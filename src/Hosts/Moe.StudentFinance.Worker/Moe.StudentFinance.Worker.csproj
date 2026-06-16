@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\Moe.Infrastructure.Shared\Moe.Infrastructure.Shared.csproj" />
+    <ProjectReference Include="..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
+    <ProjectReference Include="..\..\Modules\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
+    <ProjectReference Include="..\..\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
+  </ItemGroup>
+</Project>

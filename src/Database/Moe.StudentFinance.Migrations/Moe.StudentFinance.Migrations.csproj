@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
+    <ProjectReference Include="..\..\Modules\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
+    <ProjectReference Include="..\..\Modules\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
+    <ProjectReference Include="..\..\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
+    <ProjectReference Include="..\..\Modules\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
+  </ItemGroup>
+</Project>
