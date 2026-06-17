@@ -17,6 +17,17 @@ internal sealed class AdminUserRepository(MoeDbContext dbContext) : IAdminUserRe
                 cancellationToken);
     }
 
+    public Task<string?> GetActiveOrganizationUnitTypeAsync(long organizationUnitId, DateTime utcNow, CancellationToken cancellationToken)
+    {
+        return dbContext.Set<OrganizationUnit>()
+            .Where(x => x.Id == organizationUnitId
+                && x.StatusCode == IamStatusCodes.Active
+                && x.EffectiveFromUtc <= utcNow
+                && (x.EffectiveToUtc == null || x.EffectiveToUtc > utcNow))
+            .Select(x => x.UnitTypeCode)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public Task<bool> HasActiveRolePermissionsAsync(string roleCode, DateTime utcNow, CancellationToken cancellationToken)
     {
         return dbContext.Set<RolePermission>()
