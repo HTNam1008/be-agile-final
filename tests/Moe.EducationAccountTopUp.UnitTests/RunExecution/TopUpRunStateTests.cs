@@ -172,7 +172,10 @@ public sealed class TopUpRunStateTests
 
     private static TopUpRun CreateRun()
     {
-        TopUpCampaign campaign = TopUpCampaign.Create(10, TopUpCampaignStatusCodes.Active);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+
         return TopUpRun.CreateManual(
             campaign,
             "state-test-key",

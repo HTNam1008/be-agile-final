@@ -12,4 +12,22 @@ internal sealed class TopUpCampaignRecipient : Entity<long>
     public bool IsActive { get; private set; }
     public long AddedByLoginAccountId { get; private set; }
     public DateTime AddedAtUtc { get; private set; }
+
+    public static TopUpCampaignRecipient Create(
+        long topUpCampaignId,
+        long educationAccountId,
+        decimal? amountOverride,
+        long currentUserId,
+        DateTime nowUtc)
+    {
+        return new TopUpCampaignRecipient
+        {
+            TopUpCampaignId = topUpCampaignId,
+            EducationAccountId = educationAccountId,
+            AmountOverride = amountOverride,
+            IsActive = true,
+            AddedByLoginAccountId = currentUserId,
+            AddedAtUtc = nowUtc
+        };
+    }
 }
