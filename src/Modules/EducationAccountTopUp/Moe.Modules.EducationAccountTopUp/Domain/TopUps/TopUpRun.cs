@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Moe.SharedKernel.Domain;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
@@ -15,7 +17,8 @@ public sealed class TopUpRun : AggregateRoot<long>
         long? triggeredByLoginAccountId,
         string runStatusCode,
         string idempotencyKey,
-        string? note) : base(id)
+        string? note,
+        string? ruleSnapshotJson = null) : base(id)
     {
         TopUpCampaignId = topUpCampaignId;
         CampaignVersion = campaignVersion;
@@ -25,6 +28,7 @@ public sealed class TopUpRun : AggregateRoot<long>
         RunStatusCode = runStatusCode;
         IdempotencyKey = idempotencyKey;
         Note = note;
+        RuleSnapshotJson = ruleSnapshotJson;
     }
 
     public long TopUpCampaignId { get; private set; }
@@ -38,11 +42,23 @@ public sealed class TopUpRun : AggregateRoot<long>
     public int TotalProcessed { get; private set; }
     public int TotalSucceeded { get; private set; }
     public int TotalFailed { get; private set; }
+    public int TotalSkipped { get; private set; }
     public decimal TotalAmount { get; private set; }
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
     public string IdempotencyKey { get; private set; } = string.Empty;
     public string? Note { get; private set; }
+
+    [NotMapped]
+    public DateTime ScheduledFor => ScheduledForUtc;
+
+    [NotMapped]
+    public DateTime? StartedAt => StartedAtUtc;
+
+    [NotMapped]
+    public DateTime? CompletedAt => CompletedAtUtc;
+
+    private bool IsTerminal => TopUpRunStatusCodes.TerminalStatuses.Contains(RunStatusCode);
 
     public static TopUpRun CreateManual(
         TopUpCampaign campaign,
@@ -61,6 +77,29 @@ public sealed class TopUpRun : AggregateRoot<long>
             TopUpRunStatusCodes.Previewed,
             idempotencyKey.Trim(),
             string.IsNullOrWhiteSpace(note) ? null : note.Trim());
+    }
+
+    public static TopUpRun CreateScheduled(
+        long campaignId,
+        int campaignVersion,
+        DateTime scheduledFor,
+        string idempotencyKey,
+        string? ruleSnapshotJson,
+        DateTime utcNow)
+    {
+        _ = utcNow;
+
+        return new TopUpRun(
+            id: 0,
+            campaignId,
+            campaignVersion,
+            scheduledFor,
+            TopUpRunTriggerTypes.Scheduled,
+            triggeredByLoginAccountId: 0,
+            TopUpRunStatusCodes.Previewed,
+            idempotencyKey.Trim(),
+            note: null,
+            string.IsNullOrWhiteSpace(ruleSnapshotJson) ? null : ruleSnapshotJson);
     }
 
     public static TopUpRun Rehydrate(
@@ -86,6 +125,107 @@ public sealed class TopUpRun : AggregateRoot<long>
             note);
     }
 
+    public Result StartProcessing(DateTime utcNow)
+    {
+        Result transition = ValidateTransition(TopUpRunStatusCodes.Previewed, TopUpRunStatusCodes.Processing);
+        if (transition.IsFailure)
+        {
+            return transition;
+        }
+
+        RunStatusCode = TopUpRunStatusCodes.Processing;
+        StartedAtUtc = utcNow;
+        Raise(new TopUpRunStartedEvent(Id, TopUpCampaignId, utcNow));
+        return Result.Success();
+    }
+
+    public Result Cancel(DateTime utcNow)
+    {
+        Result transition = ValidateTransition(TopUpRunStatusCodes.Previewed, TopUpRunStatusCodes.Cancelled);
+        if (transition.IsFailure)
+        {
+            return transition;
+        }
+
+        RunStatusCode = TopUpRunStatusCodes.Cancelled;
+        CompletedAtUtc = utcNow;
+        Raise(new TopUpRunCancelledEvent(Id, TopUpCampaignId, utcNow));
+        return Result.Success();
+    }
+
+    public Result Finalize(
+        int totalProcessed,
+        int totalSucceeded,
+        int totalFailed,
+        int totalSkipped,
+        decimal totalAmount,
+        DateTime utcNow)
+    {
+        if (totalProcessed != totalSucceeded + totalFailed + totalSkipped)
+        {
+            return Result.Failure(TopUpErrors.ReconciliationMismatch);
+        }
+
+        string terminalStatus = DetermineTerminalStatus(totalSucceeded, totalFailed, totalSkipped);
+        Result transition = ValidateTransition(TopUpRunStatusCodes.Processing, terminalStatus);
+        if (transition.IsFailure)
+        {
+            return transition;
+        }
+
+        TotalProcessed = totalProcessed;
+        TotalSucceeded = totalSucceeded;
+        TotalFailed = totalFailed;
+        TotalSkipped = totalSkipped;
+        TotalAmount = totalAmount;
+        RunStatusCode = terminalStatus;
+        CompletedAtUtc = utcNow;
+
+        Raise(new TopUpRunCompletedEvent(
+            Id,
+            TopUpCampaignId,
+            terminalStatus,
+            totalSucceeded,
+            totalFailed,
+            totalSkipped,
+            totalAmount,
+            utcNow));
+
+        return Result.Success();
+    }
+
+    public Result SetTotalSelected(int count)
+    {
+        if (IsTerminal)
+        {
+            return Result.Failure(TopUpErrors.RunIsTerminal);
+        }
+
+        if (RunStatusCode is not (TopUpRunStatusCodes.Previewed or TopUpRunStatusCodes.Processing))
+        {
+            return Result.Failure(TopUpErrors.InvalidRunTransition);
+        }
+
+        TotalSelected = count;
+        return Result.Success();
+    }
+
+    public Result CaptureRuleSnapshot(string ruleJson)
+    {
+        if (IsTerminal)
+        {
+            return Result.Failure(TopUpErrors.RunIsTerminal);
+        }
+
+        if (RunStatusCode != TopUpRunStatusCodes.Previewed)
+        {
+            return Result.Failure(TopUpErrors.InvalidRunTransition);
+        }
+
+        RuleSnapshotJson = ruleJson;
+        return Result.Success();
+    }
+
     public void MarkManualRunRequested(DateTime occurredAtUtc)
     {
         if (TriggeredByLoginAccountId is long requestedByUserId)
@@ -93,19 +233,34 @@ public sealed class TopUpRun : AggregateRoot<long>
             Raise(new ManualRunRequestedEvent(Id, TopUpCampaignId, requestedByUserId, occurredAtUtc));
         }
     }
-}
 
-public static class TopUpRunStatusCodes
-{
-    public const string Previewed = "PREVIEWED";
-    public const string Processing = "PROCESSING";
-    public const string Completed = "COMPLETED";
-    public const string Partial = "PARTIAL";
-    public const string Failed = "FAILED";
-    public const string Cancelled = "CANCELLED";
-}
+    private Result ValidateTransition(string from, string to)
+    {
+        if (IsTerminal)
+        {
+            return Result.Failure(TopUpErrors.RunIsTerminal);
+        }
 
-public static class TopUpRunTriggerTypes
-{
-    public const string Manual = "MANUAL";
+        if (RunStatusCode != from)
+        {
+            return Result.Failure(TopUpErrors.InvalidRunTransition);
+        }
+
+        return TopUpRunStatusCodes.ValidTransitions.TryGetValue(from, out IReadOnlySet<string>? targets)
+            && targets.Contains(to)
+            ? Result.Success()
+            : Result.Failure(TopUpErrors.InvalidRunTransition);
+    }
+
+    private static string DetermineTerminalStatus(int totalSucceeded, int totalFailed, int totalSkipped)
+    {
+        if (totalFailed == 0 && totalSkipped == 0)
+        {
+            return TopUpRunStatusCodes.Completed;
+        }
+
+        return totalSucceeded == 0
+            ? TopUpRunStatusCodes.Failed
+            : TopUpRunStatusCodes.Partial;
+    }
 }
