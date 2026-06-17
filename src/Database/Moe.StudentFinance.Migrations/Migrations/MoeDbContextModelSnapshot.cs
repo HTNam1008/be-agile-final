@@ -745,6 +745,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("varchar(30)");
 
                     b.Property<int>("CampaignVersion")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAtUtc")
@@ -809,12 +810,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CampaignCode")
+                    b.HasIndex("OrganizationId", "CampaignCode")
                         .IsUnique();
 
-                    b.HasIndex("OrganizationId");
+                    b.ToTable("TopUpCampaign", "topup", t =>
+                        {
+                            t.HasCheckConstraint("CK_TopUpCampaign_Amount", "[DefaultTopUpAmount] > 0");
 
-                    b.ToTable("TopUpCampaign", "topup");
+                            t.HasCheckConstraint("CK_TopUpCampaign_Schedule", "[ScheduleTypeCode] != 'RECURRING' OR ([FrequencyCode] IS NOT NULL AND [FrequencyInterval] IS NOT NULL AND [EndDate] IS NOT NULL AND [EndDate] >= [StartDate])");
+                        });
                 });
 
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaignRecipient", b =>
@@ -918,8 +922,12 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("nvarchar(120)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("RuleSnapshotJson")
                         .HasColumnType("nvarchar(max)");
@@ -969,7 +977,8 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("IdempotencyKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_TopUpRun_IdempotencyKey");
 
                     b.HasIndex("TopUpCampaignId");
 
@@ -2718,6 +2727,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             StudentNumber = "DEMO-STU-0001",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRun", b =>
+                {
+                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaign", null)
+                        .WithMany()
+                        .HasForeignKey("TopUpCampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

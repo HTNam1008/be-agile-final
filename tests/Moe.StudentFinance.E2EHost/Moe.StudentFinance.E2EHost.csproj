@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Hosts\Moe.StudentFinance.Api\Moe.StudentFinance.Api.csproj" />
+    <ProjectReference Include="..\Moe.StudentFinance.IntegrationTests\Moe.StudentFinance.IntegrationTests.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>
