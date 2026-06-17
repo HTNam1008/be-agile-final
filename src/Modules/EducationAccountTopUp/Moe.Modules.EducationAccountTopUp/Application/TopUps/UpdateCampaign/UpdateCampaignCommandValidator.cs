@@ -1,0 +1,34 @@
+using FluentValidation;
+using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
+
+namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
+
+public sealed class UpdateCampaignCommandValidator : AbstractValidator<UpdateCampaignCommand>
+{
+    public UpdateCampaignCommandValidator()
+    {
+        RuleFor(x => x.TopUpCampaignId).GreaterThan(0);
+        RuleFor(x => x.Request.CampaignName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Request.Description).MaximumLength(1000);
+        RuleFor(x => x.Request.DefaultTopUpAmount).GreaterThan(0);
+        RuleFor(x => x.Request.Reason).NotEmpty().MaximumLength(1000);
+        
+        RuleFor(x => x.Request.ScheduleTypeCode)
+            .IsEnumName(typeof(ScheduleTypeCode), caseSensitive: false);
+
+        When(x => string.Equals(x.Request.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+        {
+            RuleFor(x => x.Request.FrequencyCode)
+                .NotEmpty()
+                .IsEnumName(typeof(FrequencyCode), caseSensitive: false);
+            RuleFor(x => x.Request.FrequencyInterval).GreaterThan(0);
+            
+            When(x => x.Request.EndDate.HasValue, () =>
+            {
+                RuleFor(x => x.Request.EndDate)
+                    .Must((request, endDate) => endDate >= request.Request.StartDate)
+                    .WithMessage("EndDate must be greater than or equal to StartDate.");
+            });
+        });
+    }
+}

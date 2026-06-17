@@ -11,7 +11,7 @@ internal sealed class TopUpTransactionConfiguration : IEntityTypeConfiguration<T
         builder.ToTable("TopUpTransaction", "topup");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("TopUpTransactionId").UseIdentityColumn();
-        builder.HasIndex(x => new { x.TopUpRunId, x.EducationAccountId });
+        builder.HasIndex(x => new { x.TopUpRunId, x.EducationAccountId }).IsUnique();
         builder.HasIndex(x => x.IdempotencyKey).IsUnique();
         builder.Property(x => x.TopUpAmount).HasPrecision(19, 2);
         builder.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
