@@ -17,6 +17,8 @@ public sealed class JwtSchemeOptions
     public string[] Scopes { get; init; } = [];
     public string? AllowedTenantId { get; init; }
     public bool RequireHttpsMetadata { get; init; } = true;
+    public string LocalTokenSigningKey { get; init; } = string.Empty;
+    public int LocalTokenLifetimeMinutes { get; init; } = 30;
 }
 
 public sealed class SingpassSchemeOptions

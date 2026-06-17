@@ -13,4 +13,24 @@ internal sealed class TopUpCampaignRule : Entity<long>
     public decimal? NumericValueTo { get; private set; }
     public string? TextValue { get; private set; }
     public bool IsActive { get; private set; }
+
+    public static TopUpCampaignRule Create(
+        long topUpCampaignId,
+        string criterionCode,
+        string operatorCode,
+        decimal? numericValueFrom,
+        decimal? numericValueTo,
+        string? textValue)
+    {
+        return new TopUpCampaignRule
+        {
+            TopUpCampaignId = topUpCampaignId,
+            CriterionCode = criterionCode,
+            OperatorCode = operatorCode,
+            NumericValueFrom = numericValueFrom,
+            NumericValueTo = numericValueTo,
+            TextValue = textValue,
+            IsActive = true
+        };
+    }
 }
