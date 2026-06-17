@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations.Schema;
 using Moe.SharedKernel.Domain;
 using Moe.SharedKernel.Results;
 
@@ -49,13 +48,10 @@ public sealed class TopUpRun : AggregateRoot<long>
     public string IdempotencyKey { get; private set; } = string.Empty;
     public string? Note { get; private set; }
 
-    [NotMapped]
     public DateTime ScheduledFor => ScheduledForUtc;
 
-    [NotMapped]
     public DateTime? StartedAt => StartedAtUtc;
 
-    [NotMapped]
     public DateTime? CompletedAt => CompletedAtUtc;
 
     private bool IsTerminal => TopUpRunStatusCodes.TerminalStatuses.Contains(RunStatusCode);

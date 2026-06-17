@@ -1,5 +1,4 @@
 using Moe.SharedKernel.Domain;
-using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
@@ -15,27 +14,27 @@ public sealed record ManualRunRequestedEvent(
 
 public static class TopUpErrors
 {
-    public static readonly Error Unauthorized =
+    public static readonly Moe.SharedKernel.Results.Error Unauthorized =
         new("TopUp.Unauthorized", "Insufficient permissions to execute top-up runs.");
 
-    public static readonly Error CampaignNotFound =
+    public static readonly Moe.SharedKernel.Results.Error CampaignNotFound =
         new("TopUp.CampaignNotFound", "Campaign not found.");
 
-    public static readonly Error CampaignNotExecutable =
+    public static readonly Moe.SharedKernel.Results.Error CampaignNotExecutable =
         new("TopUp.CampaignNotExecutable", "Campaign is not in an executable state.");
 
-    public static readonly Error ActorRequired =
+    public static readonly Moe.SharedKernel.Results.Error ActorRequired =
         new("TopUp.ActorRequired", "An authenticated admin is required.");
 
-    public static readonly Error ReconciliationMismatch = new(
-    "TopUp.ReconciliationMismatch",
-    "Reconciliation counts do not add up: totalProcessed must equal totalSucceeded + totalFailed + totalSkipped.");
+    public static readonly Moe.SharedKernel.Results.Error InvalidRunTransition =
+        new("TopUp.InvalidRunTransition", "The requested status transition is not valid for the current run state.");
 
-    public static readonly Error RunIsTerminal = new(
-        "TopUp.RunIsTerminal",
-        "This run has already reached a terminal state and cannot be modified.");
+    public static readonly Moe.SharedKernel.Results.Error RunIsTerminal =
+        new("TopUp.RunIsTerminal", "This run has already reached a terminal state and cannot be modified.");
 
-    public static readonly Error InvalidRunTransition = new(
-        "TopUp.InvalidRunTransition",
-        "The requested status transition is not valid for the current run state.");
+    public static readonly Moe.SharedKernel.Results.Error DuplicateScheduledOccurrence =
+        new("TopUp.DuplicateScheduledOccurrence", "A run for this campaign and scheduled time already exists.");
+
+    public static readonly Moe.SharedKernel.Results.Error ReconciliationMismatch =
+        new("TopUp.ReconciliationMismatch", "Reconciliation counts do not add up: totalProcessed must equal totalSucceeded + totalFailed + totalSkipped.");
 }
