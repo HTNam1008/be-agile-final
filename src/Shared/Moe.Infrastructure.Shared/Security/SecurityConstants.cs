@@ -6,6 +6,12 @@ public static class AuthenticationSchemes
     public const string EServiceSingpass = "EServiceSingpass";
 }
 
+public static class AuthenticationCookies
+{
+    public const string AdminSession = "moe_admin_session";
+    public const string EServiceSession = "moe_eservice_session";
+}
+
 public static class AuthorizationPolicies
 {
     public const string AdminPortal = "AdminPortal";
