@@ -26,6 +26,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
+        services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
         services.AddSingleton<ITopUpRunDispatcher, InProcessTopUpRunDispatcher>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
