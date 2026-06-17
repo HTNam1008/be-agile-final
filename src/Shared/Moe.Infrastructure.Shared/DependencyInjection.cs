@@ -84,6 +84,25 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme)
     {
+        //if DEBUG
+        if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
+        {
+            target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+            target.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = source.Authority.TrimEnd('/'),
+                ValidateAudience = true,
+                ValidAudience = source.Audience,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(source.LocalTokenSigningKey)),
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+            target.Events = CreateSchemeEvents(authenticationScheme);
+            return;
+        }
+        //endif
         target.Authority = source.Authority;
         target.Audience = source.Audience;
         target.RequireHttpsMetadata = source.RequireHttpsMetadata;
