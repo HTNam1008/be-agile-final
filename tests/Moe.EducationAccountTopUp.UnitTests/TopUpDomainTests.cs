@@ -52,15 +52,25 @@ public sealed class TopUpDomainTests
     public void TopUpRun_UpdateProgress_ShouldAccumulateCorrectly()
     {
         var now = DateTime.UtcNow;
-        var run = TopUpRun.Create(1, 1, now, "MANUAL", 99, "[]", "IDEM-1", now);
+        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
+        var run = TopUpRun.CreateManual(campaign, "IDEM-1", 99, now, null);
 
-        run.UpdateProgress(succeededCount: 2, failedCount: 1, amount: 100m, now);
-        run.UpdateProgress(succeededCount: 3, failedCount: 0, amount: 150m, now);
+        run.StartProcessing(now);
+
+        // UpdateProgress is gone, we use Finalize now to test state machine transition
+        run.Finalize(
+            totalProcessed: 6,
+            totalSucceeded: 5,
+            totalFailed: 1,
+            totalSkipped: 0,
+            totalAmount: 250m,
+            utcNow: now);
 
         run.TotalSucceeded.Should().Be(5);
         run.TotalFailed.Should().Be(1);
         run.TotalProcessed.Should().Be(6);
         run.TotalAmount.Should().Be(250m);
+        run.RunStatusCode.Should().Be(TopUpRunStatusCodes.Partial);
     }
 
     [Fact]

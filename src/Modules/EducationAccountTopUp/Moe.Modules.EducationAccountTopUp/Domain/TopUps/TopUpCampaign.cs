@@ -2,9 +2,35 @@ using Moe.SharedKernel.Domain;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
-internal sealed class TopUpCampaign : Entity<long>
+public sealed class TopUpCampaign : Entity<long>
 {
     private TopUpCampaign() : base(0) { }
+
+    private TopUpCampaign(
+        long id,
+        long organizationId,
+        string campaignCode,
+        string campaignName,
+        decimal defaultTopUpAmount,
+        string reason,
+        string campaignStatusCode,
+        int campaignVersion,
+        long createdByLoginAccountId,
+        DateTime createdAtUtc) : base(id)
+    {
+        OrganizationId = organizationId;
+        CampaignCode = campaignCode;
+        CampaignName = campaignName;
+        RecipientModeCode = "ALL";
+        DefaultTopUpAmount = defaultTopUpAmount;
+        Reason = reason;
+        ScheduleTypeCode = "MANUAL";
+        StartDate = DateOnly.FromDateTime(createdAtUtc);
+        CampaignStatusCode = campaignStatusCode;
+        CampaignVersion = campaignVersion;
+        CreatedByLoginAccountId = createdByLoginAccountId;
+        CreatedAtUtc = createdAtUtc;
+    }
 
     public long OrganizationId { get; private set; }
     public string CampaignCode { get; private set; } = string.Empty;
@@ -25,6 +51,8 @@ internal sealed class TopUpCampaign : Entity<long>
     public DateTime CreatedAtUtc { get; private set; }
     public long? UpdatedByLoginAccountId { get; private set; }
     public DateTime? UpdatedAtUtc { get; private set; }
+
+    public bool IsExecutable => CampaignStatusCode == TopUpCampaignStatusCodes.Active;
 
     public static TopUpCampaign Create(
         long organizationId,
@@ -56,7 +84,7 @@ internal sealed class TopUpCampaign : Entity<long>
             EndDate = endDate,
             FrequencyCode = frequencyCode,
             FrequencyInterval = frequencyInterval,
-            CampaignStatusCode = "Draft",
+            CampaignStatusCode = TopUpCampaignStatusCodes.Draft,
             CampaignVersion = 1,
             CreatedByLoginAccountId = currentUserId,
             CreatedAtUtc = nowUtc,
@@ -104,4 +132,12 @@ internal sealed class TopUpCampaign : Entity<long>
     {
         NextRunAtUtc = nextRunAtUtc;
     }
+}
+
+public static class TopUpCampaignStatusCodes
+{
+    public const string Draft = "DRAFT";
+    public const string Active = "ACTIVE";
+    public const string Paused = "PAUSED";
+    public const string Cancelled = "CANCELLED";
 }

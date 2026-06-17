@@ -1,61 +1,128 @@
 using Moe.SharedKernel.Domain;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
-internal sealed class TopUpTransaction : Entity<long>
+public sealed class TopUpTransaction : Entity<long>
 {
     private TopUpTransaction() : base(0) { }
 
+    private TopUpTransaction(
+        long topUpRunId,
+        long educationAccountId,
+        decimal amount,
+        DateTime createdAtUtc) : base(0)
+    {
+        TopUpRunId = topUpRunId;
+        EducationAccountId = educationAccountId;
+        IdempotencyKey = BuildIdempotencyKey(topUpRunId, educationAccountId);
+        TransactionStatusCode = TopUpTransactionStatusCodes.Pending;
+        Amount = amount;
+        CreatedAtUtc = createdAtUtc;
+    }
+
     public long TopUpRunId { get; private set; }
     public long EducationAccountId { get; private set; }
-    public decimal TopUpAmount { get; private set; }
-    public string Reason { get; private set; } = string.Empty;
-    public string TransactionStatusCode { get; private set; } = string.Empty;
-    public long? ProcessedByLoginAccountId { get; private set; }
-    public DateTime? ProcessedAtUtc { get; private set; }
-    public string? FailureReason { get; private set; }
-    public long? AccountTransactionId { get; private set; }
     public string IdempotencyKey { get; private set; } = string.Empty;
+    public string TransactionStatusCode { get; private set; } = string.Empty;
+    public decimal Amount { get; private set; }
+    public long? AccountTransactionId { get; private set; }
+    public string? Reason { get; private set; }
+    public DateTime CreatedAtUtc { get; private set; }
+    public DateTime? CompletedAtUtc { get; private set; }
+
+    private bool IsTerminal => TopUpTransactionStatusCodes.TerminalStatuses.Contains(TransactionStatusCode);
 
     public static TopUpTransaction Create(
         long topUpRunId,
         long educationAccountId,
-        decimal topUpAmount,
-        string reason,
-        string idempotencyKey)
+        decimal amount,
+        DateTime utcNow)
     {
-        return new TopUpTransaction
+        return new TopUpTransaction(topUpRunId, educationAccountId, amount, utcNow);
+    }
+
+    public Result Complete(long accountTransactionId, DateTime utcNow)
+    {
+        Result transition = EnsureCanTransition();
+        if (transition.IsFailure)
         {
-            TopUpRunId = topUpRunId,
-            EducationAccountId = educationAccountId,
-            TopUpAmount = topUpAmount,
-            Reason = reason,
-            TransactionStatusCode = "PENDING",
-            IdempotencyKey = idempotencyKey
-        };
-    }
+            return transition;
+        }
 
-    public void MarkCompleted(long accountTransactionId, long currentUserId, DateTime nowUtc)
-    {
-        TransactionStatusCode = "COMPLETED";
+        if (accountTransactionId <= 0)
+        {
+            return Result.Failure(TopUpErrors.InvalidAccountTransactionReference);
+        }
+
+        TransactionStatusCode = TopUpTransactionStatusCodes.Completed;
         AccountTransactionId = accountTransactionId;
-        ProcessedByLoginAccountId = currentUserId;
-        ProcessedAtUtc = nowUtc;
+        CompletedAtUtc = utcNow;
+        return Result.Success();
     }
 
-    public void MarkFailed(string failureReason, long currentUserId, DateTime nowUtc)
+    public Result Fail(string? reason, DateTime utcNow)
     {
-        TransactionStatusCode = "FAILED";
-        FailureReason = failureReason;
-        ProcessedByLoginAccountId = currentUserId;
-        ProcessedAtUtc = nowUtc;
+        Result transition = EnsureCanTransition();
+        if (transition.IsFailure)
+        {
+            return transition;
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return Result.Failure(TopUpErrors.TransactionReasonRequired);
+        }
+
+        TransactionStatusCode = TopUpTransactionStatusCodes.Failed;
+        Amount = 0m;
+        Reason = reason.Trim();
+        CompletedAtUtc = utcNow;
+        return Result.Success();
     }
 
-    public void MarkSkipped(string skipReason, long currentUserId, DateTime nowUtc)
+    public Result Skip(string? reason, DateTime utcNow)
     {
-        TransactionStatusCode = "SKIPPED";
-        FailureReason = skipReason;
-        ProcessedByLoginAccountId = currentUserId;
-        ProcessedAtUtc = nowUtc;
+        Result transition = EnsureCanTransition();
+        if (transition.IsFailure)
+        {
+            return transition;
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return Result.Failure(TopUpErrors.TransactionReasonRequired);
+        }
+
+        TransactionStatusCode = TopUpTransactionStatusCodes.Skipped;
+        Amount = 0m;
+        Reason = reason.Trim();
+        CompletedAtUtc = utcNow;
+        return Result.Success();
+    }
+
+    private Result EnsureCanTransition()
+    {
+        Result terminal = EnsureNotTerminal();
+        return terminal.IsFailure ? terminal : EnsurePending();
+    }
+
+    private Result EnsureNotTerminal()
+    {
+        return IsTerminal
+            ? Result.Failure(TopUpErrors.TransactionIsTerminal)
+            : Result.Success();
+    }
+
+    private Result EnsurePending()
+    {
+        return TransactionStatusCode == TopUpTransactionStatusCodes.Pending
+            ? Result.Success()
+            : Result.Failure(TopUpErrors.TransactionNotPending);
+    }
+
+    private static string BuildIdempotencyKey(long topUpRunId, long educationAccountId)
+    {
+        return $"topup:{topUpRunId}:{educationAccountId}";
     }
 }
