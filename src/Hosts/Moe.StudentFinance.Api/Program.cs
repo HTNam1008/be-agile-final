@@ -38,6 +38,7 @@ builder.Services.AddControllers(options =>
         options.Filters.Add<FluentValidationActionFilter>();
     })
     .AddApplicationPart(typeof(EducationAccountTopUpModule).Assembly)
+    .AddApplicationPart(typeof(CourseBillingModule).Assembly)
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly);
 
 builder.Services.AddApiVersioning(options =>
@@ -204,6 +205,12 @@ static string GetSwaggerTag(string path)
     if (path.Contains("/education-account", StringComparison.OrdinalIgnoreCase))
     {
         return "Accounts";
+    }
+
+    if (path.Contains("/courses", StringComparison.OrdinalIgnoreCase)
+        || path.Contains("/course-enrollments", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Courses";
     }
 
     if (path.Contains("/identity", StringComparison.OrdinalIgnoreCase)
