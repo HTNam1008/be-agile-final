@@ -33,20 +33,16 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         var idempotencyKey = $"TOPUP-RUN:{campaign.Id}:MANUAL:{nowUtc.Ticks}";
 
         // 1. Create TopUpRun
-        var ruleSnapshot = "[]"; // Simplified for MVP
-        var run = TopUpRun.Create(
-            topUpCampaignId: campaign.Id,
-            campaignVersion: campaign.CampaignVersion,
-            scheduledForUtc: nowUtc,
-            triggerTypeCode: TopUpTriggerTypeCode.Manual.ToString().ToUpperInvariant(),
-            triggeredByLoginAccountId: currentUser.UserAccountId,
-            ruleSnapshotJson: ruleSnapshot,
-            idempotencyKey: idempotencyKey,
-            nowUtc: nowUtc);
+        var run = TopUpRun.CreateManual(
+            campaign,
+            idempotencyKey,
+            currentUser.UserAccountId ?? 0,
+            nowUtc,
+            note: null);
+
+        run.StartProcessing(nowUtc);
 
         dbContext.Set<TopUpRun>().Add(run);
-
-        // We could save early to reserve the idempotency key, but EF Core transaction is fine for now.
 
         // 2. Fetch Recipients
         var recipientsQuery = dbContext.Set<TopUpCampaignRecipient>()
@@ -75,8 +71,6 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         }
         else
         {
-            // Dynamic Rules: For MVP, assume it selects all Active accounts (if no rules matched, we guard against zero rules anyway).
-            // A real IQueryable evaluator goes here.
             var rules = await dbContext.Set<TopUpCampaignRule>()
                 .Where(x => x.TopUpCampaignId == campaign.Id && x.IsActive)
                 .ToListAsync(cancellationToken);
@@ -87,7 +81,6 @@ internal sealed class ExecuteTopUpRunCommandHandler(
             var allAccounts = await accountsQuery.ToListAsync(cancellationToken);
             foreach (var acc in allAccounts)
             {
-                // Stub Rule Evaluator -> In real implementation, translates criteria to expression tree
                 matches.Add((acc, campaign.DefaultTopUpAmount));
             }
         }
@@ -99,24 +92,23 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         {
             var acc = match.Account;
             var amount = match.Amount;
-            var txIdempotency = $"TOPUP:{run.Id}:{acc.Id}";
 
             var topupTx = TopUpTransaction.Create(
                 topUpRunId: run.Id,
                 educationAccountId: acc.Id,
-                topUpAmount: amount,
-                reason: campaign.Reason,
-                idempotencyKey: txIdempotency);
+                amount: amount,
+                utcNow: nowUtc);
 
             if (acc.StatusCode != Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active)
             {
-                topupTx.MarkSkipped("Account not ACTIVE", currentUser.UserAccountId ?? 0, nowUtc);
+                topupTx.Skip("Account not ACTIVE", nowUtc);
                 skipped++;
                 dbContext.Set<TopUpTransaction>().Add(topupTx);
                 continue;
             }
 
             // Ledger Transaction
+            var txIdempotency = $"TOPUP:{run.Id}:{acc.Id}";
             var accTx = Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountTransaction.Create(
                 educationAccountId: acc.Id,
                 transactionTypeCode: "CREDIT",
@@ -126,28 +118,23 @@ internal sealed class ExecuteTopUpRunCommandHandler(
                 idempotencyKey: txIdempotency,
                 currentBalance: acc.CachedBalance,
                 description: campaign.Reason,
-                createdByUserId: currentUser.UserAccountId,
+                createdByUserId: currentUser.UserAccountId ?? 0,
                 nowUtc: nowUtc);
 
             dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountTransaction>().Add(accTx);
-            
             acc.UpdateBalance(amount);
-            
-            // Mark TopUpTx Complete (we don't have accTx.Id yet until DB save, so we'll just set it to 0 or we need to save changes first)
-            topupTx.MarkCompleted(0, currentUser.UserAccountId ?? 0, nowUtc);
-            
+
+            // We must save to get the accTx.Id for Henry's strict state machine
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            topupTx.Complete(accTx.Id, nowUtc);
             dbContext.Set<TopUpTransaction>().Add(topupTx);
+
             succeeded++;
             totalAmount += amount;
         }
 
-        run.UpdateProgress(succeeded, failed, totalAmount, nowUtc);
-        
-        string finalStatus = TopUpRunStatusCode.Completed.ToString().ToUpperInvariant();
-        if (succeeded == 0) finalStatus = TopUpRunStatusCode.Failed.ToString().ToUpperInvariant();
-        else if (skipped > 0 || failed > 0) finalStatus = TopUpRunStatusCode.Partial.ToString().ToUpperInvariant();
-
-        run.Complete(finalStatus, nowUtc, matches.Count);
+        run.Finalize(matches.Count, succeeded, failed, skipped, totalAmount, nowUtc);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
