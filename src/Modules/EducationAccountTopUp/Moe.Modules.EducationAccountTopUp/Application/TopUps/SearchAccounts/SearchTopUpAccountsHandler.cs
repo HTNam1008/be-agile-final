@@ -2,6 +2,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.Filters;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.IdentityPlatform.IGateway.Students.TopUpSearch;
@@ -32,41 +33,34 @@ internal sealed class SearchTopUpAccountsHandler(
             return Result<SearchTopUpAccountsResponse>.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        TopUpAccountSearchCriteria accountCriteria = new(
-            null,
-            query.BalanceFrom,
-            query.BalanceTo,
-            query.AccountStatusCode);
-
-        IReadOnlyCollection<long> candidatePersonIds = await accounts.FindMatchingPersonIdsAsync(
-            accountCriteria,
-            cancellationToken);
-
-        IReadOnlyCollection<long>? accountSearchPersonIds = null;
-
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            TopUpAccountSearchCriteria accountSearchCriteria = new(
-                query.Search,
-                query.BalanceFrom,
-                query.BalanceTo,
-                query.AccountStatusCode);
-
-            accountSearchPersonIds = await accounts.FindMatchingPersonIdsAsync(
-                accountSearchCriteria,
-                cancellationToken);
-        }
-
-        TopUpStudentSearchCriteria studentCriteria = new(
+        TopUpAccountFilter filter = new(
             query.Search,
-            candidatePersonIds,
-            accountSearchPersonIds,
             query.OrganizationId,
             query.SchoolingStatusCode,
             query.LevelCode,
             query.ClassCode,
+            query.AccountStatusCode,
             query.AgeFrom,
             query.AgeTo,
+            query.BalanceFrom,
+            query.BalanceTo);
+
+        IReadOnlyCollection<long> candidatePersonIds = await accounts.FindMatchingPersonIdsAsync(
+            filter.ToAccountCriteria(includeSearch: false),
+            cancellationToken);
+
+        IReadOnlyCollection<long>? accountSearchPersonIds = null;
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            accountSearchPersonIds = await accounts.FindMatchingPersonIdsAsync(
+                filter.ToAccountCriteria(includeSearch: true),
+                cancellationToken);
+        }
+
+        TopUpStudentSearchCriteria studentCriteria = filter.ToStudentCriteria(
+            candidatePersonIds,
+            accountSearchPersonIds,
             query.Page,
             query.PageSize);
 
