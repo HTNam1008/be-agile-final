@@ -11,4 +11,7 @@ public sealed record PreviewAccountDto(
     long EducationAccountId,
     decimal EstimatedAmount);
 
-public sealed record PreviewCampaignQuery(long TopUpCampaignId) : IQuery<PreviewCampaignResult>;
+public sealed record PreviewCampaignQuery(
+    long TopUpCampaignId,
+    int PageNumber,
+    int PageSize) : IQuery<PreviewCampaignResult>;
