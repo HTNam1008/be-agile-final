@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Asp.Versioning;
+using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Security;
@@ -12,7 +13,6 @@ using Moe.StudentFinance.Persistence;
 using Moe.Infrastructure.Shared.Validation;
 using NSwag;
 using NSwag.Generation.Processors.Security;
-using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
