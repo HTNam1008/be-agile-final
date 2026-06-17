@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
@@ -31,5 +32,47 @@ public sealed class AdminAuthController(IQueryDispatcher queries) : ControllerBa
     {
         var result = await queries.Send(new GetCurrentIdentityQuery(), cancellationToken);
         return result.ToApiResponse(this, ApiResponseCodes.Forbidden);
+    }
+
+    [HttpPost("session")]
+    [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
+    public IActionResult EstablishSession()
+    {
+        string? bearer = Request.Headers.Authorization.ToString();
+
+        if (string.IsNullOrWhiteSpace(bearer)
+            || !bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponseFactory.Failure(
+                new("IDENTITY.ADMIN_TOKEN_REQUIRED", "A validated Microsoft Entra ID bearer token is required."),
+                ApiResponseCodes.Unauthorized,
+                HttpContext.TraceIdentifier);
+        }
+
+        Response.Cookies.Append(AuthenticationCookies.AdminSession, bearer["Bearer ".Length..].Trim(), new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Path = "/",
+            MaxAge = TimeSpan.FromMinutes(60)
+        });
+
+        return ApiResponseFactory.Ok(new { signedIn = true }, HttpContext.TraceIdentifier);
+    }
+
+    [HttpPost("logout")]
+    [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete(AuthenticationCookies.AdminSession, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Path = "/"
+        });
+
+        return ApiResponseFactory.Ok(new { signedOut = true }, HttpContext.TraceIdentifier);
     }
 }

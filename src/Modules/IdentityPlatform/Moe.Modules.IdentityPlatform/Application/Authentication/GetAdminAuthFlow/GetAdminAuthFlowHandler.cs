@@ -24,7 +24,7 @@ public sealed class GetAdminAuthFlowHandler(IOptions<AuthenticationOptions> opti
             admin.ClientId,
             admin.Audience,
             admin.Scopes.Length == 0 ? [BuildDefaultScope(admin.Audience)] : admin.Scopes,
-            "Use the returned access_token as Authorization: Bearer <token> when calling /api/admin endpoints.",
+            "Exchange the authorization code for an access_token, then POST it once to /api/admin/v1/auth/session. Authenticated admin API calls use the secure backend session cookie.",
             false,
             false);
 
