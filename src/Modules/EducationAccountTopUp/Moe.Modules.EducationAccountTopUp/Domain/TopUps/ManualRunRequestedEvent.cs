@@ -1,4 +1,5 @@
 using Moe.SharedKernel.Domain;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
@@ -14,15 +15,27 @@ public sealed record ManualRunRequestedEvent(
 
 public static class TopUpErrors
 {
-    public static readonly Moe.SharedKernel.Results.Error Unauthorized =
+    public static readonly Error Unauthorized =
         new("TopUp.Unauthorized", "Insufficient permissions to execute top-up runs.");
 
-    public static readonly Moe.SharedKernel.Results.Error CampaignNotFound =
+    public static readonly Error CampaignNotFound =
         new("TopUp.CampaignNotFound", "Campaign not found.");
 
-    public static readonly Moe.SharedKernel.Results.Error CampaignNotExecutable =
+    public static readonly Error CampaignNotExecutable =
         new("TopUp.CampaignNotExecutable", "Campaign is not in an executable state.");
 
-    public static readonly Moe.SharedKernel.Results.Error ActorRequired =
+    public static readonly Error ActorRequired =
         new("TopUp.ActorRequired", "An authenticated admin is required.");
+
+    public static readonly Error ReconciliationMismatch = new(
+    "TopUp.ReconciliationMismatch",
+    "Reconciliation counts do not add up: totalProcessed must equal totalSucceeded + totalFailed + totalSkipped.");
+
+    public static readonly Error RunIsTerminal = new(
+        "TopUp.RunIsTerminal",
+        "This run has already reached a terminal state and cannot be modified.");
+
+    public static readonly Error InvalidRunTransition = new(
+        "TopUp.InvalidRunTransition",
+        "The requested status transition is not valid for the current run state.");
 }
