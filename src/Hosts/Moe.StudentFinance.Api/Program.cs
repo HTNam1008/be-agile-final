@@ -1,6 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Asp.Versioning;
+using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
+using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.IdentityPlatform;
@@ -87,6 +92,58 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
 }
 
 app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
+
+#if DEBUG
+app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
+{
+    string issuer = configuration["Authentication:AdminEntra:Authority"]?.TrimEnd('/')
+        ?? throw new InvalidOperationException("Authentication:AdminEntra:Authority is required.");
+    string audience = configuration["Authentication:AdminEntra:Audience"]
+        ?? throw new InvalidOperationException("Authentication:AdminEntra:Audience is required.");
+    string signingKey = configuration["Authentication:AdminEntra:LocalTokenSigningKey"]
+        ?? throw new InvalidOperationException("Authentication:AdminEntra:LocalTokenSigningKey is required.");
+    int lifetimeMinutes = configuration.GetValue("Authentication:AdminEntra:LocalTokenLifetimeMinutes", 120);
+    DateTime utcNow = DateTime.UtcNow;
+
+    Claim[] claims =
+    [
+        new(JwtRegisteredClaimNames.Sub, "dev-admin-1"),
+        new(JwtRegisteredClaimNames.Email, "system.admin@moe.local"),
+        new("name", "System Admin"),
+        new("oid", "731f2a50-4fa7-4530-9294-1a5b912daf31"),
+        new("tid", "ea71ddeb-596c-4034-84d4-d65f91edc14a"),
+        new(LocalIdentityClaimNames.UserAccountId, "1"),
+        new(LocalIdentityClaimNames.PersonId, "1"),
+        new(LocalIdentityClaimNames.OrganizationUnitId, "1"),
+        new(LocalIdentityClaimNames.Role, "SYSTEM_ADMIN"),
+        new(LocalIdentityClaimNames.Permission, "TOPUPS_MANAGE"),
+        new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
+        new(LocalIdentityClaimNames.Permission, "ACCESS_SCOPE_MANAGE"),
+        new(LocalIdentityClaimNames.Permission, "EXTERNAL_ACCOUNTS_PROVISION"),
+        new(LocalIdentityClaimNames.Portal, PortalCodes.Admin),
+        new(LocalIdentityClaimNames.IdentityProvider, "ENTRA_WORKFORCE")
+    ];
+
+    JwtSecurityToken token = new(
+        issuer: issuer,
+        audience: audience,
+        claims: claims,
+        notBefore: utcNow,
+        expires: utcNow.AddMinutes(lifetimeMinutes),
+        signingCredentials: new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+            SecurityAlgorithms.HmacSha256));
+
+    string accessToken = new JwtSecurityTokenHandler().WriteToken(token);
+
+    return Results.Ok(new
+    {
+        tokenType = "Bearer",
+        accessToken,
+        expiresAtUtc = utcNow.AddMinutes(lifetimeMinutes)
+    });
+}).AllowAnonymous();
+#endif
 
 if (!app.Environment.IsDevelopment())
 {
