@@ -1,6 +1,5 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
-using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
@@ -14,8 +13,7 @@ public sealed class RequestManualRunCommandHandler(
     ITopUpRunRepository runs,
     ITopUpRunDispatcher dispatcher,
     ICurrentUser currentUser,
-    IClock clock,
-    IUnitOfWork unitOfWork) : ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>
+    IClock clock) : ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>
 {
     private const string TopUpsManagePermission = "TOPUPS_MANAGE";
 
@@ -58,8 +56,7 @@ public sealed class RequestManualRunCommandHandler(
             requestedAtUtc,
             command.Note);
 
-        runs.Add(run);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await runs.AddAsync(run, cancellationToken);
 
         await dispatcher.EnqueueAsync(run.Id, cancellationToken);
         run.MarkManualRunRequested(requestedAtUtc);
