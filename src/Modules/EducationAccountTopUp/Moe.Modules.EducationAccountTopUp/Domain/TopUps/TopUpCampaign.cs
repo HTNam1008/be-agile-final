@@ -25,4 +25,83 @@ internal sealed class TopUpCampaign : Entity<long>
     public DateTime CreatedAtUtc { get; private set; }
     public long? UpdatedByLoginAccountId { get; private set; }
     public DateTime? UpdatedAtUtc { get; private set; }
+
+    public static TopUpCampaign Create(
+        long organizationId,
+        string campaignCode,
+        string campaignName,
+        string? description,
+        string recipientModeCode,
+        decimal defaultTopUpAmount,
+        string reason,
+        string scheduleTypeCode,
+        DateOnly startDate,
+        DateOnly? endDate,
+        string? frequencyCode,
+        int? frequencyInterval,
+        long currentUserId,
+        DateTime nowUtc)
+    {
+        return new TopUpCampaign
+        {
+            OrganizationId = organizationId,
+            CampaignCode = campaignCode,
+            CampaignName = campaignName,
+            Description = description,
+            RecipientModeCode = recipientModeCode,
+            DefaultTopUpAmount = defaultTopUpAmount,
+            Reason = reason,
+            ScheduleTypeCode = scheduleTypeCode,
+            StartDate = startDate,
+            EndDate = endDate,
+            FrequencyCode = frequencyCode,
+            FrequencyInterval = frequencyInterval,
+            CampaignStatusCode = "DRAFT",
+            CampaignVersion = 1,
+            CreatedByLoginAccountId = currentUserId,
+            CreatedAtUtc = nowUtc,
+            UpdatedByLoginAccountId = currentUserId,
+            UpdatedAtUtc = nowUtc
+        };
+    }
+
+    public void Update(
+        string campaignName,
+        string? description,
+        decimal defaultTopUpAmount,
+        string reason,
+        string scheduleTypeCode,
+        DateOnly startDate,
+        DateOnly? endDate,
+        string? frequencyCode,
+        int? frequencyInterval,
+        long currentUserId,
+        DateTime nowUtc)
+    {
+        CampaignName = campaignName;
+        Description = description;
+        DefaultTopUpAmount = defaultTopUpAmount;
+        Reason = reason;
+        ScheduleTypeCode = scheduleTypeCode;
+        StartDate = startDate;
+        EndDate = endDate;
+        FrequencyCode = frequencyCode;
+        FrequencyInterval = frequencyInterval;
+        UpdatedByLoginAccountId = currentUserId;
+        UpdatedAtUtc = nowUtc;
+        CampaignVersion++;
+    }
+
+    public void ChangeStatus(string newStatusCode, long currentUserId, DateTime nowUtc)
+    {
+        CampaignStatusCode = newStatusCode;
+        UpdatedByLoginAccountId = currentUserId;
+        UpdatedAtUtc = nowUtc;
+        CampaignVersion++;
+    }
+
+    public void SetNextRunAt(DateTime? nextRunAtUtc)
+    {
+        NextRunAtUtc = nextRunAtUtc;
+    }
 }

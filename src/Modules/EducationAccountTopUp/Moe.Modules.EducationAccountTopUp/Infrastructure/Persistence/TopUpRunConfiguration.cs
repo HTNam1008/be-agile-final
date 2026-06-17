@@ -12,6 +12,7 @@ internal sealed class TopUpRunConfiguration : IEntityTypeConfiguration<TopUpRun>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("TopUpRunId").UseIdentityColumn();
         builder.HasIndex(x => x.TopUpCampaignId);
+        builder.HasIndex(x => new { x.TopUpCampaignId, x.ScheduledForUtc }).IsUnique().HasFilter("[TriggerTypeCode] = 'SCHEDULED'");
         builder.HasIndex(x => x.IdempotencyKey).IsUnique();
         builder.Property(x => x.ScheduledForUtc).HasColumnName("ScheduledFor");
         builder.Property(x => x.TriggerTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
