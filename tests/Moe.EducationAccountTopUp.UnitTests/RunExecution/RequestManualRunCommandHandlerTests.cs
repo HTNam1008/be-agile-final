@@ -1,7 +1,6 @@
 using System.Reflection;
 using FluentAssertions;
 using Moe.Application.Abstractions.Clock;
-using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -18,7 +17,6 @@ public sealed class RequestManualRunCommandHandlerTests
     private readonly FakeTopUpRunDispatcher _dispatcher = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 17, 4, 0, 0, TimeSpan.Zero));
-    private readonly FakeUnitOfWork _unitOfWork = new();
 
     [Fact]
     public async Task Should_Create_Run_When_Campaign_Active_And_Key_Unique()
@@ -34,7 +32,6 @@ public sealed class RequestManualRunCommandHandlerTests
         result.Value.IdempotencyKey.Should().Be("manual-key-1");
         result.Value.RequestedAtUtc.Should().Be(_clock.UtcNow.UtcDateTime);
         _runs.AddCalls.Should().Be(1);
-        _unitOfWork.SaveChangesCalls.Should().Be(1);
     }
 
     [Fact]
@@ -58,7 +55,6 @@ public sealed class RequestManualRunCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.RunId.Should().Be(42);
         _runs.AddCalls.Should().Be(0);
-        _unitOfWork.SaveChangesCalls.Should().Be(0);
         _dispatcher.EnqueueCalls.Should().Be(0);
     }
 
@@ -142,8 +138,7 @@ public sealed class RequestManualRunCommandHandlerTests
             _runs,
             _dispatcher,
             _currentUser,
-            _clock,
-            _unitOfWork);
+            _clock);
     }
 
     private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository
@@ -184,11 +179,20 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(_runs.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
         }
 
-        public void Add(TopUpRun run)
+        public Task<bool> ExistsForScheduledOccurrenceAsync(
+            long campaignId,
+            DateTime scheduledFor,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_runs.Any(x => x.TopUpCampaignId == campaignId && x.ScheduledForUtc == scheduledFor));
+        }
+
+        public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
         {
             AddCalls++;
             IdProperty.SetValue(run, _nextId++);
             _runs.Add(run);
+            return Task.CompletedTask;
         }
     }
 
@@ -226,14 +230,4 @@ public sealed class RequestManualRunCommandHandlerTests
         public DateTimeOffset UtcNow { get; } = utcNow;
     }
 
-    private sealed class FakeUnitOfWork : IUnitOfWork
-    {
-        public int SaveChangesCalls { get; private set; }
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        {
-            SaveChangesCalls++;
-            return Task.FromResult(1);
-        }
-    }
 }

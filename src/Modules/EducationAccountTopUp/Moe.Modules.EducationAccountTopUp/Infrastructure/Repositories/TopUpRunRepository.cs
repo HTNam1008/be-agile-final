@@ -20,8 +20,20 @@ internal sealed class TopUpRunRepository(MoeDbContext dbContext) : ITopUpRunRepo
             .SingleOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
     }
 
-    public void Add(TopUpRun run)
+    public Task<bool> ExistsForScheduledOccurrenceAsync(
+        long campaignId,
+        DateTime scheduledFor,
+        CancellationToken cancellationToken = default)
     {
-        dbContext.Set<TopUpRun>().Add(run);
+        return dbContext.Set<TopUpRun>()
+            .AnyAsync(
+                x => x.TopUpCampaignId == campaignId && x.ScheduledForUtc == scheduledFor,
+                cancellationToken);
+    }
+
+    public async Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
+    {
+        await dbContext.Set<TopUpRun>().AddAsync(run, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
