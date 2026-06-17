@@ -11,13 +11,46 @@ internal sealed class TopUpTransactionConfiguration : IEntityTypeConfiguration<T
         builder.ToTable("TopUpTransaction", "topup");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("TopUpTransactionId").UseIdentityColumn();
-        builder.HasIndex(x => new { x.TopUpRunId, x.EducationAccountId });
-        builder.HasIndex(x => x.IdempotencyKey).IsUnique();
-        builder.Property(x => x.TopUpAmount).HasPrecision(19, 2);
-        builder.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
-        builder.Property(x => x.TransactionStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
-        builder.Property(x => x.ProcessedAtUtc).HasColumnName("ProcessedAt");
-        builder.Property(x => x.FailureReason).HasMaxLength(1000);
-        builder.Property(x => x.IdempotencyKey).HasMaxLength(120).IsRequired();
+
+        builder.Property(x => x.IdempotencyKey)
+            .HasMaxLength(100)
+            .IsRequired();
+
+        builder.HasIndex(x => x.IdempotencyKey)
+            .IsUnique()
+            .HasDatabaseName("IX_TopUpTransaction_IdempotencyKey");
+
+        builder.HasIndex(x => new { x.TopUpRunId, x.EducationAccountId })
+            .IsUnique()
+            .HasDatabaseName("IX_TopUpTransaction_Run_Account");
+
+        builder.Property(x => x.TransactionStatusCode)
+            .HasMaxLength(20)
+            .IsUnicode(false)
+            .IsRequired();
+
+        builder.Property(x => x.Amount)
+            .HasColumnType("decimal(18,2)")
+            .IsRequired();
+
+        builder.Property(x => x.AccountTransactionId)
+            .IsRequired(false);
+
+        builder.Property(x => x.Reason)
+            .HasMaxLength(500)
+            .IsRequired(false);
+
+        builder.Property(x => x.CreatedAtUtc)
+            .HasColumnName("CreatedAt")
+            .IsRequired();
+
+        builder.Property(x => x.CompletedAtUtc)
+            .HasColumnName("CompletedAt")
+            .IsRequired(false);
+
+        builder.HasOne<TopUpRun>()
+            .WithMany()
+            .HasForeignKey(x => x.TopUpRunId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
