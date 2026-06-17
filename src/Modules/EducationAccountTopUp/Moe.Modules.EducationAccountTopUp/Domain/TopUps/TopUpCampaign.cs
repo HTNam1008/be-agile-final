@@ -56,7 +56,7 @@ internal sealed class TopUpCampaign : Entity<long>
             EndDate = endDate,
             FrequencyCode = frequencyCode,
             FrequencyInterval = frequencyInterval,
-            CampaignStatusCode = "DRAFT",
+            CampaignStatusCode = "Draft",
             CampaignVersion = 1,
             CreatedByLoginAccountId = currentUserId,
             CreatedAtUtc = nowUtc,
