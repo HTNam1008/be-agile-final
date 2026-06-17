@@ -22,7 +22,7 @@ public sealed class GetEServiceAuthFlowHandler(IOptions<AuthenticationOptions> o
             singpass.Scopes,
             "/api/eservice/v1/auth/login",
             "/api/eservice/v1/auth/callback",
-            "Start at /api/eservice/v1/auth/login. The backend completes Singpass/MockPass FAPI and returns an MOE API token for /api/eservice endpoints.",
+            "Start at /api/eservice/v1/auth/login. The backend completes Singpass/MockPass FAPI, resolves local eligibility, and sets a secure e-service session cookie.",
             true,
             false);
 
