@@ -10,6 +10,9 @@ internal sealed class TopUpRunConfiguration : IEntityTypeConfiguration<TopUpRun>
     {
         builder.ToTable("TopUpRun", "topup");
         builder.HasKey(x => x.Id);
+        builder.Ignore(x => x.ScheduledFor);
+        builder.Ignore(x => x.StartedAt);
+        builder.Ignore(x => x.CompletedAt);
         builder.Property(x => x.Id).HasColumnName("TopUpRunId").UseIdentityColumn();
         builder.HasIndex(x => x.TopUpCampaignId);
         builder.HasIndex(x => x.IdempotencyKey)
