@@ -35,5 +35,11 @@ public sealed class CreateAdminUserRequestValidator : AbstractValidator<CreateAd
             .Matches("[^A-Za-z0-9]").WithMessage("Temporary password must contain a symbol.");
 
         RuleFor(x => x.InitialOrganizationUnitId).GreaterThan(0);
+
+        RuleFor(x => x.RoleCode)
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty()
+            .Must(role => role is "SYSTEM_ADMIN" or "SCHOOL_ADMIN")
+            .WithMessage("Role code must be SYSTEM_ADMIN or SCHOOL_ADMIN.");
     }
 }

@@ -11,11 +11,6 @@ internal sealed class TopUpTransactionConfiguration : IEntityTypeConfiguration<T
         builder.ToTable("TopUpTransaction", "topup");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("TopUpTransactionId").UseIdentityColumn();
-
-        builder.Property(x => x.IdempotencyKey)
-            .HasMaxLength(100)
-            .IsRequired();
-
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasDatabaseName("IX_TopUpTransaction_IdempotencyKey");
@@ -24,8 +19,12 @@ internal sealed class TopUpTransactionConfiguration : IEntityTypeConfiguration<T
             .IsUnique()
             .HasDatabaseName("IX_TopUpTransaction_Run_Account");
 
+        builder.Property(x => x.IdempotencyKey)
+            .HasMaxLength(100)
+            .IsRequired();
+
         builder.Property(x => x.TransactionStatusCode)
-            .HasMaxLength(20)
+            .HasMaxLength(30)
             .IsUnicode(false)
             .IsRequired();
 
@@ -33,11 +32,8 @@ internal sealed class TopUpTransactionConfiguration : IEntityTypeConfiguration<T
             .HasColumnType("decimal(18,2)")
             .IsRequired();
 
-        builder.Property(x => x.AccountTransactionId)
-            .IsRequired(false);
-
         builder.Property(x => x.Reason)
-            .HasMaxLength(500)
+            .HasMaxLength(1000)
             .IsRequired(false);
 
         builder.Property(x => x.CreatedAtUtc)
