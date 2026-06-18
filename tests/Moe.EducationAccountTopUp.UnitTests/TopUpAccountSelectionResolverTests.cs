@@ -241,5 +241,22 @@ public sealed class TopUpAccountSelectionResolverTests
             IReadOnlyCollection<long> personIds = query.Select(x => x.PersonId).Distinct().ToArray();
             return Task.FromResult(personIds);
         }
+
+        public Task<IReadOnlyDictionary<long, TopUpStudentDisplaySummary>> FindDisplayByPersonIdsForTopUpAsync(
+            IReadOnlyCollection<long> personIds,
+            long organizationId,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyDictionary<long, TopUpStudentDisplaySummary> result = students
+                .Where(x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId))
+                .ToDictionary(
+                    x => x.PersonId,
+                    x => new TopUpStudentDisplaySummary(
+                        x.PersonId,
+                        $"STU-{x.PersonId}",
+                        $"Student {x.PersonId}"));
+
+            return Task.FromResult(result);
+        }
     }
 }
