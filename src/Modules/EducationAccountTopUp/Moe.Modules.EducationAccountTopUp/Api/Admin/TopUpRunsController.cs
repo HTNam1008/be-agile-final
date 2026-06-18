@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
@@ -41,31 +42,11 @@ public sealed class TopUpRunsController(
             return ToFailureResponse(result.Error);
         }
 
-        Response.Headers.Location = $"/api/admin/v1/campaigns/{campaignId}/runs/{result.Value.RunId}";
+        Response.Headers.Location = $"/api/admin/v1/top-up/runs/{result.Value.RunId}";
         return ApiResponseFactory.Accepted(
             result.Value,
             HttpContext.TraceIdentifier,
             "Run request accepted");
-    }
-
-    [HttpGet("{runId:long}")]
-    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
-    [ProducesResponseType(typeof(ApiResponse<RunSummaryResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetRunSummary(
-        long campaignId,
-        long runId,
-        CancellationToken cancellationToken)
-    {
-        _ = campaignId;
-
-        Result<RunSummaryResponse> result = await queries.Send(
-            new GetRunSummaryQuery(runId),
-            cancellationToken);
-
-        return result.IsFailure
-            ? ToFailureResponse(result.Error)
-            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
     }
 
     [HttpPost("{runId:long}/reconcile")]
@@ -78,7 +59,14 @@ public sealed class TopUpRunsController(
         [FromServices] RunReconciliationService reconciliationService,
         CancellationToken cancellationToken)
     {
-        _ = campaignId;
+        Result<RunSummaryResponse> accessResult = await queries.Send(
+            new GetRunSummaryQuery(runId, campaignId),
+            cancellationToken);
+
+        if (accessResult.IsFailure)
+        {
+            return ToFailureResponse(accessResult.Error);
+        }
 
         Result<ReconciliationResult> result = await reconciliationService.ReconcileRunAsync(
             runId,
@@ -94,9 +82,15 @@ public sealed class TopUpRunsController(
 
     private ObjectResult ToFailureResponse(Error error)
     {
-        int statusCode = error == TopUpErrors.CampaignNotFound || error == TopUpErrors.RunNotFound
-            ? ApiResponseCodes.NotFound
-            : ApiResponseCodes.BadRequest;
+        int statusCode =
+            error == TopUpErrors.CampaignNotFound || error == TopUpErrors.RunNotFound
+                ? ApiResponseCodes.NotFound
+                : error == TopUpErrors.Unauthorized
+                    || error == TopUpHistoryErrors.AccessDenied
+                    || error == TopUpHistoryErrors.OrganizationOutsideScope
+                    || error == TopUpHistoryErrors.OrganizationScopeRequired
+                        ? ApiResponseCodes.Forbidden
+                        : ApiResponseCodes.BadRequest;
 
         return ApiResponseFactory.Failure(error, statusCode, HttpContext.TraceIdentifier);
     }
