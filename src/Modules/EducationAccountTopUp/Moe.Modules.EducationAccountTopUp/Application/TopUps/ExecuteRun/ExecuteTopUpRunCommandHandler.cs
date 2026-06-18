@@ -26,7 +26,7 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
             return Result<long>.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCode.Active.ToString())
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Active)
             return Result<long>.Failure(new Error("InvalidStatus", "Only ACTIVE campaigns can be executed."));
 
         var nowUtc = clock.UtcNow.UtcDateTime;
@@ -78,10 +78,19 @@ internal sealed class ExecuteTopUpRunCommandHandler(
             if (rules.Count == 0)
                 return Result<long>.Failure(new Error("ZeroRules", "Cannot execute DYNAMIC_RULES campaign without rules."));
 
-            var allAccounts = await accountsQuery.ToListAsync(cancellationToken);
-            foreach (var acc in allAccounts)
+            var activeAccountsQuery = accountsQuery
+                .Where(x => x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active);
+
+            activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, nowUtc);
+
+            var accountIds = await activeAccountsQuery.Select(x => x.Id).ToListAsync(cancellationToken);
+            foreach (var accId in accountIds)
             {
-                matches.Add((acc, campaign.DefaultTopUpAmount));
+                var acc = await dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>().FindAsync(new object[] { accId }, cancellationToken);
+                if (acc != null)
+                {
+                     matches.Add((acc, campaign.DefaultTopUpAmount));
+                }
             }
         }
 
