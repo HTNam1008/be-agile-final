@@ -15,6 +15,42 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
         IReadOnlyCollection<long> scopedOrganizationIds,
         CancellationToken cancellationToken)
     {
+        IQueryable<TopUpStudentSearchSummary> query = BuildTopUpSearchQuery(criteria, scopedOrganizationIds);
+
+        long total = await query.LongCountAsync(cancellationToken);
+
+        TopUpStudentSearchSummary[] items = await query
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.StudentNumber)
+            .ThenBy(x => x.PersonId)
+            .Skip((criteria.Page - 1) * criteria.PageSize)
+            .Take(criteria.PageSize)
+            .ToArrayAsync(cancellationToken);
+
+        return new TopUpStudentSearchSummaryPage(
+            items,
+            criteria.Page,
+            criteria.PageSize,
+            total);
+    }
+
+    public async Task<IReadOnlyCollection<long>> FindMatchingPersonIdsForTopUpAsync(
+        TopUpStudentSearchCriteria criteria,
+        IReadOnlyCollection<long> scopedOrganizationIds,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<TopUpStudentSearchSummary> query = BuildTopUpSearchQuery(criteria, scopedOrganizationIds);
+
+        return await query
+            .Select(x => x.PersonId)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+    }
+
+    private IQueryable<TopUpStudentSearchSummary> BuildTopUpSearchQuery(
+        TopUpStudentSearchCriteria criteria,
+        IReadOnlyCollection<long> scopedOrganizationIds)
+    {
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()
@@ -80,29 +116,14 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             query = query.Where(x => x.Person.DateOfBirth >= earliestBirthDate);
         }
 
-        long total = await query.LongCountAsync(cancellationToken);
-
-        TopUpStudentSearchSummary[] items = await query
-            .OrderBy(x => x.Person.OfficialFullName)
-            .ThenBy(x => x.Enrollment.StudentNumber)
-            .ThenBy(x => x.Person.Id)
-            .Skip((criteria.Page - 1) * criteria.PageSize)
-            .Take(criteria.PageSize)
-            .Select(x => new TopUpStudentSearchSummary(
-                x.Person.Id,
-                x.Enrollment.StudentNumber,
-                x.Person.OfficialFullName,
-                x.Person.DateOfBirth,
-                x.Enrollment.SchoolingStatusCode,
-                x.Enrollment.LevelCode,
-                x.Enrollment.ClassCode,
-                x.Enrollment.OrganizationId))
-            .ToArrayAsync(cancellationToken);
-
-        return new TopUpStudentSearchSummaryPage(
-            items,
-            criteria.Page,
-            criteria.PageSize,
-            total);
+        return query.Select(x => new TopUpStudentSearchSummary(
+            x.Person.Id,
+            x.Enrollment.StudentNumber,
+            x.Person.OfficialFullName,
+            x.Person.DateOfBirth,
+            x.Enrollment.SchoolingStatusCode,
+            x.Enrollment.LevelCode,
+            x.Enrollment.ClassCode,
+            x.Enrollment.OrganizationId));
     }
 }

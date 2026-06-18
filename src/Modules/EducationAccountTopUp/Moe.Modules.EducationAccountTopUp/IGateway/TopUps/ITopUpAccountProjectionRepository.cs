@@ -9,4 +9,8 @@ internal interface ITopUpAccountProjectionRepository
     Task<IReadOnlyDictionary<long, TopUpAccountProjection>> FindByPersonIdsAsync(
         IReadOnlyCollection<long> personIds,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<long, TopUpAccountProjection>> FindByEducationAccountIdsAsync(
+        IReadOnlyCollection<long> educationAccountIds,
+        CancellationToken cancellationToken);
 }
