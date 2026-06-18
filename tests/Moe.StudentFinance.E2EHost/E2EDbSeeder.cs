@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.E2EHost;
@@ -18,6 +19,8 @@ public class E2EDbSeeder : IHostedService
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
+        SeedIdentityRows(db);
 
         // We use Reflection or direct EF Core insertions to bypass domain rules if necessary, 
         // but OpenManual is better. However, EducationAccount uses long Id. 
@@ -54,4 +57,75 @@ public class E2EDbSeeder : IHostedService
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static void SeedIdentityRows(MoeDbContext db)
+    {
+        if (!db.Set<Person>().Any(x => x.Id == 2001))
+        {
+            db.Set<Person>().Add(new Person(
+                2001,
+                "MOCKPASS-STUDENT-2001",
+                "Tan Mei Ling",
+                new DateOnly(2008, 5, 12),
+                "SG",
+                "CITIZEN"));
+        }
+
+        Type userAccountType = typeof(Person).Assembly.GetType(
+            "Moe.Modules.IdentityPlatform.Domain.Iam.UserAccount",
+            throwOnError: true)!;
+
+        if (db.Find(userAccountType, 1001L) is null)
+        {
+            object admin = userAccountType.GetMethod("CreateBootstrapAdmin")!.Invoke(null,
+            [
+                "https://sts.windows.net/e2e/",
+                "e2e-admin-object-id",
+                "e2e-tenant-id",
+                "e2e-admin-object-id",
+                "system.admin@moe.local",
+                "MOE System Admin",
+                DateTime.UtcNow
+            ])!;
+            SetId(admin, 1001);
+            db.Add(admin);
+        }
+
+        if (db.Find(userAccountType, 1003L) is null)
+        {
+            object student = userAccountType.GetMethod("CreateStudentSingpass")!.Invoke(null,
+            [
+                2001L,
+                "http://localhost:5001/mockpass",
+                "MOCKPASS-STUDENT-2001",
+                "Tan Mei Ling",
+                1001L,
+                DateTime.UtcNow
+            ])!;
+            SetId(student, 1003);
+            db.Add(student);
+        }
+
+        if (!db.Set<EducationAccount>().Any(x => x.PersonId == 2001))
+        {
+            var accountResult = EducationAccount.OpenManual(
+                2001,
+                "EA-DEMO-0001",
+                DateTimeOffset.UtcNow,
+                "E2E Seed",
+                "Portal account seed",
+                1001);
+
+            if (accountResult.IsSuccess)
+            {
+                accountResult.Value.UpdateBalance(250.00m);
+                db.Set<EducationAccount>().Add(accountResult.Value);
+            }
+        }
+    }
+
+    private static void SetId(object entity, long id)
+    {
+        entity.GetType().GetProperty("Id")!.SetValue(entity, id);
+    }
 }
