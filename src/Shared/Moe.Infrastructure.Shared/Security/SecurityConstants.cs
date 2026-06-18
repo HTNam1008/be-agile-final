@@ -21,6 +21,7 @@ public static class AuthorizationPolicies
     public const string ManageAccountLifecycle = "ManageAccountLifeCycle";
     public const string ManageExternalAccounts = "ManageExternalAccounts";
     public const string ManageTopUps = "ManageTopUps";
+    public const string ViewTopUps = "ViewTopUps";
     public const string ManageCourses = "ManageCourses";
     public const string ReviewFas = "ReviewFas";
 }

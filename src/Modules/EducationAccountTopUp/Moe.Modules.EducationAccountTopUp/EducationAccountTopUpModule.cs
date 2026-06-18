@@ -5,12 +5,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.EducationAccountTopUp.Api.Admin;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
+using Moe.Modules.EducationAccountTopUp.Application.History;
+using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
+using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
@@ -21,7 +25,11 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
+using Moe.Modules.EducationAccountTopUp.IGateway;
+using Moe.Modules.EducationAccountTopUp.IGateway.History;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
@@ -49,6 +57,12 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
         services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
+        services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
+        services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
+        services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
+        services.AddScoped<ITopUpRunDispatcher, InProcessTopUpRunDispatcher>();
+        services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
+        services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();
         services.AddScoped<RecipientProcessingService>();
@@ -61,6 +75,9 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddHostedService<TopUpRunWorker>();
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsRequest>, SearchTopUpAccountsRequestValidator>();
+        services.AddScoped<IValidator<UpsertFixedRecipientsRequest>, UpsertFixedRecipientsRequestValidator>();
+        services.AddScoped<IValidator<CampaignHistoryRequest>, CampaignHistoryRequestValidator>();
+        services.AddScoped<IValidator<RunHistoryRequest>, RunHistoryRequestValidator>();
         services.AddScoped<IValidator<OpenManualAccountCommand>, OpenManualAccountValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsQuery>, SearchTopUpAccountsValidator>();
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
@@ -70,7 +87,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<CreateCampaignCommand, long>, CreateCampaignCommandHandler>();
         services.AddScoped<ICommandHandler<UpdateCampaignCommand>, UpdateCampaignCommandHandler>();
         services.AddScoped<ICommandHandler<ChangeCampaignStatusCommand>, ChangeCampaignStatusCommandHandler>();
-        services.AddScoped<ICommandHandler<UpsertFixedRecipientsCommand>, UpsertFixedRecipientsCommandHandler>();
+        services.AddScoped<ICommandHandler<UpsertFixedRecipientsCommand, UpsertFixedRecipientsResponse>, UpsertFixedRecipientsCommandHandler>();
         services.AddScoped<ICommandHandler<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandHandler>();
         services.AddScoped<ICommandHandler<ExecuteTopUpRunCommand, long>, ExecuteTopUpRunCommandHandler>();
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
@@ -78,6 +95,8 @@ public sealed class EducationAccountTopUpModule : IModule
         // Top-Up Campaign Queries
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
         services.AddScoped<IQueryHandler<GetRunSummaryQuery, RunSummaryResponse>, GetRunSummaryQueryHandler>();
+        services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
 
         // Top-Up Campaign Validators
         services.AddScoped<IValidator<CreateCampaignCommand>, CreateCampaignCommandValidator>();
@@ -88,8 +107,6 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<ExecuteTopUpRunCommand>, ExecuteTopUpRunCommandValidator>();
         services.AddScoped<IValidator<RequestManualRunRequest>, RequestManualRunRequestValidator>();
         services.AddScoped<IValidator<RequestManualRunCommand>, RequestManualRunCommandValidator>();
-        services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
-        
         services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }

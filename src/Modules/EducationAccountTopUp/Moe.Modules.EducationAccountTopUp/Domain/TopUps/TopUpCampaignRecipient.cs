@@ -30,4 +30,9 @@ internal sealed class TopUpCampaignRecipient : Entity<long>
             AddedAtUtc = nowUtc
         };
     }
+
+    public void UpdateAmountOverride(decimal? amountOverride)
+    {
+        AmountOverride = amountOverride;
+    }
 }
