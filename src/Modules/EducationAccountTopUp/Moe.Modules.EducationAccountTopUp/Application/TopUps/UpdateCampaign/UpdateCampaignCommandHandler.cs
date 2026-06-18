@@ -26,9 +26,9 @@ internal sealed class UpdateCampaignCommandHandler(
         if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
             return Result.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
 
-        // Validation constraint: Cannot update unless DRAFT or PAUSED. 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCode.Draft.ToString() &&
-            campaign.CampaignStatusCode != TopUpCampaignStatusCode.Paused.ToString())
+        // Validation constraint: Cannot update unless DRAFT or PAUSED.
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
+            campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
             return Result.Failure(new Error("InvalidStatus", "Only DRAFT or PAUSED campaigns can be modified."));
         }
