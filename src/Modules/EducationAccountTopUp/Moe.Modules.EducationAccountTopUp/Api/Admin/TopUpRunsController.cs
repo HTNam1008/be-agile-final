@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
@@ -57,10 +58,8 @@ public sealed class TopUpRunsController(
         long runId,
         CancellationToken cancellationToken)
     {
-        _ = campaignId;
-
         Result<RunSummaryResponse> result = await queries.Send(
-            new GetRunSummaryQuery(runId),
+            new GetRunSummaryQuery(runId, campaignId),
             cancellationToken);
 
         return result.IsFailure
@@ -94,9 +93,15 @@ public sealed class TopUpRunsController(
 
     private ObjectResult ToFailureResponse(Error error)
     {
-        int statusCode = error == TopUpErrors.CampaignNotFound || error == TopUpErrors.RunNotFound
-            ? ApiResponseCodes.NotFound
-            : ApiResponseCodes.BadRequest;
+        int statusCode =
+            error == TopUpErrors.CampaignNotFound || error == TopUpErrors.RunNotFound
+                ? ApiResponseCodes.NotFound
+                : error == TopUpErrors.Unauthorized
+                    || error == TopUpHistoryErrors.AccessDenied
+                    || error == TopUpHistoryErrors.OrganizationOutsideScope
+                    || error == TopUpHistoryErrors.OrganizationScopeRequired
+                        ? ApiResponseCodes.Forbidden
+                        : ApiResponseCodes.BadRequest;
 
         return ApiResponseFactory.Failure(error, statusCode, HttpContext.TraceIdentifier);
     }
