@@ -14,7 +14,7 @@ public sealed class RecipientProcessingService(
     IRecipientValidator recipientValidator,
     IUnitOfWork unitOfWork,
     IClock clock,
-    ILogger<RecipientProcessingService> logger)
+    ILogger<RecipientProcessingService> logger) : IRecipientProcessingService
 {
     private const string CreditUnavailableReason = "Credit service unavailable";
 
