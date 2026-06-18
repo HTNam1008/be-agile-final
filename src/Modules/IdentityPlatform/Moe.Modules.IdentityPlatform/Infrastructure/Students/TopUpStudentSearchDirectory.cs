@@ -44,6 +44,34 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             .ToArrayAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<long, TopUpStudentDisplaySummary>> FindDisplayByPersonIdsForTopUpAsync(
+        IReadOnlyCollection<long> personIds,
+        long organizationId,
+        CancellationToken cancellationToken)
+    {
+        if (personIds.Count == 0)
+        {
+            return new Dictionary<long, TopUpStudentDisplaySummary>();
+        }
+
+        TopUpStudentDisplaySummary[] rows = await (
+            from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
+            join person in dbContext.Set<Person>().AsNoTracking()
+                on enrollment.PersonId equals person.Id
+            where personIds.Contains(enrollment.PersonId)
+                && enrollment.OrganizationId == organizationId
+            orderby enrollment.PersonId, enrollment.StartDate descending, enrollment.Id descending
+            select new TopUpStudentDisplaySummary(
+                enrollment.PersonId,
+                enrollment.StudentNumber,
+                person.OfficialFullName))
+            .ToArrayAsync(cancellationToken);
+
+        return rows
+            .DistinctBy(x => x.PersonId)
+            .ToDictionary(x => x.PersonId);
+    }
+
     private IQueryable<TopUpStudentSearchSummary> BuildTopUpSearchQuery(
         TopUpStudentSearchCriteria criteria,
         IReadOnlyCollection<long> scopedOrganizationIds)
