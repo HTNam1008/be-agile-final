@@ -35,7 +35,7 @@ public static class DependencyInjection
 
         var auth = configuration.GetSection(AuthenticationOptions.SectionName).Get<AuthenticationOptions>() ?? new();
         services.AddAuthentication()
-            .AddJwtBearer(AuthenticationSchemes.AdminEntra, options => Bind(options, auth.AdminEntra, AuthenticationSchemes.AdminEntra))
+            .AddJwtBearer(AuthenticationSchemes.AdminEntra, options => Bind(options, auth.AdminEntra, AuthenticationSchemes.AdminEntra, AuthenticationCookies.AdminSession))
             .AddJwtBearer(AuthenticationSchemes.EServiceSingpass, options => Bind(options, auth.EServiceSingpass, AuthenticationSchemes.EServiceSingpass));
 
         services.AddAuthorization(options =>
@@ -45,26 +45,28 @@ public static class DependencyInjection
                 policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
                 policy.RequireAuthenticatedUser();
                 policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+                policy.RequireClaim(ClaimNames.Role, "SYSTEM_ADMIN", "SCHOOL_ADMIN");
             });
             options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
             {
                 policy.AddAuthenticationSchemes(AuthenticationSchemes.EServiceSingpass);
                 policy.RequireAuthenticatedUser();
                 policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
+                policy.RequireClaim(ClaimNames.Role, "STUDENT");
             });
             AddPermission(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE");
-            AddPermission(options, AuthorizationPolicies.ManageAccounts, "ACCOUNTS_MANAGE");
+            AddPermission(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE");
             AddPermission(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION");
             AddPermission(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE");
-            AddPermission(options, AuthorizationPolicies.ManageCourses, "COURSES_MANAGE");
+            AddPermission(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL");
             AddPermission(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW");
         });
 
         services.AddCors(options =>
         {
             var portals = configuration.GetSection(PortalOptions.SectionName).Get<PortalOptions>() ?? new();
-            options.AddPolicy("AdminCors", p => p.WithOrigins(portals.AdminAllowedOrigins).AllowAnyHeader().AllowAnyMethod());
-            options.AddPolicy("EServiceCors", p => p.WithOrigins(portals.EServiceAllowedOrigins).AllowAnyHeader().AllowAnyMethod());
+            options.AddPolicy("AdminCors", p => p.WithOrigins(portals.AdminAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+            options.AddPolicy("EServiceCors", p => p.WithOrigins(portals.EServiceAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
         });
         return services;
     }
@@ -82,12 +84,32 @@ public static class DependencyInjection
         return app;
     }
 
-    private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme)
+    private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
+#if DEBUG
+        if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
+        {
+            target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+            target.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = source.Authority.TrimEnd('/'),
+                ValidateAudience = true,
+                ValidAudience = source.Audience,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(source.LocalTokenSigningKey)),
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+            target.Events = CreateSchemeEvents(authenticationScheme);
+            return;
+        }
+#endif
+
         target.Authority = source.Authority;
         target.Audience = source.Audience;
         target.RequireHttpsMetadata = source.RequireHttpsMetadata;
-        target.Events = CreateSchemeEvents(authenticationScheme);
+        target.Events = CreateSchemeEvents(authenticationScheme, bearerCookieName);
         ConfigureTenantIssuers(target, source);
     }
 
@@ -107,14 +129,14 @@ public static class DependencyInjection
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.FromMinutes(1)
             };
-            target.Events = CreateSchemeEvents(authenticationScheme);
+            target.Events = CreateSchemeEvents(authenticationScheme, AuthenticationCookies.EServiceSession);
             return;
         }
 
         target.Authority = source.Authority;
         target.Audience = source.Audience;
         target.RequireHttpsMetadata = source.RequireHttpsMetadata;
-        target.Events = CreateSchemeEvents(authenticationScheme);
+        target.Events = CreateSchemeEvents(authenticationScheme, AuthenticationCookies.EServiceSession);
 
         if (!string.IsNullOrWhiteSpace(source.DiscoveryEndpoint))
         {
@@ -146,10 +168,21 @@ public static class DependencyInjection
         };
     }
 
-    private static JwtBearerEvents CreateSchemeEvents(string authenticationScheme)
+    private static JwtBearerEvents CreateSchemeEvents(string authenticationScheme, string? bearerCookieName = null)
     {
         return new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                if (string.IsNullOrWhiteSpace(context.Token)
+                    && !string.IsNullOrWhiteSpace(bearerCookieName)
+                    && context.Request.Cookies.TryGetValue(bearerCookieName, out string? cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
+
+                return Task.CompletedTask;
+            },
             OnTokenValidated = context =>
             {
                 if (context.Principal?.Identity is ClaimsIdentity identity)
