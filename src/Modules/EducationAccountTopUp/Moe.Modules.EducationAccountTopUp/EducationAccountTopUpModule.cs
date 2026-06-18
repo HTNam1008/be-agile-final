@@ -8,6 +8,7 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Api.Admin;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
@@ -47,6 +48,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();
         services.AddScoped<RecipientProcessingService>();
         services.AddScoped<RunExecutionOrchestrator>();
+        services.AddScoped<RunReconciliationService>();
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsRequest>, SearchTopUpAccountsRequestValidator>();
         services.AddScoped<IValidator<OpenManualAccountCommand>, OpenManualAccountValidator>();
@@ -65,6 +67,7 @@ public sealed class EducationAccountTopUpModule : IModule
 
         // Top-Up Campaign Queries
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
+        services.AddScoped<IQueryHandler<GetRunSummaryQuery, RunSummaryResponse>, GetRunSummaryQueryHandler>();
 
         // Top-Up Campaign Validators
         services.AddScoped<IValidator<CreateCampaignCommand>, CreateCampaignCommandValidator>();
