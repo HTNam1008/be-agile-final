@@ -35,6 +35,9 @@ internal static class StudentProfileMapper
             profile.PreferredEmail,
             profile.OfficialMobile,
             profile.PreferredMobile,
+            profile.OfficialAddress,
+            profile.PreferredAddress,
+            profile.UpdatedAtUtc,
             new StudentEnrollmentProfileResponse(
                 profile.SchoolEnrollmentId,
                 profile.SchoolOrganizationId,

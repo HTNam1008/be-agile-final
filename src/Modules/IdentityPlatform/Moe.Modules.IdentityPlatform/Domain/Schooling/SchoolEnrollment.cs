@@ -2,7 +2,7 @@ using Moe.SharedKernel.Domain;
 
 namespace Moe.Modules.IdentityPlatform.Domain.Schooling;
 
-public sealed class SchoolEnrollment : Entity<long>
+public class SchoolEnrollment : Entity<long>
 {
     private SchoolEnrollment() : base(0) { }
 
