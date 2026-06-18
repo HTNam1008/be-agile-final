@@ -19,8 +19,7 @@ internal sealed class UserAccessScopeConfiguration : IEntityTypeConfiguration<Us
         builder.HasData(
             Seed(1001, DemoSeedData.SystemAdminLoginAccountId, OrganizationUnitCodes.MoeHeadquartersId, RoleCodes.SystemAdmin, null),
             Seed(1002, DemoSeedData.SchoolAdminLoginAccountId, OrganizationUnitCodes.DemoSchoolId, RoleCodes.SchoolAdmin, DemoSeedData.SystemAdminLoginAccountId),
-            Seed(1003, DemoSeedData.StudentLoginAccountId, OrganizationUnitCodes.DemoSchoolId, RoleCodes.Student, DemoSeedData.SystemAdminLoginAccountId),
-            Seed(1004, DemoSeedData.SystemAdminLoginAccountId, OrganizationUnitCodes.DemoSchoolId, RoleCodes.SystemAdmin, null));
+            Seed(1003, DemoSeedData.StudentLoginAccountId, OrganizationUnitCodes.DemoSchoolId, RoleCodes.Student, DemoSeedData.SystemAdminLoginAccountId));
     }
 
     private static object Seed(long id, long loginAccountId, long organizationId, string roleCode, long? createdByLoginAccountId)

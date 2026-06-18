@@ -8,6 +8,10 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.EducationAccountTopUp.Api.Admin;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
@@ -18,7 +22,6 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipients
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
-using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
@@ -29,6 +32,8 @@ using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.History;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 
 namespace Moe.Modules.EducationAccountTopUp;
@@ -40,6 +45,17 @@ public sealed class EducationAccountTopUpModule : IModule
     {
         services.AddSingleton<IModelConfigurationContributor, EducationAccountTopUpModelConfiguration>();
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
+        services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
+        services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
+        services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
+        services.AddSingleton<ChannelTopUpRunDispatcher>();
+        services.AddSingleton<ITopUpRunDispatcher>(sp => sp.GetRequiredService<ChannelTopUpRunDispatcher>());
+        services.AddSingleton<ITopUpRunQueueReader>(sp => sp.GetRequiredService<ChannelTopUpRunDispatcher>());
+        services.AddScoped<IAccountCreditGateway, AccountCreditGateway>();
+        services.AddScoped<IRecipientValidator, StubRecipientValidator>();
+        services.AddScoped<IRecipientResolver, StubRecipientResolver>();
+        services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
+        services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
@@ -48,6 +64,15 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
+        services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();
+        services.AddScoped<RecipientProcessingService>();
+        services.AddScoped<IRunExecutionOrchestrator, RunExecutionOrchestrator>();
+        services.AddScoped<RunExecutionOrchestrator>();
+        services.AddScoped<IRunReconciliationService, RunReconciliationService>();
+        services.AddScoped<RunReconciliationService>();
+        services.AddScoped<IPendingTransactionRecoveryService, PendingTransactionRecoveryService>();
+        services.AddScoped<PendingTransactionRecoveryService>();
+        services.AddHostedService<TopUpRunWorker>();
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsRequest>, SearchTopUpAccountsRequestValidator>();
         services.AddScoped<IValidator<UpsertFixedRecipientsRequest>, UpsertFixedRecipientsRequestValidator>();
@@ -69,6 +94,7 @@ public sealed class EducationAccountTopUpModule : IModule
 
         // Top-Up Campaign Queries
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
+        services.AddScoped<IQueryHandler<GetRunSummaryQuery, RunSummaryResponse>, GetRunSummaryQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
 
