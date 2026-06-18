@@ -19,6 +19,7 @@ internal static class IdentityErrors
     public static readonly Error ActiveAccessScopeAlreadyExists = new("IDENTITY.ACTIVE_ACCESS_SCOPE_ALREADY_EXISTS", "The user already has this active access scope.");
     public static readonly Error SingpassAccountAlreadyExists = new("IDENTITY.SINGPASS_ACCOUNT_ALREADY_EXISTS", "A Singpass account is already linked to this person.");
     public static readonly Error ActiveProvisioningRequestAlreadyExists = new("IDENTITY.ACTIVE_PROVISIONING_REQUEST_ALREADY_EXISTS", "An active provisioning request already exists.");
+    public static readonly Error ProfileUpdateConflict = new("IDENTITY.PROFILE_UPDATE_CONFLICT", "The profile was updated by another request. Reload the latest profile before saving changes.");
 
     public static Error AdminDirectoryCreateFailed(string reason)
         => new("IDENTITY.ADMIN_DIRECTORY_CREATE_FAILED", $"Microsoft Entra ID could not create the admin user. {reason}");

@@ -23,35 +23,22 @@ internal sealed class SchoolEnrollmentConfiguration : IEntityTypeConfiguration<S
         builder.Property(x => x.SourceCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
-        builder.HasData(
-            Seed(DemoSeedData.StudentSchoolEnrollmentId, DemoSeedData.StudentPersonId, "DEMO-STU-0001", "SEC_4", "4A", "ACTIVE"),
-            Seed(DemoSeedData.TopUpStudentSchoolEnrollmentIdOne, DemoSeedData.TopUpStudentPersonIdOne, "DEMO-STU-0002", "SEC_3", "3B", "ACTIVE"),
-            Seed(DemoSeedData.TopUpStudentSchoolEnrollmentIdTwo, DemoSeedData.TopUpStudentPersonIdTwo, "DEMO-STU-0003", "SEC_2", "2C", "ACTIVE"),
-            Seed(DemoSeedData.TopUpStudentSchoolEnrollmentIdThree, DemoSeedData.TopUpStudentPersonIdThree, "DEMO-STU-0004", "SEC_4", "4A", "ON_LEAVE"));
-    }
-
-    private static object Seed(
-        long id,
-        long personId,
-        string studentNumber,
-        string levelCode,
-        string classCode,
-        string schoolingStatusCode)
-        => new
+        builder.HasData(new
         {
-            Id = id,
-            PersonId = personId,
+            Id = DemoSeedData.StudentSchoolEnrollmentId,
+            PersonId = DemoSeedData.StudentPersonId,
             OrganizationId = OrganizationUnitCodes.DemoSchoolId,
-            StudentNumber = studentNumber,
+            StudentNumber = "DEMO-STU-0001",
             AcademicYear = "2026",
-            LevelCode = levelCode,
-            ClassCode = classCode,
-            SchoolingStatusCode = schoolingStatusCode,
+            LevelCode = "SEC_4",
+            ClassCode = "4A",
+            SchoolingStatusCode = "ACTIVE",
             StatusReasonCode = (string?)null,
             StartDate = new DateOnly(2026, 1, 2),
             EndDate = (DateOnly?)null,
             SourceCode = "DEMO_SEED",
             CreatedAtUtc = DemoSeedData.SeededAtUtc,
             UpdatedAtUtc = DemoSeedData.SeededAtUtc
-        };
+        });
+    }
 }
