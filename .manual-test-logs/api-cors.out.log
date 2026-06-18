@@ -1,0 +1,1017 @@
+Using launch settings from src\Hosts\Moe.StudentFinance.Api\Properties\launchSettings.json...
+2026-06-17 21:53:09,489 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (91ms) [Parameters=[@bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [org].[Organization] AS [o]
+        WHERE [o].[OrganizationId] = @bootstrap_OrganizationUnitId AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 21:53:09,635 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@utcNow='?' (DbType = DateTime2), @utcNow1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[RolePermission] AS [r]
+        WHERE [r].[RoleCode] = 'SYSTEM_ADMIN' AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow1)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 21:53:09,775 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @entraObjectId
+2026-06-17 21:53:09,983 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@account_Id='?' (DbType = Int64), @bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @bootstrap_OrganizationUnitId AND [u].[RoleCode] = 'SYSTEM_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 21:53:10,174 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: https://localhost:7000
+2026-06-17 21:53:10,180 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: http://localhost:7001
+2026-06-17 21:53:10,197 INFO  [(null)] Microsoft.Hosting.Lifetime - Application started. Press Ctrl+C to shut down.
+2026-06-17 21:53:10,198 INFO  [(null)] Microsoft.Hosting.Lifetime - Hosting environment: Development
+2026-06-17 21:53:10,199 INFO  [(null)] Microsoft.Hosting.Lifetime - Content root path: C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Hosts\Moe.StudentFinance.Api
+2026-06-17 21:56:26,682 INFO  [8caf8089-de87-4c4e-b197-2477e407a83f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 21:56:26,876 INFO  [8caf8089-de87-4c4e-b197-2477e407a83f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 180 ms with 200
+2026-06-17 21:56:26,885 INFO  [8caf8089-de87-4c4e-b197-2477e407a83f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 191 ms. TraceId=8caf8089-de87-4c4e-b197-2477e407a83f
+2026-06-17 22:00:28,342 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:00:28,391 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 7 ms with 200
+2026-06-17 22:00:28,395 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 11 ms. TraceId=ac69248e-a2b8-4874-914c-7f5f661afb3f
+2026-06-17 22:00:28,398 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:00:28,405 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 5 ms with 200
+2026-06-17 22:00:28,405 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 6 ms. TraceId=ac69248e-a2b8-4874-914c-7f5f661afb3f
+2026-06-17 22:00:28,748 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:00:28,777 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:00:30,072 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (74ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:00:30,072 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (83ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:00:30,149 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (38ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:00:30,149 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (38ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:00:30,378 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (46ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:00:30,378 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (46ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:00:30,416 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 1620 ms with 200
+2026-06-17 22:00:30,417 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 1622 ms with 200
+2026-06-17 22:00:30,420 WARN  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - Slow HTTP request POST /api/admin/v1/auth/session completed in 1622 ms. TraceId=ac69248e-a2b8-4874-914c-7f5f661afb3f
+2026-06-17 22:00:30,421 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 1627 ms. TraceId=ac69248e-a2b8-4874-914c-7f5f661afb3f
+2026-06-17 22:00:30,422 WARN  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - Slow HTTP request POST /api/admin/v1/auth/session completed in 1620 ms. TraceId=ac69248e-a2b8-4874-914c-7f5f661afb3f
+2026-06-17 22:00:30,433 INFO  [ac69248e-a2b8-4874-914c-7f5f661afb3f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 1637 ms. TraceId=ac69248e-a2b8-4874-914c-7f5f661afb3f
+2026-06-17 22:00:33,027 INFO  [37eb6f5d-a0ad-4ded-98fe-f49f3b8ed865] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:00:33,072 INFO  [37eb6f5d-a0ad-4ded-98fe-f49f3b8ed865] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 2 ms with 200
+2026-06-17 22:00:33,073 INFO  [37eb6f5d-a0ad-4ded-98fe-f49f3b8ed865] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 3 ms. TraceId=37eb6f5d-a0ad-4ded-98fe-f49f3b8ed865
+2026-06-17 22:00:38,033 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:00:38,074 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 1 ms with 200
+2026-06-17 22:00:38,076 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 2 ms. TraceId=cfa952de-9d33-4c8e-a3a3-51d7dc2d4395
+2026-06-17 22:00:38,078 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:00:38,080 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 22:00:38,081 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 1 ms. TraceId=cfa952de-9d33-4c8e-a3a3-51d7dc2d4395
+2026-06-17 22:00:38,394 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:00:38,419 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:00:38,563 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:00:38,564 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:00:38,610 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:00:38,611 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:00:38,616 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:00:38,616 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:00:38,620 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 184 ms with 200
+2026-06-17 22:00:38,620 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 184 ms with 200
+2026-06-17 22:00:38,621 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 185 ms. TraceId=cfa952de-9d33-4c8e-a3a3-51d7dc2d4395
+2026-06-17 22:00:38,622 INFO  [cfa952de-9d33-4c8e-a3a3-51d7dc2d4395] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 185 ms. TraceId=cfa952de-9d33-4c8e-a3a3-51d7dc2d4395
+2026-06-17 22:07:08,534 INFO  [948dfee3402042b29a740c221be1e219] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /
+2026-06-17 22:07:08,582 INFO  [948dfee3402042b29a740c221be1e219] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET / => 302 in 7 ms. TraceId=948dfee3402042b29a740c221be1e219
+2026-06-17 22:07:08,584 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET / completed in 8 ms with 302
+2026-06-17 22:07:08,770 INFO  [4a44b6a2e05a4ff0938587d224df3dfd] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /health/live
+2026-06-17 22:07:08,771 INFO  [32863cf3023442419c4e32cc86c7c881] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/me
+2026-06-17 22:07:08,772 INFO  [74cf771257b0435a902fa20777e5ee2f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/me
+2026-06-17 22:07:08,779 INFO  [4a44b6a2e05a4ff0938587d224df3dfd] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /health/live completed in 6 ms with 200
+2026-06-17 22:07:08,780 INFO  [74cf771257b0435a902fa20777e5ee2f] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/me => 401 in 7 ms. TraceId=74cf771257b0435a902fa20777e5ee2f
+2026-06-17 22:07:08,780 INFO  [32863cf3023442419c4e32cc86c7c881] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/me => 401 in 7 ms. TraceId=32863cf3023442419c4e32cc86c7c881
+2026-06-17 22:07:08,781 INFO  [4a44b6a2e05a4ff0938587d224df3dfd] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /health/live => 200 in 8 ms. TraceId=4a44b6a2e05a4ff0938587d224df3dfd
+2026-06-17 22:07:08,781 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/me completed in 8 ms with 401
+2026-06-17 22:07:08,782 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/me completed in 9 ms with 401
+2026-06-17 22:07:19,803 INFO  [ffe54bd6-76c3-4bb8-b11c-25e09d489fbd] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:07:19,805 INFO  [ffe54bd6-76c3-4bb8-b11c-25e09d489fbd] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 22:07:19,806 INFO  [ffe54bd6-76c3-4bb8-b11c-25e09d489fbd] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 1 ms. TraceId=ffe54bd6-76c3-4bb8-b11c-25e09d489fbd
+2026-06-17 22:07:36,761 INFO  [70531094-1184-409d-86cb-8b27515c2cd3] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:07:36,804 INFO  [70531094-1184-409d-86cb-8b27515c2cd3] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 2 ms with 200
+2026-06-17 22:07:36,805 INFO  [70531094-1184-409d-86cb-8b27515c2cd3] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 3 ms. TraceId=70531094-1184-409d-86cb-8b27515c2cd3
+2026-06-17 22:07:41,647 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:07:41,689 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 1 ms with 200
+2026-06-17 22:07:41,690 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 2 ms. TraceId=fb613be3-7bdf-420f-bace-b776730bb615
+2026-06-17 22:07:41,694 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:07:41,695 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 22:07:41,696 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 1 ms. TraceId=fb613be3-7bdf-420f-bace-b776730bb615
+2026-06-17 22:07:42,238 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:07:42,313 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (27ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:07:42,331 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:07:42,336 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (18ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:07:42,338 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:07:42,346 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:07:42,360 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (19ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:07:42,363 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (11ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:07:42,365 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 85 ms with 200
+2026-06-17 22:07:42,365 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 86 ms. TraceId=fb613be3-7bdf-420f-bace-b776730bb615
+2026-06-17 22:07:42,366 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 33 ms with 200
+2026-06-17 22:07:42,367 INFO  [fb613be3-7bdf-420f-bace-b776730bb615] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 34 ms. TraceId=fb613be3-7bdf-420f-bace-b776730bb615
+2026-06-17 22:07:44,978 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 22:07:44,984 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:07:44,993 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:07:44,999 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:07:45,070 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:07:45,160 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 181 ms with 200
+2026-06-17 22:07:45,201 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 221 ms. TraceId=b8debd68-3005-43db-bd0b-1d556aa77c70
+2026-06-17 22:07:45,202 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 22:07:45,208 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:07:45,215 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:07:45,223 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:07:45,232 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:07:45,237 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 33 ms with 200
+2026-06-17 22:07:45,238 INFO  [b8debd68-3005-43db-bd0b-1d556aa77c70] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 35 ms. TraceId=b8debd68-3005-43db-bd0b-1d556aa77c70
+2026-06-17 22:45:01,475 INFO  [c9250b44d8e044e8bda0875a06deafd7] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:45:01,512 INFO  [c9250b44d8e044e8bda0875a06deafd7] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 3 ms with 200
+2026-06-17 22:45:01,513 INFO  [c9250b44d8e044e8bda0875a06deafd7] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 4 ms. TraceId=c9250b44d8e044e8bda0875a06deafd7
+2026-06-17 22:49:10,352 INFO  [22921414d81b4526ba0554549d1700a1] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/login?returnUrl=http%3A%2F%2Flocalhost%3A3000%2Fportal%2Flogin
+2026-06-17 22:49:10,510 INFO  [22921414d81b4526ba0554549d1700a1] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:49:10,552 INFO  [22921414d81b4526ba0554549d1700a1] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:49:14,678 INFO  [22921414d81b4526ba0554549d1700a1] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - HTTP request failed after 4114.808ms
+System.Net.Http.HttpRequestException: No connection could be made because the target machine actively refused it. (localhost:5156)
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.SocketsHttpHandler.<SendAsync>g__CreateHandlerAndSendAsync|115_0(HttpRequestMessage request, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+2026-06-17 22:49:14,687 INFO  [22921414d81b4526ba0554549d1700a1] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - HTTP request failed after 4183.078ms
+System.Net.Http.HttpRequestException: No connection could be made because the target machine actively refused it. (localhost:5156)
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.SocketsHttpHandler.<SendAsync>g__CreateHandlerAndSendAsync|115_0(HttpRequestMessage request, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+2026-06-17 22:49:14,694 WARN  [22921414d81b4526ba0554549d1700a1] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - Slow HTTP request GET /api/eservice/v1/auth/login completed in 4299 ms. TraceId=22921414d81b4526ba0554549d1700a1
+2026-06-17 22:49:14,694 INFO  [22921414d81b4526ba0554549d1700a1] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/login => 200 in 4300 ms. TraceId=22921414d81b4526ba0554549d1700a1
+2026-06-17 22:49:14,695 ERROR [22921414d81b4526ba0554549d1700a1] Moe.Infrastructure.Shared.Middleware.ExceptionHandlingMiddleware - Unhandled request failure. TraceId=22921414d81b4526ba0554549d1700a1
+System.Net.Http.HttpRequestException: No connection could be made because the target machine actively refused it. (localhost:5156)
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.SocketsHttpHandler.<SendAsync>g__CreateHandlerAndSendAsync|115_0(HttpRequestMessage request, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Moe.Modules.IdentityPlatform.Infrastructure.Singpass.MockPassFapiLoginGateway.StartLoginAsync(CancellationToken cancellationToken) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Modules\IdentityPlatform\Moe.Modules.IdentityPlatform\Infrastructure\Singpass\MockPassFapiLoginGateway.cs:line 71
+   at Moe.Modules.IdentityPlatform.Api.EService.EServiceAuthController.Login(CancellationToken cancellationToken) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Modules\IdentityPlatform\Moe.Modules.IdentityPlatform\Api\EService\EServiceAuthController.cs:line 38
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.TaskOfIActionResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeActionMethodAsync>g__Awaited|12_0(ControllerActionInvoker invoker, ValueTask`1 actionResultValueTask)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeNextActionFilterAsync>g__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeInnerFilterAsync>g__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeFilterPipelineAsync>g__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+   at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+   at Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\PerformanceTrackingMiddleware.cs:line 34
+   at Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\RequestLoggingMiddleware.cs:line 36
+   at Moe.Infrastructure.Shared.Middleware.SecurityHeadersMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\SecurityHeadersMiddleware.cs:line 13
+   at Moe.Infrastructure.Shared.Middleware.ApiVersionHeaderMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\ApiVersionHeaderMiddleware.cs:line 20
+   at Moe.Infrastructure.Shared.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\ExceptionHandlingMiddleware.cs:line 17
+2026-06-17 22:49:14,763 INFO  [22921414d81b4526ba0554549d1700a1] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/login completed in 4369 ms with 500
+2026-06-17 22:49:14,855 INFO  [1ab1aaf4a65e4ef3b1efcdcda1b5e540] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /favicon.ico
+2026-06-17 22:49:14,887 INFO  [656c7726365c41faaf93c3cb1c813901] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /.well-known/appspecific/com.chrome.devtools.json
+2026-06-17 22:49:14,896 INFO  [1ab1aaf4a65e4ef3b1efcdcda1b5e540] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /favicon.ico => 404 in 0 ms. TraceId=1ab1aaf4a65e4ef3b1efcdcda1b5e540
+2026-06-17 22:49:14,897 INFO  [656c7726365c41faaf93c3cb1c813901] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /.well-known/appspecific/com.chrome.devtools.json => 404 in 0 ms. TraceId=656c7726365c41faaf93c3cb1c813901
+2026-06-17 22:49:14,897 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /favicon.ico completed in 1 ms with 404
+2026-06-17 22:49:14,898 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /.well-known/appspecific/com.chrome.devtools.json completed in 1 ms with 404
+2026-06-17 22:49:31,581 INFO  [d9953548-4ccb-451e-92f8-f8e464702199] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:49:31,624 INFO  [d9953548-4ccb-451e-92f8-f8e464702199] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 1 ms with 200
+2026-06-17 22:49:31,625 INFO  [d9953548-4ccb-451e-92f8-f8e464702199] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 2 ms. TraceId=d9953548-4ccb-451e-92f8-f8e464702199
+2026-06-17 22:49:37,154 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:49:37,197 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 1 ms with 200
+2026-06-17 22:49:37,198 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 2 ms. TraceId=e348a4fd-e740-4b3c-b745-44a9b20a2099
+2026-06-17 22:49:37,201 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 22:49:37,202 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 22:49:37,203 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 1 ms. TraceId=e348a4fd-e740-4b3c-b745-44a9b20a2099
+2026-06-17 22:49:37,595 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:49:37,637 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 22:49:37,699 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (28ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:49:37,699 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (21ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:49:37,711 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:49:37,711 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:49:37,728 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (12ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:49:37,728 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (13ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:49:37,732 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 86 ms with 200
+2026-06-17 22:49:37,733 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 87 ms. TraceId=e348a4fd-e740-4b3c-b745-44a9b20a2099
+2026-06-17 22:49:37,733 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 86 ms with 200
+2026-06-17 22:49:37,735 INFO  [e348a4fd-e740-4b3c-b745-44a9b20a2099] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 87 ms. TraceId=e348a4fd-e740-4b3c-b745-44a9b20a2099
+2026-06-17 22:49:39,819 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 22:49:39,864 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:49:39,869 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:49:39,872 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:49:39,883 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:49:39,886 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 26 ms with 200
+2026-06-17 22:49:39,886 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 27 ms. TraceId=8d261c61-16cd-4df8-a126-609f7a243d52
+2026-06-17 22:49:39,888 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 22:49:39,895 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:49:39,900 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:49:39,903 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:49:39,907 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:49:39,909 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 20 ms with 200
+2026-06-17 22:49:39,910 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 21 ms. TraceId=8d261c61-16cd-4df8-a126-609f7a243d52
+2026-06-17 22:50:10,681 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 22:50:10,726 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:50:10,730 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:50:10,733 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:50:10,736 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:50:10,739 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 17 ms with 200
+2026-06-17 22:50:10,740 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 18 ms. TraceId=8d261c61-16cd-4df8-a126-609f7a243d52
+2026-06-17 22:50:10,743 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 22:50:10,750 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 22:50:10,757 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:50:10,762 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:50:10,766 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:50:10,769 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 24 ms with 200
+2026-06-17 22:50:10,770 INFO  [8d261c61-16cd-4df8-a126-609f7a243d52] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 25 ms. TraceId=8d261c61-16cd-4df8-a126-609f7a243d52
+2026-06-17 22:50:25,405 INFO  [21ebf48cbb9e45198a68768318eae82a] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/login?returnUrl=http%3A%2F%2Flocalhost%3A3000%2Fportal%2Flogin
+2026-06-17 22:50:25,466 INFO  [21ebf48cbb9e45198a68768318eae82a] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:50:25,468 INFO  [21ebf48cbb9e45198a68768318eae82a] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:50:29,538 INFO  [21ebf48cbb9e45198a68768318eae82a] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - HTTP request failed after 4069.2152ms
+System.Net.Http.HttpRequestException: No connection could be made because the target machine actively refused it. (localhost:5156)
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+2026-06-17 22:50:29,583 INFO  [21ebf48cbb9e45198a68768318eae82a] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - HTTP request failed after 4116.9771ms
+System.Net.Http.HttpRequestException: No connection could be made because the target machine actively refused it. (localhost:5156)
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+2026-06-17 22:50:29,591 WARN  [21ebf48cbb9e45198a68768318eae82a] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - Slow HTTP request GET /api/eservice/v1/auth/login completed in 4143 ms. TraceId=21ebf48cbb9e45198a68768318eae82a
+2026-06-17 22:50:29,591 INFO  [21ebf48cbb9e45198a68768318eae82a] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/login => 200 in 4144 ms. TraceId=21ebf48cbb9e45198a68768318eae82a
+2026-06-17 22:50:29,592 ERROR [21ebf48cbb9e45198a68768318eae82a] Moe.Infrastructure.Shared.Middleware.ExceptionHandlingMiddleware - Unhandled request failure. TraceId=21ebf48cbb9e45198a68768318eae82a
+System.Net.Http.HttpRequestException: No connection could be made because the target machine actively refused it. (localhost:5156)
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.DiagnosticsHandler.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Moe.Modules.IdentityPlatform.Infrastructure.Singpass.MockPassFapiLoginGateway.StartLoginAsync(CancellationToken cancellationToken) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Modules\IdentityPlatform\Moe.Modules.IdentityPlatform\Infrastructure\Singpass\MockPassFapiLoginGateway.cs:line 71
+   at Moe.Modules.IdentityPlatform.Api.EService.EServiceAuthController.Login(CancellationToken cancellationToken) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Modules\IdentityPlatform\Moe.Modules.IdentityPlatform\Api\EService\EServiceAuthController.cs:line 38
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.TaskOfIActionResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeActionMethodAsync>g__Awaited|12_0(ControllerActionInvoker invoker, ValueTask`1 actionResultValueTask)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeNextActionFilterAsync>g__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeInnerFilterAsync>g__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeFilterPipelineAsync>g__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+   at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+   at Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\PerformanceTrackingMiddleware.cs:line 34
+   at Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\RequestLoggingMiddleware.cs:line 36
+   at Moe.Infrastructure.Shared.Middleware.SecurityHeadersMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\SecurityHeadersMiddleware.cs:line 13
+   at Moe.Infrastructure.Shared.Middleware.ApiVersionHeaderMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\ApiVersionHeaderMiddleware.cs:line 20
+   at Moe.Infrastructure.Shared.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in C:\Users\LENOVO\Downloads\moe-backend-template-with-auth-plan\moe-backend-template-auth-plan\src\Shared\Moe.Infrastructure.Shared\Middleware\ExceptionHandlingMiddleware.cs:line 17
+2026-06-17 22:50:29,609 INFO  [21ebf48cbb9e45198a68768318eae82a] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/login completed in 4162 ms with 500
+2026-06-17 22:50:29,728 INFO  [ab65ea33279f4b8589b6ace83f6f6334] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /.well-known/appspecific/com.chrome.devtools.json
+2026-06-17 22:50:29,769 INFO  [ab65ea33279f4b8589b6ace83f6f6334] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /.well-known/appspecific/com.chrome.devtools.json => 404 in 0 ms. TraceId=ab65ea33279f4b8589b6ace83f6f6334
+2026-06-17 22:50:29,770 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /.well-known/appspecific/com.chrome.devtools.json completed in 0 ms with 404
+2026-06-17 22:52:25,114 INFO  [f8f1b558f8824198bfb6ffe463bd8cac] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/login?returnUrl=http%3A%2F%2Flocalhost%3A3000%2Fportal%2Flogin
+2026-06-17 22:52:25,170 INFO  [f8f1b558f8824198bfb6ffe463bd8cac] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:52:25,171 INFO  [f8f1b558f8824198bfb6ffe463bd8cac] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:52:25,225 INFO  [f8f1b558f8824198bfb6ffe463bd8cac] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 48.6842ms - 201
+2026-06-17 22:52:25,226 INFO  [f8f1b558f8824198bfb6ffe463bd8cac] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 56.2349ms - 201
+2026-06-17 22:52:25,261 INFO  [f8f1b558f8824198bfb6ffe463bd8cac] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/login => 302 in 106 ms. TraceId=f8f1b558f8824198bfb6ffe463bd8cac
+2026-06-17 22:52:25,308 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/login completed in 153 ms with 302
+2026-06-17 22:52:40,498 INFO  [26822cf6095c49fc8917ece7a0f6cc89] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/login?returnUrl=http%3A%2F%2Flocalhost%3A3000%2Fportal%2Flogin
+2026-06-17 22:52:40,556 INFO  [26822cf6095c49fc8917ece7a0f6cc89] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:52:40,557 INFO  [26822cf6095c49fc8917ece7a0f6cc89] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 22:52:40,566 INFO  [26822cf6095c49fc8917ece7a0f6cc89] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 8.3883ms - 201
+2026-06-17 22:52:40,567 INFO  [26822cf6095c49fc8917ece7a0f6cc89] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 11.5444ms - 201
+2026-06-17 22:52:40,569 INFO  [26822cf6095c49fc8917ece7a0f6cc89] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/login => 302 in 21 ms. TraceId=26822cf6095c49fc8917ece7a0f6cc89
+2026-06-17 22:52:40,570 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/login completed in 21 ms with 302
+2026-06-17 22:52:43,566 INFO  [d05764c433e84c429b502dad60b312b1] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/callback?code=zeGkPcN38u7H_h6UIrB02mcUDuNzQrzEizDrset-pH9H_C6T4v7DnzihHh-y&state=hZup-kmf7crNwnz5KSKyjV0h0m7v6jWtXCy8UaclwgE
+2026-06-17 22:52:43,605 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/token
+2026-06-17 22:52:43,607 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/token
+2026-06-17 22:52:43,624 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 15.9541ms - 200
+2026-06-17 22:52:43,625 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 19.6067ms - 200
+2026-06-17 22:52:43,632 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request GET http://localhost:5156/singpass/v3/fapi/.well-known/keys
+2026-06-17 22:52:43,634 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request GET http://localhost:5156/singpass/v3/fapi/.well-known/keys
+2026-06-17 22:52:43,637 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 2.7151ms - 200
+2026-06-17 22:52:43,637 INFO  [d05764c433e84c429b502dad60b312b1] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 5.0533ms - 200
+2026-06-17 22:52:43,781 INFO  [d05764c433e84c429b502dad60b312b1] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (56ms) [Parameters=[@login_ExternalIssuer='?' (Size = 300), @login_ExternalSubjectId='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'SINGPASS' AND [l].[ExternalIssuer] = @login_ExternalIssuer AND [l].[ExternalSubjectId] = @login_ExternalSubjectId AND [l].[LoginStatusCode] IN ('ACTIVE', 'PENDING_FIRST_LOGIN')
+2026-06-17 22:52:43,853 INFO  [d05764c433e84c429b502dad60b312b1] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (34ms) [Parameters=[@account_PersonId_Value='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @account_PersonId_Value
+2026-06-17 22:52:43,986 INFO  [d05764c433e84c429b502dad60b312b1] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (46ms) [Parameters=[@person_Id='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [person].[SchoolEnrollment] AS [s]
+        WHERE [s].[PersonId] = @person_Id AND [s].[SchoolingStatusCode] = 'ACTIVE' AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 22:52:44,020 INFO  [d05764c433e84c429b502dad60b312b1] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [account].[EducationAccount] AS [e]
+        WHERE [e].[PersonId] = @personId) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 22:52:44,051 INFO  [d05764c433e84c429b502dad60b312b1] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (9ms) [Parameters=[@account_Id='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[RoleCode] = 'STUDENT' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 22:52:44,263 INFO  [d05764c433e84c429b502dad60b312b1] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (33ms) [Parameters=[@p2='?' (DbType = Int64), @p0='?' (DbType = DateTime2), @p3='?' (Size = 8) (DbType = Binary), @p1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [iam].[LoginAccount] SET [LastLoginAt] = @p0, [UpdatedAt] = @p1
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginAccountId] = @p2 AND [RowVersion] = @p3;
+2026-06-17 22:52:44,337 INFO  [d05764c433e84c429b502dad60b312b1] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/callback => 302 in 769 ms. TraceId=d05764c433e84c429b502dad60b312b1
+2026-06-17 22:52:44,364 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/callback completed in 796 ms with 302
+2026-06-17 22:52:49,145 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 22:52:49,222 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:52:49,230 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:52:49,254 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (19ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:52:49,280 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:52:49,335 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:52:49,533 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (42ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:52:49,576 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 390 ms with 200
+2026-06-17 22:52:49,577 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 391 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:52:49,579 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 22:52:49,584 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:52:49,591 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:52:49,595 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:52:49,603 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:52:49,608 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:52:49,614 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:52:49,618 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 38 ms with 200
+2026-06-17 22:52:49,619 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 39 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:53:05,199 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 22:53:05,206 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:53:05,212 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:53:05,216 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:53:05,226 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:53:05,230 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:53:05,233 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:53:05,235 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 33 ms with 200
+2026-06-17 22:53:05,236 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 34 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:53:05,238 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 22:53:05,243 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:53:05,248 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:53:05,251 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:53:05,255 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:53:05,260 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:53:05,264 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:53:05,267 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 28 ms with 200
+2026-06-17 22:53:05,268 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 29 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:53:18,539 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 22:53:18,596 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:53:18,600 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:53:18,603 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:53:18,606 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (0ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:53:18,608 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (0ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:53:18,611 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:53:18,613 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 22 ms with 200
+2026-06-17 22:53:18,614 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 23 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:53:18,616 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 22:53:18,619 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:53:18,624 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:53:18,638 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (10ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:53:18,650 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:53:18,661 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:53:18,666 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:53:18,669 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 52 ms with 200
+2026-06-17 22:53:18,669 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 52 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:53:24,132 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started PUT /api/eservice/v1/profile/contact
+2026-06-17 22:53:24,174 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:53:24,178 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:53:24,182 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:53:24,268 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:53:24,290 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@p1='?' (DbType = Int64), @p2='?' (Size = 8) (DbType = Binary), @p0='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [iam].[LoginAccount] SET [UpdatedAt] = @p0
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginAccountId] = @p1 AND [RowVersion] = @p2;
+2026-06-17 22:53:24,294 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:53:24,296 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:53:24,299 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - PUT /api/eservice/v1/profile/contact completed in 127 ms with 200
+2026-06-17 22:53:24,300 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP PUT /api/eservice/v1/profile/contact => 200 in 128 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 22:53:33,624 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started PUT /api/eservice/v1/profile/contact
+2026-06-17 22:53:33,685 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 22:53:33,691 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 22:53:33,696 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 22:53:33,704 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 22:53:33,709 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Int64), @p2='?' (Size = 8) (DbType = Binary), @p0='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [iam].[LoginAccount] SET [UpdatedAt] = @p0
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginAccountId] = @p1 AND [RowVersion] = @p2;
+2026-06-17 22:53:33,711 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 22:53:33,714 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 22:53:33,717 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - PUT /api/eservice/v1/profile/contact completed in 41 ms with 200
+2026-06-17 22:53:33,718 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP PUT /api/eservice/v1/profile/contact => 200 in 41 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 23:14:36,879 INFO  [3dbec23728ef4a78ab79a81ac9a5ca66] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /
+2026-06-17 23:14:36,922 INFO  [3dbec23728ef4a78ab79a81ac9a5ca66] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET / => 302 in 0 ms. TraceId=3dbec23728ef4a78ab79a81ac9a5ca66
+2026-06-17 23:14:36,924 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET / completed in 2 ms with 302
+2026-06-17 23:15:05,390 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 23:15:05,393 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 23:15:05,397 INFO  [92b4d513-6611-4b05-8457-0fdb91dc950b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 4 ms. TraceId=92b4d513-6611-4b05-8457-0fdb91dc950b
+2026-06-17 23:15:11,058 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 23:15:11,086 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 23:15:11,100 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 14 ms. TraceId=061e1404-3737-45e1-b97b-d1a7cdbd3cb8
+2026-06-17 23:15:11,103 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/auth/flow
+2026-06-17 23:15:11,105 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/auth/flow completed in 0 ms with 200
+2026-06-17 23:15:11,106 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/auth/flow => 200 in 1 ms. TraceId=061e1404-3737-45e1-b97b-d1a7cdbd3cb8
+2026-06-17 23:15:11,603 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 23:15:11,665 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (9ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 23:15:11,675 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 23:15:11,686 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 23:15:11,689 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 45 ms with 200
+2026-06-17 23:15:11,691 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 46 ms. TraceId=061e1404-3737-45e1-b97b-d1a7cdbd3cb8
+2026-06-17 23:15:11,771 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/admin/v1/auth/session
+2026-06-17 23:15:11,803 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 23:15:11,817 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 23:15:11,822 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 23:15:11,824 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/admin/v1/auth/session completed in 26 ms with 200
+2026-06-17 23:15:11,825 INFO  [061e1404-3737-45e1-b97b-d1a7cdbd3cb8] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/admin/v1/auth/session => 200 in 26 ms. TraceId=061e1404-3737-45e1-b97b-d1a7cdbd3cb8
+2026-06-17 23:15:12,761 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 23:15:12,806 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 23:15:12,810 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 23:15:12,814 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 23:15:12,819 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 23:15:12,822 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 19 ms with 200
+2026-06-17 23:15:12,822 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 20 ms. TraceId=5c40296f-0e91-4368-b267-bd1ae1ea1c58
+2026-06-17 23:15:12,824 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/admin/v1/profile
+2026-06-17 23:15:12,829 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200), @externalObjectId='?' (Size = 100), @externalTenantId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND (([l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject) OR ([l].[ExternalObjectId] = @externalObjectId AND ([l].[ExternalTenantId] IS NULL OR [l].[ExternalTenantId] = @externalTenantId)))
+2026-06-17 23:15:12,834 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 23:15:12,839 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 23:15:12,843 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 23:15:12,847 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/admin/v1/profile completed in 21 ms with 200
+2026-06-17 23:15:12,847 INFO  [5c40296f-0e91-4368-b267-bd1ae1ea1c58] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/admin/v1/profile => 200 in 22 ms. TraceId=5c40296f-0e91-4368-b267-bd1ae1ea1c58
+2026-06-17 23:15:57,423 INFO  [c2555680c98c46edac951e74963eccb7] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/login?returnUrl=http%3A%2F%2Flocalhost%3A3000%2Fportal%2Flogin
+2026-06-17 23:15:57,473 INFO  [c2555680c98c46edac951e74963eccb7] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 23:15:57,475 INFO  [c2555680c98c46edac951e74963eccb7] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/par
+2026-06-17 23:15:57,489 INFO  [c2555680c98c46edac951e74963eccb7] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 13.1713ms - 201
+2026-06-17 23:15:57,490 INFO  [c2555680c98c46edac951e74963eccb7] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 16.826ms - 201
+2026-06-17 23:15:57,492 INFO  [c2555680c98c46edac951e74963eccb7] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/login => 302 in 28 ms. TraceId=c2555680c98c46edac951e74963eccb7
+2026-06-17 23:15:57,493 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/login completed in 29 ms with 302
+2026-06-17 23:15:59,119 INFO  [3589749fa4be443d8c4f4b09875e1972] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/auth/callback?code=89qdd0bLTDwIJHfRJ-YR3JV7Z0ChYj-oOhuofZLtyb2bGL1nh1wRQisYa8W9&state=HGkhZjP7BBX9LJVDZEo4tZT5RMHcXgUD2c8zYZ_gYXc
+2026-06-17 23:15:59,160 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request POST http://localhost:5156/singpass/v3/fapi/token
+2026-06-17 23:15:59,161 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request POST http://localhost:5156/singpass/v3/fapi/token
+2026-06-17 23:15:59,172 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 9.6586ms - 200
+2026-06-17 23:15:59,173 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 12.3991ms - 200
+2026-06-17 23:15:59,174 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - Start processing HTTP request GET http://localhost:5156/singpass/v3/fapi/.well-known/keys
+2026-06-17 23:15:59,174 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Sending HTTP request GET http://localhost:5156/singpass/v3/fapi/.well-known/keys
+2026-06-17 23:15:59,177 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.ClientHandler - Received HTTP response headers after 1.882ms - 200
+2026-06-17 23:15:59,177 INFO  [3589749fa4be443d8c4f4b09875e1972] System.Net.Http.HttpClient.ISingpassLoginGateway.LogicalHandler - End processing HTTP request after 3.6141ms - 200
+2026-06-17 23:15:59,209 INFO  [3589749fa4be443d8c4f4b09875e1972] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (21ms) [Parameters=[@login_ExternalIssuer='?' (Size = 300), @login_ExternalSubjectId='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'SINGPASS' AND [l].[ExternalIssuer] = @login_ExternalIssuer AND [l].[ExternalSubjectId] = @login_ExternalSubjectId AND [l].[LoginStatusCode] IN ('ACTIVE', 'PENDING_FIRST_LOGIN')
+2026-06-17 23:15:59,218 INFO  [3589749fa4be443d8c4f4b09875e1972] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@account_PersonId_Value='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @account_PersonId_Value
+2026-06-17 23:15:59,227 INFO  [3589749fa4be443d8c4f4b09875e1972] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@person_Id='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [person].[SchoolEnrollment] AS [s]
+        WHERE [s].[PersonId] = @person_Id AND [s].[SchoolingStatusCode] = 'ACTIVE' AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 23:15:59,233 INFO  [3589749fa4be443d8c4f4b09875e1972] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [account].[EducationAccount] AS [e]
+        WHERE [e].[PersonId] = @personId) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 23:15:59,243 INFO  [3589749fa4be443d8c4f4b09875e1972] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (7ms) [Parameters=[@account_Id='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[RoleCode] = 'STUDENT' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-17 23:15:59,255 INFO  [3589749fa4be443d8c4f4b09875e1972] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@p2='?' (DbType = Int64), @p0='?' (DbType = DateTime2), @p3='?' (Size = 8) (DbType = Binary), @p1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [iam].[LoginAccount] SET [LastLoginAt] = @p0, [UpdatedAt] = @p1
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginAccountId] = @p2 AND [RowVersion] = @p3;
+2026-06-17 23:15:59,257 INFO  [3589749fa4be443d8c4f4b09875e1972] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/auth/callback => 302 in 103 ms. TraceId=3589749fa4be443d8c4f4b09875e1972
+2026-06-17 23:15:59,257 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/auth/callback completed in 103 ms with 302
+2026-06-17 23:16:01,965 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 23:16:02,015 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 23:16:02,023 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 23:16:02,033 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 23:16:02,040 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 23:16:02,046 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 23:16:02,057 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (9ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 23:16:02,061 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 55 ms with 200
+2026-06-17 23:16:02,062 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 56 ms. TraceId=d6043207-6b08-4426-bc6a-8d80fd56ed55
+2026-06-17 23:16:02,064 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/eservice/v1/profile
+2026-06-17 23:16:02,068 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@expectedIdentityProviderCode='?' (Size = 40) (DbType = AnsiString), @issuer='?' (Size = 300), @subject='?' (Size = 200)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = @expectedIdentityProviderCode AND [l].[ExternalIssuer] = @issuer AND [l].[ExternalSubjectId] = @subject
+2026-06-17 23:16:02,073 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (2ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT [u].[UserAccessScopeId], [u].[CreatedAtUtc], [u].[CreatedByUserAccountId], [u].[EffectiveFromUtc], [u].[EffectiveToUtc], [u].[OrganizationUnitId], [u].[RoleCode], [u].[RowVersion], [u].[StatusCode], [u].[UserAccountId]
+FROM [iam].[UserAccessScope] AS [u]
+WHERE [u].[UserAccountId] = @userAccountId
+2026-06-17 23:16:02,077 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@roles1='?' (Size = 50) (DbType = AnsiString), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT DISTINCT [r].[PermissionCode]
+FROM [iam].[RolePermission] AS [r]
+WHERE [r].[RoleCode] = @roles1 AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow2)
+2026-06-17 23:16:02,081 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@userAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[LoginAccountId] = @userAccountId
+2026-06-17 23:16:02,089 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@personId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [p].[PersonId], [p].[ResidencyStatusCode], [p].[CreatedAt], [p].[DateOfBirth], [p].[MockPassPersonId], [p].[IdentityNumberMasked], [p].[NationalityCode], [p].[OfficialAddress], [p].[OfficialEmail], [p].[FullName], [p].[OfficialMobile], [p].[PersonStatusCode], [p].[PreferredAddress], [p].[PreferredEmail], [p].[PreferredMobile], [p].[RowVersion], [p].[SourceUpdatedAt], [p].[UpdatedAt]
+FROM [person].[Person] AS [p]
+WHERE [p].[PersonId] = @personId
+2026-06-17 23:16:02,095 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@personId='?' (DbType = Int64), @today='?' (DbType = Date), @today2='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(1) [s].[SchoolEnrollmentId] AS [Id], [s].[OrganizationId], [o].[OrganizationCode] AS [UnitCode], [o].[OrganizationName] AS [UnitName], [s].[StudentNumber], [s].[AcademicYear], [s].[LevelCode], [s].[ClassCode], [s].[SchoolingStatusCode], [s].[StartDate], [s].[EndDate]
+FROM [person].[SchoolEnrollment] AS [s]
+INNER JOIN [org].[Organization] AS [o] ON [s].[OrganizationId] = [o].[OrganizationId]
+WHERE [s].[PersonId] = @personId AND [s].[StartDate] <= @today AND ([s].[EndDate] IS NULL OR [s].[EndDate] >= @today2)
+ORDER BY CASE
+    WHEN [s].[SchoolingStatusCode] = 'ACTIVE' THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END DESC, [s].[StartDate] DESC
+2026-06-17 23:16:02,099 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/eservice/v1/profile completed in 34 ms with 200
+2026-06-17 23:16:02,100 INFO  [d6043207-6b08-4426-bc6a-8d80fd56ed55] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/eservice/v1/profile => 200 in 35 ms. TraceId=d6043207-6b08-4426-bc6a-8d80fd56ed55

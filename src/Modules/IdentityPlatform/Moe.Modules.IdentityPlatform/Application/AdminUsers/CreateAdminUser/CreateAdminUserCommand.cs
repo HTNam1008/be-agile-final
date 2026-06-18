@@ -8,4 +8,5 @@ public sealed record CreateAdminUserCommand(
     string MailNickname,
     string TemporaryPassword,
     long InitialOrganizationUnitId,
+    string RoleCode,
     bool AccountEnabled = true) : ICommand<CreateAdminUserResponse>;

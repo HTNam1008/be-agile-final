@@ -37,7 +37,7 @@ internal sealed class UserAccount : AggregateRoot<long>
 
     public long? PersonId { get; private set; }
     public long? AdminOrganizationId { get; private set; }
-    public string RoleCode { get; private set; } = "ADMIN";
+    public string RoleCode { get; private set; } = string.Empty;
     public string IdentityProviderCode { get; private set; } = string.Empty;
     public string? ExternalTenantId { get; private set; }
     public string ExternalIssuer { get; private set; } = string.Empty;
@@ -71,6 +71,8 @@ internal sealed class UserAccount : AggregateRoot<long>
         string? externalObjectId,
         string? email,
         string? displayName,
+        string roleCode,
+        long adminOrganizationId,
         long createdByUserAccountId,
         DateTime utcNow)
     {
@@ -88,6 +90,8 @@ internal sealed class UserAccount : AggregateRoot<long>
             UserAccountStatusCodes.PendingFirstLogin,
             utcNow);
 
+        account.RoleCode = roleCode;
+        account.AdminOrganizationId = adminOrganizationId;
         account.CreatedByUserAccountId = createdByUserAccountId;
         return account;
     }
@@ -101,7 +105,7 @@ internal sealed class UserAccount : AggregateRoot<long>
         string? displayName,
         DateTime utcNow)
     {
-        return new UserAccount(
+        UserAccount account = new(
             null,
             IdentityProviderCodes.EntraWorkforce,
             externalIssuer,
@@ -114,6 +118,10 @@ internal sealed class UserAccount : AggregateRoot<long>
             PortalAccessCodes.Admin,
             UserAccountStatusCodes.PendingFirstLogin,
             utcNow);
+
+        account.RoleCode = RoleCodes.SystemAdmin;
+        account.AdminOrganizationId = OrganizationUnitCodes.MoeHeadquartersId;
+        return account;
     }
 
     public static UserAccount CreateStudentSingpass(
@@ -121,7 +129,7 @@ internal sealed class UserAccount : AggregateRoot<long>
         string externalIssuer,
         string externalSubjectId,
         string? displayName,
-        long createdByUserAccountId,
+        long? createdByUserAccountId,
         DateTime utcNow)
     {
         UserAccount account = new(
@@ -138,6 +146,7 @@ internal sealed class UserAccount : AggregateRoot<long>
             UserAccountStatusCodes.PendingFirstLogin,
             utcNow);
 
+        account.RoleCode = RoleCodes.Student;
         account.CreatedByUserAccountId = createdByUserAccountId;
         return account;
     }
@@ -154,10 +163,39 @@ internal sealed class UserAccount : AggregateRoot<long>
         UpdatedAtUtc = utcNow;
     }
 
+    public void RecordSuccessfulLogin(DateTime utcNow)
+    {
+        if (AccountStatusCode == UserAccountStatusCodes.PendingFirstLogin)
+        {
+            AccountStatusCode = UserAccountStatusCodes.Active;
+            FirstLoginAtUtc = utcNow;
+        }
+
+        LastLoginAtUtc = utcNow;
+        UpdatedAtUtc = utcNow;
+    }
+
     public void Disable(DateTime utcNow)
     {
         AccountStatusCode = UserAccountStatusCodes.Disabled;
         UpdatedAtUtc = utcNow;
+    }
+
+    public void UpdateContactDetails(string? contactEmail, string? contactMobile, DateTime utcNow)
+    {
+        ContactEmail = NormalizeEmailForContact(contactEmail);
+        ContactMobile = NormalizeNullable(contactMobile);
+        UpdatedAtUtc = utcNow;
+    }
+
+    private static string? NormalizeEmailForContact(string? email)
+    {
+        return string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+    }
+
+    private static string? NormalizeNullable(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static string? NormalizeEmail(string? email)

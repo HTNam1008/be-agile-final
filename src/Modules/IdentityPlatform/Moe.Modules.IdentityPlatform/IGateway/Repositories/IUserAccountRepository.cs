@@ -11,4 +11,11 @@ internal interface IUserAccountRepository
     Task<bool> ExistsSingpassForPersonAsync(long personId, CancellationToken cancellationToken);
 
     Task<UserAccount?> DisableAsync(long userAccountId, DateTime utcNow, CancellationToken cancellationToken);
+
+    Task<UserAccount?> UpdateContactDetailsAsync(
+        long userAccountId,
+        string? contactEmail,
+        string? contactMobile,
+        DateTime utcNow,
+        CancellationToken cancellationToken);
 }

@@ -58,4 +58,23 @@ internal sealed class UserAccountRepository(MoeDbContext dbContext) : IUserAccou
         await dbContext.SaveChangesAsync(cancellationToken);
         return account;
     }
+
+    public async Task<UserAccount?> UpdateContactDetailsAsync(
+        long userAccountId,
+        string? contactEmail,
+        string? contactMobile,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        UserAccount? account = await FindByIdAsync(userAccountId, cancellationToken);
+
+        if (account is null)
+        {
+            return null;
+        }
+
+        account.UpdateContactDetails(contactEmail, contactMobile, utcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return account;
+    }
 }
