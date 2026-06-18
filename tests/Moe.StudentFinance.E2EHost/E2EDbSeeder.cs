@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.E2EHost;
@@ -60,16 +61,9 @@ public class E2EDbSeeder : IHostedService
 
     private static void SeedIdentityRows(MoeDbContext db)
     {
-        if (!db.Set<Person>().Any(x => x.Id == 2001))
-        {
-            db.Set<Person>().Add(new Person(
-                2001,
-                "MOCKPASS-STUDENT-2001",
-                "Tan Mei Ling",
-                new DateOnly(2008, 5, 12),
-                "SG",
-                "CITIZEN"));
-        }
+        SeedStudentProfile(db, 2001, "MOCKPASS-STUDENT-2001", "Tan Mei Ling", new DateOnly(2008, 5, 12), "DEMO-STU-0001", "SEC_4", "4A", "ACTIVE");
+        SeedStudentProfile(db, 2002, "MOCKPASS-STUDENT-2002", "Nur Aisyah", new DateOnly(2009, 3, 1), "DEMO-STU-0002", "SEC_3", "3B", "ACTIVE");
+        SeedStudentProfile(db, 2003, "MOCKPASS-STUDENT-2003", "Loh Jun Jie", new DateOnly(2010, 9, 20), "DEMO-STU-0003", "SEC_2", "2C", "ACTIVE");
 
         Type userAccountType = typeof(Person).Assembly.GetType(
             "Moe.Modules.IdentityPlatform.Domain.Iam.UserAccount",
@@ -122,10 +116,91 @@ public class E2EDbSeeder : IHostedService
                 db.Set<EducationAccount>().Add(accountResult.Value);
             }
         }
+
+        SeedDemoStudentAccount(db, 2002, "EA-DEMO-0002", 80.00m);
+        SeedDemoStudentAccount(db, 2003, "EA-DEMO-0003", 600.00m);
     }
 
     private static void SetId(object entity, long id)
     {
         entity.GetType().GetProperty("Id")!.SetValue(entity, id);
+    }
+
+    private static void SeedDemoStudentAccount(
+        MoeDbContext db,
+        long personId,
+        string accountNumber,
+        decimal balance)
+    {
+        if (db.Set<EducationAccount>().Any(x => x.PersonId == personId))
+        {
+            return;
+        }
+
+        var accountResult = EducationAccount.OpenManual(
+            personId,
+            accountNumber,
+            DateTimeOffset.UtcNow,
+            "E2E Seed",
+            "Portal account seed",
+            1001);
+
+        if (!accountResult.IsSuccess)
+        {
+            return;
+        }
+
+        accountResult.Value.UpdateBalance(balance);
+        db.Set<EducationAccount>().Add(accountResult.Value);
+    }
+
+    private static void SeedStudentProfile(
+        MoeDbContext db,
+        long personId,
+        string externalSubjectId,
+        string fullName,
+        DateOnly dateOfBirth,
+        string studentNumber,
+        string levelCode,
+        string classCode,
+        string schoolingStatusCode)
+    {
+        if (!db.Set<Person>().Any(x => x.Id == personId))
+        {
+            db.Set<Person>().Add(new Person(
+                personId,
+                externalSubjectId,
+                fullName,
+                dateOfBirth,
+                "SG",
+                "CITIZEN"));
+        }
+
+        if (db.Set<SchoolEnrollment>().Any(x => x.PersonId == personId && x.AcademicYear == "2026"))
+        {
+            return;
+        }
+
+        SchoolEnrollment enrollment = (SchoolEnrollment)Activator.CreateInstance(typeof(SchoolEnrollment), nonPublic: true)!;
+        SetId(enrollment, 3000 + personId);
+        SetProperty(enrollment, nameof(SchoolEnrollment.PersonId), personId);
+        SetProperty(enrollment, nameof(SchoolEnrollment.OrganizationId), 2L);
+        SetProperty(enrollment, nameof(SchoolEnrollment.StudentNumber), studentNumber);
+        SetProperty(enrollment, nameof(SchoolEnrollment.AcademicYear), "2026");
+        SetProperty(enrollment, nameof(SchoolEnrollment.LevelCode), levelCode);
+        SetProperty(enrollment, nameof(SchoolEnrollment.ClassCode), classCode);
+        SetProperty(enrollment, nameof(SchoolEnrollment.SchoolingStatusCode), schoolingStatusCode);
+        SetProperty(enrollment, nameof(SchoolEnrollment.StatusReasonCode), null);
+        SetProperty(enrollment, nameof(SchoolEnrollment.StartDate), new DateOnly(2026, 1, 2));
+        SetProperty(enrollment, nameof(SchoolEnrollment.EndDate), null);
+        SetProperty(enrollment, nameof(SchoolEnrollment.SourceCode), "E2E_SEED");
+        SetProperty(enrollment, nameof(SchoolEnrollment.CreatedAtUtc), DateTime.UtcNow);
+        SetProperty(enrollment, nameof(SchoolEnrollment.UpdatedAtUtc), DateTime.UtcNow);
+        db.Set<SchoolEnrollment>().Add(enrollment);
+    }
+
+    private static void SetProperty(object entity, string propertyName, object? value)
+    {
+        entity.GetType().GetProperty(propertyName)!.SetValue(entity, value);
     }
 }
