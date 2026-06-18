@@ -30,12 +30,10 @@ using Moe.Modules.IdentityPlatform.Infrastructure.Authentication;
 using Moe.Modules.IdentityPlatform.Infrastructure.People;
 using Moe.Modules.IdentityPlatform.Infrastructure.Repositories;
 using Moe.Modules.IdentityPlatform.Infrastructure.Singpass;
-using Moe.Modules.IdentityPlatform.Infrastructure.Students;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
-using Moe.Modules.IdentityPlatform.IGateway.Students;
 
 namespace Moe.Modules.IdentityPlatform;
 
@@ -55,7 +53,6 @@ public sealed class IdentityPlatformModule : IModule
         services.AddHttpClient<ISingpassLoginGateway, MockPassFapiLoginGateway>();
         services.AddScoped<ILocalIdentityDirectory, LocalIdentityDirectory>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
-        services.AddScoped<ITopUpStudentSearchDirectory, TopUpStudentSearchDirectory>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IExternalIdentityProvisioningRepository, UserAccountRepository>();
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();
