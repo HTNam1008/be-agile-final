@@ -55,6 +55,13 @@ public class E2EHostingStartup : IHostingStartup
                     policy.RequireAuthenticatedUser();
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE");
                 });
+
+                options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
+                {
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
+                });
             });
         });
 
