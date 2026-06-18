@@ -19,4 +19,16 @@ internal static class TopUpErrors
     public static readonly Error AccountSelectionOutsideScope = new(
         "TOPUP.ACCOUNT_SELECTION_OUTSIDE_SCOPE",
         "The top-up account selection contains accounts outside the admin's scope or filter.");
+
+    public static readonly Error CampaignNotFound = new(
+        "TOPUP.CAMPAIGN_NOT_FOUND",
+        "The top-up campaign was not found.");
+
+    public static readonly Error InvalidRecipientMode = new(
+        "TOPUP.INVALID_RECIPIENT_MODE",
+        "Recipients can only be selected directly for a fixed-selection campaign.");
+
+    public static readonly Error InvalidCampaignStatus = new(
+        "TOPUP.INVALID_CAMPAIGN_STATUS",
+        "Recipients can only be modified for a draft or paused campaign.");
 }
