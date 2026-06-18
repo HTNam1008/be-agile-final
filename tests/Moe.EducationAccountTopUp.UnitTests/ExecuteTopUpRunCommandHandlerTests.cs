@@ -16,6 +16,7 @@ using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.EducationAccountTopUp.IGateway;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests;
@@ -66,6 +67,21 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
         public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
     }
 
+    private sealed class MockEventPublisher : ITopUpExecutionEventPublisher
+    {
+        public Task PublishTopUpFailedEvent(long transactionId, string reason) => Task.CompletedTask;
+        public Task PublishTopUpSucceededEvent(long transactionId, decimal amount) => Task.CompletedTask;
+    }
+
+    private sealed class MockMetrics : ITopUpExecutionMetrics
+    {
+        public void RecordTopUpSuccess(decimal amount) {}
+        public void RecordTopUpFailure() {}
+        public void RecordProcessingTime(TimeSpan duration) {}
+        public void RecordRunStarted() {}
+        public void RecordRunCompleted(int succeeded, int failed) {}
+    }
+
     [Fact]
     public async Task Handle_ShouldChunkAndExecute_DynamicRules()
     {
@@ -101,6 +117,8 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
             new TopUpTransactionRepository(dbContext),
             new StubAccountCreditGateway(dbContext, NullLogger<StubAccountCreditGateway>.Instance),
             new StubRecipientValidator(dbContext),
+            new MockEventPublisher(),
+            new MockMetrics(),
             dbContext,
             new MockClock(),
             NullLogger<RecipientProcessingService>.Instance);
