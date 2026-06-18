@@ -62,6 +62,12 @@ public static class TopUpErrors
     public static readonly Moe.SharedKernel.Results.Error InvalidCreditAmount =
         new("TopUp.InvalidCreditAmount", "Credit amount must be positive.");
 
+    public static readonly Moe.SharedKernel.Results.Error AccountNotFound =
+        new("TopUp.AccountNotFound", "Education account not found.");
+
+    public static readonly Moe.SharedKernel.Results.Error AccountNotActive =
+        new("TopUp.AccountNotActive", "Education account is not in active status.");
+
     public static readonly Moe.SharedKernel.Results.Error RunNotFound =
         new("TopUp.RunNotFound", "Top-up run not found.");
 

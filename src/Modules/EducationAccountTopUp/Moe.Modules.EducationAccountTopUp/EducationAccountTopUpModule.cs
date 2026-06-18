@@ -43,7 +43,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddSingleton<ChannelTopUpRunDispatcher>();
         services.AddSingleton<ITopUpRunDispatcher>(sp => sp.GetRequiredService<ChannelTopUpRunDispatcher>());
         services.AddSingleton<ITopUpRunQueueReader>(sp => sp.GetRequiredService<ChannelTopUpRunDispatcher>());
-        services.AddScoped<IAccountCreditGateway, StubAccountCreditGateway>();
+        services.AddScoped<IAccountCreditGateway, AccountCreditGateway>();
         services.AddScoped<IRecipientValidator, StubRecipientValidator>();
         services.AddScoped<IRecipientResolver, StubRecipientResolver>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
