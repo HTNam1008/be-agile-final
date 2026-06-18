@@ -60,6 +60,9 @@ internal sealed class StudentProfileRepository(MoeDbContext dbContext) : IStuden
             person.PreferredEmail,
             person.OfficialMobile,
             person.PreferredMobile,
+            person.OfficialAddress,
+            person.PreferredAddress,
+            person.UpdatedAtUtc,
             enrollment?.Id,
             enrollment?.OrganizationId,
             enrollment?.UnitCode,
@@ -71,5 +74,40 @@ internal sealed class StudentProfileRepository(MoeDbContext dbContext) : IStuden
             enrollment?.SchoolingStatusCode,
             enrollment?.StartDate,
             enrollment?.EndDate);
+    }
+
+    public async Task<UpdatePreferredContactResult> UpdatePreferredContactAsync(
+        long personId,
+        string? preferredEmail,
+        string? preferredMobile,
+        string? preferredAddress,
+        DateTime? expectedUpdatedAtUtc,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        Person? person = await dbContext.Set<Person>()
+            .SingleOrDefaultAsync(x => x.Id == personId, cancellationToken);
+
+        if (person is null)
+        {
+            return new UpdatePreferredContactResult(UpdatePreferredContactStatus.NotFound, null);
+        }
+
+        if (expectedUpdatedAtUtc is not null
+            && TruncateToMilliseconds(person.UpdatedAtUtc) != TruncateToMilliseconds(expectedUpdatedAtUtc.Value))
+        {
+            return new UpdatePreferredContactResult(UpdatePreferredContactStatus.Conflict, null);
+        }
+
+        person.UpdatePreferredContact(preferredEmail, preferredMobile, preferredAddress, utcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        StudentProfileSummary? profile = await GetProfileSummaryAsync(personId, DateOnly.FromDateTime(utcNow), cancellationToken);
+        return new UpdatePreferredContactResult(UpdatePreferredContactStatus.Updated, profile);
+    }
+
+    private static DateTime TruncateToMilliseconds(DateTime value)
+    {
+        return new DateTime(value.Ticks - value.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
     }
 }

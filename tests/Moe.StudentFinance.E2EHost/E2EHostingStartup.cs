@@ -66,6 +66,13 @@ public class E2EHostingStartup : IHostingStartup
                     policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
                     policy.RequireClaim(ClaimNames.Role, "STUDENT");
                 });
+
+                options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
+                {
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
+                });
             });
         });
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
@@ -142,21 +143,47 @@ public sealed class TopUpCampaignsController(
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPut("{id:long}/fixed-recipients")]
     [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponse<UpsertFixedRecipientsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpsertFixedRecipients(
         long id,
-        [FromBody] UpsertFixedRecipientsCommand commandRequest,
+        [FromBody] UpsertFixedRecipientsRequest request,
         CancellationToken cancellationToken)
     {
-        if (id != commandRequest.TopUpCampaignId) return BadRequest();
-        var result = await commandDispatcher.Send(commandRequest, cancellationToken);
+        var command = new UpsertFixedRecipientsCommand(
+            id,
+            request.Mode,
+            request.Filter,
+            request.Recipients,
+            request.ExcludedEducationAccountIds);
 
-        if (result.IsFailure) return BadRequest(result.Error);
-        return NoContent();
+        var result = await commandDispatcher.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return ApiResponseFactory.Failure(
+                result.Error,
+                GetRecipientSelectionFailureStatusCode(result.Error.Code),
+                HttpContext.TraceIdentifier);
+        }
+
+        return ApiResponseFactory.Ok(
+            result.Value,
+            HttpContext.TraceIdentifier,
+            "Recipients updated successfully.");
     }
+
+    private static int GetRecipientSelectionFailureStatusCode(string errorCode)
+        => errorCode switch
+        {
+            "TOPUP.CAMPAIGN_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "TOPUP.ADMIN_ORGANIZATION_SCOPE_REQUIRED" => ApiResponseCodes.Forbidden,
+            "TOPUP.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
+            "TOPUP.ACCOUNT_SELECTION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
+            _ => ApiResponseCodes.BadRequest
+        };
 
     /// <summary>
     /// Previews the financial projection of a campaign (paginated, non-mutating).
