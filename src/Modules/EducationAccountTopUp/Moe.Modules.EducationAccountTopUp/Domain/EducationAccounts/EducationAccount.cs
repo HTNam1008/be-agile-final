@@ -98,6 +98,11 @@ public sealed class EducationAccount : AggregateRoot<long>
         ClosingRemarks = remarks.Trim();
         return Result.Success();
     }
+
+    public void UpdateBalance(decimal amount)
+    {
+        CachedBalance += amount;
+    }
 }
 
 public static class CurrencyCodes

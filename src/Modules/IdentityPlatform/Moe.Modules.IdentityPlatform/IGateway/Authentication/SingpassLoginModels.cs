@@ -10,14 +10,6 @@ public sealed record SingpassLoginResult(
     string AuthenticationContext,
     string AuthenticationMethod);
 
-public sealed record EServiceTokenResult(
-    string AccessToken,
-    string TokenType,
-    int ExpiresIn,
-    string ExternalSubjectId,
-    string IdentityNumber,
-    string DisplayName);
-
 public interface ISingpassLoginGateway
 {
     Task<SingpassLoginStartResult> StartLoginAsync(CancellationToken cancellationToken);

@@ -13,6 +13,8 @@ internal interface IAdminUserRepository
 {
     Task<bool> IsActiveOrganizationUnitAsync(long organizationUnitId, DateTime utcNow, CancellationToken cancellationToken);
 
+    Task<string?> GetActiveOrganizationUnitTypeAsync(long organizationUnitId, DateTime utcNow, CancellationToken cancellationToken);
+
     Task<bool> HasActiveRolePermissionsAsync(string roleCode, DateTime utcNow, CancellationToken cancellationToken);
 
     Task<CreatedAdminLocalAccount> CreateAdminWithInitialScopeAsync(

@@ -668,9 +668,45 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             OpenedByUserId = 1001L,
                             OpeningModeCode = "MANUAL",
-                            OpeningRemarks = "Demo seeded account for MockPass student",
+                            OpeningRemarks = "Demo seeded account for top-up search",
                             PersonId = 2001L,
                             StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 4002L,
+                            AccountNumber = "EA-DEMO-0002",
+                            CachedBalance = 125.50m,
+                            OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            OpenedByUserId = 1001L,
+                            OpeningModeCode = "MANUAL",
+                            OpeningRemarks = "Demo seeded account for top-up search",
+                            PersonId = 2002L,
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 4003L,
+                            AccountNumber = "EA-DEMO-0003",
+                            CachedBalance = 480m,
+                            OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            OpenedByUserId = 1001L,
+                            OpeningModeCode = "MANUAL",
+                            OpeningRemarks = "Demo seeded account for top-up search",
+                            PersonId = 2003L,
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 4004L,
+                            AccountNumber = "EA-DEMO-0004",
+                            CachedBalance = 35.75m,
+                            OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            OpenedByUserId = 1001L,
+                            OpeningModeCode = "MANUAL",
+                            OpeningRemarks = "Demo seeded account for top-up search",
+                            PersonId = 2004L,
+                            StatusCode = "CLOSING"
                         });
                 });
 
@@ -1862,20 +1898,92 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasData(
                         new
                         {
-                            PermissionCode = "ACCOUNTS_VIEW",
+                            PermissionCode = "ORG_VIEW_ALL",
+                            ActionCode = "VIEW",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "View all organizations",
+                            ResourceCode = "ORGANIZATIONS",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "SCHOOL_STUDENT_VIEW",
+                            ActionCode = "VIEW",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "View assigned school students",
+                            ResourceCode = "SCHOOL_STUDENTS",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "SCHOOL_ADMIN_PROVISION",
+                            ActionCode = "PROVISION",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "Provision school admin accounts",
+                            ResourceCode = "SCHOOL_ADMINS",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "LOGIN_DISABLE",
+                            ActionCode = "DISABLE",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "Disable permitted login accounts",
+                            ResourceCode = "LOGIN_ACCOUNTS",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "ACCOUNT_VIEW_ALL",
                             ActionCode = "VIEW",
                             ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
-                            PermissionName = "View accounts",
+                            PermissionName = "View all education accounts",
+                            ResourceCode = "ACCOUNTS_ALL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "ACCOUNT_VIEW_SCHOOL",
+                            ActionCode = "VIEW",
+                            ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
+                            PermissionName = "View own-school education account summaries",
+                            ResourceCode = "ACCOUNTS_SCHOOL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "STUDENT_ACCOUNT_VIEW_SELF",
+                            ActionCode = "VIEW",
+                            ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
+                            PermissionName = "View own education account",
+                            ResourceCode = "ACCOUNT_SELF",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "ACCOUNT_MANUAL_CREATE",
+                            ActionCode = "CREATE",
+                            ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
+                            PermissionName = "Manually create education accounts",
                             ResourceCode = "ACCOUNTS",
                             StatusCode = "ACTIVE"
                         },
                         new
                         {
-                            PermissionCode = "ACCOUNTS_MANAGE",
+                            PermissionCode = "ACCOUNT_LIFECYCLE_MANAGE",
                             ActionCode = "MANAGE",
                             ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
-                            PermissionName = "Manage accounts",
-                            ResourceCode = "ACCOUNTS",
+                            PermissionName = "Suspend, reactivate and close education accounts",
+                            ResourceCode = "ACCOUNT_LIFECYCLE",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "ACCOUNT_SETTLEMENT_VIEW",
+                            ActionCode = "VIEW",
+                            ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
+                            PermissionName = "View settlement operations",
+                            ResourceCode = "SETTLEMENTS",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -1898,6 +2006,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         },
                         new
                         {
+                            PermissionCode = "TOPUP_VIEW_ALL",
+                            ActionCode = "VIEW",
+                            ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
+                            PermissionName = "View national top-up activity",
+                            ResourceCode = "TOPUPS_ALL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
                             PermissionCode = "TOPUPS_MANAGE",
                             ActionCode = "MANAGE",
                             ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
@@ -1907,11 +2024,56 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         },
                         new
                         {
-                            PermissionCode = "COURSES_MANAGE",
+                            PermissionCode = "COURSE_VIEW_ALL",
+                            ActionCode = "VIEW",
+                            ModuleCode = "COURSE_BILLING",
+                            PermissionName = "View all courses",
+                            ResourceCode = "COURSES_ALL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "COURSE_MANAGE_ANY",
                             ActionCode = "MANAGE",
                             ModuleCode = "COURSE_BILLING",
-                            PermissionName = "Manage courses",
-                            ResourceCode = "COURSES",
+                            PermissionName = "Manage courses across any school",
+                            ResourceCode = "COURSES_ANY",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "COURSE_DISABLE_ANY",
+                            ActionCode = "DISABLE",
+                            ModuleCode = "COURSE_BILLING",
+                            PermissionName = "Disable any course with reason",
+                            ResourceCode = "COURSES_ANY",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "COURSE_MANAGE_OWN_SCHOOL",
+                            ActionCode = "MANAGE",
+                            ModuleCode = "COURSE_BILLING",
+                            PermissionName = "Manage own-school courses",
+                            ResourceCode = "COURSES_OWN_SCHOOL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "COURSE_FEE_MANAGE_OWN_SCHOOL",
+                            ActionCode = "MANAGE",
+                            ModuleCode = "COURSE_BILLING",
+                            PermissionName = "Manage own-school course fees",
+                            ResourceCode = "COURSE_FEES_OWN_SCHOOL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "COURSE_ASSIGN_STUDENT",
+                            ActionCode = "ASSIGN",
+                            ModuleCode = "COURSE_BILLING",
+                            PermissionName = "Assign own-school students to courses",
+                            ResourceCode = "COURSE_STUDENTS",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -1925,11 +2087,56 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         },
                         new
                         {
+                            PermissionCode = "FAS_SCHEME_MANAGE",
+                            ActionCode = "MANAGE",
+                            ModuleCode = "FAS_PAYMENT",
+                            PermissionName = "Manage national FAS schemes",
+                            ResourceCode = "FAS_SCHEMES",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
                             PermissionCode = "PAYMENT_EXCEPTIONS_REVIEW",
                             ActionCode = "REVIEW",
                             ModuleCode = "FAS_PAYMENT",
                             PermissionName = "Review payment exceptions",
                             ResourceCode = "PAYMENT_EXCEPTIONS",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "AUDIT_VIEW_ALL",
+                            ActionCode = "VIEW",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "View national audit",
+                            ResourceCode = "AUDIT_ALL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "REPORT_EXPORT_ALL",
+                            ActionCode = "EXPORT",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "Export national reports",
+                            ResourceCode = "REPORTS_ALL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "AUDIT_VIEW_SCHOOL",
+                            ActionCode = "VIEW",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "View own-school audit",
+                            ResourceCode = "AUDIT_SCHOOL",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            PermissionCode = "REPORT_EXPORT_SCHOOL",
+                            ActionCode = "EXPORT",
+                            ModuleCode = "IDENTITY_PLATFORM",
+                            PermissionName = "Export own-school reports",
+                            ResourceCode = "REPORTS_SCHOOL",
                             StatusCode = "ACTIVE"
                         });
                 });
@@ -1985,7 +2192,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 1L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "ACCESS_SCOPE_MANAGE",
+                            PermissionCode = "ORG_VIEW_ALL",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -1993,7 +2200,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 2L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "EXTERNAL_ACCOUNTS_PROVISION",
+                            PermissionCode = "SCHOOL_STUDENT_VIEW",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2001,7 +2208,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 3L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "ACCOUNTS_VIEW",
+                            PermissionCode = "SCHOOL_ADMIN_PROVISION",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2009,7 +2216,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 4L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "ACCOUNTS_MANAGE",
+                            PermissionCode = "LOGIN_DISABLE",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2017,7 +2224,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 5L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "TOPUPS_MANAGE",
+                            PermissionCode = "EXTERNAL_ACCOUNTS_PROVISION",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2025,7 +2232,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 6L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "COURSES_MANAGE",
+                            PermissionCode = "ACCESS_SCOPE_MANAGE",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2033,7 +2240,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 7L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "FAS_REVIEW",
+                            PermissionCode = "ACCOUNT_VIEW_ALL",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2041,7 +2248,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 8L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "PAYMENT_EXCEPTIONS_REVIEW",
+                            PermissionCode = "ACCOUNT_MANUAL_CREATE",
                             RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
@@ -2049,31 +2256,143 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 9L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "ACCOUNTS_VIEW",
-                            RoleCode = "SCHOOL_ADMIN",
+                            PermissionCode = "ACCOUNT_LIFECYCLE_MANAGE",
+                            RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
                         {
                             Id = 10L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "COURSES_MANAGE",
-                            RoleCode = "SCHOOL_ADMIN",
+                            PermissionCode = "ACCOUNT_SETTLEMENT_VIEW",
+                            RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
                         {
                             Id = 11L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "FAS_REVIEW",
-                            RoleCode = "SCHOOL_ADMIN",
+                            PermissionCode = "TOPUP_VIEW_ALL",
+                            RoleCode = "SYSTEM_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
                         {
                             Id = 12L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            PermissionCode = "ACCOUNTS_VIEW",
+                            PermissionCode = "COURSE_VIEW_ALL",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 13L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "COURSE_DISABLE_ANY",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 14L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "FAS_SCHEME_MANAGE",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 15L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "FAS_REVIEW",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 16L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "PAYMENT_EXCEPTIONS_REVIEW",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 17L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "AUDIT_VIEW_ALL",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 18L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "REPORT_EXPORT_ALL",
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 19L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "SCHOOL_STUDENT_VIEW",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 20L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "ACCOUNT_VIEW_SCHOOL",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 21L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "COURSE_MANAGE_OWN_SCHOOL",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 22L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "COURSE_FEE_MANAGE_OWN_SCHOOL",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 23L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "COURSE_ASSIGN_STUDENT",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 24L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "AUDIT_VIEW_SCHOOL",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 25L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "REPORT_EXPORT_SCHOOL",
+                            RoleCode = "SCHOOL_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 26L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "STUDENT_ACCOUNT_VIEW_SELF",
                             RoleCode = "STUDENT",
                             StatusCode = "ACTIVE"
                         });
@@ -2163,6 +2482,16 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             RoleCode = "STUDENT",
                             StatusCode = "ACTIVE",
                             UserAccountId = 1003L
+                        },
+                        new
+                        {
+                            Id = 1004L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            OrganizationUnitId = 2L,
+                            RoleCode = "SYSTEM_ADMIN",
+                            StatusCode = "ACTIVE",
+                            UserAccountId = 1001L
                         });
                 });
 
@@ -2565,6 +2894,66 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             PreferredMobile = "+6590000001",
                             SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 2002L,
+                            CitizenshipStatusCode = "CITIZEN",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DateOfBirth = new DateOnly(2009, 3, 18),
+                            ExternalPersonReference = "TOPUP-STUDENT-0002",
+                            IdentityNumberMasked = "S234****B",
+                            NationalityCode = "SG",
+                            OfficialAddress = "1 Demo Street, Singapore 000001",
+                            OfficialEmail = "aisha.official@example.test",
+                            OfficialFullName = "Aisha Rahman",
+                            OfficialMobile = "+6590000002",
+                            PersonStatusCode = "ACTIVE",
+                            PreferredAddress = "1 Demo Street, Singapore 000001",
+                            PreferredEmail = "aisha@example.test",
+                            PreferredMobile = "+6590000002",
+                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 2003L,
+                            CitizenshipStatusCode = "CITIZEN",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DateOfBirth = new DateOnly(2010, 9, 4),
+                            ExternalPersonReference = "TOPUP-STUDENT-0003",
+                            IdentityNumberMasked = "S345****C",
+                            NationalityCode = "SG",
+                            OfficialAddress = "1 Demo Street, Singapore 000001",
+                            OfficialEmail = "brandon.official@example.test",
+                            OfficialFullName = "Brandon Lee",
+                            OfficialMobile = "+6590000003",
+                            PersonStatusCode = "ACTIVE",
+                            PreferredAddress = "1 Demo Street, Singapore 000001",
+                            PreferredEmail = "brandon@example.test",
+                            PreferredMobile = "+6590000003",
+                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 2004L,
+                            CitizenshipStatusCode = "CITIZEN",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DateOfBirth = new DateOnly(2008, 11, 28),
+                            ExternalPersonReference = "TOPUP-STUDENT-0004",
+                            IdentityNumberMasked = "S456****D",
+                            NationalityCode = "SG",
+                            OfficialAddress = "1 Demo Street, Singapore 000001",
+                            OfficialEmail = "weijie.official@example.test",
+                            OfficialFullName = "Chen Wei Jie",
+                            OfficialMobile = "+6590000004",
+                            PersonStatusCode = "ACTIVE",
+                            PreferredAddress = "1 Demo Street, Singapore 000001",
+                            PreferredEmail = "weijie@example.test",
+                            PreferredMobile = "+6590000004",
+                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -2742,6 +3131,51 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             SourceCode = "DEMO_SEED",
                             StartDate = new DateOnly(2026, 1, 2),
                             StudentNumber = "DEMO-STU-0001",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 3002L,
+                            AcademicYear = "2026",
+                            ClassCode = "3B",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LevelCode = "SEC_3",
+                            OrganizationId = 2L,
+                            PersonId = 2002L,
+                            SchoolingStatusCode = "ACTIVE",
+                            SourceCode = "DEMO_SEED",
+                            StartDate = new DateOnly(2026, 1, 2),
+                            StudentNumber = "DEMO-STU-0002",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 3003L,
+                            AcademicYear = "2026",
+                            ClassCode = "2C",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LevelCode = "SEC_2",
+                            OrganizationId = 2L,
+                            PersonId = 2003L,
+                            SchoolingStatusCode = "ACTIVE",
+                            SourceCode = "DEMO_SEED",
+                            StartDate = new DateOnly(2026, 1, 2),
+                            StudentNumber = "DEMO-STU-0003",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 3004L,
+                            AcademicYear = "2026",
+                            ClassCode = "4A",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LevelCode = "SEC_4",
+                            OrganizationId = 2L,
+                            PersonId = 2004L,
+                            SchoolingStatusCode = "ON_LEAVE",
+                            SourceCode = "DEMO_SEED",
+                            StartDate = new DateOnly(2026, 1, 2),
+                            StudentNumber = "DEMO-STU-0004",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
