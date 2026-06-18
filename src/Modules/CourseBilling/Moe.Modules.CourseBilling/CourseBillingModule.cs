@@ -27,6 +27,24 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();
         services.AddScoped<IValidator<SelfJoinCourseRequest>, SelfJoinCourseRequestValidator>();
+        
+        services.AddScoped<IAdminCourseRepository, AdminCourseRepository>();
+services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
+services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
+services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
+
+services.AddScoped<IAdminCourseService, AdminCourseService>();
+services.AddScoped<IAdminFeeComponentService, AdminFeeComponentService>();
+
+services.AddScoped<IValidator<CreateCourseRequest>, CreateCourseRequestValidator>();
+services.AddScoped<IValidator<UpdateCourseRequest>, UpdateCourseRequestValidator>();
+services.AddScoped<IValidator<CreateCourseMaterialRequest>, CreateCourseMaterialRequestValidator>();
+services.AddScoped<IValidator<UpdateCourseMaterialRequest>, UpdateCourseMaterialRequestValidator>();
+services.AddScoped<IValidator<CreateCourseFeeRequest>, CreateCourseFeeRequestValidator>();
+services.AddScoped<IValidator<UpdateCourseFeeRequest>, UpdateCourseFeeRequestValidator>();
+services.AddScoped<IValidator<CreateFeeComponentRequest>, CreateFeeComponentRequestValidator>();
+services.AddScoped<IValidator<UpdateFeeComponentRequest>, UpdateFeeComponentRequestValidator>();
+;
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
