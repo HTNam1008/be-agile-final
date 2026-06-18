@@ -61,4 +61,13 @@ public static class TopUpErrors
 
     public static readonly Moe.SharedKernel.Results.Error InvalidCreditAmount =
         new("TopUp.InvalidCreditAmount", "Credit amount must be positive.");
+
+    public static readonly Moe.SharedKernel.Results.Error RunNotFound =
+        new("TopUp.RunNotFound", "Top-up run not found.");
+
+    public static readonly Moe.SharedKernel.Results.Error RunAlreadyTerminal =
+        new("TopUp.RunAlreadyTerminal", "Run has already reached a terminal state and cannot be executed.");
+
+    public static readonly Moe.SharedKernel.Results.Error NonPositiveDefaultAmount =
+        new("TopUp.NonPositiveDefaultAmount", "Campaign default top-up amount must be positive.");
 }
