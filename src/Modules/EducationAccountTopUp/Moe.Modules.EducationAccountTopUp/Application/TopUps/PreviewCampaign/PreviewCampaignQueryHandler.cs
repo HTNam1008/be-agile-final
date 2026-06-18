@@ -74,32 +74,24 @@ internal sealed class PreviewCampaignQueryHandler(
             var activeAccountsQuery = accountsQuery
                 .Where(x => x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active);
 
-            foreach (var rule in rules)
-            {
-                if (string.Equals(rule.CriterionCode, TopUpCriterionCode.AccountBalance.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    if (string.Equals(rule.OperatorCode, OperatorCode.GreaterThan.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
-                        activeAccountsQuery = activeAccountsQuery.Where(x => x.CachedBalance > rule.NumericValueFrom.Value);
-                    else if (string.Equals(rule.OperatorCode, OperatorCode.LessThan.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
-                        activeAccountsQuery = activeAccountsQuery.Where(x => x.CachedBalance < rule.NumericValueFrom.Value);
-                }
-                else if (string.Equals(rule.CriterionCode, TopUpCriterionCode.Age.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    // Advanced criteria like AGE would require joining to Person table in a real system.
-                    // For the sake of the E2E script and L-005 MVP, we validate the builder mechanism.
-                }
-            }
+            activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, DateTime.UtcNow);
 
-            var activeAccounts = await activeAccountsQuery.ToListAsync(cancellationToken);
+            var totalAccounts = await activeAccountsQuery.CountAsync(cancellationToken);
+            totalMatched = totalAccounts;
+            estimatedTotalAmount = totalAccounts * campaign.DefaultTopUpAmount;
 
-            foreach (var acc in activeAccounts)
+            var skip = (query.PageNumber - 1) * query.PageSize;
+            
+            var pagedAccounts = await activeAccountsQuery
+                .OrderBy(x => x.Id)
+                .Skip(skip)
+                .Take(query.PageSize)
+                .Select(x => new { x.Id })
+                .ToListAsync(cancellationToken);
+
+            foreach (var acc in pagedAccounts)
             {
-                totalMatched++;
-                estimatedTotalAmount += campaign.DefaultTopUpAmount;
-                
-                var skip = (query.PageNumber - 1) * query.PageSize;
-                if (totalMatched > skip && samples.Count < query.PageSize)
-                    samples.Add(new PreviewAccountDto(acc.Id, campaign.DefaultTopUpAmount));
+                samples.Add(new PreviewAccountDto(acc.Id, campaign.DefaultTopUpAmount));
             }
         }
 

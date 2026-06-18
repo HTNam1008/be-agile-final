@@ -19,5 +19,7 @@ public interface ITopUpTransactionRepository
         long topUpRunId,
         CancellationToken cancellationToken = default);
 
+    void Add(TopUpTransaction transaction);
+
     Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default);
 }

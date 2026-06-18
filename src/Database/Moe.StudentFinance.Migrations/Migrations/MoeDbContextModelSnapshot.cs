@@ -141,12 +141,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("AcademicYear")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)");
-
                     b.Property<string>("CourseCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -163,10 +157,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
                     b.Property<long>("CreatedByLoginAccountId")
                         .HasColumnType("bigint");
 
@@ -181,18 +171,14 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<long?>("DisabledByLoginAccountId")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("DisabledReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateOnly?>("EndDate")
+                    b.Property<DateOnly>("EndDate")
                         .HasColumnType("date");
 
-                    b.Property<DateTime?>("EnrollmentCloseAtUtc")
+                    b.Property<DateTime>("EnrollmentCloseAtUtc")
                         .HasColumnType("datetime2")
                         .HasColumnName("EnrollmentCloseAt");
 
-                    b.Property<DateTime?>("EnrollmentOpenAtUtc")
+                    b.Property<DateTime>("EnrollmentOpenAtUtc")
                         .HasColumnType("datetime2")
                         .HasColumnName("EnrollmentOpenAt");
 
@@ -202,17 +188,14 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
 
-                    b.Property<DateTime?>("UpdatedAtUtc")
+                    b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2")
                         .HasColumnName("UpdatedAt");
 
-                    b.Property<long?>("UpdatedByLoginAccountId")
+                    b.Property<long>("UpdatedByLoginAccountId")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("OrganizationId", "CourseCode", "AcademicYear")
-                        .IsUnique();
 
                     b.ToTable("Course", "course");
                 });
@@ -233,7 +216,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("EnrolledAt");
 
-                    b.Property<long?>("EnrolledByLoginAccountId")
+                    b.Property<long>("EnrolledByLoginAccountId")
                         .HasColumnType("bigint");
 
                     b.Property<string>("EnrollmentSourceCode")
@@ -299,6 +282,105 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("CourseFee", "course");
+                });
+
+            modelBuilder.Entity("Moe.Modules.CourseBilling.Domain.Courses.CourseMaterial", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("CourseMaterialId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("CourseId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("DeletedAt");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FileExtension")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MaterialDescription")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("MaterialTitle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("MaterialTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<string>("PublicUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("nvarchar(600)");
+
+                    b.Property<string>("StorageProviderCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UploadedAt");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("CourseId", "IsActive");
+
+                    b.HasIndex("CourseId", "StoragePath")
+                        .IsUnique();
+
+                    b.ToTable("CourseMaterial", "course");
                 });
 
             modelBuilder.Entity("Moe.Modules.CourseBilling.Domain.Courses.CourseTarget", b =>
@@ -986,20 +1068,34 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<decimal>("TotalAmount")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<int>("TotalFailed")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("TotalProcessed")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("TotalSelected")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("TotalSkipped")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("TotalSucceeded")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("TriggerTypeCode")
                         .IsRequired()
@@ -1018,6 +1114,11 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasIndex("TopUpCampaignId");
 
+                    b.HasIndex("TopUpCampaignId", "ScheduledForUtc")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TopUpRuns_Campaign_ScheduledFor")
+                        .HasFilter("[ScheduledFor] IS NOT NULL");
+
                     b.ToTable("TopUpRun", "topup");
                 });
 
@@ -1033,33 +1134,28 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<long?>("AccountTransactionId")
                         .HasColumnType("bigint");
 
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CompletedAt");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
                     b.Property<long>("EducationAccountId")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("nvarchar(120)");
-
-                    b.Property<DateTime?>("ProcessedAtUtc")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("ProcessedAt");
-
-                    b.Property<long?>("ProcessedByLoginAccountId")
-                        .HasColumnType("bigint");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Reason")
-                        .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
-
-                    b.Property<decimal>("TopUpAmount")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
 
                     b.Property<long>("TopUpRunId")
                         .HasColumnType("bigint");
@@ -1073,9 +1169,12 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("IdempotencyKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_TopUpTransaction_IdempotencyKey");
 
-                    b.HasIndex("TopUpRunId", "EducationAccountId");
+                    b.HasIndex("TopUpRunId", "EducationAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TopUpTransaction_Run_Account");
 
                     b.ToTable("TopUpTransaction", "topup");
                 });
@@ -3168,6 +3267,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaign", null)
                         .WithMany()
                         .HasForeignKey("TopUpCampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpTransaction", b =>
+                {
+                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRun", null)
+                        .WithMany()
+                        .HasForeignKey("TopUpRunId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
