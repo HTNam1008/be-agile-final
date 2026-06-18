@@ -21,10 +21,10 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
-using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
-using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 
 namespace Moe.Modules.EducationAccountTopUp;

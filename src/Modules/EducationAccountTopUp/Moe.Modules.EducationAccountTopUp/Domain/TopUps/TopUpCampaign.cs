@@ -55,24 +55,82 @@ public sealed class TopUpCampaign : Entity<long>
     public bool IsExecutable => CampaignStatusCode == TopUpCampaignStatusCodes.Active;
 
     public static TopUpCampaign Create(
-        long id,
-        string campaignStatusCode,
-        decimal defaultTopUpAmount = 100,
-        int campaignVersion = 1,
-        DateTime? createdAtUtc = null)
+        long organizationId,
+        string campaignCode,
+        string campaignName,
+        string? description,
+        string recipientModeCode,
+        decimal defaultTopUpAmount,
+        string reason,
+        string scheduleTypeCode,
+        DateOnly startDate,
+        DateOnly? endDate,
+        string? frequencyCode,
+        int? frequencyInterval,
+        long currentUserId,
+        DateTime nowUtc)
     {
-        DateTime createdAt = createdAtUtc ?? DateTime.UtcNow;
-        return new TopUpCampaign(
-            id,
-            organizationId: 1,
-            campaignCode: $"CAMPAIGN-{id}",
-            campaignName: $"Campaign {id}",
-            defaultTopUpAmount,
-            reason: "Manual top-up",
-            campaignStatusCode,
-            campaignVersion,
-            createdByLoginAccountId: 1,
-            createdAt);
+        return new TopUpCampaign
+        {
+            OrganizationId = organizationId,
+            CampaignCode = campaignCode,
+            CampaignName = campaignName,
+            Description = description,
+            RecipientModeCode = recipientModeCode,
+            DefaultTopUpAmount = defaultTopUpAmount,
+            Reason = reason,
+            ScheduleTypeCode = scheduleTypeCode,
+            StartDate = startDate,
+            EndDate = endDate,
+            FrequencyCode = frequencyCode,
+            FrequencyInterval = frequencyInterval,
+            CampaignStatusCode = TopUpCampaignStatusCodes.Draft,
+            CampaignVersion = 1,
+            CreatedByLoginAccountId = currentUserId,
+            CreatedAtUtc = nowUtc,
+            UpdatedByLoginAccountId = currentUserId,
+            UpdatedAtUtc = nowUtc
+        };
+    }
+
+    public void Update(
+        string campaignName,
+        string? description,
+        decimal defaultTopUpAmount,
+        string reason,
+        string scheduleTypeCode,
+        DateOnly startDate,
+        DateOnly? endDate,
+        string? frequencyCode,
+        int? frequencyInterval,
+        long currentUserId,
+        DateTime nowUtc)
+    {
+        CampaignName = campaignName;
+        Description = description;
+        DefaultTopUpAmount = defaultTopUpAmount;
+        Reason = reason;
+        ScheduleTypeCode = scheduleTypeCode;
+        StartDate = startDate;
+        EndDate = endDate;
+        FrequencyCode = frequencyCode;
+        FrequencyInterval = frequencyInterval;
+        UpdatedByLoginAccountId = currentUserId;
+        UpdatedAtUtc = nowUtc;
+        CampaignVersion++;
+    }
+
+    public void ChangeStatus(string newStatusCode, long currentUserId, DateTime nowUtc)
+    {
+        CampaignStatusCode = newStatusCode;
+        UpdatedByLoginAccountId = currentUserId;
+        UpdatedAtUtc = nowUtc;
+        CampaignVersion++;
+    }
+
+    public void SetNextRunAt(DateTime? nextRunAtUtc)
+    {
+        NextRunAtUtc = nextRunAtUtc;
     }
 }
 
