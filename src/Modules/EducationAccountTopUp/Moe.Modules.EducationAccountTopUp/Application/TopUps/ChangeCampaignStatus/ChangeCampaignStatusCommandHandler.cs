@@ -29,14 +29,24 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         var newStatusCode = Enum.Parse<TopUpCampaignStatusCode>(command.NewStatusCode, ignoreCase: true);
 
         // Zero-Rule Guard for Activation
-        if (newStatusCode == TopUpCampaignStatusCode.Active && 
-            string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
+        if (newStatusCode == TopUpCampaignStatusCode.Active)
         {
-            var ruleCount = await dbContext.Set<TopUpCampaignRule>()
-                .CountAsync(x => x.TopUpCampaignId == campaign.Id && x.IsActive, cancellationToken);
+            if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                var ruleCount = await dbContext.Set<TopUpCampaignRule>()
+                    .CountAsync(x => x.TopUpCampaignId == campaign.Id && x.IsActive, cancellationToken);
 
-            if (ruleCount == 0)
-                return Result.Failure(new Error("ValidationException", "Cannot activate a DYNAMIC_RULES campaign with zero active rules."));
+                if (ruleCount == 0)
+                    return Result.Failure(new Error("ValidationException", "Cannot activate a DYNAMIC_RULES campaign with zero active rules."));
+            }
+            else if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                var recipientCount = await dbContext.Set<TopUpCampaignRecipient>()
+                    .CountAsync(x => x.TopUpCampaignId == campaign.Id, cancellationToken);
+
+                if (recipientCount == 0)
+                    return Result.Failure(new Error("ValidationException", "Cannot activate a FIXED_SELECTION campaign with zero recipients."));
+            }
         }
 
         // Calculate NextRunAt if Activating

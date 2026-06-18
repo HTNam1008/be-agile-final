@@ -34,6 +34,24 @@ public sealed class Person : AggregateRoot<long>
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
+
+    public void UpdatePreferredContact(
+        string? preferredEmail,
+        string? preferredMobile,
+        string? preferredAddress,
+        DateTime utcNow)
+    {
+        PreferredEmail = NormalizeNullable(preferredEmail);
+        PreferredMobile = NormalizeNullable(preferredMobile);
+        PreferredAddress = NormalizeNullable(preferredAddress);
+        UpdatedAtUtc = utcNow;
+    }
+
+    private static string? NormalizeNullable(string? value)
+    {
+        string? trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
 }
 
 internal static class PersonStatusCodes
