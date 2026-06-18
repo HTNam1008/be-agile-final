@@ -71,6 +71,9 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
     {
         public Task PublishTopUpFailedEvent(long transactionId, string reason) => Task.CompletedTask;
         public Task PublishTopUpSucceededEvent(long transactionId, decimal amount) => Task.CompletedTask;
+        public Task PublishRunStartedAsync(TopUpRunStartedReport report, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishRunCompletedAsync(TopUpRunCompletedReport report, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishTopUpReceivedAsync(TopUpReceivedReport report, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class MockMetrics : ITopUpExecutionMetrics
@@ -80,6 +83,10 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
         public void RecordProcessingTime(TimeSpan duration) {}
         public void RecordRunStarted() {}
         public void RecordRunCompleted(int succeeded, int failed) {}
+        public void RecordRecipientProcessed(long recipientId, string campaignCode, bool isDynamic, bool wasEligible) {}
+        public void RecordAccountCreditDbConflict() {}
+        public void RecordRunStarted(long runId, long campaignId, int totalRecipients) {}
+        public void RecordRunCompleted(long runId, long campaignId, string status, int totalRecipients, int succeeded, int failed, int skipped, TimeSpan duration) {}
     }
 
     [Fact]
