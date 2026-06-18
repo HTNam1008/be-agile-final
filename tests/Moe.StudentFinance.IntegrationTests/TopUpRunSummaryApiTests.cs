@@ -71,7 +71,7 @@ public sealed class TopUpRunSummaryApiTests : IClassFixture<CustomWebApplication
     }
 
     [Fact]
-    public async Task Nested_Run_Summary_Should_Reject_Mismatched_Campaign()
+    public async Task Nested_Reconciliation_Should_Reject_Mismatched_Campaign()
     {
         long runId = await SeedRunAsync(
             organizationId: 1,
@@ -81,8 +81,9 @@ public sealed class TopUpRunSummaryApiTests : IClassFixture<CustomWebApplication
             skipped: 0,
             totalCredited: 100m);
 
-        HttpResponseMessage response = await _client.GetAsync(
-            $"/api/admin/v1/campaigns/999999/runs/{runId}");
+        HttpResponseMessage response = await _client.PostAsync(
+            $"/api/admin/v1/campaigns/999999/runs/{runId}/reconcile",
+            content: null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
