@@ -20,6 +20,12 @@ public sealed class DynamicRuleEvaluatorTests
             modelBuilder.Entity<Person>().HasKey(x => x.Id);
             modelBuilder.Entity<EducationAccount>().HasKey(x => x.Id);
             modelBuilder.Entity<SchoolEnrollment>().HasKey(x => x.Id);
+            modelBuilder.Entity<TopUpCampaign>().HasKey(x => x.Id);
+            modelBuilder.Entity<TopUpCampaignRule>().HasKey(x => x.Id);
+            modelBuilder.Entity<TopUpRun>().HasKey(x => x.Id);
+            modelBuilder.Entity<TopUpTransaction>().HasKey(x => x.Id);
+            modelBuilder.Entity<AccountTransaction>().HasKey(x => x.Id);
+            modelBuilder.Entity<TopUpCampaignRecipient>().HasKey(x => x.Id);
         }
     }
 
