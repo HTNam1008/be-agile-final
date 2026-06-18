@@ -20,7 +20,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var createPayload = new
         {
             organizationId = 1,
-            campaignCode = "TEST_FIXED_001",
+            campaignCode = $"TEST_FIXED_{Guid.NewGuid():N}",
             campaignName = "Integration Test Fixed",
             recipientModeCode = "FixedSelection",
             defaultTopUpAmount = 50.00m,
@@ -73,15 +73,20 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             throw new Exception($"Activate failed: {activateResponse.StatusCode} - {err}");
         }
 
-        // 5. Execute Run
-        var executeResponse = await _client.PostAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/execute", null);
-        if (!executeResponse.IsSuccessStatusCode)
-        {
-            var err = await executeResponse.Content.ReadAsStringAsync();
-            throw new Exception($"Execute failed: {executeResponse.StatusCode} - {err}");
-        }
-        var runId = await executeResponse.Content.ReadFromJsonAsync<long>();
-        Assert.True(runId > 0);
+        // 5. Request idempotent manual run and wait for worker completion.
+        var idempotencyKey = $"fixed:{campaignId}:{Guid.NewGuid():N}";
+        var runId = await RequestManualRunAsync(campaignId, idempotencyKey);
+        var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
+        Assert.Equal(runId, duplicateRunId);
+
+        using JsonDocument summary = await WaitForRunSummaryAsync(campaignId, runId);
+        JsonElement data = summary.RootElement.GetProperty("data");
+        Assert.Equal("COMPLETED", data.GetProperty("runStatus").GetString());
+        Assert.Equal(2, data.GetProperty("totalSelected").GetInt32());
+        Assert.Equal(2, data.GetProperty("totalProcessed").GetInt32());
+        Assert.Equal(2, data.GetProperty("totalSucceeded").GetInt32());
+        Assert.Equal(0, data.GetProperty("totalFailed").GetInt32());
+        Assert.Equal(0, data.GetProperty("totalSkipped").GetInt32());
     }
 
     [Fact]
@@ -91,7 +96,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var createPayload = new
         {
             organizationId = 1,
-            campaignCode = "TEST_DYN_001",
+            campaignCode = $"TEST_DYN_{Guid.NewGuid():N}",
             campaignName = "Integration Test Dynamic",
             recipientModeCode = "DynamicRules",
             defaultTopUpAmount = 75.00m,
@@ -137,15 +142,61 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             throw new Exception($"Activate failed: {activateResponse.StatusCode} - {err}");
         }
 
-        // 5. Execute Run
-        var executeResponse = await _client.PostAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/execute", null);
-        if (!executeResponse.IsSuccessStatusCode)
+        // 5. Request idempotent manual run and wait for worker completion.
+        var runId = await RequestManualRunAsync(campaignId, $"dynamic:{campaignId}:{Guid.NewGuid():N}");
+        using JsonDocument summary = await WaitForRunSummaryAsync(campaignId, runId);
+        JsonElement data = summary.RootElement.GetProperty("data");
+        Assert.Equal("COMPLETED", data.GetProperty("runStatus").GetString());
+        Assert.True(data.GetProperty("totalSucceeded").GetInt32() > 0);
+    }
+
+    private async Task<long> RequestManualRunAsync(long campaignId, string idempotencyKey)
+    {
+        var request = new
         {
-            var err = await executeResponse.Content.ReadAsStringAsync();
-            throw new Exception($"Execute failed: {executeResponse.StatusCode} - {err}");
+            idempotencyKey,
+            note = "Integration test manual run"
+        };
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/admin/v1/campaigns/{campaignId}/runs",
+            request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Manual run request failed: {response.StatusCode} - {err}");
         }
-        var runId = await executeResponse.Content.ReadFromJsonAsync<long>();
-        Assert.True(runId > 0);
+
+        await using var responseStream = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(responseStream);
+        return document.RootElement.GetProperty("data").GetProperty("runId").GetInt64();
+    }
+
+    private async Task<JsonDocument> WaitForRunSummaryAsync(long campaignId, long runId)
+    {
+        for (int attempt = 0; attempt < 40; attempt++)
+        {
+            var response = await _client.GetAsync($"/api/admin/v1/campaigns/{campaignId}/runs/{runId}");
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Run summary failed: {response.StatusCode} - {err}");
+            }
+
+            await using var responseStream = await response.Content.ReadAsStreamAsync();
+            var document = await JsonDocument.ParseAsync(responseStream);
+            string? status = document.RootElement.GetProperty("data").GetProperty("runStatus").GetString();
+            if (status is "COMPLETED" or "PARTIAL" or "FAILED" or "CANCELLED")
+            {
+                return document;
+            }
+
+            document.Dispose();
+            await Task.Delay(250);
+        }
+
+        throw new TimeoutException($"Run {runId} for campaign {campaignId} did not reach a terminal status.");
     }
 
     private async Task<long[]> SearchEducationAccountIdsAsync()

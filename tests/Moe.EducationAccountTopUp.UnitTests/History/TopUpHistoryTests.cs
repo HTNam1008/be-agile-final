@@ -12,6 +12,7 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
 using Xunit;
 
@@ -331,6 +332,18 @@ public sealed class TopUpHistoryTests : IAsyncLifetime
                 builder.Property(x => x.Id).ValueGeneratedOnAdd();
             });
 
+            modelBuilder.Entity<TopUpCampaignRule>(builder =>
+            {
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedOnAdd();
+            });
+
+            modelBuilder.Entity<TopUpCampaignRecipient>(builder =>
+            {
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedOnAdd();
+            });
+
             modelBuilder.Entity<EducationAccount>(builder =>
             {
                 builder.HasKey(x => x.Id);
@@ -338,11 +351,23 @@ public sealed class TopUpHistoryTests : IAsyncLifetime
                 builder.Ignore(x => x.DomainEvents);
             });
 
+            modelBuilder.Entity<AccountTransaction>(builder =>
+            {
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedOnAdd();
+            });
+
             modelBuilder.Entity<Person>(builder =>
             {
                 builder.HasKey(x => x.Id);
                 builder.Property(x => x.Id).ValueGeneratedOnAdd();
                 builder.Ignore(x => x.DomainEvents);
+            });
+
+            modelBuilder.Entity<SchoolEnrollment>(builder =>
+            {
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedOnAdd();
             });
         }
     }
