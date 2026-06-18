@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.SharedKernel.Results;
 using Xunit;
@@ -16,6 +17,8 @@ public sealed class RunExecutionOrchestratorTests
     private readonly FakeRecipientProcessingService _recipientProcessor = new();
     private readonly FakeTopUpRunRepository _runs = new();
     private readonly FakeTopUpTransactionRepository _transactions = new();
+    private readonly FakeTopUpExecutionEventPublisher _events = new();
+    private readonly FakeTopUpExecutionMetrics _metrics = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 18, 4, 0, 0, TimeSpan.Zero));
 
@@ -196,12 +199,41 @@ public sealed class RunExecutionOrchestratorTests
         _recipientProcessor.Calls.Should().Be(0);
     }
 
+    [Fact]
+    public async Task Should_Emit_Run_Events_After_Commit_Boundaries()
+    {
+        TopUpRun run = AddRun();
+        _recipientProcessor.UseDefaultCompletedResult(100m);
+        _events.OnStarted = () => _unitOfWork.SaveCalls.Should().Be(1);
+        _events.OnCompleted = () => _unitOfWork.SaveCalls.Should().Be(2);
+
+        var result = await CreateOrchestrator().ExecuteRunAsync(run.Id, Recipients(1, 100m));
+
+        result.IsSuccess.Should().BeTrue();
+        _events.Emitted.Should().Equal("started", "completed");
+    }
+
+    [Fact]
+    public async Task Should_Record_Run_Metrics()
+    {
+        TopUpRun run = AddRun();
+        _recipientProcessor.UseDefaultCompletedResult(100m);
+
+        await CreateOrchestrator().ExecuteRunAsync(run.Id, Recipients(2, 100m));
+
+        _metrics.StartedRecords.Should().ContainSingle();
+        _metrics.CompletedRecords.Should().ContainSingle();
+        _metrics.CompletedRecords.Single().TotalProcessed.Should().Be(2);
+    }
+
     private RunExecutionOrchestrator CreateOrchestrator()
     {
         return new RunExecutionOrchestrator(
             _recipientProcessor,
             _runs,
             _transactions,
+            _events,
+            _metrics,
             _unitOfWork,
             _clock,
             NullLogger<RunExecutionOrchestrator>.Instance);
@@ -398,5 +430,63 @@ public sealed class RunExecutionOrchestratorTests
     private sealed class FakeClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+    }
+
+    private sealed class FakeTopUpExecutionEventPublisher : ITopUpExecutionEventPublisher
+    {
+        public List<string> Emitted { get; } = [];
+        public Action? OnStarted { get; set; }
+        public Action? OnCompleted { get; set; }
+
+        public Task PublishRunStartedAsync(
+            TopUpRunStartedReport report,
+            CancellationToken cancellationToken = default)
+        {
+            OnStarted?.Invoke();
+            Emitted.Add("started");
+            return Task.CompletedTask;
+        }
+
+        public Task PublishRunCompletedAsync(
+            TopUpRunCompletedReport report,
+            CancellationToken cancellationToken = default)
+        {
+            OnCompleted?.Invoke();
+            Emitted.Add("completed");
+            return Task.CompletedTask;
+        }
+
+        public Task PublishTopUpReceivedAsync(
+            TopUpReceivedReport report,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class FakeTopUpExecutionMetrics : ITopUpExecutionMetrics
+    {
+        public List<(long TopUpRunId, long CampaignId, int TotalSelected)> StartedRecords { get; } = [];
+        public List<(long TopUpRunId, long CampaignId, string TerminalStatus, int TotalProcessed)> CompletedRecords { get; } = [];
+
+        public void RecordRunStarted(long topUpRunId, long campaignId, int totalSelected)
+            => StartedRecords.Add((topUpRunId, campaignId, totalSelected));
+
+        public void RecordRunCompleted(
+            long topUpRunId,
+            long campaignId,
+            string terminalStatus,
+            int totalProcessed,
+            int totalSucceeded,
+            int totalFailed,
+            int totalSkipped,
+            TimeSpan duration)
+            => CompletedRecords.Add((topUpRunId, campaignId, terminalStatus, totalProcessed));
+
+        public void RecordRecipientProcessed(
+            long topUpRunId,
+            string status,
+            bool duplicateIdempotencyHit,
+            bool accountCreditFailure) { }
+
+        public void RecordAccountCreditDbConflict() { }
     }
 }

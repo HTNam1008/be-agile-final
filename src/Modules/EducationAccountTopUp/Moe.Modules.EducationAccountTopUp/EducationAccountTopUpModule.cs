@@ -46,6 +46,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IAccountCreditGateway, AccountCreditGateway>();
         services.AddScoped<IRecipientValidator, StubRecipientValidator>();
         services.AddScoped<IRecipientResolver, StubRecipientResolver>();
+        services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
+        services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();

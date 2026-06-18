@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.SharedKernel.Results;
 
@@ -11,6 +12,8 @@ public sealed class RunExecutionOrchestrator(
     IRecipientProcessingService recipientProcessor,
     ITopUpRunRepository runs,
     ITopUpTransactionRepository transactions,
+    ITopUpExecutionEventPublisher events,
+    ITopUpExecutionMetrics metrics,
     IUnitOfWork unitOfWork,
     IClock clock,
     ILogger<RunExecutionOrchestrator> logger) : IRunExecutionOrchestrator
@@ -57,6 +60,18 @@ public sealed class RunExecutionOrchestrator(
             }
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            await events.PublishRunStartedAsync(
+                new TopUpRunStartedReport
+                {
+                    TopUpRunId = run.Id,
+                    CampaignId = run.TopUpCampaignId,
+                    TotalSelected = recipients.Count,
+                    OccurredAtUtc = run.StartedAtUtc ?? clock.UtcNow.UtcDateTime
+                },
+                cancellationToken);
+
+            metrics.RecordRunStarted(run.Id, run.TopUpCampaignId, recipients.Count);
         }
 
         int totalSucceeded = 0;
@@ -103,6 +118,36 @@ public sealed class RunExecutionOrchestrator(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        DateTime completedAtUtc = run.CompletedAtUtc ?? clock.UtcNow.UtcDateTime;
+        TimeSpan duration = run.StartedAtUtc is DateTime startedAtUtc
+            ? completedAtUtc - startedAtUtc
+            : TimeSpan.Zero;
+
+        await events.PublishRunCompletedAsync(
+            new TopUpRunCompletedReport
+            {
+                TopUpRunId = topUpRunId,
+                CampaignId = run.TopUpCampaignId,
+                TerminalStatus = run.RunStatusCode,
+                TotalProcessed = totalProcessed,
+                TotalSucceeded = totalSucceeded,
+                TotalFailed = totalFailed,
+                TotalSkipped = totalSkipped,
+                TotalAmount = totalAmount,
+                OccurredAtUtc = completedAtUtc
+            },
+            cancellationToken);
+
+        metrics.RecordRunCompleted(
+            topUpRunId,
+            run.TopUpCampaignId,
+            run.RunStatusCode,
+            totalProcessed,
+            totalSucceeded,
+            totalFailed,
+            totalSkipped,
+            duration);
 
         return Result<RunExecutionResult>.Success(new RunExecutionResult
         {

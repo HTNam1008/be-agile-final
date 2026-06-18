@@ -15,6 +15,8 @@ public sealed class PendingTransactionRecoveryTests
 {
     private readonly FakeTopUpTransactionRepository _transactions = new();
     private readonly FakeAccountCreditGateway _accountGateway = new();
+    private readonly FakeTopUpExecutionEventPublisher _events = new();
+    private readonly FakeTopUpExecutionMetrics _metrics = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 18, 4, 0, 0, TimeSpan.Zero));
 
@@ -44,6 +46,7 @@ public sealed class PendingTransactionRecoveryTests
         recovered.Should().Be(1);
         transaction.TransactionStatusCode.Should().Be(TopUpTransactionStatusCodes.Completed);
         transaction.AccountTransactionId.Should().Be(9002);
+        _events.TopUpReceivedReports.Should().ContainSingle();
     }
 
     [Fact]
@@ -113,6 +116,8 @@ public sealed class PendingTransactionRecoveryTests
         return new PendingTransactionRecoveryService(
             _transactions,
             _accountGateway,
+            _events,
+            _metrics,
             _unitOfWork,
             _clock,
             NullLogger<PendingTransactionRecoveryService>.Instance);
@@ -163,5 +168,51 @@ public sealed class PendingTransactionRecoveryTests
     private sealed class FakeClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+    }
+
+    private sealed class FakeTopUpExecutionEventPublisher : ITopUpExecutionEventPublisher
+    {
+        public List<TopUpReceivedReport> TopUpReceivedReports { get; } = [];
+
+        public Task PublishRunStartedAsync(
+            TopUpRunStartedReport report,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PublishRunCompletedAsync(
+            TopUpRunCompletedReport report,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PublishTopUpReceivedAsync(
+            TopUpReceivedReport report,
+            CancellationToken cancellationToken = default)
+        {
+            TopUpReceivedReports.Add(report);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeTopUpExecutionMetrics : ITopUpExecutionMetrics
+    {
+        public void RecordRunStarted(long topUpRunId, long campaignId, int totalSelected) { }
+
+        public void RecordRunCompleted(
+            long topUpRunId,
+            long campaignId,
+            string terminalStatus,
+            int totalProcessed,
+            int totalSucceeded,
+            int totalFailed,
+            int totalSkipped,
+            TimeSpan duration) { }
+
+        public void RecordRecipientProcessed(
+            long topUpRunId,
+            string status,
+            bool duplicateIdempotencyHit,
+            bool accountCreditFailure) { }
+
+        public void RecordAccountCreditDbConflict() { }
     }
 }
