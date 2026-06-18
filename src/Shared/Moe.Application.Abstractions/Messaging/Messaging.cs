@@ -23,6 +23,10 @@ public interface ICommandDispatcher
     Task<Result<TResponse>> Send<TResponse>(
         ICommand<TResponse> command,
         CancellationToken cancellationToken);
+
+    Task<Result> Send(
+        ICommand command,
+        CancellationToken cancellationToken);
 }
 
 public interface IQueryDispatcher
