@@ -69,6 +69,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<ExecuteTopUpRunCommand>, ExecuteTopUpRunCommandValidator>();
         services.AddScoped<IValidator<RequestManualRunRequest>, RequestManualRunRequestValidator>();
         services.AddScoped<IValidator<RequestManualRunCommand>, RequestManualRunCommandValidator>();
+        services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
+        
         services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
