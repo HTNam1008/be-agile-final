@@ -27,13 +27,13 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.RunSummary;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.History;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.EducationAccountTopUp.IGateway.RunSummary;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
-using Moe.Modules.EducationAccountTopUp.IGateway;
-using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 
 namespace Moe.Modules.EducationAccountTopUp;
@@ -63,6 +63,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpRunDispatcher, InProcessTopUpRunDispatcher>();
         services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
+        services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();
         services.AddScoped<RecipientProcessingService>();
