@@ -83,10 +83,14 @@ internal sealed class ExecuteTopUpRunCommandHandler(
 
             activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, nowUtc);
 
-            var allAccounts = await activeAccountsQuery.ToListAsync(cancellationToken);
-            foreach (var acc in allAccounts)
+            var accountIds = await activeAccountsQuery.Select(x => x.Id).ToListAsync(cancellationToken);
+            foreach (var accId in accountIds)
             {
-                matches.Add((acc, campaign.DefaultTopUpAmount));
+                var acc = await dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>().FindAsync(new object[] { accId }, cancellationToken);
+                if (acc != null)
+                {
+                     matches.Add((acc, campaign.DefaultTopUpAmount));
+                }
             }
         }
 
