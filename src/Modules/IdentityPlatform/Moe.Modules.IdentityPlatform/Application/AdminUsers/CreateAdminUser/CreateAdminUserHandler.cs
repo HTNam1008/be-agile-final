@@ -32,13 +32,23 @@ internal sealed class CreateAdminUserHandler(
         DateTime utcNow = clock.UtcNow.UtcDateTime;
         string email = command.Email.Trim();
         string normalizedEmail = NormalizeEmail(command.Email);
-        const string adminRoleCode = RoleCodes.Admin;
+        string adminRoleCode = command.RoleCode.Trim().ToUpperInvariant();
+
+        if (adminRoleCode is not (RoleCodes.SystemAdmin or RoleCodes.SchoolAdmin))
+        {
+            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.InvalidAdminRole);
+        }
+
+        if (!currentUser.Roles.Contains(RoleCodes.SystemAdmin))
+        {
+            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.SystemAdminRequired);
+        }
 
         UserAccount? actor = await userAccounts.FindByIdAsync(actorUserAccountId, cancellationToken);
 
         if (actor is null || actor.PortalAccessCode != PortalAccessCodes.Admin)
         {
-            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.AuthenticatedAdminRequired);
+            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.SystemAdminRequired);
         }
 
         if (actor.LoginEmailNormalized == normalizedEmail)
@@ -51,9 +61,19 @@ internal sealed class CreateAdminUserHandler(
             return Result<CreateAdminUserResponse>.Failure(IdentityErrors.AdminAccountAlreadyExists);
         }
 
-        if (!await adminUsers.IsActiveOrganizationUnitAsync(command.InitialOrganizationUnitId, utcNow, cancellationToken))
+        string? organizationType = await adminUsers.GetActiveOrganizationUnitTypeAsync(
+            command.InitialOrganizationUnitId,
+            utcNow,
+            cancellationToken);
+
+        if (organizationType is null)
         {
             return Result<CreateAdminUserResponse>.Failure(IdentityErrors.OrganizationUnitNotFound);
+        }
+
+        if (!IsValidRoleOrganizationPair(adminRoleCode, command.InitialOrganizationUnitId, organizationType))
+        {
+            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.InvalidAdminOrganizationScope);
         }
 
         if (!await adminUsers.HasActiveRolePermissionsAsync(adminRoleCode, utcNow, cancellationToken))
@@ -88,6 +108,8 @@ internal sealed class CreateAdminUserHandler(
                 createdUser.ExternalObjectId,
                 createdUser.UserPrincipalName,
                 createdUser.DisplayName,
+                adminRoleCode,
+                command.InitialOrganizationUnitId,
                 actorUserAccountId,
                 utcNow);
 
@@ -129,4 +151,15 @@ internal sealed class CreateAdminUserHandler(
 
     private static string NormalizeEmail(string email)
         => email.Trim().ToUpperInvariant();
+
+    private static bool IsValidRoleOrganizationPair(string roleCode, long organizationUnitId, string organizationType)
+    {
+        return roleCode switch
+        {
+            RoleCodes.SystemAdmin => organizationUnitId == OrganizationUnitCodes.MoeHeadquartersId
+                && organizationType == "HQ",
+            RoleCodes.SchoolAdmin => organizationType == "SCHOOL",
+            _ => false
+        };
+    }
 }

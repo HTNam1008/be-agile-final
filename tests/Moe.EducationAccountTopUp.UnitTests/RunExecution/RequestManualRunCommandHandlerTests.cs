@@ -21,7 +21,10 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Create_Run_When_Campaign_Active_And_Key_Unique()
     {
-        _campaigns.Add(TopUpCampaign.Create(10, TopUpCampaignStatusCodes.Active));
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
 
         RequestManualRunCommandHandler handler = CreateHandler();
         var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", "Backfill"), CancellationToken.None);
@@ -37,7 +40,10 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Return_Existing_Run_When_Idempotency_Key_Duplicate()
     {
-        _campaigns.Add(TopUpCampaign.Create(10, TopUpCampaignStatusCodes.Active));
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
         var existingRun = TopUpRun.Rehydrate(
             42,
             10,
@@ -88,7 +94,10 @@ public sealed class RequestManualRunCommandHandlerTests
     [InlineData(TopUpCampaignStatusCodes.Cancelled)]
     public async Task Should_Fail_When_Campaign_Not_Active(string statusCode)
     {
-        _campaigns.Add(TopUpCampaign.Create(10, statusCode));
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(statusCode, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
 
         RequestManualRunCommandHandler handler = CreateHandler();
         var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);
@@ -101,7 +110,10 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Enqueue_Run_For_Background_Processing()
     {
-        _campaigns.Add(TopUpCampaign.Create(10, TopUpCampaignStatusCodes.Active));
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
 
         RequestManualRunCommandHandler handler = CreateHandler();
         var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);
@@ -114,7 +126,10 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Raise_ManualRunRequestedEvent()
     {
-        _campaigns.Add(TopUpCampaign.Create(10, TopUpCampaignStatusCodes.Active));
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
 
         RequestManualRunCommandHandler handler = CreateHandler();
         var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);

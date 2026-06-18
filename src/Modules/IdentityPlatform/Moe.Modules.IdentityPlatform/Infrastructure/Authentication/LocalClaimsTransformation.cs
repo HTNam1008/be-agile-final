@@ -45,14 +45,6 @@ internal sealed class LocalClaimsTransformation(MoeDbContext dbContext, IClock c
             return principal;
         }
 
-        DateTime utcNow = clock.UtcNow.UtcDateTime;
-
-        if (account.AccountStatusCode == UserAccountStatusCodes.PendingFirstLogin)
-        {
-            account.ActivateFirstLogin(utcNow);
-            await dbContext.SaveChangesAsync();
-        }
-
         ClaimsIdentity identity = new("MoeLocalIdentity");
         identity.AddClaim(new Claim(LocalIdentityClaimNames.UserAccountId, account.Id.ToString()));
         identity.AddClaim(new Claim(LocalIdentityClaimNames.IdentityProvider, account.IdentityProviderCode));
@@ -63,13 +55,25 @@ internal sealed class LocalClaimsTransformation(MoeDbContext dbContext, IClock c
             identity.AddClaim(new Claim(LocalIdentityClaimNames.PersonId, account.PersonId.Value.ToString()));
         }
 
-        await AddAccessClaimsAsync(identity, account.Id, utcNow);
+        DateTime utcNow = clock.UtcNow.UtcDateTime;
+        string[] roles = await AddAccessClaimsAsync(identity, account.Id, utcNow);
+
+        if (!HasRequiredPortalRole(account, expectedIdentityProviderCode, roles))
+        {
+            return principal;
+        }
+
+        if (account.AccountStatusCode == UserAccountStatusCodes.PendingFirstLogin)
+        {
+            account.ActivateFirstLogin(utcNow);
+            await dbContext.SaveChangesAsync();
+        }
 
         principal.AddIdentity(identity);
         return principal;
     }
 
-    private async Task AddAccessClaimsAsync(ClaimsIdentity identity, long userAccountId, DateTime utcNow)
+    private async Task<string[]> AddAccessClaimsAsync(ClaimsIdentity identity, long userAccountId, DateTime utcNow)
     {
         List<UserAccessScope> scopes = await dbContext.Set<UserAccessScope>()
             .Where(x => x.UserAccountId == userAccountId)
@@ -104,6 +108,21 @@ internal sealed class LocalClaimsTransformation(MoeDbContext dbContext, IClock c
         {
             identity.AddClaim(new Claim(LocalIdentityClaimNames.Permission, permission));
         }
+
+        return roles;
+    }
+
+    private static bool HasRequiredPortalRole(UserAccount account, string identityProviderCode, IReadOnlyCollection<string> roles)
+    {
+        return identityProviderCode switch
+        {
+            IdentityProviderCodes.EntraWorkforce => account.PortalAccessCode == PortalAccessCodes.Admin
+                && roles.Any(x => x is RoleCodes.SystemAdmin or RoleCodes.SchoolAdmin),
+            IdentityProviderCodes.Singpass => account.PortalAccessCode == PortalAccessCodes.EService
+                && account.PersonId.HasValue
+                && roles.Contains(RoleCodes.Student),
+            _ => false
+        };
     }
 
     private static string? ResolveExpectedIdentityProviderCode(ClaimsPrincipal principal)
