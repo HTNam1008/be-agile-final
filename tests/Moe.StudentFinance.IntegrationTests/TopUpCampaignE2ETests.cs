@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -36,15 +37,15 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         Assert.True(campaignId > 0);
 
         // 2. Upsert Recipients
+        long[] educationAccountIds = await SearchEducationAccountIdsAsync();
         var recipientsPayload = new
         {
             mode = "ExplicitIds",
             filter = (object?)null,
-            recipients = new[]
+            recipients = educationAccountIds.Select(educationAccountId => new
             {
-                new { educationAccountId = 1001L },
-                new { educationAccountId = 1002L }
-            },
+                educationAccountId
+            }).ToArray(),
             excludedEducationAccountIds = Array.Empty<long>()
         };
         var upsertResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/fixed-recipients", recipientsPayload);
@@ -64,7 +65,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         }
 
         // 4. Activate Campaign
-        var activatePayload = new { topUpCampaignId = campaignId, newStatusCode = "Active" };
+        var activatePayload = new { topUpCampaignId = campaignId, newStatusCode = "ACTIVE" };
         var activateResponse = await _client.PatchAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/status", activatePayload);
         if (!activateResponse.IsSuccessStatusCode)
         {
@@ -128,7 +129,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         }
 
         // 4. Activate Campaign
-        var activatePayload = new { topUpCampaignId = campaignId, newStatusCode = "Active" };
+        var activatePayload = new { topUpCampaignId = campaignId, newStatusCode = "ACTIVE" };
         var activateResponse = await _client.PatchAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/status", activatePayload);
         if (!activateResponse.IsSuccessStatusCode)
         {
@@ -145,5 +146,27 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         }
         var runId = await executeResponse.Content.ReadFromJsonAsync<long>();
         Assert.True(runId > 0);
+    }
+
+    private async Task<long[]> SearchEducationAccountIdsAsync()
+    {
+        var searchResponse = await _client.GetAsync("/api/admin/v1/top-up/accounts/search?organizationId=1&accountStatusCode=ACTIVE&page=1&pageSize=2");
+        if (!searchResponse.IsSuccessStatusCode)
+        {
+            var err = await searchResponse.Content.ReadAsStringAsync();
+            throw new Exception($"Account search failed: {searchResponse.StatusCode} - {err}");
+        }
+
+        await using var responseStream = await searchResponse.Content.ReadAsStreamAsync();
+        using var response = await JsonDocument.ParseAsync(responseStream);
+
+        var data = response.RootElement.GetProperty("data");
+        long[] ids = data.GetProperty("items")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("educationAccountId").GetInt64())
+            .ToArray();
+
+        Assert.True(ids.Length >= 2, $"Expected at least 2 active education accounts, found {ids.Length}.");
+        return ids.Take(2).ToArray();
     }
 }
