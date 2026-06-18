@@ -6,9 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
-using Moe.Modules.IdentityPlatform.Application.Access.AssignAccessScope;
 using Moe.Modules.IdentityPlatform.Api.Admin;
 using Moe.Modules.IdentityPlatform.Api.EService;
+using Moe.Modules.IdentityPlatform.Application.Access.AssignAccessScope;
 using Moe.Modules.IdentityPlatform.Application.Access.RevokeAccessScope;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile.GetMyAdminProfile;
@@ -24,16 +24,18 @@ using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.RetryIdentit
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
-using Moe.Modules.IdentityPlatform.Infrastructure.Bootstrap;
-using Moe.Modules.IdentityPlatform.Infrastructure.EntraWorkforce;
-using Moe.Modules.IdentityPlatform.Infrastructure.Authentication;
-using Moe.Modules.IdentityPlatform.Infrastructure.People;
-using Moe.Modules.IdentityPlatform.Infrastructure.Repositories;
-using Moe.Modules.IdentityPlatform.Infrastructure.Singpass;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.IdentityPlatform.Infrastructure.Authentication;
+using Moe.Modules.IdentityPlatform.Infrastructure.Bootstrap;
+using Moe.Modules.IdentityPlatform.Infrastructure.EntraWorkforce;
+using Moe.Modules.IdentityPlatform.Infrastructure.People;
+using Moe.Modules.IdentityPlatform.Infrastructure.Repositories;
+using Moe.Modules.IdentityPlatform.Infrastructure.Singpass;
+using Moe.Modules.IdentityPlatform.Infrastructure.Students;
 
 namespace Moe.Modules.IdentityPlatform;
 
@@ -52,6 +54,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         services.AddHttpClient<ISingpassLoginGateway, MockPassFapiLoginGateway>();
         services.AddScoped<ILocalIdentityDirectory, LocalIdentityDirectory>();
+        services.AddScoped<ITopUpStudentSearchDirectory, TopUpStudentSearchDirectory>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IExternalIdentityProvisioningRepository, UserAccountRepository>();
