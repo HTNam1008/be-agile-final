@@ -29,8 +29,8 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
         if (!string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase))
             return Result.Failure(new Error("InvalidRecipientMode", "Recipients can only be added directly to FIXED_SELECTION campaigns."));
 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCode.Draft.ToString() &&
-            campaign.CampaignStatusCode != TopUpCampaignStatusCode.Paused.ToString())
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
+            campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
             return Result.Failure(new Error("InvalidStatus", "Recipients can only be modified for DRAFT or PAUSED campaigns."));
         }
