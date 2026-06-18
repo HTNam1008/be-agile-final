@@ -12,7 +12,7 @@ public sealed class RunReconciliationService(
     ITopUpTransactionRepository transactions,
     IUnitOfWork unitOfWork,
     IClock clock,
-    ILogger<RunReconciliationService> logger)
+    ILogger<RunReconciliationService> logger) : IRunReconciliationService
 {
     public async Task<Result<ReconciliationResult>> ReconcileRunAsync(
         long topUpRunId,
