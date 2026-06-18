@@ -16,18 +16,30 @@ public sealed class UpdateCampaignCommandValidator : AbstractValidator<UpdateCam
         RuleFor(x => x.Request.ScheduleTypeCode)
             .IsEnumName(typeof(ScheduleTypeCode), caseSensitive: false);
 
-        When(x => string.Equals(x.Request.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+        When(x => !string.Equals(x.Request.ScheduleTypeCode, ScheduleTypeCode.Immediate.ToString(), StringComparison.OrdinalIgnoreCase), () =>
         {
-            RuleFor(x => x.Request.FrequencyCode)
-                .NotEmpty()
-                .IsEnumName(typeof(FrequencyCode), caseSensitive: false);
-            RuleFor(x => x.Request.FrequencyInterval).GreaterThan(0);
-            
-            When(x => x.Request.EndDate.HasValue, () =>
+            RuleFor(x => x.Request.StartDate)
+                .Must(startDate => startDate >= DateOnly.FromDateTime(DateTime.UtcNow))
+                .WithMessage("StartDate must be today or in the future for scheduled campaigns.");
+
+            When(x => string.Equals(x.Request.ScheduleTypeCode, ScheduleTypeCode.OneTimeScheduled.ToString(), StringComparison.OrdinalIgnoreCase), () =>
             {
-                RuleFor(x => x.Request.EndDate)
-                    .Must((request, endDate) => endDate >= request.Request.StartDate)
-                    .WithMessage("EndDate must be greater than or equal to StartDate.");
+                RuleFor(x => x.Request.EndDate).Null().WithMessage("EndDate is not applicable for OneTimeScheduled campaigns.");
+            });
+
+            When(x => string.Equals(x.Request.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+            {
+                RuleFor(x => x.Request.FrequencyCode)
+                    .NotEmpty()
+                    .IsEnumName(typeof(FrequencyCode), caseSensitive: false);
+                RuleFor(x => x.Request.FrequencyInterval).GreaterThan(0);
+                
+                When(x => x.Request.EndDate.HasValue, () =>
+                {
+                    RuleFor(x => x.Request.EndDate)
+                        .Must((request, endDate) => endDate >= request.Request.StartDate)
+                        .WithMessage("EndDate must be greater than or equal to StartDate.");
+                });
             });
         });
     }

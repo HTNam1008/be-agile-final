@@ -76,16 +76,22 @@ internal sealed class PreviewCampaignQueryHandler(
 
             activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, DateTime.UtcNow);
 
-            var activeAccounts = await activeAccountsQuery.ToListAsync(cancellationToken);
+            var totalAccounts = await activeAccountsQuery.CountAsync(cancellationToken);
+            totalMatched = totalAccounts;
+            estimatedTotalAmount = totalAccounts * campaign.DefaultTopUpAmount;
 
-            foreach (var acc in activeAccounts)
+            var skip = (query.PageNumber - 1) * query.PageSize;
+            
+            var pagedAccounts = await activeAccountsQuery
+                .OrderBy(x => x.Id)
+                .Skip(skip)
+                .Take(query.PageSize)
+                .Select(x => new { x.Id })
+                .ToListAsync(cancellationToken);
+
+            foreach (var acc in pagedAccounts)
             {
-                totalMatched++;
-                estimatedTotalAmount += campaign.DefaultTopUpAmount;
-                
-                var skip = (query.PageNumber - 1) * query.PageSize;
-                if (totalMatched > skip && samples.Count < query.PageSize)
-                    samples.Add(new PreviewAccountDto(acc.Id, campaign.DefaultTopUpAmount));
+                samples.Add(new PreviewAccountDto(acc.Id, campaign.DefaultTopUpAmount));
             }
         }
 
