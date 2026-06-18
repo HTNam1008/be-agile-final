@@ -36,6 +36,26 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var campaignId = await createResponse.Content.ReadFromJsonAsync<long>();
         Assert.True(campaignId > 0);
 
+        var updatePayload = new
+        {
+            campaignName = "Integration Test Fixed Updated",
+            description = (string?)null,
+            defaultTopUpAmount = 50.00m,
+            reason = "E2E Testing",
+            scheduleTypeCode = "Immediate",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1),
+            endDate = (DateOnly?)null,
+            frequencyCode = (string?)null,
+            frequencyInterval = (int?)null,
+            campaignVersion = 1
+        };
+        var updateResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}", updatePayload);
+        if (!updateResponse.IsSuccessStatusCode)
+        {
+            var err = await updateResponse.Content.ReadAsStringAsync();
+            throw new Exception($"Update failed: {updateResponse.StatusCode} - {err}");
+        }
+
         // 2. Upsert Recipients
         long[] educationAccountIds = await SearchEducationAccountIdsAsync();
         var recipientsPayload = new
