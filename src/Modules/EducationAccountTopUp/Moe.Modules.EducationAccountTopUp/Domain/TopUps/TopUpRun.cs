@@ -250,13 +250,16 @@ public sealed class TopUpRun : AggregateRoot<long>
 
     private static string DetermineTerminalStatus(int totalSucceeded, int totalFailed, int totalSkipped)
     {
+        if (totalSucceeded == 0)
+        {
+            return TopUpRunStatusCodes.Failed;
+        }
+
         if (totalFailed == 0 && totalSkipped == 0)
         {
             return TopUpRunStatusCodes.Completed;
         }
 
-        return totalSucceeded == 0
-            ? TopUpRunStatusCodes.Failed
-            : TopUpRunStatusCodes.Partial;
+        return TopUpRunStatusCodes.Partial;
     }
 }

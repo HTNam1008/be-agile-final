@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.SharedKernel.Results;
@@ -17,7 +19,9 @@ namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 [Route("api/admin/v{version:apiVersion}/campaigns/{campaignId:long}/runs")]
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 [EnableCors("AdminCors")]
-public sealed class TopUpRunsController(ICommandDispatcher commands) : ControllerBase
+public sealed class TopUpRunsController(
+    ICommandDispatcher commands,
+    IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
@@ -44,9 +48,53 @@ public sealed class TopUpRunsController(ICommandDispatcher commands) : Controlle
             "Run request accepted");
     }
 
+    [HttpGet("{runId:long}")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [ProducesResponseType(typeof(ApiResponse<RunSummaryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRunSummary(
+        long campaignId,
+        long runId,
+        CancellationToken cancellationToken)
+    {
+        _ = campaignId;
+
+        Result<RunSummaryResponse> result = await queries.Send(
+            new GetRunSummaryQuery(runId),
+            cancellationToken);
+
+        return result.IsFailure
+            ? ToFailureResponse(result.Error)
+            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
+    [HttpPost("{runId:long}/reconcile")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [ProducesResponseType(typeof(ApiResponse<ReconciliationResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReconcileRun(
+        long campaignId,
+        long runId,
+        [FromServices] RunReconciliationService reconciliationService,
+        CancellationToken cancellationToken)
+    {
+        _ = campaignId;
+
+        Result<ReconciliationResult> result = await reconciliationService.ReconcileRunAsync(
+            runId,
+            cancellationToken);
+
+        return result.IsFailure
+            ? ToFailureResponse(result.Error)
+            : ApiResponseFactory.Ok(
+                result.Value,
+                HttpContext.TraceIdentifier,
+                $"Reconciliation: {result.Value.ReconciliationStatus}");
+    }
+
     private ObjectResult ToFailureResponse(Error error)
     {
-        int statusCode = error == TopUpErrors.CampaignNotFound
+        int statusCode = error == TopUpErrors.CampaignNotFound || error == TopUpErrors.RunNotFound
             ? ApiResponseCodes.NotFound
             : ApiResponseCodes.BadRequest;
 
