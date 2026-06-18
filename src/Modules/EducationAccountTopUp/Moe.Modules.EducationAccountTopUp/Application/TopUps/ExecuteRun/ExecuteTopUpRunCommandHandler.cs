@@ -78,7 +78,12 @@ internal sealed class ExecuteTopUpRunCommandHandler(
             if (rules.Count == 0)
                 return Result<long>.Failure(new Error("ZeroRules", "Cannot execute DYNAMIC_RULES campaign without rules."));
 
-            var allAccounts = await accountsQuery.ToListAsync(cancellationToken);
+            var activeAccountsQuery = accountsQuery
+                .Where(x => x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active);
+
+            activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, nowUtc);
+
+            var allAccounts = await activeAccountsQuery.ToListAsync(cancellationToken);
             foreach (var acc in allAccounts)
             {
                 matches.Add((acc, campaign.DefaultTopUpAmount));
