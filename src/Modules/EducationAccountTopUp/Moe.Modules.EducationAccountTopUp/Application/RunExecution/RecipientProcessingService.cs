@@ -12,9 +12,11 @@ public sealed class RecipientProcessingService(
     ITopUpTransactionRepository transactions,
     IAccountCreditGateway accountCreditGateway,
     IRecipientValidator recipientValidator,
+    ITopUpExecutionEventPublisher events,
+    ITopUpExecutionMetrics metrics,
     IUnitOfWork unitOfWork,
     IClock clock,
-    ILogger<RecipientProcessingService> logger)
+    ILogger<RecipientProcessingService> logger) : IRecipientProcessingService
 {
     private const string CreditUnavailableReason = "Credit service unavailable";
 
@@ -41,6 +43,12 @@ public sealed class RecipientProcessingService(
         if (transaction is not null
             && transaction.TransactionStatusCode != TopUpTransactionStatusCodes.Pending)
         {
+            metrics.RecordRecipientProcessed(
+                topUpRunId,
+                transaction.TransactionStatusCode,
+                duplicateIdempotencyHit: true,
+                accountCreditFailure: false);
+
             return Result<RecipientProcessingResult>.Success(
                 RecipientProcessingResult.FromExisting(transaction));
         }
@@ -67,6 +75,12 @@ public sealed class RecipientProcessingService(
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
+            metrics.RecordRecipientProcessed(
+                topUpRunId,
+                TopUpTransactionStatusCodes.Skipped,
+                duplicateIdempotencyHit: false,
+                accountCreditFailure: false);
+
             return Result<RecipientProcessingResult>.Success(
                 RecipientProcessingResult.Skipped(transaction.Id, validation.Error.Message));
         }
@@ -82,6 +96,12 @@ public sealed class RecipientProcessingService(
 
             if (credit.IsFailure)
             {
+                metrics.RecordRecipientProcessed(
+                    topUpRunId,
+                    TopUpTransactionStatusCodes.Failed,
+                    duplicateIdempotencyHit: false,
+                    accountCreditFailure: true);
+
                 return await FailTransactionAsync(
                     transaction,
                     credit.Error.Message,
@@ -97,6 +117,25 @@ public sealed class RecipientProcessingService(
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
+            await events.PublishTopUpReceivedAsync(
+                new TopUpReceivedReport
+                {
+                    TopUpRunId = topUpRunId,
+                    TopUpTransactionId = transaction.Id,
+                    EducationAccountId = educationAccountId,
+                    AccountTransactionId = credit.Value.AccountTransactionId,
+                    Amount = amount,
+                    AlreadyProcessed = credit.Value.AlreadyProcessed,
+                    OccurredAtUtc = utcNow
+                },
+                cancellationToken);
+
+            metrics.RecordRecipientProcessed(
+                topUpRunId,
+                TopUpTransactionStatusCodes.Completed,
+                credit.Value.AlreadyProcessed,
+                accountCreditFailure: false);
+
             return Result<RecipientProcessingResult>.Success(
                 RecipientProcessingResult.Completed(
                     transaction.Id,
@@ -106,6 +145,12 @@ public sealed class RecipientProcessingService(
         }
         catch (Exception exception)
         {
+            metrics.RecordRecipientProcessed(
+                topUpRunId,
+                TopUpTransactionStatusCodes.Failed,
+                duplicateIdempotencyHit: false,
+                accountCreditFailure: true);
+
             logger.LogError(
                 exception,
                 "Failed to credit account {EducationAccountId} for top-up run {TopUpRunId}",
