@@ -26,7 +26,7 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
             return Result<long>.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCode.Active.ToString())
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Active)
             return Result<long>.Failure(new Error("InvalidStatus", "Only ACTIVE campaigns can be executed."));
 
         var nowUtc = clock.UtcNow.UtcDateTime;
