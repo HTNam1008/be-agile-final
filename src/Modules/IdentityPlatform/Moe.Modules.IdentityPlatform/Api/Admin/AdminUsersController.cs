@@ -28,6 +28,7 @@ public sealed class AdminUsersController(ICommandDispatcher commands) : Controll
             request.MailNickname,
             request.TemporaryPassword,
             request.InitialOrganizationUnitId,
+            request.RoleCode,
             request.AccountEnabled);
 
         var result = await commands.Send(command, cancellationToken);

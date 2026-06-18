@@ -44,7 +44,7 @@ internal sealed class AdminBootstrapHostedService(
                 cancellationToken);
 
         bool adminRoleExists = await dbContext.Set<RolePermission>()
-            .AnyAsync(x => x.RoleCode == RoleCodes.Admin
+            .AnyAsync(x => x.RoleCode == RoleCodes.SystemAdmin
                 && x.StatusCode == IamStatusCodes.Active
                 && x.EffectiveFromUtc <= utcNow
                 && (x.EffectiveToUtc == null || x.EffectiveToUtc > utcNow),
@@ -81,7 +81,7 @@ internal sealed class AdminBootstrapHostedService(
         bool activeAdminScopeExists = await dbContext.Set<UserAccessScope>()
             .AnyAsync(x => x.UserAccountId == account.Id
                 && x.OrganizationUnitId == bootstrap.OrganizationUnitId
-                && x.RoleCode == RoleCodes.Admin
+                && x.RoleCode == RoleCodes.SystemAdmin
                 && x.StatusCode == IamStatusCodes.Active
                 && x.EffectiveFromUtc <= utcNow
                 && (x.EffectiveToUtc == null || x.EffectiveToUtc > utcNow),
@@ -95,7 +95,7 @@ internal sealed class AdminBootstrapHostedService(
         UserAccessScope adminAccessScope = new(
             account.Id,
             bootstrap.OrganizationUnitId,
-            RoleCodes.Admin,
+            RoleCodes.SystemAdmin,
             account.Id,
             utcNow,
             utcNow);
