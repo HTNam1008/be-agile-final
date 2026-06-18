@@ -3,11 +3,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
@@ -93,7 +97,14 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
 
         await dbContext.SaveChangesAsync();
 
-        var handler = new ExecuteTopUpRunCommandHandler(dbContext, new MockCurrentUser(), new MockClock());
+        var processor = new RecipientProcessingService(
+            new TopUpTransactionRepository(dbContext),
+            new StubAccountCreditGateway(dbContext, NullLogger<StubAccountCreditGateway>.Instance),
+            new StubRecipientValidator(dbContext),
+            dbContext,
+            new MockClock(),
+            NullLogger<RecipientProcessingService>.Instance);
+        var handler = new ExecuteTopUpRunCommandHandler(dbContext, new MockCurrentUser(), new MockClock(), processor);
         var command = new ExecuteTopUpRunCommand(campaign.Id);
 
         // Act
