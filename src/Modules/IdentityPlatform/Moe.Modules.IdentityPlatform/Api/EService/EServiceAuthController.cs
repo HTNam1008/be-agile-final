@@ -1,14 +1,15 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Configuration;
 using Moe.Infrastructure.Shared.Api;
-using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetEServiceAuthFlow;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
+using Moe.Infrastructure.Shared.Security;
 
 namespace Moe.Modules.IdentityPlatform.Api.EService;
 
@@ -19,7 +20,7 @@ namespace Moe.Modules.IdentityPlatform.Api.EService;
 public sealed class EServiceAuthController(
     IQueryDispatcher queries,
     ISingpassLoginGateway singpassLogin,
-    IExternalIdentityProvisioningRepository provisionedIdentities,
+    IEServiceLoginResolver loginResolver,
     IOptions<AuthenticationOptions> options) : ControllerBase
 {
     [HttpGet("flow")]
@@ -62,30 +63,34 @@ public sealed class EServiceAuthController(
         try
         {
             SingpassLoginResult login = await singpassLogin.CompleteLoginAsync(code, state, cancellationToken);
-            if (!await provisionedIdentities.HasActiveExternalIdentityAsync(
-                IdentityProviderCodes.Singpass,
-                login.ExternalIssuer,
-                login.ExternalSubjectId,
-                cancellationToken))
-            {
-                return RedirectWithError(
-                    portalRedirectUri,
-                    $"Singpass user is not provisioned in MOE. subject={login.ExternalSubjectId}; nric={login.IdentityNumber}; issuer={login.ExternalIssuer}");
-            }
-
+            await loginResolver.ResolveAsync(login, cancellationToken);
             string token = singpassLogin.IssueLocalApiToken(login);
-            return RedirectWithToken(portalRedirectUri, new EServiceTokenResult(
-                token,
-                "Bearer",
-                options.Value.EServiceSingpass.LocalTokenLifetimeMinutes * 60,
-                login.ExternalSubjectId,
-                login.IdentityNumber,
-                login.DisplayName));
+            WriteSessionCookie(token, options.Value.EServiceSingpass);
+            return RedirectWithSuccess(portalRedirectUri);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (UnauthorizedAccessException ex)
         {
             return RedirectWithError(portalRedirectUri, ex.Message);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return RedirectWithError(portalRedirectUri, "Singpass login could not be completed.");
+        }
+    }
+
+    [HttpPost("logout")]
+    [Authorize(Policy = AuthorizationPolicies.EServicePortal)]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete(AuthenticationCookies.EServiceSession, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Path = "/"
+        });
+
+        return ApiResponseFactory.Ok(new { signedOut = true }, HttpContext.TraceIdentifier);
     }
 
     private static string ResolvePortalRedirectUri(SingpassSchemeOptions options)
@@ -101,25 +106,23 @@ public sealed class EServiceAuthController(
         return new RedirectResult(builder.Uri.ToString());
     }
 
-    private static RedirectResult RedirectWithToken(string portalRedirectUri, EServiceTokenResult token)
+    private static RedirectResult RedirectWithSuccess(string portalRedirectUri)
     {
         UriBuilder builder = new(portalRedirectUri);
         string separator = string.IsNullOrWhiteSpace(builder.Query) ? string.Empty : "&";
-        builder.Query = string.Concat(
-            builder.Query.TrimStart('?'),
-            separator,
-            "eservice_token=",
-            Uri.EscapeDataString(token.AccessToken),
-            "&eservice_token_type=",
-            Uri.EscapeDataString(token.TokenType),
-            "&eservice_expires_in=",
-            token.ExpiresIn.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            "&eservice_subject=",
-            Uri.EscapeDataString(token.ExternalSubjectId),
-            "&eservice_nric=",
-            Uri.EscapeDataString(token.IdentityNumber),
-            "&eservice_name=",
-            Uri.EscapeDataString(token.DisplayName));
+        builder.Query = $"{builder.Query.TrimStart('?')}{separator}eservice_login=success";
         return new RedirectResult(builder.Uri.ToString());
+    }
+
+    private void WriteSessionCookie(string token, SingpassSchemeOptions singpass)
+    {
+        Response.Cookies.Append(AuthenticationCookies.EServiceSession, token, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Path = "/",
+            MaxAge = TimeSpan.FromMinutes(singpass.LocalTokenLifetimeMinutes)
+        });
     }
 }

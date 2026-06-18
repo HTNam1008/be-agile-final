@@ -91,7 +91,7 @@ public sealed class TopUpRun : AggregateRoot<long>
             campaignVersion,
             scheduledFor,
             TopUpRunTriggerTypes.Scheduled,
-            triggeredByLoginAccountId: 0,
+            triggeredByLoginAccountId: null,
             TopUpRunStatusCodes.Previewed,
             idempotencyKey.Trim(),
             note: null,

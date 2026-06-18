@@ -13,6 +13,9 @@ internal static class IdentityErrors
     public static readonly Error AdminCannotCreateOwnAccount = new("IDENTITY.ADMIN_CANNOT_CREATE_OWN_ACCOUNT", "An admin cannot create their own admin account.");
     public static readonly Error OrganizationUnitNotFound = new("IDENTITY.ORGANIZATION_UNIT_NOT_FOUND", "The organization unit was not found or is not active.");
     public static readonly Error RoleNotConfigured = new("IDENTITY.ROLE_NOT_CONFIGURED", "The requested role is not configured with active permissions.");
+    public static readonly Error SystemAdminRequired = new("IDENTITY.SYSTEM_ADMIN_REQUIRED", "Only a system admin can provision admin accounts.");
+    public static readonly Error InvalidAdminRole = new("IDENTITY.INVALID_ADMIN_ROLE", "Admin role must be SYSTEM_ADMIN or SCHOOL_ADMIN.");
+    public static readonly Error InvalidAdminOrganizationScope = new("IDENTITY.INVALID_ADMIN_ORGANIZATION_SCOPE", "The requested admin role is not valid for the selected organization scope.");
     public static readonly Error ActiveAccessScopeAlreadyExists = new("IDENTITY.ACTIVE_ACCESS_SCOPE_ALREADY_EXISTS", "The user already has this active access scope.");
     public static readonly Error SingpassAccountAlreadyExists = new("IDENTITY.SINGPASS_ACCOUNT_ALREADY_EXISTS", "A Singpass account is already linked to this person.");
     public static readonly Error ActiveProvisioningRequestAlreadyExists = new("IDENTITY.ACTIVE_PROVISIONING_REQUEST_ALREADY_EXISTS", "An active provisioning request already exists.");

@@ -18,6 +18,7 @@ internal sealed class TopUpRunConfiguration : IEntityTypeConfiguration<TopUpRun>
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasDatabaseName("IX_TopUpRun_IdempotencyKey");
+
         builder.HasIndex(x => new { x.TopUpCampaignId, x.ScheduledForUtc })
             .IsUnique()
             .HasFilter("[ScheduledFor] IS NOT NULL")

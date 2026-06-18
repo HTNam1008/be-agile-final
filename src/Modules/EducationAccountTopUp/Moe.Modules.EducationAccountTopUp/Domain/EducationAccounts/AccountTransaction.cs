@@ -17,4 +17,31 @@ internal sealed class AccountTransaction : Entity<long>
     public decimal BalanceAfter { get; private set; }
     public string? Description { get; private set; }
     public long? CreatedByLoginAccountId { get; private set; }
+
+    public static AccountTransaction Create(
+        long educationAccountId,
+        string transactionTypeCode,
+        decimal amount,
+        string referenceTypeCode,
+        long? referenceId,
+        string idempotencyKey,
+        decimal currentBalance,
+        string description,
+        long? createdByUserId,
+        DateTime nowUtc)
+    {
+        return new AccountTransaction
+        {
+            EducationAccountId = educationAccountId,
+            TransactionTypeCode = transactionTypeCode,
+            Amount = amount,
+            TransactionAtUtc = nowUtc,
+            ReferenceTypeCode = referenceTypeCode,
+            ReferenceId = referenceId,
+            IdempotencyKey = idempotencyKey,
+            BalanceAfter = currentBalance + amount,
+            Description = description,
+            CreatedByLoginAccountId = createdByUserId
+        };
+    }
 }
