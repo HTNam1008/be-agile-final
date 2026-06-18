@@ -58,6 +58,14 @@ public static class DependencyInjection
             AddPermission(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE");
             AddPermission(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION");
             AddPermission(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE");
+            options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
+            {
+                policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
+                policy.RequireAuthenticatedUser();
+                policy.RequireAssertion(context =>
+                    context.User.HasClaim(ClaimNames.Permission, "TOPUP_VIEW_ALL")
+                    || context.User.HasClaim(ClaimNames.Permission, "TOPUPS_MANAGE"));
+            });
             AddPermission(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL");
             AddPermission(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW");
         });
