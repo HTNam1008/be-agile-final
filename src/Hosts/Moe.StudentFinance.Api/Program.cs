@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using Asp.Versioning;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
@@ -14,6 +13,7 @@ using Moe.StudentFinance.Persistence;
 using Moe.Infrastructure.Shared.Validation;
 using NSwag;
 using NSwag.Generation.Processors.Security;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,7 +93,6 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
 
 app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
 
-#if DEBUG
 app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 {
     string issuer = configuration["Authentication:AdminEntra:Authority"]?.TrimEnd('/')
@@ -114,7 +113,7 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new("tid", "ea71ddeb-596c-4034-84d4-d65f91edc14a"),
         new(LocalIdentityClaimNames.UserAccountId, "1"),
         new(LocalIdentityClaimNames.PersonId, "1"),
-        new(LocalIdentityClaimNames.OrganizationUnitId, "1"),
+        new(LocalIdentityClaimNames.OrganizationUnitId, "2"),
         new(LocalIdentityClaimNames.Role, "SYSTEM_ADMIN"),
         new(LocalIdentityClaimNames.Permission, "TOPUPS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
@@ -143,7 +142,6 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         expiresAtUtc = utcNow.AddMinutes(lifetimeMinutes)
     });
 }).AllowAnonymous();
-#endif
 
 if (!app.Environment.IsDevelopment())
 {
@@ -204,6 +202,11 @@ static string GetSwaggerTag(string path)
     if (path.Contains("/education-account", StringComparison.OrdinalIgnoreCase))
     {
         return "Accounts";
+    }
+
+    if (path.Contains("/top-up", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Top up";
     }
 
     if (path.Contains("/identity", StringComparison.OrdinalIgnoreCase)
