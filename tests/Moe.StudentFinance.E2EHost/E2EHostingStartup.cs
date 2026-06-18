@@ -44,6 +44,7 @@ public class E2EHostingStartup : IHostingStartup
             {
                 options.AddPolicy(AuthorizationPolicies.AdminPortal, policy =>
                 {
+                    policy.AuthenticationSchemes.Clear();
                     policy.AddAuthenticationSchemes("Test");
                     policy.RequireAuthenticatedUser();
                     policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
@@ -51,9 +52,19 @@ public class E2EHostingStartup : IHostingStartup
 
                 options.AddPolicy(AuthorizationPolicies.ManageTopUps, policy =>
                 {
+                    policy.AuthenticationSchemes.Clear();
                     policy.AddAuthenticationSchemes("Test");
                     policy.RequireAuthenticatedUser();
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE");
+                });
+
+                options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
+                    policy.RequireClaim(ClaimNames.Role, "STUDENT");
                 });
             });
         });

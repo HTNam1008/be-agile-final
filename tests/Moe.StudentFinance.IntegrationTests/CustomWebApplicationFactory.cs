@@ -76,15 +76,24 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.Name, "Test User"),
-            new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
-            new Claim(ClaimNames.Portal, PortalCodes.Admin),
-            new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
-            new Claim(ClaimNames.OrganizationUnitId, "1"),
-            new Claim(ClaimNames.UserAccountId, "1")
-        };
+        Claim[] claims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
+            ? [
+                new Claim(ClaimTypes.Name, "Test Student"),
+                new Claim(ClaimTypes.NameIdentifier, "test-student-id"),
+                new Claim(ClaimNames.Portal, PortalCodes.EService),
+                new Claim(ClaimNames.Role, "STUDENT"),
+                new Claim(ClaimNames.PersonId, "2001"),
+                new Claim(ClaimNames.UserAccountId, "1003")
+            ]
+            : [
+                new Claim(ClaimTypes.Name, "Test User"),
+                new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
+                new Claim(ClaimNames.Portal, PortalCodes.Admin),
+                new Claim(ClaimNames.Role, "SYSTEM_ADMIN"),
+                new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
+                new Claim(ClaimNames.OrganizationUnitId, "1"),
+                new Claim(ClaimNames.UserAccountId, "1001")
+            ];
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, "Test");
