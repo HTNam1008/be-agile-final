@@ -52,4 +52,13 @@ public static class TopUpErrors
 
     public static readonly Moe.SharedKernel.Results.Error TransactionReasonRequired =
         new("TopUp.TransactionReasonRequired", "A safe display reason is required.");
+
+    public static readonly Moe.SharedKernel.Results.Error CreditServiceUnavailable =
+        new("TopUp.CreditServiceUnavailable", "Account credit service is temporarily unavailable.");
+
+    public static readonly Moe.SharedKernel.Results.Error RecipientNotEligible =
+        new("TopUp.RecipientNotEligible", "Recipient is not eligible for top-up credit.");
+
+    public static readonly Moe.SharedKernel.Results.Error InvalidCreditAmount =
+        new("TopUp.InvalidCreditAmount", "Credit amount must be positive.");
 }

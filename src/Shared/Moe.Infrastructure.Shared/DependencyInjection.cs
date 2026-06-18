@@ -86,7 +86,7 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
-#if DEBUG
+        //if DEBUG
         if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
         {
             target.RequireHttpsMetadata = source.RequireHttpsMetadata;
@@ -104,8 +104,7 @@ public static class DependencyInjection
             target.Events = CreateSchemeEvents(authenticationScheme);
             return;
         }
-#endif
-
+        //endif
         target.Authority = source.Authority;
         target.Audience = source.Audience;
         target.RequireHttpsMetadata = source.RequireHttpsMetadata;
