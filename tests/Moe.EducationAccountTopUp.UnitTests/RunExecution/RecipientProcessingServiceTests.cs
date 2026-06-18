@@ -17,6 +17,8 @@ public sealed class RecipientProcessingServiceTests
     private readonly FakeTopUpTransactionRepository _transactions = new();
     private readonly FakeAccountCreditGateway _accountCreditGateway = new();
     private readonly FakeRecipientValidator _recipientValidator = new();
+    private readonly FakeTopUpExecutionEventPublisher _events = new();
+    private readonly FakeTopUpExecutionMetrics _metrics = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 17, 4, 0, 0, TimeSpan.Zero));
 
@@ -167,12 +169,39 @@ public sealed class RecipientProcessingServiceTests
         _unitOfWork.SaveCalls.Should().Be(2);
     }
 
+    [Fact]
+    public async Task Should_Emit_TopUpReceived_After_Completed_Credit_Is_Committed()
+    {
+        RecipientProcessingService service = CreateService();
+        _events.OnTopUpReceived = () => _unitOfWork.SaveCalls.Should().Be(2);
+
+        var result = await service.ProcessRecipientAsync(42, 100, 500m, 1, "Campaign top-up");
+
+        result.IsSuccess.Should().BeTrue();
+        _events.TopUpReceivedReports.Should().ContainSingle();
+        _events.TopUpReceivedReports.Single().TopUpTransactionId.Should().Be(_transactions.Items.Single().Id);
+        _events.TopUpReceivedReports.Single().AccountTransactionId.Should().Be(1001);
+    }
+
+    [Fact]
+    public async Task Should_Record_Recipient_Metrics()
+    {
+        RecipientProcessingService service = CreateService();
+
+        await service.ProcessRecipientAsync(42, 100, 500m, 1, "Campaign top-up");
+
+        _metrics.RecipientRecords.Should().ContainSingle();
+        _metrics.RecipientRecords.Single().Status.Should().Be(TopUpTransactionStatusCodes.Completed);
+    }
+
     private RecipientProcessingService CreateService()
     {
         return new RecipientProcessingService(
             _transactions,
             _accountCreditGateway,
             _recipientValidator,
+            _events,
+            _metrics,
             _unitOfWork,
             _clock,
             NullLogger<RecipientProcessingService>.Instance);
@@ -310,5 +339,56 @@ public sealed class RecipientProcessingServiceTests
     private sealed class FakeClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+    }
+
+    private sealed class FakeTopUpExecutionEventPublisher : ITopUpExecutionEventPublisher
+    {
+        public List<TopUpReceivedReport> TopUpReceivedReports { get; } = [];
+        public Action? OnTopUpReceived { get; set; }
+
+        public Task PublishRunStartedAsync(
+            TopUpRunStartedReport report,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PublishRunCompletedAsync(
+            TopUpRunCompletedReport report,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PublishTopUpReceivedAsync(
+            TopUpReceivedReport report,
+            CancellationToken cancellationToken = default)
+        {
+            OnTopUpReceived?.Invoke();
+            TopUpReceivedReports.Add(report);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeTopUpExecutionMetrics : ITopUpExecutionMetrics
+    {
+        public List<(long TopUpRunId, string Status, bool Duplicate, bool AccountCreditFailure)> RecipientRecords { get; } = [];
+
+        public void RecordRunStarted(long topUpRunId, long campaignId, int totalSelected) { }
+
+        public void RecordRunCompleted(
+            long topUpRunId,
+            long campaignId,
+            string terminalStatus,
+            int totalProcessed,
+            int totalSucceeded,
+            int totalFailed,
+            int totalSkipped,
+            TimeSpan duration) { }
+
+        public void RecordRecipientProcessed(
+            long topUpRunId,
+            string status,
+            bool duplicateIdempotencyHit,
+            bool accountCreditFailure)
+            => RecipientRecords.Add((topUpRunId, status, duplicateIdempotencyHit, accountCreditFailure));
+
+        public void RecordAccountCreditDbConflict() { }
     }
 }
