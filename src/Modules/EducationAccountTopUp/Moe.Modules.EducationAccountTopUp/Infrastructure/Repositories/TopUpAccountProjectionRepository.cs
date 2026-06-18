@@ -63,4 +63,27 @@ internal sealed class TopUpAccountProjectionRepository(MoeDbContext dbContext) :
 
         return accounts.ToDictionary(x => x.PersonId);
     }
+
+    public async Task<IReadOnlyDictionary<long, TopUpAccountProjection>> FindByEducationAccountIdsAsync(
+        IReadOnlyCollection<long> educationAccountIds,
+        CancellationToken cancellationToken)
+    {
+        if (educationAccountIds.Count == 0)
+        {
+            return new Dictionary<long, TopUpAccountProjection>();
+        }
+
+        TopUpAccountProjection[] accounts = await dbContext.Set<EducationAccount>()
+            .AsNoTracking()
+            .Where(x => educationAccountIds.Contains(x.Id))
+            .Select(x => new TopUpAccountProjection(
+                x.PersonId,
+                x.Id,
+                x.AccountNumber,
+                x.StatusCode,
+                x.CachedBalance))
+            .ToArrayAsync(cancellationToken);
+
+        return accounts.ToDictionary(x => x.EducationAccountId);
+    }
 }
