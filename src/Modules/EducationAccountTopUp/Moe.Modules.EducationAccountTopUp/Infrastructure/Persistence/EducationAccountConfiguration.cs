@@ -30,15 +30,28 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
         builder.Ignore(x => x.DomainEvents);
         builder.Ignore(x => x.OpeningReasonCode);
         builder.Ignore(x => x.ClosingReasonCode);
-        builder.HasData(new
+        builder.HasData(
+            Seed(AccountDemoSeedData.StudentEducationAccountId, AccountDemoSeedData.StudentPersonId, "EA-DEMO-0001", AccountStatuses.Active, 0m),
+            Seed(AccountDemoSeedData.TopUpEducationAccountIdOne, AccountDemoSeedData.TopUpStudentPersonIdOne, "EA-DEMO-0002", AccountStatuses.Active, 125.50m),
+            Seed(AccountDemoSeedData.TopUpEducationAccountIdTwo, AccountDemoSeedData.TopUpStudentPersonIdTwo, "EA-DEMO-0003", AccountStatuses.Active, 480m),
+            Seed(AccountDemoSeedData.TopUpEducationAccountIdThree, AccountDemoSeedData.TopUpStudentPersonIdThree, "EA-DEMO-0004", AccountStatuses.Closing, 35.75m));
+    }
+
+    private static object Seed(
+        long id,
+        long personId,
+        string accountNumber,
+        string statusCode,
+        decimal cachedBalance)
+        => new
         {
-            Id = AccountDemoSeedData.StudentEducationAccountId,
-            PersonId = AccountDemoSeedData.StudentPersonId,
-            AccountNumber = "EA-DEMO-0001",
-            StatusCode = AccountStatuses.Active,
+            Id = id,
+            PersonId = personId,
+            AccountNumber = accountNumber,
+            StatusCode = statusCode,
             OpenedAtUtc = AccountDemoSeedData.SeededAtUtc,
             OpeningModeCode = AccountOpeningModeCodes.Manual,
-            OpeningRemarks = "Demo seeded account for MockPass student",
+            OpeningRemarks = "Demo seeded account for top-up search",
             OpenedByUserId = (long?)AccountDemoSeedData.SystemAdminLoginAccountId,
             PendingClosureAtUtc = (DateTimeOffset?)null,
             ClosureExceptionUntil = (DateOnly?)null,
@@ -48,7 +61,6 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
             ClosingTypeCode = (string?)null,
             ClosingRemarks = (string?)null,
             ClosedByLoginAccountId = (long?)null,
-            CachedBalance = 0m
-        });
-    }
+            CachedBalance = cachedBalance
+        };
 }
