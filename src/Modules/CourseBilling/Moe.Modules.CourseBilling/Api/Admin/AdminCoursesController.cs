@@ -65,9 +65,9 @@ public sealed class AdminCoursesController(IAdminCourseService courses) : Contro
     public async Task<IActionResult> ListEnrollments(long courseId, CancellationToken cancellationToken)
         => ToResponse(await courses.ListEnrollmentsAsync(courseId, cancellationToken));
 
-    [HttpPost("{courseId:long}/enrollments")]
-    public async Task<IActionResult> AssignStudents(long courseId, [FromBody] AssignStudentsToCourseRequest request, CancellationToken cancellationToken)
-        => ToResponse(await courses.AssignStudentsAsync(courseId, request, cancellationToken), created: true);
+        //[HttpPost("{courseId:long}/enrollments")]
+        //public async Task<IActionResult> AssignStudents(long courseId, [FromBody] AssignStudentsToCourseRequest request, CancellationToken cancellationToken)
+        //    => ToResponse(await courses.AssignStudentsAsync(courseId, request, cancellationToken), created: true);
 
     [HttpDelete("{courseId:long}/enrollments/{courseEnrollmentId:long}")]
     public async Task<IActionResult> RemoveEnrollment(long courseId, long courseEnrollmentId, CancellationToken cancellationToken)

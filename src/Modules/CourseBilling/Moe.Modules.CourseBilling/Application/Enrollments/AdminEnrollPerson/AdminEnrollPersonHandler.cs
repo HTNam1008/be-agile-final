@@ -96,7 +96,7 @@ internal sealed class AdminEnrollPersonHandler(
             result.Enrollment.PersonId,
             result.Enrollment.CourseId,
             result.Enrollment.EnrollmentSourceCode,
-            result.Enrollment.EnrolledByLoginAccountId!.Value,
+            result.Enrollment.EnrolledByLoginAccountId,
             result.Enrollment.EnrollmentStatusCode,
             result.Bill.Id,
             result.Bill.BillNumber,
