@@ -15,5 +15,6 @@ public sealed class CourseBillingModelConfiguration : IModelConfigurationContrib
         modelBuilder.ApplyConfiguration(new CourseFeeConfiguration());
         modelBuilder.ApplyConfiguration(new CourseTargetConfiguration());
         modelBuilder.ApplyConfiguration(new FeeComponentConfiguration());
+        modelBuilder.ApplyConfiguration(new CourseMaterialConfiguration());
     }
 }
