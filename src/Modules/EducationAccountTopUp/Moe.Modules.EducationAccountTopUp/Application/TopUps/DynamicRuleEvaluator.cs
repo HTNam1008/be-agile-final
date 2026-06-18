@@ -29,24 +29,39 @@ internal static class DynamicRuleEvaluator
             {
                 if (rule.NumericValueFrom.HasValue)
                 {
-                    // Calculate DateOfBirth threshold
-                    // Age = nowUtc.Year - DateOfBirth.Year
-                    var thresholdDate = new DateOnly(nowUtc.Year - (int)rule.NumericValueFrom.Value, nowUtc.Month, nowUtc.Day);
+                    // Fix Leap Year Bug: safely subtract years
+                    var thresholdDate = DateOnly.FromDateTime(nowUtc.AddYears(-(int)rule.NumericValueFrom.Value));
                     
                     if (rule.OperatorCode.Equals(OperatorCode.GreaterThan.ToString(), StringComparison.OrdinalIgnoreCase))
                     {
-                        // Age > X means DateOfBirth < thresholdDate
                         query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && p.DateOfBirth < thresholdDate));
+                    }
+                    else if (rule.OperatorCode.Equals(OperatorCode.GreaterThanOrEqual.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && p.DateOfBirth <= thresholdDate));
                     }
                     else if (rule.OperatorCode.Equals(OperatorCode.LessThan.ToString(), StringComparison.OrdinalIgnoreCase))
                     {
-                        // Age < X means DateOfBirth > thresholdDate
                         query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && p.DateOfBirth > thresholdDate));
+                    }
+                    else if (rule.OperatorCode.Equals(OperatorCode.LessThanOrEqual.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && p.DateOfBirth >= thresholdDate));
                     }
                     else if (rule.OperatorCode.Equals(OperatorCode.Equals.ToString(), StringComparison.OrdinalIgnoreCase))
                     {
                         var thresholdDateNext = thresholdDate.AddYears(-1);
                         query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && p.DateOfBirth <= thresholdDate && p.DateOfBirth > thresholdDateNext));
+                    }
+                    else if (rule.OperatorCode.Equals(OperatorCode.NotEquals.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        var thresholdDateNext = thresholdDate.AddYears(-1);
+                        query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && (p.DateOfBirth > thresholdDate || p.DateOfBirth <= thresholdDateNext)));
+                    }
+                    else if (rule.OperatorCode.Equals(OperatorCode.Between.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueTo.HasValue)
+                    {
+                        var thresholdToDate = DateOnly.FromDateTime(nowUtc.AddYears(-(int)rule.NumericValueTo.Value)).AddYears(-1);
+                        query = query.Where(acc => dbContext.Set<Person>().Any(p => p.Id == acc.PersonId && p.DateOfBirth <= thresholdDate && p.DateOfBirth > thresholdToDate));
                     }
                 }
             }
@@ -63,12 +78,14 @@ internal static class DynamicRuleEvaluator
                     {
                         query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && e.SchoolingStatusCode == rule.TextValue && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
                     }
+                    else if (rule.OperatorCode.Equals(OperatorCode.NotEquals.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
+                    {
+                        query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && e.SchoolingStatusCode != rule.TextValue && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
+                    }
                     else if (rule.OperatorCode.Equals(OperatorCode.In.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
                     {
-                        try {
-                            var inValues = System.Text.Json.JsonSerializer.Deserialize<List<string>>(rule.TextValue) ?? new List<string>();
-                            query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && inValues.Contains(e.SchoolingStatusCode) && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
-                        } catch { }
+                        var inValues = System.Text.Json.JsonSerializer.Deserialize<List<string>>(rule.TextValue) ?? new List<string>();
+                        query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && inValues.Contains(e.SchoolingStatusCode) && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
                     }
                 }
                 else if (rule.CriterionCode.Equals(TopUpCriterionCode.Level.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -77,12 +94,14 @@ internal static class DynamicRuleEvaluator
                     {
                         query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && e.LevelCode == rule.TextValue && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
                     }
+                    else if (rule.OperatorCode.Equals(OperatorCode.NotEquals.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
+                    {
+                        query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && e.LevelCode != rule.TextValue && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
+                    }
                     else if (rule.OperatorCode.Equals(OperatorCode.In.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
                     {
-                        try {
-                            var inValues = System.Text.Json.JsonSerializer.Deserialize<List<string>>(rule.TextValue) ?? new List<string>();
-                            query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && inValues.Contains(e.LevelCode) && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
-                        } catch { }
+                        var inValues = System.Text.Json.JsonSerializer.Deserialize<List<string>>(rule.TextValue) ?? new List<string>();
+                        query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && inValues.Contains(e.LevelCode) && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
                     }
                 }
                 else if (rule.CriterionCode.Equals(TopUpCriterionCode.Class.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -90,6 +109,15 @@ internal static class DynamicRuleEvaluator
                     if (rule.OperatorCode.Equals(OperatorCode.Equals.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
                     {
                         query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && e.ClassCode == rule.TextValue && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
+                    }
+                    else if (rule.OperatorCode.Equals(OperatorCode.NotEquals.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
+                    {
+                        query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && e.ClassCode != rule.TextValue && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
+                    }
+                    else if (rule.OperatorCode.Equals(OperatorCode.In.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rule.TextValue))
+                    {
+                        var inValues = System.Text.Json.JsonSerializer.Deserialize<List<string>>(rule.TextValue) ?? new List<string>();
+                        query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e => e.PersonId == acc.PersonId && inValues.Contains(e.ClassCode) && e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
                     }
                 }
             }
@@ -99,8 +127,18 @@ internal static class DynamicRuleEvaluator
         {
             if (rule.OperatorCode.Equals(OperatorCode.GreaterThan.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
                 query = query.Where(x => x.CachedBalance > rule.NumericValueFrom.Value);
+            else if (rule.OperatorCode.Equals(OperatorCode.GreaterThanOrEqual.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
+                query = query.Where(x => x.CachedBalance >= rule.NumericValueFrom.Value);
             else if (rule.OperatorCode.Equals(OperatorCode.LessThan.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
                 query = query.Where(x => x.CachedBalance < rule.NumericValueFrom.Value);
+            else if (rule.OperatorCode.Equals(OperatorCode.LessThanOrEqual.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
+                query = query.Where(x => x.CachedBalance <= rule.NumericValueFrom.Value);
+            else if (rule.OperatorCode.Equals(OperatorCode.Equals.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
+                query = query.Where(x => x.CachedBalance == rule.NumericValueFrom.Value);
+            else if (rule.OperatorCode.Equals(OperatorCode.NotEquals.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
+                query = query.Where(x => x.CachedBalance != rule.NumericValueFrom.Value);
+            else if (rule.OperatorCode.Equals(OperatorCode.Between.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue && rule.NumericValueTo.HasValue)
+                query = query.Where(x => x.CachedBalance >= rule.NumericValueFrom.Value && x.CachedBalance <= rule.NumericValueTo.Value);
         }
 
         return query;

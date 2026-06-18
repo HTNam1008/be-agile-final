@@ -135,7 +135,6 @@ internal sealed class MockPassFapiLoginGateway(
         Claim[] claims =
         [
             new(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub, login.ExternalSubjectId),
-            new("singpass_nric", login.IdentityNumber),
             new("name", login.DisplayName),
             new("amr", login.AuthenticationMethod)
         ];
