@@ -6,4 +6,5 @@ public sealed record CreateAdminUserRequest(
     string MailNickname,
     string TemporaryPassword,
     long InitialOrganizationUnitId,
+    string RoleCode,
     bool AccountEnabled = true);
