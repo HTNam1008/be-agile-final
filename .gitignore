@@ -1,80 +1,11 @@
-# Build output
-bin/
-obj/
-[Bb]uild/
-[Dd]ebug/
-[Rr]elease/
-x64/
-x86/
-
-# Visual Studio
+**/bin/
+**/obj/
 .vs/
+.idea/
 *.user
 *.suo
-*.userosscache
-*.sln.docstates
-*.rsuser
-
-# Rider / JetBrains
-.idea/
-*.DotSettings.user
-
-# VS Code
-.vscode/
-
-# Logs
-*.log
-logs/
-LogFiles/
-
-# Test results
+.env
+appsettings.Local.json
 TestResults/
 coverage/
-coverage.xml
-*.coverage
-*.coveragexml
-
-# NuGet
-*.nupkg
-packages/
-.nuget/
-project.assets.json
-
-# Node / frontend
-node_modules/
-dist/
-.cache/
-.parcel-cache/
-.vite/
-
-# Environment / secrets
-.env
-.env.*
-appsettings.Development.local.json
-appsettings.Local.json
-secrets.json
-
-# Certificates / keys
-*.pfx
-*.p12
-*.key
-*.pem
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Database / local storage
-*.db
-*.sqlite
-*.sqlite3
-*.mdf
-*.ldf
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*.swp
-~$*
+artifacts/
