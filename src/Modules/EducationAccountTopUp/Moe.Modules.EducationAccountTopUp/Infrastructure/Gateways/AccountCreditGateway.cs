@@ -16,6 +16,7 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 internal sealed class AccountCreditGateway(
     MoeDbContext dbContext,
     IClock clock,
+    ITopUpExecutionMetrics metrics,
     ILogger<AccountCreditGateway> logger) : IAccountCreditGateway
 {
     private const string CreditTransactionTypeCode = "CREDIT";
@@ -76,6 +77,8 @@ internal sealed class AccountCreditGateway(
         }
         catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
         {
+            metrics.RecordAccountCreditDbConflict();
+
             Result<CreditAccountResult>? raceResult = await TryGetExistingCreditAsync(
                 idempotencyKey,
                 cancellationToken);

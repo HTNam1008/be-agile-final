@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -205,7 +206,7 @@ public sealed class AccountCreditGatewayTests
     }
 
     private AccountCreditGateway CreateGateway(MoeDbContext dbContext)
-        => new(dbContext, _clock, NullLogger<AccountCreditGateway>.Instance);
+        => new(dbContext, _clock, new FakeTopUpExecutionMetrics(), NullLogger<AccountCreditGateway>.Instance);
 
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
     {
@@ -226,5 +227,28 @@ public sealed class AccountCreditGatewayTests
             modelBuilder.Entity<AccountTransaction>().HasKey(x => x.Id);
             modelBuilder.Entity<TopUpCampaignRecipient>().HasKey(x => x.Id);
         }
+    }
+
+    private sealed class FakeTopUpExecutionMetrics : ITopUpExecutionMetrics
+    {
+        public void RecordRunStarted(long topUpRunId, long campaignId, int totalSelected) { }
+
+        public void RecordRunCompleted(
+            long topUpRunId,
+            long campaignId,
+            string terminalStatus,
+            int totalProcessed,
+            int totalSucceeded,
+            int totalFailed,
+            int totalSkipped,
+            TimeSpan duration) { }
+
+        public void RecordRecipientProcessed(
+            long topUpRunId,
+            string status,
+            bool duplicateIdempotencyHit,
+            bool accountCreditFailure) { }
+
+        public void RecordAccountCreditDbConflict() { }
     }
 }

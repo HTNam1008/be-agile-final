@@ -41,6 +41,11 @@ public sealed class TopUpRunWorker(
 
     public async Task ProcessRunAsync(long runId, CancellationToken cancellationToken = default)
     {
+        using IDisposable? correlationScope = logger.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = $"topup-run-{runId}"
+        });
+
         logger.LogInformation("Top-up worker picked up run {TopUpRunId}", runId);
 
         using IServiceScope scope = scopeFactory.CreateScope();

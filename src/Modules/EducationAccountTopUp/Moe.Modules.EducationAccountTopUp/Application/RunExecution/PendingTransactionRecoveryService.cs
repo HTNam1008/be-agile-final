@@ -11,6 +11,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 public sealed class PendingTransactionRecoveryService(
     ITopUpTransactionRepository transactions,
     IAccountCreditGateway accountCreditGateway,
+    ITopUpExecutionEventPublisher events,
+    ITopUpExecutionMetrics metrics,
     IUnitOfWork unitOfWork,
     IClock clock,
     ILogger<PendingTransactionRecoveryService> logger) : IPendingTransactionRecoveryService
@@ -59,7 +61,28 @@ public sealed class PendingTransactionRecoveryService(
 
                     if (complete.IsSuccess)
                     {
+                        DateTime completedAtUtc = clock.UtcNow.UtcDateTime;
                         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+                        await events.PublishTopUpReceivedAsync(
+                            new TopUpReceivedReport
+                            {
+                                TopUpRunId = topUpRunId,
+                                TopUpTransactionId = transaction.Id,
+                                EducationAccountId = transaction.EducationAccountId,
+                                AccountTransactionId = credit.Value.AccountTransactionId,
+                                Amount = transaction.Amount,
+                                AlreadyProcessed = credit.Value.AlreadyProcessed,
+                                OccurredAtUtc = completedAtUtc
+                            },
+                            cancellationToken);
+
+                        metrics.RecordRecipientProcessed(
+                            topUpRunId,
+                            TopUpTransactionStatusCodes.Completed,
+                            credit.Value.AlreadyProcessed,
+                            accountCreditFailure: false);
+
                         recovered++;
 
                         logger.LogInformation(
@@ -79,10 +102,22 @@ public sealed class PendingTransactionRecoveryService(
                 if (fail.IsSuccess)
                 {
                     await unitOfWork.SaveChangesAsync(cancellationToken);
+
+                    metrics.RecordRecipientProcessed(
+                        topUpRunId,
+                        TopUpTransactionStatusCodes.Failed,
+                        duplicateIdempotencyHit: false,
+                        accountCreditFailure: true);
                 }
             }
             catch (Exception exception)
             {
+                metrics.RecordRecipientProcessed(
+                    topUpRunId,
+                    TopUpTransactionStatusCodes.Failed,
+                    duplicateIdempotencyHit: false,
+                    accountCreditFailure: true);
+
                 logger.LogError(
                     exception,
                     "Failed to recover pending top-up transaction {TopUpTransactionId} for run {TopUpRunId}",

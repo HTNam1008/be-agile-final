@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
@@ -101,6 +102,19 @@ public sealed class TopUpRunWorkerTests
         fixture.Reconciliation.Calls.Should().Be(1);
     }
 
+    [Fact]
+    public async Task Should_Add_CorrelationId_Scope_When_Processing_Run()
+    {
+        WorkerFixture fixture = new();
+        TopUpRun run = fixture.AddRun();
+        fixture.Resolver.SetRecipients([]);
+        TestLogger<TopUpRunWorker> logger = new();
+
+        await fixture.CreateWorker(logger).ProcessRunAsync(run.Id);
+
+        logger.Scopes.Should().Contain(scope => scope.Contains($"topup-run-{run.Id}"));
+    }
+
     private static IReadOnlyList<RecipientInfo> Recipients(int count)
     {
         return Enumerable.Range(1, count)
@@ -136,10 +150,10 @@ public sealed class TopUpRunWorkerTests
             _provider = services.BuildServiceProvider();
         }
 
-        public TopUpRunWorker CreateWorker()
+        public TopUpRunWorker CreateWorker(ILogger<TopUpRunWorker>? logger = null)
         {
             FakeTopUpRunQueueReader reader = new();
-            return new TopUpRunWorker(reader, ScopeFactory, NullLogger<TopUpRunWorker>.Instance);
+            return new TopUpRunWorker(reader, ScopeFactory, logger ?? NullLogger<TopUpRunWorker>.Instance);
         }
 
         public TopUpRun AddRun()
@@ -264,5 +278,34 @@ public sealed class TopUpRunWorkerTests
     {
         public Task<int> RecoverPendingTransactionsAsync(long topUpRunId, string campaignReason, CancellationToken cancellationToken = default)
             => Task.FromResult(0);
+    }
+
+    private sealed class TestLogger<T> : ILogger<T>
+    {
+        public List<string> Scopes { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            if (state is IEnumerable<KeyValuePair<string, object>> values)
+            {
+                Scopes.Add(string.Join(";", values.Select(value => $"{value.Key}={value.Value}")));
+            }
+            else
+            {
+                Scopes.Add(state?.ToString() ?? string.Empty);
+            }
+
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) { }
     }
 }
