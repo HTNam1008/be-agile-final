@@ -38,12 +38,14 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         // 2. Upsert Recipients
         var recipientsPayload = new
         {
-            topUpCampaignId = campaignId,
+            mode = "ExplicitIds",
+            filter = (object?)null,
             recipients = new[]
             {
                 new { educationAccountId = 1001L },
                 new { educationAccountId = 1002L }
-            }
+            },
+            excludedEducationAccountIds = Array.Empty<long>()
         };
         var upsertResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/fixed-recipients", recipientsPayload);
         if (!upsertResponse.IsSuccessStatusCode)

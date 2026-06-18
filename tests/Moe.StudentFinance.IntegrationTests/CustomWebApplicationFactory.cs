@@ -61,6 +61,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireAuthenticatedUser();
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE");
                 });
+
+                options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
+                });
             });
         });
     }

@@ -20,9 +20,6 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
         long total = await query.LongCountAsync(cancellationToken);
 
         TopUpStudentSearchSummary[] items = await query
-            .OrderBy(x => x.DisplayName)
-            .ThenBy(x => x.StudentNumber)
-            .ThenBy(x => x.PersonId)
             .Skip((criteria.Page - 1) * criteria.PageSize)
             .Take(criteria.PageSize)
             .ToArrayAsync(cancellationToken);
@@ -116,14 +113,18 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             query = query.Where(x => x.Person.DateOfBirth >= earliestBirthDate);
         }
 
-        return query.Select(x => new TopUpStudentSearchSummary(
-            x.Person.Id,
-            x.Enrollment.StudentNumber,
-            x.Person.OfficialFullName,
-            x.Person.DateOfBirth,
-            x.Enrollment.SchoolingStatusCode,
-            x.Enrollment.LevelCode,
-            x.Enrollment.ClassCode,
-            x.Enrollment.OrganizationId));
+        return query
+            .OrderBy(x => x.Person.OfficialFullName)
+            .ThenBy(x => x.Enrollment.StudentNumber)
+            .ThenBy(x => x.Person.Id)
+            .Select(x => new TopUpStudentSearchSummary(
+                x.Person.Id,
+                x.Enrollment.StudentNumber,
+                x.Person.OfficialFullName,
+                x.Person.DateOfBirth,
+                x.Enrollment.SchoolingStatusCode,
+                x.Enrollment.LevelCode,
+                x.Enrollment.ClassCode,
+                x.Enrollment.OrganizationId));
     }
 }

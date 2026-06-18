@@ -6,6 +6,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
+using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateContactPreferences;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
 
 namespace Moe.Modules.IdentityPlatform.Api.EService;
@@ -26,6 +27,13 @@ public sealed class EServiceProfileController(
         return result.ToApiResponse(this, ApiResponseCodes.Unauthorized);
     }
 
+    [HttpGet("~/api/v{version:apiVersion}/me/profile")]
+    public async Task<IActionResult> GetCanonical(CancellationToken cancellationToken)
+    {
+        var result = await queries.Send(new GetMyStudentProfileQuery(), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.Unauthorized);
+    }
+
     [HttpPut("contact")]
     public async Task<IActionResult> UpdateContact(
         [FromBody] UpdateMyStudentContactRequest request,
@@ -34,5 +42,20 @@ public sealed class EServiceProfileController(
         UpdateMyStudentContactCommand command = new(request.ContactEmail, request.ContactMobile);
         var result = await commands.Send(command, cancellationToken);
         return result.ToApiResponse(this, ApiResponseCodes.Unauthorized);
+    }
+
+    [HttpPatch("~/api/v{version:apiVersion}/me/contact-preferences")]
+    public async Task<IActionResult> UpdateContactPreferences(
+        [FromBody] UpdateContactPreferencesRequest request,
+        CancellationToken cancellationToken)
+    {
+        UpdateContactPreferencesCommand command = new(
+            request.PreferredEmail,
+            request.PreferredMobile,
+            request.PreferredAddress,
+            request.ExpectedUpdatedAtUtc);
+
+        var result = await commands.Send(command, cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.Conflict);
     }
 }

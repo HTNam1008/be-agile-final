@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.SharedKernel.Results;
@@ -12,70 +13,108 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipi
 internal sealed class UpsertFixedRecipientsCommandHandler(
     MoeDbContext dbContext,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<UpsertFixedRecipientsCommand>
+    IClock clock,
+    ITopUpAccountSelectionResolver selectionResolver)
+    : ICommandHandler<UpsertFixedRecipientsCommand, UpsertFixedRecipientsResponse>
 {
-    public async Task<Result> Handle(UpsertFixedRecipientsCommand command, CancellationToken cancellationToken)
+    public async Task<Result<UpsertFixedRecipientsResponse>> Handle(
+        UpsertFixedRecipientsCommand command,
+        CancellationToken cancellationToken)
     {
         var campaign = await dbContext.Set<TopUpCampaign>()
             .FirstOrDefaultAsync(x => x.Id == command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
-            return Result.Failure(new Error("NotFound", "Campaign not found."));
-
-        // Cross-Cutting Auth Scope Check
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
-            return Result.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
-
-        if (!string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase))
-            return Result.Failure(new Error("InvalidRecipientMode", "Recipients can only be added directly to FIXED_SELECTION campaigns."));
-
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
-            campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
-            return Result.Failure(new Error("InvalidStatus", "Recipients can only be modified for DRAFT or PAUSED campaigns."));
+            return Result<UpsertFixedRecipientsResponse>.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        // Idempotent upsert: fetch existing and merge, or flush and replace for MVP.
-        // For absolute correctness based on standard idempotent lists, we can delete non-matches, insert new, update existing.
-        // Given L-006 is "Idempotent upsert", we do exactly that.
+        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
+            && currentUser.OrganizationUnitId != campaign.OrganizationId)
+        {
+            return Result<UpsertFixedRecipientsResponse>.Failure(TopUpErrors.OrganizationOutsideScope);
+        }
+
+        if (!string.Equals(
+                campaign.RecipientModeCode,
+                RecipientModeCode.FixedSelection.ToString(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<UpsertFixedRecipientsResponse>.Failure(TopUpErrors.InvalidRecipientMode);
+        }
+
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft
+            && campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
+        {
+            return Result<UpsertFixedRecipientsResponse>.Failure(TopUpErrors.InvalidCampaignStatus);
+        }
+
+        TopUpAccountSelection selection = command.Mode switch
+        {
+            TopUpAccountSelectionMode.ExplicitIds => TopUpAccountSelection.Explicit(
+                command.Recipients.Select(x => x.EducationAccountId).ToArray()),
+            TopUpAccountSelectionMode.AllMatchingFilter => TopUpAccountSelection.AllMatching(
+                command.Filter!,
+                command.ExcludedEducationAccountIds),
+            _ => new TopUpAccountSelection(
+                command.Mode,
+                command.Filter,
+                command.Recipients.Select(x => x.EducationAccountId).ToArray(),
+                command.ExcludedEducationAccountIds)
+        };
+
+        Result<TopUpAccountSelectionResolution> selectionResult =
+            await selectionResolver.ResolveAsync(selection, cancellationToken);
+
+        if (selectionResult.IsFailure)
+        {
+            return Result<UpsertFixedRecipientsResponse>.Failure(selectionResult.Error);
+        }
 
         var existingRecipients = await dbContext.Set<TopUpCampaignRecipient>()
             .Where(x => x.TopUpCampaignId == campaign.Id)
             .ToDictionaryAsync(x => x.EducationAccountId, cancellationToken);
 
-        var newRecipientsList = command.Recipients.DistinctBy(x => x.EducationAccountId).ToList();
-        var incomingIds = newRecipientsList.Select(x => x.EducationAccountId).ToHashSet();
+        TopUpAccountSelectionResolution resolution = selectionResult.Value;
+        HashSet<long> incomingIds = resolution.EducationAccountIds.ToHashSet();
+        IReadOnlyDictionary<long, decimal?> amountOverrides = command.Mode == TopUpAccountSelectionMode.ExplicitIds
+            ? command.Recipients.ToDictionary(x => x.EducationAccountId, x => x.AmountOverride)
+            : new Dictionary<long, decimal?>();
 
         var nowUtc = clock.UtcNow.UtcDateTime;
         var userId = currentUser.UserAccountId ?? 0;
 
-        // Delete those not in incoming list
         var toDelete = existingRecipients.Values.Where(x => !incomingIds.Contains(x.EducationAccountId)).ToList();
         dbContext.Set<TopUpCampaignRecipient>().RemoveRange(toDelete);
 
-        // Update existing / Insert new
-        foreach (var dto in newRecipientsList)
+        foreach (long educationAccountId in resolution.EducationAccountIds)
         {
-            if (existingRecipients.TryGetValue(dto.EducationAccountId, out var existing))
+            decimal? amountOverride = amountOverrides.GetValueOrDefault(educationAccountId);
+
+            if (existingRecipients.TryGetValue(educationAccountId, out var existing))
             {
-                // Update properties (we could add an Update method to TopUpCampaignRecipient, but since only AmountOverride can change here for an active record)
-                // For a proper DDD approach, let's just delete and reinsert if we cannot mutate easily, or just update via reflection/EF tracking.
-                // EF core will track it, but the property setter is private. 
-                // Let's remove and re-add for absolute clean state, or use a method.
-                // For now, removing and re-adding is safer if there's no Update method.
-                dbContext.Set<TopUpCampaignRecipient>().Remove(existing);
-                var newRec = TopUpCampaignRecipient.Create(campaign.Id, dto.EducationAccountId, dto.AmountOverride, userId, nowUtc);
-                dbContext.Set<TopUpCampaignRecipient>().Add(newRec);
+                existing.UpdateAmountOverride(amountOverride);
             }
             else
             {
-                var newRec = TopUpCampaignRecipient.Create(campaign.Id, dto.EducationAccountId, dto.AmountOverride, userId, nowUtc);
+                var newRec = TopUpCampaignRecipient.Create(
+                    campaign.Id,
+                    educationAccountId,
+                    amountOverride,
+                    userId,
+                    nowUtc);
                 dbContext.Set<TopUpCampaignRecipient>().Add(newRec);
             }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Result.Success();
+        return Result<UpsertFixedRecipientsResponse>.Success(
+            new UpsertFixedRecipientsResponse(
+                campaign.Id,
+                command.Mode,
+                resolution.TotalMatched,
+                resolution.TotalExcluded,
+                resolution.TotalSelected));
     }
 }

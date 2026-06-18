@@ -9,13 +9,7 @@ internal static class DemoSeedData
     public const long SchoolAdminLoginAccountId = 1002;
     public const long StudentLoginAccountId = 1003;
     public const long StudentPersonId = 2001;
-    public const long TopUpStudentPersonIdOne = 2002;
-    public const long TopUpStudentPersonIdTwo = 2003;
-    public const long TopUpStudentPersonIdThree = 2004;
     public const long StudentSchoolEnrollmentId = 3001;
-    public const long TopUpStudentSchoolEnrollmentIdOne = 3002;
-    public const long TopUpStudentSchoolEnrollmentIdTwo = 3003;
-    public const long TopUpStudentSchoolEnrollmentIdThree = 3004;
     public const long StudentEducationAccountId = 4001;
 
     public const string TenantId = "ea71ddeb-596c-4034-84d4-d65f91edc14a";
