@@ -17,8 +17,6 @@ public sealed class JwtSchemeOptions
     public string[] Scopes { get; init; } = [];
     public string? AllowedTenantId { get; init; }
     public bool RequireHttpsMetadata { get; init; } = true;
-    public string LocalTokenSigningKey { get; init; } = string.Empty;
-    public int LocalTokenLifetimeMinutes { get; init; } = 30;
 }
 
 public sealed class SingpassSchemeOptions
@@ -43,6 +41,12 @@ public sealed class AuthenticationOptions
     public const string SectionName = "Authentication";
     [Required] public JwtSchemeOptions AdminEntra { get; init; } = new();
     [Required] public SingpassSchemeOptions EServiceSingpass { get; init; } = new();
+}
+
+public sealed class AuthorizationOptions
+{
+    public const string SectionName = "Authorization";
+    public bool UseStrictPermissionPolicies { get; init; } = true;
 }
 
 public sealed class UatOptions
