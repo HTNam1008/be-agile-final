@@ -44,7 +44,6 @@ services.AddScoped<IValidator<CreateCourseFeeRequest>, CreateCourseFeeRequestVal
 services.AddScoped<IValidator<UpdateCourseFeeRequest>, UpdateCourseFeeRequestValidator>();
 services.AddScoped<IValidator<CreateFeeComponentRequest>, CreateFeeComponentRequestValidator>();
 services.AddScoped<IValidator<UpdateFeeComponentRequest>, UpdateFeeComponentRequestValidator>();
-;
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
