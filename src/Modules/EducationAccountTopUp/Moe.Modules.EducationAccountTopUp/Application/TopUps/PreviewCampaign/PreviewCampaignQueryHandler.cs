@@ -74,21 +74,7 @@ internal sealed class PreviewCampaignQueryHandler(
             var activeAccountsQuery = accountsQuery
                 .Where(x => x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active);
 
-            foreach (var rule in rules)
-            {
-                if (string.Equals(rule.CriterionCode, TopUpCriterionCode.AccountBalance.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    if (string.Equals(rule.OperatorCode, OperatorCode.GreaterThan.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
-                        activeAccountsQuery = activeAccountsQuery.Where(x => x.CachedBalance > rule.NumericValueFrom.Value);
-                    else if (string.Equals(rule.OperatorCode, OperatorCode.LessThan.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue)
-                        activeAccountsQuery = activeAccountsQuery.Where(x => x.CachedBalance < rule.NumericValueFrom.Value);
-                }
-                else if (string.Equals(rule.CriterionCode, TopUpCriterionCode.Age.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    // Advanced criteria like AGE would require joining to Person table in a real system.
-                    // For the sake of the E2E script and L-005 MVP, we validate the builder mechanism.
-                }
-            }
+            activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, DateTime.UtcNow);
 
             var activeAccounts = await activeAccountsQuery.ToListAsync(cancellationToken);
 
