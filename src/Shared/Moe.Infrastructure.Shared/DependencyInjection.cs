@@ -61,6 +61,11 @@ public static class DependencyInjection
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountLifecycle, "ACCOUNT_LIFECYCLE_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(
+                options,
+                AuthorizationPolicies.ViewTopUps,
+                ["TOPUPS_MANAGE", "TOPUP_VIEW_ALL"],
+                authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW", authorization.UseStrictPermissionPolicies);
         });
@@ -188,6 +193,13 @@ public static class DependencyInjection
         string policyName,
         string permission,
         bool useStrictPermissionPolicies)
+        => AddAdminFeaturePolicy(options, policyName, [permission], useStrictPermissionPolicies);
+
+    private static void AddAdminFeaturePolicy(
+        Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
+        string policyName,
+        IReadOnlyCollection<string> permissions,
+        bool useStrictPermissionPolicies)
         => options.AddPolicy(policyName, policy =>
         {
             policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
@@ -198,7 +210,7 @@ public static class DependencyInjection
 
             if (useStrictPermissionPolicies)
             {
-                policy.RequireClaim(ClaimNames.Permission, permission);
+                policy.RequireClaim(ClaimNames.Permission, permissions);
             }
         });
 }

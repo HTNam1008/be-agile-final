@@ -1,113 +1,182 @@
-using System.Reflection;
 using FluentAssertions;
+using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Application.History;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
-using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.EducationAccountTopUp.IGateway.RunSummary;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests.RunExecution;
 
 public sealed class GetRunSummaryQueryHandlerTests
 {
-    private readonly FakeTopUpRunRepository _runs = new();
+    private static readonly DateTime RunDateUtc =
+        new(2026, 6, 18, 4, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task Should_Return_Run_Summary()
+    public async Task Should_Return_Safe_Reconciled_Run_Summary()
     {
-        DateTime now = new(2026, 6, 18, 4, 0, 0, DateTimeKind.Utc);
-        TopUpRun run = CreateRun(now);
-        run.StartProcessing(now.AddMinutes(1)).IsSuccess.Should().BeTrue();
-        run.SetTotalSelected(2).IsSuccess.Should().BeTrue();
-        run.Finalize(2, 2, 0, 0, 200m, now.AddMinutes(2)).IsSuccess.Should().BeTrue();
-        _runs.Add(run);
+        RunSummaryProjection projection = CreateProjection(organizationId: 10);
+        GetRunSummaryQueryHandler handler = CreateHandler(
+            projection,
+            permissions: ["TOPUPS_MANAGE"],
+            organizationIds: [10]);
 
-        GetRunSummaryQueryHandler handler = new(_runs);
-        var result = await handler.Handle(new GetRunSummaryQuery(run.Id), CancellationToken.None);
+        var result = await handler.Handle(
+            new GetRunSummaryQuery(projection.RunId),
+            CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.TopUpRunId.Should().Be(run.Id);
-        result.Value.CampaignId.Should().Be(run.TopUpCampaignId);
-        result.Value.RunStatus.Should().Be(TopUpRunStatusCodes.Completed);
+        result.Value.RunId.Should().Be(projection.RunId);
+        result.Value.CampaignId.Should().Be(projection.CampaignId);
+        result.Value.RunDateUtc.Should().Be(RunDateUtc);
         result.Value.TriggerType.Should().Be(TopUpRunTriggerTypes.Manual);
-        result.Value.TotalSelected.Should().Be(2);
-        result.Value.TotalProcessed.Should().Be(2);
-        result.Value.TotalSucceeded.Should().Be(2);
-        result.Value.TotalFailed.Should().Be(0);
-        result.Value.TotalSkipped.Should().Be(0);
-        result.Value.TotalAmount.Should().Be(200m);
-        result.Value.RequestedAtUtc.Should().Be(now);
-        result.Value.StartedAt.Should().Be(now.AddMinutes(1));
-        result.Value.CompletedAt.Should().Be(now.AddMinutes(2));
-        result.Value.Note.Should().Be("Manual request");
+        result.Value.Status.Should().Be(TopUpRunStatusCodes.Partial);
+        result.Value.MatchedCount.Should().Be(5);
+        result.Value.ProcessedCount.Should().Be(5);
+        result.Value.SucceededCount.Should().Be(3);
+        result.Value.FailedCount.Should().Be(1);
+        result.Value.SkippedCount.Should().Be(1);
+        result.Value.TotalCredited.Should().Be(300m);
+        result.Value.StartedAtUtc.Should().Be(RunDateUtc.AddMinutes(1));
+        result.Value.CompletedAtUtc.Should().Be(RunDateUtc.AddMinutes(2));
     }
 
     [Fact]
-    public async Task Should_Return_Error_When_Run_Not_Found()
+    public async Task Should_Deny_Run_Outside_Organization_Scope()
     {
-        GetRunSummaryQueryHandler handler = new(_runs);
+        RunSummaryProjection projection = CreateProjection(organizationId: 20);
+        GetRunSummaryQueryHandler handler = CreateHandler(
+            projection,
+            permissions: ["TOPUPS_MANAGE"],
+            organizationIds: [10]);
 
-        var result = await handler.Handle(new GetRunSummaryQuery(999), CancellationToken.None);
+        var result = await handler.Handle(
+            new GetRunSummaryQuery(projection.RunId),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(TopUpHistoryErrors.OrganizationOutsideScope);
+    }
+
+    [Fact]
+    public async Task Should_Deny_Actor_Without_View_Capability()
+    {
+        RunSummaryProjection projection = CreateProjection(organizationId: 10);
+        GetRunSummaryQueryHandler handler = CreateHandler(
+            projection,
+            permissions: [],
+            organizationIds: [10]);
+
+        var result = await handler.Handle(
+            new GetRunSummaryQuery(projection.RunId),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(TopUpHistoryErrors.AccessDenied);
+    }
+
+    [Fact]
+    public async Task Should_Allow_ViewAll_Actor_Across_Organizations()
+    {
+        RunSummaryProjection projection = CreateProjection(organizationId: 20);
+        GetRunSummaryQueryHandler handler = CreateHandler(
+            projection,
+            permissions: ["TOPUP_VIEW_ALL"],
+            organizationIds: []);
+
+        var result = await handler.Handle(
+            new GetRunSummaryQuery(projection.RunId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Should_Return_NotFound_When_Nested_Campaign_Does_Not_Match()
+    {
+        RunSummaryProjection projection = CreateProjection(organizationId: 10);
+        GetRunSummaryQueryHandler handler = CreateHandler(
+            projection,
+            permissions: ["TOPUPS_MANAGE"],
+            organizationIds: [10]);
+
+        var result = await handler.Handle(
+            new GetRunSummaryQuery(projection.RunId, ExpectedCampaignId: 999),
+            CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(TopUpErrors.RunNotFound);
     }
 
-    private static TopUpRun CreateRun(DateTime now)
+    [Fact]
+    public async Task Should_Return_NotFound_When_Run_Does_Not_Exist()
     {
-        TopUpCampaign campaign = TopUpCampaign.Create(
-            1,
-            "CAMPAIGN-01",
-            "Test campaign",
-            null,
-            "FIXED",
-            100m,
-            "Campaign top-up",
-            "IMMEDIATE",
-            new DateOnly(2026, 1, 1),
-            null,
-            null,
-            null,
-            99,
-            now);
-        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
+        GetRunSummaryQueryHandler handler = CreateHandler(
+            projection: null,
+            permissions: ["TOPUPS_MANAGE"],
+            organizationIds: [10]);
 
-        return TopUpRun.CreateManual(
-            campaign,
-            "summary-key",
-            99,
-            now,
-            "Manual request");
+        var result = await handler.Handle(
+            new GetRunSummaryQuery(999),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(TopUpErrors.RunNotFound);
     }
 
-    private sealed class FakeTopUpRunRepository : ITopUpRunRepository
+    private static GetRunSummaryQueryHandler CreateHandler(
+        RunSummaryProjection? projection,
+        IReadOnlyCollection<string> permissions,
+        IReadOnlyCollection<long> organizationIds)
     {
-        private static readonly PropertyInfo IdProperty =
-            typeof(TopUpRun).GetProperty(nameof(TopUpRun.Id))!;
+        FakeCurrentUser currentUser = new(permissions, organizationIds);
+        return new GetRunSummaryQueryHandler(
+            new FakeRunSummaryReader(projection),
+            new TopUpAccessScopeResolver(currentUser));
+    }
 
-        private readonly Dictionary<long, TopUpRun> _runs = [];
+    private static RunSummaryProjection CreateProjection(long organizationId)
+        => new(
+            RunId: 123,
+            CampaignId: 456,
+            OrganizationId: organizationId,
+            RunDateUtc,
+            TriggerType: TopUpRunTriggerTypes.Manual,
+            Status: TopUpRunStatusCodes.Partial,
+            MatchedCount: 5,
+            ProcessedCount: 5,
+            SucceededCount: 3,
+            FailedCount: 1,
+            SkippedCount: 1,
+            TotalCredited: 300m,
+            StartedAtUtc: RunDateUtc.AddMinutes(1),
+            CompletedAtUtc: RunDateUtc.AddMinutes(2));
 
-        public void Add(TopUpRun run)
-        {
-            IdProperty.SetValue(run, 123);
-            _runs[run.Id] = run;
-        }
+    private sealed class FakeRunSummaryReader(RunSummaryProjection? projection)
+        : ITopUpRunSummaryReader
+    {
+        public Task<RunSummaryProjection?> GetByIdAsync(
+            long runId,
+            CancellationToken cancellationToken)
+            => Task.FromResult(projection?.RunId == runId ? projection : null);
+    }
 
-        public Task<TopUpRun?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
-        {
-            _runs.TryGetValue(id, out TopUpRun? run);
-            return Task.FromResult(run);
-        }
+    private sealed class FakeCurrentUser(
+        IReadOnlyCollection<string> permissions,
+        IReadOnlyCollection<long> organizationIds) : ICurrentUser
+    {
+        public long? UserAccountId => 1;
+        public long? PersonId => null;
+        public long? OrganizationUnitId => organizationIds.FirstOrDefault();
+        public IReadOnlyCollection<long> OrganizationUnitIds => organizationIds;
+        public IReadOnlyCollection<string> Roles => ["SCHOOL_ADMIN"];
+        public IReadOnlyCollection<string> Permissions => permissions;
+        public string Portal => "ADMIN";
+        public bool IsAuthenticated => true;
 
-        public Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
-            => Task.FromResult(_runs.Values.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
-
-        public Task<bool> ExistsForScheduledOccurrenceAsync(long campaignId, DateTime scheduledFor, CancellationToken cancellationToken = default)
-            => Task.FromResult(false);
-
-        public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
-        {
-            Add(run);
-            return Task.CompletedTask;
-        }
+        public bool HasPermission(string permission)
+            => permissions.Contains(permission, StringComparer.OrdinalIgnoreCase);
     }
 }

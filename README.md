@@ -103,4 +103,39 @@ dotnet ef migrations add InitialCreate `
   --startup-project src/Hosts/Moe.StudentFinance.Api
 ```
 
+## Canonical local database data
+
+After applying the EF Core migrations, run the canonical local seed:
+
+```powershell
+.\scripts\seed-local-database.ps1
+```
+
+For a non-default SQL Server instance or database:
+
+```powershell
+.\scripts\seed-local-database.ps1 `
+  -Server "localhost\SQLEXPRESS" `
+  -Database "StudentFinance"
+```
+
+The seed is idempotent and preserves unrelated data. It always creates the same
+B-003 run-summary records:
+
+| Run ID | Organization | Status |
+|---:|---:|---|
+| `96001` | HQ (`1`) | `COMPLETED` |
+| `96002` | Demo school (`2`) | `PARTIAL` |
+| `96003` | HQ (`1`) | `PROCESSING` |
+| `96004` | Demo school (`2`) | `FAILED` |
+
+Example:
+
+```http
+GET /api/admin/v1/top-up/runs/96001
+```
+
+The underlying SQL is available at
+`docs/database/seed-local-development.sql`.
+
 The API must not automatically apply migrations in UAT. Generate and review SQL scripts in the deployment pipeline.
