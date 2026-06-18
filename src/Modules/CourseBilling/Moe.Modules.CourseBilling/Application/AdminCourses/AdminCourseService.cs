@@ -292,37 +292,7 @@ internal sealed class AdminCourseService(
         return Result<CourseFeeDto>.Success(ToFeeDto(new CourseFeeDetail(fee, component)));
     }
 
-    public async Task<Result<AssignStudentsToCourseResultDto>> AssignStudentsAsync(long courseId, AssignStudentsToCourseRequest request, CancellationToken cancellationToken)
-    {
-        Result<Course> courseResult = await RequireCourseAsync(courseId, cancellationToken);
-        if (courseResult.IsFailure) return Result<AssignStudentsToCourseResultDto>.Failure(courseResult.Error);
-
-        Course course = courseResult.Value;
-        if (!course.IsPublished) return Result<AssignStudentsToCourseResultDto>.Failure(CourseErrors.CourseNotPublished);
-        if (!IsEnrollmentWindowOpen(course, UtcNow())) return Result<AssignStudentsToCourseResultDto>.Failure(CourseErrors.EnrollmentWindowClosed);
-        List<AssignStudentResultDto> results = [];
-        foreach (long personId in request.PersonIds.Distinct())
-        {
-            if (await courses.HasActiveEnrollmentAsync(courseId, personId, cancellationToken))
-            {
-                results.Add(new AssignStudentResultDto(personId, false, null, "Student already enrolled in this course."));
-                continue;
-            }
-
-            CourseEnrollment enrollment = new(personId, courseId, UtcNow());
-            await courses.AddEnrollmentAsync(enrollment, cancellationToken);
-            results.Add(new AssignStudentResultDto(personId, true, enrollment.Id, "Assigned successfully."));
-        }
-
-        // Billing generation is handled by the Student Enrollment/Billing module.
-        return Result<AssignStudentsToCourseResultDto>.Success(new AssignStudentsToCourseResultDto(
-            courseId,
-            request.PersonIds.Count,
-            results.Count(x => x.Success),
-            results.Count(x => !x.Success),
-            results));
-    }
-
+   
     public async Task<Result<IReadOnlyList<AdminCourseEnrollmentDto>>> ListEnrollmentsAsync(long courseId, CancellationToken cancellationToken)
     {
         Result<Course> course = await RequireCourseAsync(courseId, cancellationToken);
@@ -331,22 +301,7 @@ internal sealed class AdminCourseService(
         return Result<IReadOnlyList<AdminCourseEnrollmentDto>>.Success(await courses.ListEnrollmentsAsync(courseId, cancellationToken));
     }
 
-    public async Task<Result<AdminCourseEnrollmentDto>> RemoveEnrollmentAsync(long courseId, long courseEnrollmentId, CancellationToken cancellationToken)
-    {
-        Result<Course> course = await RequireMutableCourseAsync(courseId, cancellationToken);
-        if (course.IsFailure) return Result<AdminCourseEnrollmentDto>.Failure(course.Error);
 
-        CourseEnrollment? enrollment = await courses.FindEnrollmentAsync(courseEnrollmentId, cancellationToken);
-        if (enrollment is null || enrollment.CourseId != courseId)
-        {
-            return Result<AdminCourseEnrollmentDto>.Failure(CourseErrors.EnrollmentNotFound);
-        }
-
-        AdminCourseEnrollmentDto removed = ToEnrollmentDto(enrollment);
-        courses.RemoveEnrollment(enrollment);
-        await courses.SaveChangesAsync(cancellationToken);
-        return Result<AdminCourseEnrollmentDto>.Success(removed);
-    }
 
     private async Task<Result<Course>> RequireCourseAsync(long courseId, CancellationToken cancellationToken)
     {
@@ -499,16 +454,18 @@ internal sealed class AdminCourseService(
             detail.CourseFee.SequenceNumber,
             detail.CourseFee.IsActive);
 
-    private static AdminCourseEnrollmentDto ToEnrollmentDto(CourseEnrollment enrollment)
-        => new(
-            enrollment.Id,
-            enrollment.CourseId,
-            enrollment.PersonId,
-            null,
-            enrollment.EnrollmentSourceCode,
-            enrollment.EnrolledByLoginAccountId,
-            enrollment.EnrolledAtUtc,
-            enrollment.EnrollmentStatusCode);
+    
+     
 
     private DateTime UtcNow() => clock.UtcNow.UtcDateTime;
+
+    public Task<Result<AssignStudentsToCourseResultDto>> AssignStudentsAsync(long courseId, AssignStudentsToCourseRequest request, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<Result<AdminCourseEnrollmentDto>> RemoveEnrollmentAsync(long courseId, long courseEnrollmentId, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
 }
