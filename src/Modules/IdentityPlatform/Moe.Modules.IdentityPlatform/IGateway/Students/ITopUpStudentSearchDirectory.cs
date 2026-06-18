@@ -13,4 +13,9 @@ public interface ITopUpStudentSearchDirectory
         TopUpStudentSearchCriteria criteria,
         IReadOnlyCollection<long> scopedOrganizationIds,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<long, TopUpStudentDisplaySummary>> FindDisplayByPersonIdsForTopUpAsync(
+        IReadOnlyCollection<long> personIds,
+        long organizationId,
+        CancellationToken cancellationToken);
 }
