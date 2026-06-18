@@ -13,7 +13,7 @@ public sealed class RunExecutionOrchestrator(
     ITopUpTransactionRepository transactions,
     IUnitOfWork unitOfWork,
     IClock clock,
-    ILogger<RunExecutionOrchestrator> logger)
+    ILogger<RunExecutionOrchestrator> logger) : IRunExecutionOrchestrator
 {
     private const int MaxTransientRetries = 3;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
