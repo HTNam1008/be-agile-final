@@ -3,15 +3,20 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.EducationAccountTopUp.IGateway;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests;
@@ -62,6 +67,28 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
         public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
     }
 
+    private sealed class MockEventPublisher : ITopUpExecutionEventPublisher
+    {
+        public Task PublishTopUpFailedEvent(long transactionId, string reason) => Task.CompletedTask;
+        public Task PublishTopUpSucceededEvent(long transactionId, decimal amount) => Task.CompletedTask;
+        public Task PublishRunStartedAsync(TopUpRunStartedReport report, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishRunCompletedAsync(TopUpRunCompletedReport report, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishTopUpReceivedAsync(TopUpReceivedReport report, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class MockMetrics : ITopUpExecutionMetrics
+    {
+        public void RecordTopUpSuccess(decimal amount) {}
+        public void RecordTopUpFailure() {}
+        public void RecordProcessingTime(TimeSpan duration) {}
+        public void RecordRunStarted() {}
+        public void RecordRunCompleted(int succeeded, int failed) {}
+        public void RecordRecipientProcessed(long recipientId, string campaignCode, bool isDynamic, bool wasEligible) {}
+        public void RecordAccountCreditDbConflict() {}
+        public void RecordRunStarted(long runId, long campaignId, int totalRecipients) {}
+        public void RecordRunCompleted(long runId, long campaignId, string status, int totalRecipients, int succeeded, int failed, int skipped, TimeSpan duration) {}
+    }
+
     [Fact]
     public async Task Handle_ShouldChunkAndExecute_DynamicRules()
     {
@@ -93,7 +120,16 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
 
         await dbContext.SaveChangesAsync();
 
-        var handler = new ExecuteTopUpRunCommandHandler(dbContext, new MockCurrentUser(), new MockClock());
+        var processor = new RecipientProcessingService(
+            new TopUpTransactionRepository(dbContext),
+            new StubAccountCreditGateway(dbContext, NullLogger<StubAccountCreditGateway>.Instance),
+            new StubRecipientValidator(dbContext),
+            new MockEventPublisher(),
+            new MockMetrics(),
+            dbContext,
+            new MockClock(),
+            NullLogger<RecipientProcessingService>.Instance);
+        var handler = new ExecuteTopUpRunCommandHandler(dbContext, new MockCurrentUser(), new MockClock(), processor);
         var command = new ExecuteTopUpRunCommand(campaign.Id);
 
         // Act

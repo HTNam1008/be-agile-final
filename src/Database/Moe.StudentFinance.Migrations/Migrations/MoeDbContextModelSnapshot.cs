@@ -2564,16 +2564,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             RoleCode = "STUDENT",
                             StatusCode = "ACTIVE",
                             UserAccountId = 1003L
-                        },
-                        new
-                        {
-                            Id = 1004L,
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            OrganizationUnitId = 2L,
-                            RoleCode = "SYSTEM_ADMIN",
-                            StatusCode = "ACTIVE",
-                            UserAccountId = 1001L
                         });
                 });
 
@@ -2976,66 +2966,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             PreferredMobile = "+6590000001",
                             SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 2002L,
-                            CitizenshipStatusCode = "CITIZEN",
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DateOfBirth = new DateOnly(2009, 3, 18),
-                            ExternalPersonReference = "TOPUP-STUDENT-0002",
-                            IdentityNumberMasked = "S234****B",
-                            NationalityCode = "SG",
-                            OfficialAddress = "1 Demo Street, Singapore 000001",
-                            OfficialEmail = "aisha.official@example.test",
-                            OfficialFullName = "Aisha Rahman",
-                            OfficialMobile = "+6590000002",
-                            PersonStatusCode = "ACTIVE",
-                            PreferredAddress = "1 Demo Street, Singapore 000001",
-                            PreferredEmail = "aisha@example.test",
-                            PreferredMobile = "+6590000002",
-                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 2003L,
-                            CitizenshipStatusCode = "CITIZEN",
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DateOfBirth = new DateOnly(2010, 9, 4),
-                            ExternalPersonReference = "TOPUP-STUDENT-0003",
-                            IdentityNumberMasked = "S345****C",
-                            NationalityCode = "SG",
-                            OfficialAddress = "1 Demo Street, Singapore 000001",
-                            OfficialEmail = "brandon.official@example.test",
-                            OfficialFullName = "Brandon Lee",
-                            OfficialMobile = "+6590000003",
-                            PersonStatusCode = "ACTIVE",
-                            PreferredAddress = "1 Demo Street, Singapore 000001",
-                            PreferredEmail = "brandon@example.test",
-                            PreferredMobile = "+6590000003",
-                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 2004L,
-                            CitizenshipStatusCode = "CITIZEN",
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DateOfBirth = new DateOnly(2008, 11, 28),
-                            ExternalPersonReference = "TOPUP-STUDENT-0004",
-                            IdentityNumberMasked = "S456****D",
-                            NationalityCode = "SG",
-                            OfficialAddress = "1 Demo Street, Singapore 000001",
-                            OfficialEmail = "weijie.official@example.test",
-                            OfficialFullName = "Chen Wei Jie",
-                            OfficialMobile = "+6590000004",
-                            PersonStatusCode = "ACTIVE",
-                            PreferredAddress = "1 Demo Street, Singapore 000001",
-                            PreferredEmail = "weijie@example.test",
-                            PreferredMobile = "+6590000004",
-                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -3213,51 +3143,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             SourceCode = "DEMO_SEED",
                             StartDate = new DateOnly(2026, 1, 2),
                             StudentNumber = "DEMO-STU-0001",
-                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 3002L,
-                            AcademicYear = "2026",
-                            ClassCode = "3B",
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "SEC_3",
-                            OrganizationId = 2L,
-                            PersonId = 2002L,
-                            SchoolingStatusCode = "ACTIVE",
-                            SourceCode = "DEMO_SEED",
-                            StartDate = new DateOnly(2026, 1, 2),
-                            StudentNumber = "DEMO-STU-0002",
-                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 3003L,
-                            AcademicYear = "2026",
-                            ClassCode = "2C",
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "SEC_2",
-                            OrganizationId = 2L,
-                            PersonId = 2003L,
-                            SchoolingStatusCode = "ACTIVE",
-                            SourceCode = "DEMO_SEED",
-                            StartDate = new DateOnly(2026, 1, 2),
-                            StudentNumber = "DEMO-STU-0003",
-                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 3004L,
-                            AcademicYear = "2026",
-                            ClassCode = "4A",
-                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "SEC_4",
-                            OrganizationId = 2L,
-                            PersonId = 2004L,
-                            SchoolingStatusCode = "ON_LEAVE",
-                            SourceCode = "DEMO_SEED",
-                            StartDate = new DateOnly(2026, 1, 2),
-                            StudentNumber = "DEMO-STU-0004",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
