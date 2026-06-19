@@ -1,8 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.IdentityPlatform.IGateway.Students.TopUpSearch;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
@@ -10,7 +14,9 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 
 internal sealed class PreviewCampaignQueryHandler(
     MoeDbContext dbContext,
-    ICurrentUser currentUser) : IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>
+    ICurrentUser currentUser,
+    ITopUpAccountProjectionRepository accounts,
+    ITopUpStudentSearchDirectory students) : IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>
 {
     public async Task<Result<PreviewCampaignResult>> Handle(PreviewCampaignQuery query, CancellationToken cancellationToken)
     {
@@ -56,7 +62,7 @@ internal sealed class PreviewCampaignQueryHandler(
                     
                     var skip = (query.PageNumber - 1) * query.PageSize;
                     if (totalMatched > skip && samples.Count < query.PageSize)
-                        samples.Add(new PreviewAccountDto(fr.EducationAccountId, amt));
+                        samples.Add(CreatePreviewSample(fr.EducationAccountId, amt));
                 }
             }
         }
@@ -91,10 +97,74 @@ internal sealed class PreviewCampaignQueryHandler(
 
             foreach (var acc in pagedAccounts)
             {
-                samples.Add(new PreviewAccountDto(acc.Id, campaign.DefaultTopUpAmount));
+                samples.Add(CreatePreviewSample(acc.Id, campaign.DefaultTopUpAmount));
             }
         }
 
-        return Result<PreviewCampaignResult>.Success(new PreviewCampaignResult(totalMatched, estimatedTotalAmount, samples));
+        List<PreviewAccountDto> enrichedSamples = await EnrichSamplesAsync(
+            samples,
+            campaign.OrganizationId,
+            cancellationToken);
+
+        return Result<PreviewCampaignResult>.Success(new PreviewCampaignResult(totalMatched, estimatedTotalAmount, enrichedSamples));
+    }
+
+    private static PreviewAccountDto CreatePreviewSample(long educationAccountId, decimal estimatedAmount)
+        => new(
+            educationAccountId,
+            MaskedAccountNumber: "****",
+            MaskedStudentNumber: null,
+            StudentDisplayName: "Unavailable",
+            estimatedAmount);
+
+    private async Task<List<PreviewAccountDto>> EnrichSamplesAsync(
+        IReadOnlyCollection<PreviewAccountDto> samples,
+        long organizationId,
+        CancellationToken cancellationToken)
+    {
+        long[] educationAccountIds = samples
+            .Select(x => x.EducationAccountId)
+            .Distinct()
+            .ToArray();
+
+        IReadOnlyDictionary<long, TopUpAccountProjection> accountById =
+            await accounts.FindByEducationAccountIdsAsync(
+                educationAccountIds,
+                cancellationToken);
+
+        long[] personIds = accountById.Values
+            .Select(x => x.PersonId)
+            .Distinct()
+            .ToArray();
+
+        var studentByPersonId =
+            await students.FindDisplayByPersonIdsForTopUpAsync(
+                personIds,
+                organizationId,
+                cancellationToken);
+
+        return samples
+            .Select(sample =>
+            {
+                accountById.TryGetValue(sample.EducationAccountId, out TopUpAccountProjection? account);
+
+                TopUpStudentDisplaySummary? student = null;
+                if (account is not null)
+                {
+                    studentByPersonId.TryGetValue(account.PersonId, out student);
+                }
+
+                return sample with
+                {
+                    MaskedAccountNumber = account is null
+                        ? "****"
+                        : TopUpDisplayMasker.MaskAccountNumber(account.AccountNumber),
+                    MaskedStudentNumber = student is null
+                        ? null
+                        : TopUpDisplayMasker.MaskStudentNumber(student.StudentNumber),
+                    StudentDisplayName = student?.DisplayName ?? "Unavailable"
+                };
+            })
+            .ToList();
     }
 }

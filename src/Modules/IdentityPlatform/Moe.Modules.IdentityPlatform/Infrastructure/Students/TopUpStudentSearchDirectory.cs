@@ -59,8 +59,10 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             join person in dbContext.Set<Person>().AsNoTracking()
                 on enrollment.PersonId equals person.Id
             where personIds.Contains(enrollment.PersonId)
-                && enrollment.OrganizationId == organizationId
-            orderby enrollment.PersonId, enrollment.StartDate descending, enrollment.Id descending
+            orderby enrollment.PersonId,
+                enrollment.OrganizationId == organizationId descending,
+                enrollment.StartDate descending,
+                enrollment.Id descending
             select new TopUpStudentDisplaySummary(
                 enrollment.PersonId,
                 enrollment.StudentNumber,
