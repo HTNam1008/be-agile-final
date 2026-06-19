@@ -167,6 +167,13 @@ public sealed class RequestManualRunCommandHandlerTests
             _campaigns.TryGetValue(id, out TopUpCampaign? campaign);
             return Task.FromResult(campaign);
         }
+
+        public Task<IReadOnlyList<Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns.CampaignListItem>> ListAsync(
+            IReadOnlyCollection<long> accessibleOrgIds,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     private sealed class FakeTopUpRunRepository : ITopUpRunRepository

@@ -36,13 +36,10 @@ public sealed class CreateCampaignCommandValidator : AbstractValidator<CreateCam
                     .NotEmpty()
                     .IsEnumName(typeof(FrequencyCode), caseSensitive: false);
                 RuleFor(x => x.Request.FrequencyInterval).GreaterThan(0);
-                
-                When(x => x.Request.EndDate.HasValue, () =>
-                {
-                    RuleFor(x => x.Request.EndDate)
-                        .Must((request, endDate) => endDate >= request.Request.StartDate)
-                        .WithMessage("EndDate must be greater than or equal to StartDate.");
-                });
+                RuleFor(x => x.Request.EndDate)
+                    .NotNull().WithMessage("EndDate is required for Recurring campaigns.")
+                    .Must((request, endDate) => endDate >= request.Request.StartDate)
+                    .WithMessage("EndDate must be greater than or equal to StartDate.");
             });
         });
     }
