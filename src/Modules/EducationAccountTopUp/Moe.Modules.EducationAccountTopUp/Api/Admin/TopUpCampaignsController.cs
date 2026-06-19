@@ -9,6 +9,9 @@ using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
@@ -27,19 +30,16 @@ public sealed class TopUpCampaignsController(
     IQueryDispatcher queryDispatcher) : ControllerBase
 {
     /// <summary>
-    /// Lists Top-Up Campaigns.
+    /// Lists Top-Up Campaigns visible to the authenticated user.
     /// </summary>
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
-    [ProducesResponseType(typeof(List<object>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetCampaigns([FromServices] Moe.StudentFinance.Persistence.MoeDbContext dbContext, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCampaigns(CancellationToken cancellationToken)
     {
-        var campaigns = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
-            dbContext.Set<Domain.TopUps.TopUpCampaign>()
-                .OrderByDescending(c => c.Id),
-            cancellationToken
-        );
-        return Ok(campaigns);
+        var result = await queryDispatcher.Send(new GetCampaignsQuery(), cancellationToken);
+        if (result.IsFailure) return BadRequest(result.Error);
+        return Ok(result.Value);
     }
     /// <summary>
     /// Creates a new Top-Up Campaign definition.
@@ -112,6 +112,19 @@ public sealed class TopUpCampaignsController(
     }
 
     /// <summary>
+    /// Retrieves dynamic rules for a campaign.
+    /// </summary>
+    [HttpGet("{id:long}/rules")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRules(long id, CancellationToken cancellationToken)
+    {
+        var result = await queryDispatcher.Send(new GetCampaignRulesQuery(id), cancellationToken);
+        if (result.IsFailure) return BadRequest(result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Upserts dynamic rules for a DYNAMIC_RULES campaign.
     /// </summary>
     /// <param name="id">Campaign ID.</param>
@@ -133,6 +146,19 @@ public sealed class TopUpCampaignsController(
 
         if (result.IsFailure) return BadRequest(result.Error);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Retrieves fixed recipients for a campaign.
+    /// </summary>
+    [HttpGet("{id:long}/fixed-recipients")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetFixedRecipients(long id, CancellationToken cancellationToken)
+    {
+        var result = await queryDispatcher.Send(new GetFixedRecipientsQuery(id), cancellationToken);
+        if (result.IsFailure) return BadRequest(result.Error);
+        return Ok(result.Value);
     }
 
     /// <summary>
