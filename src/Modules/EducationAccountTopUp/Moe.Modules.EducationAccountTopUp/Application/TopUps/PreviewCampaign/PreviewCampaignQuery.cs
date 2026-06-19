@@ -9,6 +9,9 @@ public sealed record PreviewCampaignResult(
 
 public sealed record PreviewAccountDto(
     long EducationAccountId,
+    string MaskedAccountNumber,
+    string? MaskedStudentNumber,
+    string StudentDisplayName,
     decimal EstimatedAmount);
 
 public sealed record PreviewCampaignQuery(
