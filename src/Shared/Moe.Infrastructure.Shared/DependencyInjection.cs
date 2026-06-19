@@ -31,9 +31,11 @@ public static class DependencyInjection
 
         services.AddOptions<PortalOptions>().BindConfiguration(PortalOptions.SectionName).ValidateOnStart();
         services.AddOptions<AuthenticationOptions>().BindConfiguration(AuthenticationOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<Configuration.AuthorizationOptions>().BindConfiguration(Configuration.AuthorizationOptions.SectionName).ValidateOnStart();
         services.AddOptions<UatOptions>().BindConfiguration(UatOptions.SectionName).ValidateOnStart();
 
         var auth = configuration.GetSection(AuthenticationOptions.SectionName).Get<AuthenticationOptions>() ?? new();
+        var authorization = configuration.GetSection(Configuration.AuthorizationOptions.SectionName).Get<Configuration.AuthorizationOptions>() ?? new();
         services.AddAuthentication()
             .AddJwtBearer(AuthenticationSchemes.AdminEntra, options => Bind(options, auth.AdminEntra, AuthenticationSchemes.AdminEntra, AuthenticationCookies.AdminSession))
             .AddJwtBearer(AuthenticationSchemes.EServiceSingpass, options => Bind(options, auth.EServiceSingpass, AuthenticationSchemes.EServiceSingpass));
@@ -54,12 +56,18 @@ public static class DependencyInjection
                 policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
                 policy.RequireClaim(ClaimNames.Role, "STUDENT");
             });
-            AddPermission(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE");
-            AddPermission(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE");
-            AddPermission(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION");
-            AddPermission(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE");
-            AddPermission(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL");
-            AddPermission(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW");
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountLifecycle, "ACCOUNT_LIFECYCLE_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(
+                options,
+                AuthorizationPolicies.ViewTopUps,
+                ["TOPUPS_MANAGE", "TOPUP_VIEW_ALL"],
+                authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW", authorization.UseStrictPermissionPolicies);
         });
 
         services.AddCors(options =>
@@ -67,6 +75,11 @@ public static class DependencyInjection
             var portals = configuration.GetSection(PortalOptions.SectionName).Get<PortalOptions>() ?? new();
             options.AddPolicy("AdminCors", p => p.WithOrigins(portals.AdminAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
             options.AddPolicy("EServiceCors", p => p.WithOrigins(portals.EServiceAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+            options.AddPolicy("PortalCors", p => p
+                .WithOrigins(portals.AdminAllowedOrigins.Concat(portals.EServiceAllowedOrigins).Distinct().ToArray())
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials());
         });
         return services;
     }
@@ -86,25 +99,6 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
-        //if DEBUG
-        if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
-        {
-            target.RequireHttpsMetadata = source.RequireHttpsMetadata;
-            target.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidIssuer = source.Authority.TrimEnd('/'),
-                ValidateAudience = true,
-                ValidAudience = source.Audience,
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(source.LocalTokenSigningKey)),
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromMinutes(1)
-            };
-            target.Events = CreateSchemeEvents(authenticationScheme);
-            return;
-        }
-        //endif
         target.Authority = source.Authority;
         target.Audience = source.Audience;
         target.RequireHttpsMetadata = source.RequireHttpsMetadata;
@@ -194,11 +188,29 @@ public static class DependencyInjection
         };
     }
 
-    private static void AddPermission(Microsoft.AspNetCore.Authorization.AuthorizationOptions options, string policyName, string permission)
+    private static void AddAdminFeaturePolicy(
+        Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
+        string policyName,
+        string permission,
+        bool useStrictPermissionPolicies)
+        => AddAdminFeaturePolicy(options, policyName, [permission], useStrictPermissionPolicies);
+
+    private static void AddAdminFeaturePolicy(
+        Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
+        string policyName,
+        IReadOnlyCollection<string> permissions,
+        bool useStrictPermissionPolicies)
         => options.AddPolicy(policyName, policy =>
         {
             policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
             policy.RequireAuthenticatedUser();
-            policy.RequireClaim(ClaimNames.Permission, permission);
+            policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+            policy.RequireClaim(ClaimNames.Role, "SYSTEM_ADMIN", "SCHOOL_ADMIN");
+            policy.RequireClaim(ClaimNames.OrganizationUnitId);
+
+            if (useStrictPermissionPolicies)
+            {
+                policy.RequireClaim(ClaimNames.Permission, permissions);
+            }
         });
 }

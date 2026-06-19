@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
+using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -12,7 +14,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 internal sealed class ExecuteTopUpRunCommandHandler(
     MoeDbContext dbContext,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<ExecuteTopUpRunCommand, long>
+    IClock clock,
+    RecipientProcessingService recipientProcessingService) : ICommandHandler<ExecuteTopUpRunCommand, long>
 {
     public async Task<Result<long>> Handle(ExecuteTopUpRunCommand command, CancellationToken cancellationToken)
     {
@@ -43,14 +46,15 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         run.StartProcessing(nowUtc);
 
         dbContext.Set<TopUpRun>().Add(run);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         // 2. Fetch Recipients
         var recipientsQuery = dbContext.Set<TopUpCampaignRecipient>()
             .Where(x => x.TopUpCampaignId == campaign.Id && x.IsActive);
         
-        var accountsQuery = dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>().AsQueryable();
+        var accountsQuery = dbContext.Set<EducationAccount>().AsQueryable();
 
-        var matches = new List<(Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount Account, decimal Amount)>();
+        var matches = new List<(EducationAccount Account, decimal Amount)>();
 
         if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase))
         {
@@ -79,14 +83,14 @@ internal sealed class ExecuteTopUpRunCommandHandler(
                 return Result<long>.Failure(new Error("ZeroRules", "Cannot execute DYNAMIC_RULES campaign without rules."));
 
             var activeAccountsQuery = accountsQuery
-                .Where(x => x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active);
+                .Where(x => x.StatusCode == AccountStatuses.Active);
 
             activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, nowUtc);
 
             var accountIds = await activeAccountsQuery.Select(x => x.Id).ToListAsync(cancellationToken);
             foreach (var accId in accountIds)
             {
-                var acc = await dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>().FindAsync(new object[] { accId }, cancellationToken);
+                var acc = await dbContext.Set<EducationAccount>().FindAsync(new object[] { accId }, cancellationToken);
                 if (acc != null)
                 {
                      matches.Add((acc, campaign.DefaultTopUpAmount));
@@ -99,51 +103,50 @@ internal sealed class ExecuteTopUpRunCommandHandler(
 
         foreach (var match in matches)
         {
-            var acc = match.Account;
-            var amount = match.Amount;
-
-            var topupTx = TopUpTransaction.Create(
-                topUpRunId: run.Id,
-                educationAccountId: acc.Id,
-                amount: amount,
-                utcNow: nowUtc);
-
-            if (acc.StatusCode != Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active)
+            Result<RecipientProcessingResult> recipientResult;
+            try
             {
-                topupTx.Skip("Account not ACTIVE", nowUtc);
-                skipped++;
-                dbContext.Set<TopUpTransaction>().Add(topupTx);
+                recipientResult = await recipientProcessingService.ProcessRecipientAsync(
+                    run.Id,
+                    match.Account.Id,
+                    match.Amount,
+                    campaign.OrganizationId,
+                    campaign.Reason,
+                    cancellationToken);
+            }
+            catch
+            {
+                failed++;
                 continue;
             }
 
-            // Ledger Transaction
-            var txIdempotency = $"TOPUP:{run.Id}:{acc.Id}";
-            var accTx = Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountTransaction.Create(
-                educationAccountId: acc.Id,
-                transactionTypeCode: "CREDIT",
-                amount: amount,
-                referenceTypeCode: "TOPUP",
-                referenceId: run.Id,
-                idempotencyKey: txIdempotency,
-                currentBalance: acc.CachedBalance,
-                description: campaign.Reason,
-                createdByUserId: currentUser.UserAccountId ?? 0,
-                nowUtc: nowUtc);
+            if (recipientResult.IsFailure)
+            {
+                failed++;
+                continue;
+            }
 
-            dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountTransaction>().Add(accTx);
-            acc.UpdateBalance(amount);
-
-            // We must save to get the accTx.Id for Henry's strict state machine
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            topupTx.Complete(accTx.Id, nowUtc);
-            dbContext.Set<TopUpTransaction>().Add(topupTx);
-
-            succeeded++;
-            totalAmount += amount;
+            switch (recipientResult.Value.Status)
+            {
+                case TopUpTransactionStatusCodes.Completed:
+                    succeeded++;
+                    totalAmount += recipientResult.Value.CreditedAmount;
+                    break;
+                case TopUpTransactionStatusCodes.Skipped:
+                    skipped++;
+                    break;
+                case TopUpTransactionStatusCodes.Failed:
+                    failed++;
+                    break;
+                default:
+                    failed++;
+                    break;
+            }
         }
 
-        run.Finalize(matches.Count, succeeded, failed, skipped, totalAmount, nowUtc);
+        Result finalize = run.Finalize(matches.Count, succeeded, failed, skipped, totalAmount, nowUtc);
+        if (finalize.IsFailure)
+            return Result<long>.Failure(finalize.Error);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

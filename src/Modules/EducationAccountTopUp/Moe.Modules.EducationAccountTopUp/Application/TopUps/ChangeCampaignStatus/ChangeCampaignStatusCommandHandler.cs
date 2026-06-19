@@ -76,7 +76,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             campaign.SetNextRunAt(null);
         }
 
-        campaign.ChangeStatus(newStatusCode.ToString(), currentUser.UserAccountId ?? 0, clock.UtcNow.UtcDateTime);
+        campaign.ChangeStatus(newStatusCode.ToString().ToUpperInvariant(), currentUser.UserAccountId ?? 0, clock.UtcNow.UtcDateTime);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

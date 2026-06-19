@@ -20,9 +20,6 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
         long total = await query.LongCountAsync(cancellationToken);
 
         TopUpStudentSearchSummary[] items = await query
-            .OrderBy(x => x.DisplayName)
-            .ThenBy(x => x.StudentNumber)
-            .ThenBy(x => x.PersonId)
             .Skip((criteria.Page - 1) * criteria.PageSize)
             .Take(criteria.PageSize)
             .ToArrayAsync(cancellationToken);
@@ -45,6 +42,34 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             .Select(x => x.PersonId)
             .Distinct()
             .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyDictionary<long, TopUpStudentDisplaySummary>> FindDisplayByPersonIdsForTopUpAsync(
+        IReadOnlyCollection<long> personIds,
+        long organizationId,
+        CancellationToken cancellationToken)
+    {
+        if (personIds.Count == 0)
+        {
+            return new Dictionary<long, TopUpStudentDisplaySummary>();
+        }
+
+        TopUpStudentDisplaySummary[] rows = await (
+            from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
+            join person in dbContext.Set<Person>().AsNoTracking()
+                on enrollment.PersonId equals person.Id
+            where personIds.Contains(enrollment.PersonId)
+                && enrollment.OrganizationId == organizationId
+            orderby enrollment.PersonId, enrollment.StartDate descending, enrollment.Id descending
+            select new TopUpStudentDisplaySummary(
+                enrollment.PersonId,
+                enrollment.StudentNumber,
+                person.OfficialFullName))
+            .ToArrayAsync(cancellationToken);
+
+        return rows
+            .DistinctBy(x => x.PersonId)
+            .ToDictionary(x => x.PersonId);
     }
 
     private IQueryable<TopUpStudentSearchSummary> BuildTopUpSearchQuery(
@@ -116,14 +141,18 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             query = query.Where(x => x.Person.DateOfBirth >= earliestBirthDate);
         }
 
-        return query.Select(x => new TopUpStudentSearchSummary(
-            x.Person.Id,
-            x.Enrollment.StudentNumber,
-            x.Person.OfficialFullName,
-            x.Person.DateOfBirth,
-            x.Enrollment.SchoolingStatusCode,
-            x.Enrollment.LevelCode,
-            x.Enrollment.ClassCode,
-            x.Enrollment.OrganizationId));
+        return query
+            .OrderBy(x => x.Person.OfficialFullName)
+            .ThenBy(x => x.Enrollment.StudentNumber)
+            .ThenBy(x => x.Person.Id)
+            .Select(x => new TopUpStudentSearchSummary(
+                x.Person.Id,
+                x.Enrollment.StudentNumber,
+                x.Person.OfficialFullName,
+                x.Person.DateOfBirth,
+                x.Enrollment.SchoolingStatusCode,
+                x.Enrollment.LevelCode,
+                x.Enrollment.ClassCode,
+                x.Enrollment.OrganizationId));
     }
 }
