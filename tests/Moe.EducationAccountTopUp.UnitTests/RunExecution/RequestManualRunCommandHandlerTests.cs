@@ -174,8 +174,23 @@ public sealed class RequestManualRunCommandHandlerTests
         {
             throw new NotImplementedException();
         }
-    }
 
+        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(
+            long campaignId,
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<TopUpCampaignRule> rules = [];
+            return Task.FromResult(rules);
+        }
+
+        public Task<IReadOnlyList<TopUpCampaignRecipient>> GetActiveRecipientsAsync(
+            long campaignId,
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<TopUpCampaignRecipient> recipients = [];
+            return Task.FromResult(recipients);
+        }
+    }
     private sealed class FakeTopUpRunRepository : ITopUpRunRepository
     {
         private static readonly PropertyInfo IdProperty =

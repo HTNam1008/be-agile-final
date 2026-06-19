@@ -15,7 +15,7 @@ public sealed class RequestManualRunCommandHandler(
     ICurrentUser currentUser,
     IClock clock) : ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>
 {
-    private const string TopUpsManagePermission = "TOPUPS_MANAGE";
+    private const string TopUpsManagePermission = "TOPUP_VIEW_ALL";
 
     public async Task<Result<RequestManualRunResponse>> Handle(
         RequestManualRunCommand command,
