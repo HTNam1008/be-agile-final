@@ -99,14 +99,14 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
         Assert.Equal(runId, duplicateRunId);
 
-        using JsonDocument summary = await WaitForRunSummaryAsync(campaignId, runId);
+        using JsonDocument summary = await WaitForRunSummaryAsync(runId);
         JsonElement data = summary.RootElement.GetProperty("data");
-        Assert.Equal("COMPLETED", data.GetProperty("runStatus").GetString());
-        Assert.Equal(2, data.GetProperty("totalSelected").GetInt32());
-        Assert.Equal(2, data.GetProperty("totalProcessed").GetInt32());
-        Assert.Equal(2, data.GetProperty("totalSucceeded").GetInt32());
-        Assert.Equal(0, data.GetProperty("totalFailed").GetInt32());
-        Assert.Equal(0, data.GetProperty("totalSkipped").GetInt32());
+        Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
+        Assert.Equal(2, data.GetProperty("matchedCount").GetInt32());
+        Assert.Equal(2, data.GetProperty("processedCount").GetInt32());
+        Assert.Equal(2, data.GetProperty("succeededCount").GetInt32());
+        Assert.Equal(0, data.GetProperty("failedCount").GetInt32());
+        Assert.Equal(0, data.GetProperty("skippedCount").GetInt32());
     }
 
     [Fact]
@@ -164,10 +164,10 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
 
         // 5. Request idempotent manual run and wait for worker completion.
         var runId = await RequestManualRunAsync(campaignId, $"dynamic:{campaignId}:{Guid.NewGuid():N}");
-        using JsonDocument summary = await WaitForRunSummaryAsync(campaignId, runId);
+        using JsonDocument summary = await WaitForRunSummaryAsync(runId);
         JsonElement data = summary.RootElement.GetProperty("data");
-        Assert.Equal("COMPLETED", data.GetProperty("runStatus").GetString());
-        Assert.True(data.GetProperty("totalSucceeded").GetInt32() > 0);
+        Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
+        Assert.True(data.GetProperty("succeededCount").GetInt32() > 0);
     }
 
     private async Task<long> RequestManualRunAsync(long campaignId, string idempotencyKey)
@@ -193,11 +193,11 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         return document.RootElement.GetProperty("data").GetProperty("runId").GetInt64();
     }
 
-    private async Task<JsonDocument> WaitForRunSummaryAsync(long campaignId, long runId)
+    private async Task<JsonDocument> WaitForRunSummaryAsync(long runId)
     {
         for (int attempt = 0; attempt < 40; attempt++)
         {
-            var response = await _client.GetAsync($"/api/admin/v1/campaigns/{campaignId}/runs/{runId}");
+            var response = await _client.GetAsync($"/api/admin/v1/top-up/runs/{runId}");
             if (!response.IsSuccessStatusCode)
             {
                 var err = await response.Content.ReadAsStringAsync();
@@ -206,7 +206,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
 
             await using var responseStream = await response.Content.ReadAsStreamAsync();
             var document = await JsonDocument.ParseAsync(responseStream);
-            string? status = document.RootElement.GetProperty("data").GetProperty("runStatus").GetString();
+            string? status = document.RootElement.GetProperty("data").GetProperty("status").GetString();
             if (status is "COMPLETED" or "PARTIAL" or "FAILED" or "CANCELLED")
             {
                 return document;
@@ -216,7 +216,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             await Task.Delay(250);
         }
 
-        throw new TimeoutException($"Run {runId} for campaign {campaignId} did not reach a terminal status.");
+        throw new TimeoutException($"Run {runId} did not reach a terminal status.");
     }
 
     private async Task<long[]> SearchEducationAccountIdsAsync()

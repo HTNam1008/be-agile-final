@@ -11,6 +11,7 @@ using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution.TransactionResults;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
@@ -27,12 +28,15 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.RunSummary;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.TransactionResults;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.History;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.EducationAccountTopUp.IGateway.RunSummary;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
-
+using Moe.Modules.EducationAccountTopUp.IGateway.TransactionResults;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 
 namespace Moe.Modules.EducationAccountTopUp;
@@ -56,11 +60,10 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
         services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
-        services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
-        services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
-        services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
         services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
+        services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
+        services.AddScoped<ITopUpTransactionResultsReader, TopUpTransactionResultsReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();
         services.AddScoped<RecipientProcessingService>();
@@ -76,6 +79,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<UpsertFixedRecipientsRequest>, UpsertFixedRecipientsRequestValidator>();
         services.AddScoped<IValidator<CampaignHistoryRequest>, CampaignHistoryRequestValidator>();
         services.AddScoped<IValidator<RunHistoryRequest>, RunHistoryRequestValidator>();
+        services.AddScoped<IValidator<TopUpTransactionResultsRequest>, TopUpTransactionResultsRequestValidator>();
         services.AddScoped<IValidator<OpenManualAccountCommand>, OpenManualAccountValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsQuery>, SearchTopUpAccountsValidator>();
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
@@ -93,6 +97,9 @@ public sealed class EducationAccountTopUpModule : IModule
         // Top-Up Campaign Queries
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
         services.AddScoped<IQueryHandler<GetRunSummaryQuery, RunSummaryResponse>, GetRunSummaryQueryHandler>();
+        services.AddScoped<
+            IQueryHandler<GetTopUpTransactionResultsQuery, PageResponse<TopUpTransactionResultItem>>,
+            GetTopUpTransactionResultsHandler>();
         services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
 
