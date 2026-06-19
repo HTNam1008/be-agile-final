@@ -17,7 +17,6 @@ namespace Moe.Modules.CourseBilling.Api.Admin;
 public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : ControllerBase
 {
     [HttpPost("{courseId:long}/enrollments")]
-    [AllowAnonymous]
     public async Task<IActionResult> EnrollPerson(
         long courseId,
         [FromBody] AdminEnrollPersonRequest request,

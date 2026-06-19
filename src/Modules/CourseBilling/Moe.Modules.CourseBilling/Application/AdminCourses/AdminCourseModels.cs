@@ -5,12 +5,17 @@ using Moe.SharedKernel.Results;
 namespace Moe.Modules.CourseBilling.Application.AdminCourses;
 
 public sealed record CourseQueryRequest(
-    string? Keyword,
-    string? StatusCode,
+    long? OrganizationId = null,
+    string? Keyword = null,
+    string? StatusCode = null,
+    string? CourseName = null,
+    DateOnly? StartDate = null,
+    DateOnly? EndDate = null,
     int Page = 1,
     int PageSize = 20);
 
 public sealed record CreateCourseRequest(
+    long OrganizationId,
     string CourseCode,
     string CourseName,
     string? Description,
@@ -53,6 +58,7 @@ public sealed record AssignStudentsToCourseRequest(IReadOnlyList<long> PersonIds
 
 public sealed record CourseSummaryDto(
     long CourseId,
+    long OrganizationId,
     string CourseCode,
     string CourseName,
     string? Description,
@@ -61,11 +67,14 @@ public sealed record CourseSummaryDto(
     DateTime EnrollmentOpenAt,
     DateTime EnrollmentCloseAt,
     string CourseStatusCode,
+    decimal TotalFeeAmount,
+    int EnrollmentCount,
     DateTime? UpdatedAt,
     DateTime? DisabledAt);
 
 public sealed record CourseDetailDto(
     long CourseId,
+    long OrganizationId,
     string CourseCode,
     string CourseName,
     string? Description,
@@ -157,6 +166,7 @@ public interface IAdminCourseService
     Task<Result<CoursePreviewDto>> PreviewCourseAsync(long courseId, CancellationToken cancellationToken);
     Task<Result<CourseDetailDto>> CreateCourseAsync(CreateCourseRequest request, CancellationToken cancellationToken);
     Task<Result<CourseDetailDto>> UpdateCourseAsync(long courseId, UpdateCourseRequest request, CancellationToken cancellationToken);
+    Task<Result<long>> RemoveCourseAsync(long courseId, CancellationToken cancellationToken);
     Task<Result<CourseDetailDto>> PublishCourseAsync(long courseId, CancellationToken cancellationToken);
     Task<Result<CourseDetailDto>> DisableCourseAsync(long courseId, DisableCourseRequest request, CancellationToken cancellationToken);
     Task<Result<CourseDetailDto>> EnableCourseAsync(long courseId, CancellationToken cancellationToken);

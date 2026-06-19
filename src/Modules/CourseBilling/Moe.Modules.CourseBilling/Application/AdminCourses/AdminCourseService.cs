@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
@@ -13,14 +14,42 @@ internal sealed class AdminCourseService(
     IAdminCourseRepository courses,
     ICourseMaterialStorageService storage,
     ICurrentAdminContext currentAdmin,
+    ICurrentUser currentUser,
     IClock clock) : IAdminCourseService
 {
+    private const long MoeHeadquartersOrganizationId = 1;
+
     public async Task<Result<PageResponse<CourseSummaryDto>>> ListCoursesAsync(CourseQueryRequest request, CancellationToken cancellationToken)
     {
         Result admin = RequireAdmin();
         if (admin.IsFailure) return Result<PageResponse<CourseSummaryDto>>.Failure(admin.Error);
 
-        return Result<PageResponse<CourseSummaryDto>>.Success(await courses.ListCoursesAsync(request, cancellationToken));
+        if (request.StartDate.HasValue && request.EndDate.HasValue && request.StartDate.Value > request.EndDate.Value)
+        {
+            return Result<PageResponse<CourseSummaryDto>>.Failure(
+                new Error("COURSE.INVALID_FILTER_DATE_RANGE", "Filter start date cannot be after filter end date."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StatusCode)
+            && request.StatusCode.Trim().ToUpperInvariant() is not (
+                CourseStatusCodes.Draft
+                or CourseStatusCodes.Published
+                or CourseStatusCodes.Disabled))
+        {
+            return Result<PageResponse<CourseSummaryDto>>.Failure(
+                new Error("COURSE.INVALID_STATUS_FILTER", "Course status must be DRAFT, PUBLISHED or DISABLED."));
+        }
+
+        if (request.OrganizationId.HasValue && !CanAccessOrganization(request.OrganizationId.Value))
+        {
+            return Result<PageResponse<CourseSummaryDto>>.Failure(OrganizationForbidden());
+        }
+
+        IReadOnlyCollection<long>? scope = OrganizationScope;
+        await DisableEndedCoursesOnAccessAsync(scope, cancellationToken);
+
+        return Result<PageResponse<CourseSummaryDto>>.Success(
+            await courses.ListCoursesAsync(request, scope, cancellationToken));
     }
 
     public async Task<Result<CourseDetailDto>> GetCourseAsync(long courseId, CancellationToken cancellationToken)
@@ -28,10 +57,14 @@ internal sealed class AdminCourseService(
         Result admin = RequireAdmin();
         if (admin.IsFailure) return Result<CourseDetailDto>.Failure(admin.Error);
 
+        await DisableEndedCoursesOnAccessAsync(OrganizationScope, cancellationToken);
+
         CourseAggregate? aggregate = await courses.GetCourseAggregateAsync(courseId, cancellationToken);
-        return aggregate is null
-            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
-            : Result<CourseDetailDto>.Success(ToDetail(aggregate));
+        if (aggregate is null) return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(aggregate.Course.OrganizationId))
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
+
+        return Result<CourseDetailDto>.Success(ToDetail(aggregate));
     }
 
     public async Task<Result<CoursePreviewDto>> PreviewCourseAsync(long courseId, CancellationToken cancellationToken)
@@ -39,8 +72,12 @@ internal sealed class AdminCourseService(
         Result admin = RequireAdmin();
         if (admin.IsFailure) return Result<CoursePreviewDto>.Failure(admin.Error);
 
+        await DisableEndedCoursesOnAccessAsync(OrganizationScope, cancellationToken);
+
         CourseAggregate? aggregate = await courses.GetCourseAggregateAsync(courseId, cancellationToken);
         if (aggregate is null) return Result<CoursePreviewDto>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(aggregate.Course.OrganizationId))
+            return Result<CoursePreviewDto>.Failure(OrganizationForbidden());
 
         CourseDetailDto detail = ToDetail(aggregate);
         CourseFeeDto[] activeFees = detail.Fees.Where(x => x.IsActive).ToArray();
@@ -55,18 +92,24 @@ internal sealed class AdminCourseService(
     {
         Result admin = RequireAdmin();
         if (admin.IsFailure) return Result<CourseDetailDto>.Failure(admin.Error);
+        if (!CanAccessOrganization(request.OrganizationId))
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
+        if (currentUser.UserAccountId is not long actorId)
+            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
 
         DateTime utcNow = UtcNow();
-        Result validation = await ValidateCourseInputAsync(request.CourseCode, request.StartDate, request.EndDate, utcNow, request.EnrollmentCloseAt, null, cancellationToken);
+        Result validation = await ValidateCourseInputAsync(request.OrganizationId, request.CourseCode, request.StartDate, request.EndDate, utcNow, request.EnrollmentCloseAt, null, cancellationToken);
         if (validation.IsFailure) return Result<CourseDetailDto>.Failure(validation.Error);
 
         Course course = new(
+            request.OrganizationId,
             request.CourseCode,
             request.CourseName,
             request.Description,
             request.StartDate,
             request.EndDate,
             request.EnrollmentCloseAt,
+            actorId,
             utcNow);
 
         await courses.AddCourseAsync(course, cancellationToken);
@@ -78,11 +121,17 @@ internal sealed class AdminCourseService(
         Result admin = RequireAdmin();
         if (admin.IsFailure) return Result<CourseDetailDto>.Failure(admin.Error);
 
+        await DisableEndedCoursesOnAccessAsync(OrganizationScope, cancellationToken);
+
         Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
         if (course is null) return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(course.OrganizationId))
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
         if (course.IsDisabled) return Result<CourseDetailDto>.Failure(CourseErrors.CourseDisabled);
+        if (currentUser.UserAccountId is not long actorId)
+            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
 
-        Result validation = await ValidateCourseInputAsync(request.CourseCode, request.StartDate, request.EndDate, course.EnrollmentOpenAtUtc, request.EnrollmentCloseAt, courseId, cancellationToken);
+        Result validation = await ValidateCourseInputAsync(course.OrganizationId, request.CourseCode, request.StartDate, request.EndDate, course.EnrollmentOpenAtUtc, request.EnrollmentCloseAt, courseId, cancellationToken);
         if (validation.IsFailure) return Result<CourseDetailDto>.Failure(validation.Error);
 
         course.Update(
@@ -92,10 +141,27 @@ internal sealed class AdminCourseService(
             request.StartDate,
             request.EndDate,
             request.EnrollmentCloseAt,
+            actorId,
             UtcNow());
 
         await courses.SaveChangesAsync(cancellationToken);
         return await GetCourseAsync(courseId, cancellationToken);
+    }
+
+    public async Task<Result<long>> RemoveCourseAsync(long courseId, CancellationToken cancellationToken)
+    {
+        Result admin = RequireAdmin();
+        if (admin.IsFailure) return Result<long>.Failure(admin.Error);
+
+        Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
+        if (course is null) return Result<long>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(course.OrganizationId))
+            return Result<long>.Failure(OrganizationForbidden());
+        if (!course.IsDraft)
+            return Result<long>.Failure(CourseErrors.DraftRequiredForRemoval);
+
+        await courses.RemoveDraftCourseAsync(courseId, cancellationToken);
+        return Result<long>.Success(courseId);
     }
 
     public async Task<Result<CourseDetailDto>> PublishCourseAsync(long courseId, CancellationToken cancellationToken)
@@ -105,8 +171,12 @@ internal sealed class AdminCourseService(
 
         Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
         if (course is null) return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(course.OrganizationId))
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
         if (course.IsDisabled) return Result<CourseDetailDto>.Failure(CourseErrors.CourseDisabled);
         if (!course.IsDraft) return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotDraft);
+        if (currentUser.UserAccountId is not long actorId)
+            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
 
         CourseAggregate? aggregate = await courses.GetCourseAggregateAsync(courseId, cancellationToken);
         CoursePublishReadinessDto readiness = BuildReadiness(aggregate!);
@@ -115,8 +185,16 @@ internal sealed class AdminCourseService(
             return Result<CourseDetailDto>.Failure(new Error("COURSE.PUBLISH_VALIDATION_FAILED", string.Join(" ", readiness.Errors)));
         }
 
-        course.Publish(UtcNow());
+        DateTime utcNow = UtcNow();
+        course.Publish(actorId, utcNow);
         await courses.SaveChangesAsync(cancellationToken);
+        await courses.IssueBillsForUnbilledEnrollmentsAsync(
+            courseId,
+            $"BILL-{utcNow:yyyyMMdd}",
+            utcNow,
+            DateOnly.FromDateTime(utcNow).AddDays(30),
+            cancellationToken);
+
         return await GetCourseAsync(courseId, cancellationToken);
     }
 
@@ -127,8 +205,12 @@ internal sealed class AdminCourseService(
 
         Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
         if (course is null) return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(course.OrganizationId))
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
+        if (currentUser.UserAccountId is not long actorId)
+            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
 
-        course.Disable(UtcNow());
+        course.Disable(actorId, UtcNow());
         await courses.SaveChangesAsync(cancellationToken);
         return await GetCourseAsync(courseId, cancellationToken);
     }
@@ -140,8 +222,12 @@ internal sealed class AdminCourseService(
 
         Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
         if (course is null) return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(course.OrganizationId))
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
+        if (currentUser.UserAccountId is not long actorId)
+            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
 
-        course.Enable(UtcNow());
+        course.Enable(actorId, UtcNow());
         await courses.SaveChangesAsync(cancellationToken);
         return await GetCourseAsync(courseId, cancellationToken);
     }
@@ -309,9 +395,11 @@ internal sealed class AdminCourseService(
         if (admin.IsFailure) return Result<Course>.Failure(admin.Error);
 
         Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
-        return course is null
-            ? Result<Course>.Failure(CourseErrors.CourseNotFound)
-            : Result<Course>.Success(course);
+        if (course is null) return Result<Course>.Failure(CourseErrors.CourseNotFound);
+        if (!CanAccessOrganization(course.OrganizationId))
+            return Result<Course>.Failure(OrganizationForbidden());
+
+        return Result<Course>.Success(course);
     }
 
     private async Task<Result<Course>> RequireMutableCourseAsync(long courseId, CancellationToken cancellationToken)
@@ -326,7 +414,44 @@ internal sealed class AdminCourseService(
     private Result RequireAdmin()
         => currentAdmin.IsAdmin ? Result.Success() : Result.Failure(CourseErrors.AdminRequired);
 
+    private async Task DisableEndedCoursesOnAccessAsync(
+        IReadOnlyCollection<long>? scopedOrganizationIds,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserAccountId is not long actorId)
+        {
+            return;
+        }
+
+        DateTime utcNow = UtcNow();
+        await courses.DisableEndedCoursesAsync(
+            DateOnly.FromDateTime(utcNow),
+            utcNow,
+            actorId,
+            scopedOrganizationIds,
+            cancellationToken);
+    }
+
+    private bool HasGlobalOrganizationScope
+        => currentUser.HasPermission("ORG_VIEW_ALL")
+            || currentUser.OrganizationUnitId == MoeHeadquartersOrganizationId
+            || currentUser.OrganizationUnitIds.Contains(MoeHeadquartersOrganizationId);
+
+    private IReadOnlyCollection<long>? OrganizationScope
+        => HasGlobalOrganizationScope
+            ? null
+            : currentUser.OrganizationUnitIds;
+
+    private bool CanAccessOrganization(long organizationId)
+        => HasGlobalOrganizationScope
+            || currentUser.OrganizationUnitIds.Contains(organizationId)
+            || currentUser.OrganizationUnitId == organizationId;
+
+    private static Error OrganizationForbidden()
+        => new("COURSE.ORGANIZATION_FORBIDDEN", "User does not have access to this organization unit.");
+
     private async Task<Result> ValidateCourseInputAsync(
+        long organizationId,
         string courseCode,
         DateOnly startDate,
         DateOnly endDate,
@@ -345,7 +470,17 @@ internal sealed class AdminCourseService(
             return Result.Failure(CourseErrors.InvalidEnrollmentWindow);
         }
 
-        if (await courses.CourseCodeExistsAsync(courseCode, excludeCourseId, cancellationToken))
+        if (DateOnly.FromDateTime(enrollmentCloseAt) > endDate)
+        {
+            return Result.Failure(CourseErrors.EnrollmentCloseAfterCourseEnd);
+        }
+
+        if (organizationId <= 0)
+        {
+            return Result.Failure(new Error("COURSE.ORGANIZATION_REQUIRED", "A valid organization unit is required."));
+        }
+
+        if (await courses.CourseCodeExistsAsync(organizationId, courseCode, excludeCourseId, cancellationToken))
         {
             return Result.Failure(CourseErrors.DuplicateCourseCode);
         }
@@ -376,6 +511,7 @@ internal sealed class AdminCourseService(
 
         return new CourseDetailDto(
             aggregate.Course.Id,
+            aggregate.Course.OrganizationId,
             aggregate.Course.CourseCode,
             aggregate.Course.CourseName,
             aggregate.Course.Description,
@@ -403,8 +539,9 @@ internal sealed class AdminCourseService(
         if (course.IsDisabled) errors.Add("Course must not be disabled.");
         if (course.StartDate > course.EndDate) errors.Add("Start date cannot be after end date.");
         if (course.EnrollmentOpenAtUtc > course.EnrollmentCloseAtUtc) errors.Add("Enrollment open date cannot be after enrollment close date.");
+        if (DateOnly.FromDateTime(course.EnrollmentCloseAtUtc) > course.EndDate) errors.Add("Last enrollment date cannot be after the course end date.");
         if (!aggregate.Materials.Any(x => x.IsActive)) warnings.Add("No material uploaded.");
-        if (!aggregate.Fees.Any(x => x.CourseFee.IsActive)) warnings.Add("No fee configured.");
+        if (!aggregate.Fees.Any(x => x.CourseFee.IsActive)) errors.Add("At least one active course fee is required.");
 
         string step = course.IsDisabled
             ? "DISABLED"
@@ -464,8 +601,30 @@ internal sealed class AdminCourseService(
         throw new NotImplementedException();
     }
 
-    public Task<Result<AdminCourseEnrollmentDto>> RemoveEnrollmentAsync(long courseId, long courseEnrollmentId, CancellationToken cancellationToken)
+    public async Task<Result<AdminCourseEnrollmentDto>> RemoveEnrollmentAsync(long courseId, long courseEnrollmentId, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        Result<Course> course = await RequireCourseAsync(courseId, cancellationToken);
+        if (course.IsFailure) return Result<AdminCourseEnrollmentDto>.Failure(course.Error);
+
+        CourseEnrollment? enrollment = await courses.FindEnrollmentAsync(courseEnrollmentId, cancellationToken);
+        if (enrollment is null || enrollment.CourseId != courseId)
+            return Result<AdminCourseEnrollmentDto>.Failure(CourseErrors.EnrollmentNotFound);
+
+        Result cancellation = await courses.CancelEnrollmentAndBillAsync(
+            enrollment,
+            UtcNow(),
+            cancellationToken);
+        if (cancellation.IsFailure)
+            return Result<AdminCourseEnrollmentDto>.Failure(cancellation.Error);
+
+        return Result<AdminCourseEnrollmentDto>.Success(new AdminCourseEnrollmentDto(
+            enrollment.Id,
+            enrollment.CourseId,
+            enrollment.PersonId,
+            null,
+            enrollment.EnrollmentSourceCode,
+            enrollment.EnrolledByLoginAccountId,
+            enrollment.EnrolledAtUtc,
+            enrollment.EnrollmentStatusCode));
     }
 }

@@ -7,6 +7,10 @@ internal interface ICourseEnrollmentRepository
 {
     Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken);
 
+    Task<Course?> FindCourseAsync(long courseId, CancellationToken cancellationToken);
+
+    Task<bool> PersonExistsAsync(long personId, CancellationToken cancellationToken);
+
     Task<bool> PersonHasActiveSchoolEnrollmentAsync(
         long personId,
         long organizationId,
@@ -18,6 +22,8 @@ internal interface ICourseEnrollmentRepository
     Task<IReadOnlyCollection<CourseFeeBillingLine>> ListActiveCourseFeesAsync(
         long courseId,
         CancellationToken cancellationToken);
+
+    Task AddEnrollmentAsync(CourseEnrollment enrollment, CancellationToken cancellationToken);
 
     Task<CourseEnrollmentBillingResult> AddEnrollmentAndIssueBillAsync(
         CourseEnrollment enrollment,
@@ -36,4 +42,5 @@ internal sealed record CourseFeeBillingLine(
 
 internal sealed record CourseEnrollmentBillingResult(
     CourseEnrollment Enrollment,
-    Bill Bill);
+    Bill Bill,
+    int BillLineCount);
