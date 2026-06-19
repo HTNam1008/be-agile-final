@@ -78,7 +78,22 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
         campaign.ChangeStatus(newStatusCode.ToString().ToUpperInvariant(), currentUser.UserAccountId ?? 0, clock.UtcNow.UtcDateTime);
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure(new Error(
+                "ConcurrencyException",
+                "The campaign was modified by another request. Please reload and try again."));
+        }
+        catch (DbUpdateException)
+        {
+            return Result.Failure(new Error(
+                "PersistenceException",
+                "The status change could not be saved. Please try again."));
+        }
 
         return Result.Success();
     }
