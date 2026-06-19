@@ -5,7 +5,6 @@ using Moe.Modules.EducationAccountTopUp.Application.RunExecution.TransactionResu
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.TransactionResults;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TransactionResults;
-using Moe.Modules.IdentityPlatform;
 using Moe.StudentFinance.Persistence;
 using Xunit;
 
@@ -26,16 +25,13 @@ public sealed class TopUpTransactionResultsReaderTests : IAsyncLifetime
         _dbContext = new MoeDbContext(
             options,
             [
-                new EducationAccountTopUpModelConfiguration(),
-                new IdentityPlatformModelConfiguration()
+                new EducationAccountTopUpModelConfiguration()
             ]);
         _reader = new TopUpTransactionResultsReader(_dbContext);
     }
 
     public async Task InitializeAsync()
     {
-        await _dbContext.Database.EnsureCreatedAsync();
-
         DateTime createdAt = new(2026, 6, 18, 1, 0, 0, DateTimeKind.Utc);
         TopUpTransaction completed = TopUpTransaction.Create(10, 101, 50m, createdAt);
         completed.Complete(9001, createdAt.AddMinutes(1));

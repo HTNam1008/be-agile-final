@@ -27,8 +27,8 @@ internal sealed class UpsertCampaignRulesCommandHandler(
         if (!string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
             return Result.Failure(new Error("InvalidRecipientMode", "Rules can only be added to DYNAMIC_RULES campaigns."));
 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCode.Draft.ToString() &&
-            campaign.CampaignStatusCode != TopUpCampaignStatusCode.Paused.ToString())
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
+            campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
             return Result.Failure(new Error("InvalidStatus", "Rules can only be modified for DRAFT or PAUSED campaigns."));
         }
