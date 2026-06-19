@@ -1,6 +1,7 @@
 using FluentValidation;
 using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Application.AdminCourses;
+using Moe.Modules.CourseBilling.Domain.Courses;
 
 namespace Moe.Modules.CourseBilling.Api.Admin;
 
@@ -28,7 +29,11 @@ internal sealed class CreateFeeComponentRequestValidator : AbstractValidator<Cre
     {
         RuleFor(x => x.ComponentCode).NotEmpty().MaximumLength(50);
         RuleFor(x => x.ComponentName).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.ComponentTypeCode).NotEmpty().MaximumLength(30);
+        RuleFor(x => x.ComponentTypeCode)
+            .NotEmpty()
+            .MaximumLength(30)
+            .Must(value => FeeComponentTypeCodes.All.Contains(value.Trim().ToUpperInvariant()))
+            .WithMessage("Fee component type must be TUITION, MATERIAL or TAX.");
         RuleFor(x => x.CalculationTypeCode).NotEmpty().MaximumLength(30);
     }
 }
@@ -39,7 +44,11 @@ internal sealed class UpdateFeeComponentRequestValidator : AbstractValidator<Upd
     {
         RuleFor(x => x.ComponentCode).NotEmpty().MaximumLength(50);
         RuleFor(x => x.ComponentName).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.ComponentTypeCode).NotEmpty().MaximumLength(30);
+        RuleFor(x => x.ComponentTypeCode)
+            .NotEmpty()
+            .MaximumLength(30)
+            .Must(value => FeeComponentTypeCodes.All.Contains(value.Trim().ToUpperInvariant()))
+            .WithMessage("Fee component type must be TUITION, MATERIAL or TAX.");
         RuleFor(x => x.CalculationTypeCode).NotEmpty().MaximumLength(30);
     }
 }

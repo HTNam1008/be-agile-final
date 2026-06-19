@@ -103,6 +103,7 @@ internal sealed class SelfJoinCourseHandler(
             result.Bill.Id,
             result.Bill.BillNumber,
             result.Bill.BillStatusCode,
+            result.BillLineCount,
             result.Bill.GrossAmount,
             result.Bill.NetPayableAmount,
             result.Bill.OutstandingAmount);

@@ -52,7 +52,7 @@ public sealed class AdminAuthController(IQueryDispatcher queries) : ControllerBa
         Response.Cookies.Append(AuthenticationCookies.AdminSession, bearer["Bearer ".Length..].Trim(), new CookieOptions
         {
             HttpOnly = true,
-            SameSite = SameSiteMode.Lax,
+            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
             Secure = Request.IsHttps,
             Path = "/",
             MaxAge = TimeSpan.FromMinutes(60)
@@ -68,7 +68,7 @@ public sealed class AdminAuthController(IQueryDispatcher queries) : ControllerBa
         Response.Cookies.Delete(AuthenticationCookies.AdminSession, new CookieOptions
         {
             HttpOnly = true,
-            SameSite = SameSiteMode.Lax,
+            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
             Secure = Request.IsHttps,
             Path = "/"
         });

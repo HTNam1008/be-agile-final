@@ -36,15 +36,18 @@ internal sealed class AdminFeeComponentService(
         Result admin = RequireAdmin();
         if (admin.IsFailure) return Result<FeeComponentDto>.Failure(admin.Error);
 
-        Result validation = await ValidateAsync(request.ComponentCode, request.CalculationTypeCode, null, cancellationToken);
+        string componentTypeCode = NormalizeCode(request.ComponentTypeCode);
+        string calculationTypeCode = NormalizeCode(request.CalculationTypeCode);
+
+        Result validation = await ValidateAsync(request.ComponentCode, componentTypeCode, calculationTypeCode, null, cancellationToken);
         if (validation.IsFailure) return Result<FeeComponentDto>.Failure(validation.Error);
 
         FeeComponent feeComponent = new(
             request.ComponentCode,
             request.ComponentName,
-            request.ComponentTypeCode,
-            request.CalculationTypeCode,
-            request.IsTaxComponent,
+            componentTypeCode,
+            calculationTypeCode,
+            componentTypeCode == FeeComponentTypeCodes.Tax,
             request.IsActive);
 
         await feeComponents.AddAsync(feeComponent, cancellationToken);
@@ -59,15 +62,18 @@ internal sealed class AdminFeeComponentService(
         FeeComponent? feeComponent = await feeComponents.FindAsync(feeComponentId, cancellationToken);
         if (feeComponent is null) return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentNotFound);
 
-        Result validation = await ValidateAsync(request.ComponentCode, request.CalculationTypeCode, feeComponentId, cancellationToken);
+        string componentTypeCode = NormalizeCode(request.ComponentTypeCode);
+        string calculationTypeCode = NormalizeCode(request.CalculationTypeCode);
+
+        Result validation = await ValidateAsync(request.ComponentCode, componentTypeCode, calculationTypeCode, feeComponentId, cancellationToken);
         if (validation.IsFailure) return Result<FeeComponentDto>.Failure(validation.Error);
 
         feeComponent.Update(
             request.ComponentCode,
             request.ComponentName,
-            request.ComponentTypeCode,
-            request.CalculationTypeCode,
-            request.IsTaxComponent,
+            componentTypeCode,
+            calculationTypeCode,
+            componentTypeCode == FeeComponentTypeCodes.Tax,
             request.IsActive);
 
         await feeComponents.SaveChangesAsync(cancellationToken);
@@ -102,10 +108,16 @@ internal sealed class AdminFeeComponentService(
 
     private async Task<Result> ValidateAsync(
         string componentCode,
+        string componentTypeCode,
         string calculationTypeCode,
         long? excludeFeeComponentId,
         CancellationToken cancellationToken)
     {
+        if (!FeeComponentTypeCodes.All.Contains(componentTypeCode, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result.Failure(CourseErrors.InvalidFeeComponentType);
+        }
+
         if (!SupportedCalculationTypes.Contains(calculationTypeCode.Trim(), StringComparer.OrdinalIgnoreCase))
         {
             return Result.Failure(CourseErrors.InvalidCalculationType);
@@ -121,6 +133,9 @@ internal sealed class AdminFeeComponentService(
 
     private Result RequireAdmin()
         => currentAdmin.IsAdmin ? Result.Success() : Result.Failure(CourseErrors.AdminRequired);
+
+    private static string NormalizeCode(string code)
+        => code.Trim().ToUpperInvariant();
 
     private static FeeComponentDto ToDto(FeeComponent feeComponent)
         => new(

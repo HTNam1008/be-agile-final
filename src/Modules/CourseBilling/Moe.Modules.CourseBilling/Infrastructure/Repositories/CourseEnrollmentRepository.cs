@@ -18,6 +18,27 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public Task<Course?> FindCourseAsync(long courseId, CancellationToken cancellationToken)
+    {
+        return dbContext.Set<Course>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == courseId, cancellationToken);
+    }
+
+    public async Task<bool> PersonExistsAsync(long personId, CancellationToken cancellationToken)
+    {
+        int exists = await dbContext.Database.SqlQuery<int>($"""
+            SELECT CAST(CASE WHEN EXISTS (
+                SELECT 1
+                FROM [person].[Person]
+                WHERE [PersonId] = {personId}
+            ) THEN 1 ELSE 0 END AS int) AS [Value]
+            """)
+            .SingleAsync(cancellationToken);
+
+        return exists == 1;
+    }
+
     public async Task<bool> PersonHasActiveSchoolEnrollmentAsync(
         long personId,
         long organizationId,
@@ -43,7 +64,11 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
     public Task<bool> ExistsAsync(long personId, long courseId, CancellationToken cancellationToken)
     {
         return dbContext.Set<CourseEnrollment>()
-            .AnyAsync(x => x.PersonId == personId && x.CourseId == courseId, cancellationToken);
+            .AnyAsync(
+                x => x.PersonId == personId
+                    && x.CourseId == courseId
+                    && x.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled,
+                cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<CourseFeeBillingLine>> ListActiveCourseFeesAsync(
@@ -64,6 +89,12 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                     feeComponent.ComponentName,
                     courseFee.FeeValue))
             .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task AddEnrollmentAsync(CourseEnrollment enrollment, CancellationToken cancellationToken)
+    {
+        await dbContext.Set<CourseEnrollment>().AddAsync(enrollment, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<CourseEnrollmentBillingResult> AddEnrollmentAndIssueBillAsync(
@@ -119,7 +150,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return new CourseEnrollmentBillingResult(enrollment, billResult.Value);
+            return new CourseEnrollmentBillingResult(enrollment, billResult.Value, feeLines.Count);
         });
     }
 }

@@ -7,11 +7,16 @@ using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.CourseBilling.Api.Admin;
 using Moe.Modules.CourseBilling.Api.EService;
+using Moe.Modules.CourseBilling.Application.AdminCourses;
+using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Application.Enrollments;
 using Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
+using Moe.Modules.CourseBilling.Infrastructure.Security;
+using Moe.Modules.CourseBilling.Infrastructure.Storage;
 
 namespace Moe.Modules.CourseBilling;
 
@@ -23,6 +28,12 @@ public sealed class CourseBillingModule : IModule
     {
         services.AddSingleton<IModelConfigurationContributor, CourseBillingModelConfiguration>();
         services.AddScoped<ICourseEnrollmentRepository, CourseEnrollmentRepository>();
+        services.AddScoped<IAdminCourseRepository, AdminCourseRepository>();
+        services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
+        services.AddScoped<IAdminCourseService, AdminCourseService>();
+        services.AddScoped<IAdminFeeComponentService, AdminFeeComponentService>();
+        services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
+        services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
         services.AddScoped<ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>, AdminEnrollPersonHandler>();
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();

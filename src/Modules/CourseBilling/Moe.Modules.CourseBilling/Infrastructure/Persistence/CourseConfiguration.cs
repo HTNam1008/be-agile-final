@@ -11,7 +11,6 @@ internal sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
         builder.ToTable("Course", "course");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("CourseId").UseIdentityColumn();
-   //     builder.HasIndex(x => new { x.OrganizationId, x.CourseCode, x.AcademicYear }).IsUnique();
         builder.Property(x => x.CourseCode).HasMaxLength(50).IsRequired();
         builder.Property(x => x.CourseName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);

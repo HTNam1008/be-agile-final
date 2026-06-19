@@ -12,9 +12,9 @@ namespace Moe.Modules.CourseBilling.Api.Admin;
 [ApiController]
 [ApiVersion(1.0)]
 [Route("api/admin/v{version:apiVersion}/courses")]
-//[Authorize(Policy = AuthorizationPolicies.AdminPortal)]
+[Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 //[Authorize(Policy = AuthorizationPolicies.ManageCourses)]
-//[EnableCors("AdminCors")]
+[EnableCors("AdminCors")]
 public sealed class AdminCoursesController(IAdminCourseService courses) : ControllerBase
 {
     [HttpGet]
@@ -36,6 +36,10 @@ public sealed class AdminCoursesController(IAdminCourseService courses) : Contro
     [HttpPut("{courseId:long}")]
     public async Task<IActionResult> Update(long courseId, [FromBody] UpdateCourseRequest request, CancellationToken cancellationToken)
         => ToResponse(await courses.UpdateCourseAsync(courseId, request, cancellationToken));
+
+    [HttpDelete("{courseId:long}")]
+    public async Task<IActionResult> Remove(long courseId, CancellationToken cancellationToken)
+        => ToResponse(await courses.RemoveCourseAsync(courseId, cancellationToken));
 
     [HttpPost("{courseId:long}/publish")]
     public async Task<IActionResult> Publish(long courseId, CancellationToken cancellationToken)
@@ -60,6 +64,10 @@ public sealed class AdminCoursesController(IAdminCourseService courses) : Contro
     [HttpPut("{courseId:long}/fees/{courseFeeId:long}")]
     public async Task<IActionResult> UpdateFee(long courseId, long courseFeeId, [FromBody] UpdateCourseFeeRequest request, CancellationToken cancellationToken)
         => ToResponse(await courses.UpdateFeeAsync(courseId, courseFeeId, request, cancellationToken));
+
+    [HttpDelete("{courseId:long}/fees/{courseFeeId:long}")]
+    public async Task<IActionResult> DeleteFee(long courseId, long courseFeeId, CancellationToken cancellationToken)
+        => ToResponse(await courses.DeleteFeeAsync(courseId, courseFeeId, cancellationToken));
 
     [HttpGet("{courseId:long}/enrollments")]
     public async Task<IActionResult> ListEnrollments(long courseId, CancellationToken cancellationToken)
@@ -89,6 +97,7 @@ public sealed class AdminCoursesController(IAdminCourseService courses) : Contro
         => error.Code switch
         {
             "COURSE.ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
+            "COURSE.ORGANIZATION_FORBIDDEN" => ApiResponseCodes.Forbidden,
             "COURSE.NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.MATERIAL_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.FEE_NOT_FOUND" => ApiResponseCodes.NotFound,
