@@ -5,6 +5,7 @@ using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
 
@@ -21,6 +22,20 @@ internal sealed class CreateCampaignCommandHandler(
         if (!currentUser.OrganizationUnitIds.Contains(request.OrganizationId) && currentUser.OrganizationUnitId != request.OrganizationId)
         {
             return Result<long>.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
+        }
+
+        // Guard: unique (OrganizationId, CampaignCode) — catch before the DB constraint fires
+        var codeExists = await dbContext.Set<TopUpCampaign>()
+            .AnyAsync(
+                c => c.OrganizationId == request.OrganizationId &&
+                     c.CampaignCode == request.CampaignCode,
+                cancellationToken);
+
+        if (codeExists)
+        {
+            return Result<long>.Failure(new Error(
+                "TopUpCampaign.DuplicateCampaignCode",
+                $"A campaign with code '{request.CampaignCode}' already exists for this organisation."));
         }
 
         var scheduleTypeCode = Enum.Parse<ScheduleTypeCode>(request.ScheduleTypeCode, ignoreCase: true);
@@ -54,7 +69,27 @@ internal sealed class CreateCampaignCommandHandler(
         );
 
         dbContext.Set<TopUpCampaign>().Add(campaign);
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            var msg = ex.InnerException?.Message ?? string.Empty;
+            
+            if (msg.Contains("CK_TopUpCampaign") || msg.Contains("CHECK constraint", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<long>.Failure(new Error(
+                    "TopUpCampaign.ConstraintViolation",
+                    "The campaign data violated a database rule. Verify all required fields are set correctly."));
+            }
+
+            // Fallback for ANY DbUpdateException on insert (e.g. Postgres vs SqlServer unique constraint differences)
+            return Result<long>.Failure(new Error(
+                "TopUpCampaign.DuplicateCampaignCode",
+                $"A campaign with code '{request.CampaignCode}' already exists for this organisation."));
+        }
 
         return Result<long>.Success(campaign.Id);
     }
