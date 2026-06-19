@@ -22,6 +22,9 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
@@ -85,6 +88,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
         services.AddScoped<ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>, OpenManualAccountHandler>();
+
         // Top-Up Campaign Commands
         services.AddScoped<ICommandHandler<CreateCampaignCommand, long>, CreateCampaignCommandHandler>();
         services.AddScoped<ICommandHandler<UpdateCampaignCommand>, UpdateCampaignCommandHandler>();
@@ -95,6 +99,9 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
 
         // Top-Up Campaign Queries
+        services.AddScoped<IQueryHandler<GetCampaignsQuery, IReadOnlyList<CampaignListItem>>, GetCampaignsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();
+        services.AddScoped<IQueryHandler<GetFixedRecipientsQuery, IReadOnlyList<FixedRecipientDto>>, GetFixedRecipientsQueryHandler>();
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
         services.AddScoped<IQueryHandler<GetRunSummaryQuery, RunSummaryResponse>, GetRunSummaryQueryHandler>();
         services.AddScoped<
@@ -102,6 +109,7 @@ public sealed class EducationAccountTopUpModule : IModule
             GetTopUpTransactionResultsHandler>();
         services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
+        services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
 
         // Top-Up Campaign Validators
         services.AddScoped<IValidator<CreateCampaignCommand>, CreateCampaignCommandValidator>();
@@ -112,7 +120,6 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<ExecuteTopUpRunCommand>, ExecuteTopUpRunCommandValidator>();
         services.AddScoped<IValidator<RequestManualRunRequest>, RequestManualRunRequestValidator>();
         services.AddScoped<IValidator<RequestManualRunCommand>, RequestManualRunCommandValidator>();
-        services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }
