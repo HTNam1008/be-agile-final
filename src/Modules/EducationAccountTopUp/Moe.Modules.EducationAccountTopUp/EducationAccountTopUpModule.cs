@@ -28,6 +28,7 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.AdminDashboard;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
@@ -35,6 +36,8 @@ using Moe.Modules.EducationAccountTopUp.Infrastructure.RunSummary;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TransactionResults;
 using Moe.Modules.EducationAccountTopUp.IGateway;
+using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
+using Moe.Modules.EducationAccountTopUp.IGateway.AdminDashboard;
 using Moe.Modules.EducationAccountTopUp.IGateway.History;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.RunSummary;
@@ -63,6 +66,10 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
         services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
+        services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
+        services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
+        services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
+        services.AddScoped<ITopUpRunDispatcher, InProcessTopUpRunDispatcher>();
         services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
@@ -88,6 +95,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
         services.AddScoped<ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>, OpenManualAccountHandler>();
+        services.AddScoped<IEducationAccountDirectory, EducationAccountDirectory>();
+        services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
         // Top-Up Campaign Commands
         services.AddScoped<ICommandHandler<CreateCampaignCommand, long>, CreateCampaignCommandHandler>();
@@ -120,6 +129,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<ExecuteTopUpRunCommand>, ExecuteTopUpRunCommandValidator>();
         services.AddScoped<IValidator<RequestManualRunRequest>, RequestManualRunRequestValidator>();
         services.AddScoped<IValidator<RequestManualRunCommand>, RequestManualRunCommandValidator>();
+        services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }

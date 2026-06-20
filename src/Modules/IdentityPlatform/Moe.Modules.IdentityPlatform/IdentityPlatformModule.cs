@@ -24,11 +24,13 @@ using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.RetryIdentit
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
+using Moe.Modules.IdentityPlatform.IGateway.AdminDashboard;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.IdentityPlatform.Infrastructure.AdminDashboard;
 using Moe.Modules.IdentityPlatform.Infrastructure.Authentication;
 using Moe.Modules.IdentityPlatform.Infrastructure.Bootstrap;
 using Moe.Modules.IdentityPlatform.Infrastructure.EntraWorkforce;
@@ -54,6 +56,8 @@ public sealed class IdentityPlatformModule : IModule
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         services.AddHttpClient<ISingpassLoginGateway, MockPassFapiLoginGateway>();
         services.AddScoped<ILocalIdentityDirectory, LocalIdentityDirectory>();
+        services.AddScoped<IAdminDashboardIdentityDirectory, AdminDashboardIdentityDirectory>();
+        services.AddScoped<IStudentDirectory, StudentDirectory>();
         services.AddScoped<ITopUpStudentSearchDirectory, TopUpStudentSearchDirectory>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
