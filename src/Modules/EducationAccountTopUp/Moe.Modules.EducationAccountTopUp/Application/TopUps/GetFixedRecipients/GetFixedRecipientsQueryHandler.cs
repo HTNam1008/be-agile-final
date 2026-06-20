@@ -13,7 +13,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipient
 
 internal sealed class GetFixedRecipientsQueryHandler(
     ITopUpCampaignRepository campaigns,
-    ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock,
     ITopUpAccountProjectionRepository accounts,
     ITopUpStudentSearchDirectory students)
@@ -30,8 +30,8 @@ internal sealed class GetFixedRecipientsQueryHandler(
             return Result<IReadOnlyList<FixedRecipientDto>>.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
-            && currentUser.OrganizationUnitId != campaign.OrganizationId)
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
         {
             return Result<IReadOnlyList<FixedRecipientDto>>.Failure(TopUpErrors.OrganizationOutsideScope);
         }

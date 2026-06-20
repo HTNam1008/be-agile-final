@@ -117,7 +117,7 @@ internal sealed class LocalClaimsTransformation(MoeDbContext dbContext, IClock c
         return identityProviderCode switch
         {
             IdentityProviderCodes.EntraWorkforce => account.PortalAccessCode == PortalAccessCodes.Admin
-                && roles.Any(x => x is RoleCodes.SystemAdmin or RoleCodes.SchoolAdmin),
+                && roles.Any(x => x is RoleCodes.HqAdmin or RoleCodes.SchoolAdmin),
             IdentityProviderCodes.Singpass => account.PortalAccessCode == PortalAccessCodes.EService
                 && account.PersonId.HasValue
                 && roles.Contains(RoleCodes.Student),

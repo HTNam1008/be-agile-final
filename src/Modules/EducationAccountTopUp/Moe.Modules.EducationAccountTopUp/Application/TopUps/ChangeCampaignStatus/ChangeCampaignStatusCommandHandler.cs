@@ -4,83 +4,63 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.SharedKernel.Results;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 
 internal sealed class ChangeCampaignStatusCommandHandler(
-    MoeDbContext dbContext,
+    ITopUpCampaignRepository campaigns,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<ChangeCampaignStatusCommand>
 {
     public async Task<Result> Handle(ChangeCampaignStatusCommand command, CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.Set<TopUpCampaign>()
-            .FirstOrDefaultAsync(x => x.Id == command.TopUpCampaignId, cancellationToken);
+        TopUpCampaign? campaign = await campaigns.GetByIdAsync(command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
-            return Result.Failure(new Error("NotFound", "Campaign not found."));
+        {
+            return Result.Failure(TopUpErrors.CampaignNotFound);
+        }
 
-        // Cross-Cutting Auth Scope Check
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
-            return Result.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
+        {
+            return Result.Failure(TopUpErrors.OrganizationOutsideScope);
+        }
 
         var newStatusCode = Enum.Parse<TopUpCampaignStatusCode>(command.NewStatusCode, ignoreCase: true);
 
-        // Zero-Rule Guard for Activation
         if (newStatusCode == TopUpCampaignStatusCode.Active)
         {
-            if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase)
+                && await campaigns.CountActiveRulesAsync(campaign.Id, cancellationToken) == 0)
             {
-                var ruleCount = await dbContext.Set<TopUpCampaignRule>()
-                    .CountAsync(x => x.TopUpCampaignId == campaign.Id && x.IsActive, cancellationToken);
-
-                if (ruleCount == 0)
-                    return Result.Failure(new Error("ValidationException", "Cannot activate a DYNAMIC_RULES campaign with zero active rules."));
+                return Result.Failure(new Error("ValidationException", "Cannot activate a DYNAMIC_RULES campaign with zero active rules."));
             }
-            else if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase))
+
+            if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase)
+                && await campaigns.CountActiveRecipientsAsync(campaign.Id, cancellationToken) == 0)
             {
-                var recipientCount = await dbContext.Set<TopUpCampaignRecipient>()
-                    .CountAsync(x => x.TopUpCampaignId == campaign.Id, cancellationToken);
-
-                if (recipientCount == 0)
-                    return Result.Failure(new Error("ValidationException", "Cannot activate a FIXED_SELECTION campaign with zero recipients."));
+                return Result.Failure(new Error("ValidationException", "Cannot activate a FIXED_SELECTION campaign with zero recipients."));
             }
+
+            SetNextRunAt(campaign, clock.UtcNow.UtcDateTime);
         }
-
-        // Calculate NextRunAt if Activating
-        if (newStatusCode == TopUpCampaignStatusCode.Active)
-        {
-            var scheduleCode = Enum.Parse<ScheduleTypeCode>(campaign.ScheduleTypeCode, ignoreCase: true);
-            if (scheduleCode == ScheduleTypeCode.Immediate)
-            {
-                campaign.SetNextRunAt(clock.UtcNow.UtcDateTime);
-            }
-            else if (scheduleCode == ScheduleTypeCode.OneTimeScheduled)
-            {
-                var targetDate = campaign.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-                if (targetDate < clock.UtcNow.UtcDateTime) targetDate = clock.UtcNow.UtcDateTime;
-                campaign.SetNextRunAt(targetDate);
-            }
-            else if (scheduleCode == ScheduleTypeCode.Recurring)
-            {
-                // Basic logic: if start date is in the future, use it. Otherwise compute based on frequency.
-                var targetDate = campaign.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-                if (targetDate < clock.UtcNow.UtcDateTime) targetDate = clock.UtcNow.UtcDateTime; // Simplified for MVP
-                campaign.SetNextRunAt(targetDate);
-            }
-        }
-        else if (newStatusCode == TopUpCampaignStatusCode.Paused || newStatusCode == TopUpCampaignStatusCode.Cancelled)
+        else if (newStatusCode is TopUpCampaignStatusCode.Paused or TopUpCampaignStatusCode.Cancelled)
         {
             campaign.SetNextRunAt(null);
         }
 
-        campaign.ChangeStatus(newStatusCode.ToString().ToUpperInvariant(), currentUser.UserAccountId ?? 0, clock.UtcNow.UtcDateTime);
+        campaign.ChangeStatus(
+            newStatusCode.ToString().ToUpperInvariant(),
+            currentUser.UserAccountId ?? 0,
+            clock.UtcNow.UtcDateTime);
 
         try
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await campaigns.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -96,5 +76,18 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         }
 
         return Result.Success();
+    }
+
+    private static void SetNextRunAt(TopUpCampaign campaign, DateTime utcNow)
+    {
+        var scheduleCode = Enum.Parse<ScheduleTypeCode>(campaign.ScheduleTypeCode, ignoreCase: true);
+        if (scheduleCode == ScheduleTypeCode.Immediate)
+        {
+            campaign.SetNextRunAt(utcNow);
+            return;
+        }
+
+        DateTime targetDate = campaign.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        campaign.SetNextRunAt(targetDate < utcNow ? utcNow : targetDate);
     }
 }

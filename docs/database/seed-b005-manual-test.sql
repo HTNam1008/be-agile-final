@@ -4,7 +4,7 @@
     Prerequisites:
       1. Apply all current EF Core migrations.
       2. Run against the StudentFinance database.
-      3. Use the seeded system admin account (LoginAccountId = 1001).
+      3. Use the seeded HQ admin account (LoginAccountId = 1001).
 
     The script is idempotent: it removes and recreates only B005-* data.
 */
@@ -14,7 +14,7 @@ SET XACT_ABORT ON;
 
 BEGIN TRANSACTION;
 
-DECLARE @SystemAdminId bigint = 1001;
+DECLARE @HqAdminId bigint = 1001;
 DECLARE @SchoolAdminId bigint = 1002;
 DECLARE @HqOrganizationId bigint = 1;
 DECLARE @SchoolOrganizationId bigint = 2;
@@ -31,9 +31,9 @@ IF OBJECT_ID(N'topup.TopUpTransaction', N'U') IS NULL
 IF NOT EXISTS (
     SELECT 1
     FROM iam.LoginAccount
-    WHERE LoginAccountId = @SystemAdminId
+    WHERE LoginAccountId = @HqAdminId
 )
-    THROW 50004, 'Seeded system admin LoginAccountId 1001 is missing.', 1;
+    THROW 50004, 'Seeded HQ admin LoginAccountId 1001 is missing.', 1;
 
 IF NOT EXISTS (
     SELECT 1
@@ -111,9 +111,9 @@ VALUES
     '2026-07-01T00:00:00',
     'Active',
     3,
-    @SystemAdminId,
+    @HqAdminId,
     '2026-05-01T01:00:00',
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-15T01:00:00'
 ),
 (
@@ -132,16 +132,16 @@ VALUES
     NULL,
     'Draft',
     1,
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-10T02:00:00',
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-10T02:00:00'
 ),
 (
     @SchoolOrganizationId,
     N'B005-SCHOOL-PAUSED',
     N'B005 School Paused Campaign',
-    N'Paused school campaign proving SYSTEM_ADMIN global visibility.',
+    N'Paused school campaign proving HQ_ADMIN global visibility.',
     'FixedSelection',
     30.00,
     N'B-005 manual test',
@@ -155,7 +155,7 @@ VALUES
     2,
     @SchoolAdminId,
     '2026-05-20T03:00:00',
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-12T03:00:00'
 ),
 (
@@ -233,7 +233,7 @@ VALUES
     3,
     '2026-06-15T02:00:00',
     'MANUAL',
-    @SystemAdminId,
+    @HqAdminId,
     'COMPLETED',
     NULL,
     3,
@@ -331,7 +331,7 @@ VALUES
     50.00,
     N'B-005 successful recipient',
     'COMPLETED',
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-15T02:00:30',
     NULL,
     NULL,
@@ -343,7 +343,7 @@ VALUES
     0.00,
     N'B-005 failed recipient',
     'FAILED',
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-12T03:31:00',
     N'Demo failure',
     NULL,

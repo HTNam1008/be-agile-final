@@ -13,23 +13,23 @@ public sealed class RequestManualRunCommandHandler(
     ITopUpRunRepository runs,
     ITopUpRunDispatcher dispatcher,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>
 {
-    private const string TopUpsManagePermission = "TOPUP_VIEW_ALL";
-
     public async Task<Result<RequestManualRunResponse>> Handle(
         RequestManualRunCommand command,
         CancellationToken cancellationToken)
     {
-        if (!currentUser.HasPermission(TopUpsManagePermission))
-        {
-            return Result<RequestManualRunResponse>.Failure(TopUpErrors.Unauthorized);
-        }
-
         TopUpCampaign? campaign = await campaigns.GetByIdAsync(command.CampaignId, cancellationToken);
         if (campaign is null)
         {
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignNotFound);
+        }
+
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
+        {
+            return Result<RequestManualRunResponse>.Failure(access.Error);
         }
 
         if (!campaign.IsExecutable)

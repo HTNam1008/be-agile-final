@@ -10,7 +10,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 
 internal sealed class UpsertCampaignRulesCommandHandler(
     MoeDbContext dbContext,
-    ICurrentUser currentUser) : ICommandHandler<UpsertCampaignRulesCommand>
+    IAdminAccessControl adminAccess) : ICommandHandler<UpsertCampaignRulesCommand>
 {
     public async Task<Result> Handle(UpsertCampaignRulesCommand command, CancellationToken cancellationToken)
     {
@@ -20,9 +20,9 @@ internal sealed class UpsertCampaignRulesCommandHandler(
         if (campaign is null)
             return Result.Failure(new Error("NotFound", "Campaign not found."));
 
-        // Cross-Cutting Auth Scope Check
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
-            return Result.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
+            return Result.Failure(TopUpErrors.OrganizationOutsideScope);
 
         if (!string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
             return Result.Failure(new Error("InvalidRecipientMode", "Rules can only be added to DYNAMIC_RULES campaigns."));

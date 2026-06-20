@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
+        services.AddScoped<IAdminAccessControl, AdminAccessControl>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         services.AddProblemDetails();
@@ -47,7 +48,7 @@ public static class DependencyInjection
                 policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
                 policy.RequireAuthenticatedUser();
                 policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
-                policy.RequireClaim(ClaimNames.Role, "SYSTEM_ADMIN", "SCHOOL_ADMIN");
+                policy.RequireClaim(ClaimNames.Role, "HQ_ADMIN", "SCHOOL_ADMIN");
             });
             options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
             {
@@ -205,8 +206,7 @@ public static class DependencyInjection
             policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
             policy.RequireAuthenticatedUser();
             policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
-            policy.RequireClaim(ClaimNames.Role, "SYSTEM_ADMIN", "SCHOOL_ADMIN");
-            policy.RequireClaim(ClaimNames.OrganizationUnitId);
+            policy.RequireClaim(ClaimNames.Role, "HQ_ADMIN", "SCHOOL_ADMIN");
 
             if (useStrictPermissionPolicies)
             {

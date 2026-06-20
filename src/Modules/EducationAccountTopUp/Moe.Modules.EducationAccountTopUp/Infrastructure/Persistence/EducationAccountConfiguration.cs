@@ -30,29 +30,20 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
         builder.Ignore(x => x.DomainEvents);
         builder.Ignore(x => x.OpeningReasonCode);
         builder.Ignore(x => x.ClosingReasonCode);
-        builder.HasData(
-            Seed(AccountDemoSeedData.StudentEducationAccountId, AccountDemoSeedData.StudentPersonId, "EA-DEMO-0001", AccountStatuses.Active, 0m),
-            Seed(AccountDemoSeedData.TopUpEducationAccountIdOne, AccountDemoSeedData.TopUpStudentPersonIdOne, "EA-DEMO-0002", AccountStatuses.Active, 125.50m),
-            Seed(AccountDemoSeedData.TopUpEducationAccountIdTwo, AccountDemoSeedData.TopUpStudentPersonIdTwo, "EA-DEMO-0003", AccountStatuses.Active, 480m),
-            Seed(AccountDemoSeedData.TopUpEducationAccountIdThree, AccountDemoSeedData.TopUpStudentPersonIdThree, "EA-DEMO-0004", AccountStatuses.Closing, 35.75m));
+        builder.HasData(AccountDemoSeedData.DemoStudentAccounts.Select(Seed));
     }
 
-    private static object Seed(
-        long id,
-        long personId,
-        string accountNumber,
-        string statusCode,
-        decimal cachedBalance)
+    private static object Seed(DemoEducationAccountSeed account)
         => new
         {
-            Id = id,
-            PersonId = personId,
-            AccountNumber = accountNumber,
-            StatusCode = statusCode,
+            Id = account.EducationAccountId,
+            PersonId = account.PersonId,
+            AccountNumber = account.AccountNumber,
+            StatusCode = AccountStatuses.Active,
             OpenedAtUtc = AccountDemoSeedData.SeededAtUtc,
             OpeningModeCode = AccountOpeningModeCodes.Manual,
             OpeningRemarks = "Demo seeded account for top-up search",
-            OpenedByUserId = (long?)AccountDemoSeedData.SystemAdminLoginAccountId,
+            OpenedByUserId = (long?)AccountDemoSeedData.HqAdminLoginAccountId,
             PendingClosureAtUtc = (DateTimeOffset?)null,
             ClosureExceptionUntil = (DateOnly?)null,
             ClosureExceptionReason = (string?)null,
@@ -61,6 +52,6 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
             ClosingTypeCode = (string?)null,
             ClosingRemarks = (string?)null,
             ClosedByLoginAccountId = (long?)null,
-            CachedBalance = cachedBalance
+            CachedBalance = 0m
         };
 }

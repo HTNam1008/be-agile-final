@@ -13,13 +13,24 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
         return dbContext.Set<TopUpCampaign>().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
+    public Task<bool> CampaignCodeExistsAsync(
+        long organizationId,
+        string campaignCode,
+        CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<TopUpCampaign>()
+            .AnyAsync(c => c.OrganizationId == organizationId
+                && c.CampaignCode == campaignCode,
+                cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CampaignListItem>> ListAsync(
-        IReadOnlyCollection<long> accessibleOrgIds,
+        IReadOnlyCollection<long>? accessibleOrgIds,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.Set<TopUpCampaign>().AsNoTracking();
 
-        if (accessibleOrgIds.Count > 0)
+        if (accessibleOrgIds is { Count: > 0 })
             query = query.Where(c => accessibleOrgIds.Contains(c.OrganizationId));
 
         return await query
@@ -44,6 +55,29 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
+    }
+
+    public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<TopUpCampaignRule>()
+            .CountAsync(x => x.TopUpCampaignId == campaignId && x.IsActive, cancellationToken);
+    }
+
+    public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<TopUpCampaignRecipient>()
+            .CountAsync(x => x.TopUpCampaignId == campaignId && x.IsActive, cancellationToken);
+    }
+
+    public async Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
+    {
+        await dbContext.Set<TopUpCampaign>().AddAsync(campaign, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Moe.Modules.IdentityPlatform.Infrastructure.Persistence;
 
@@ -25,5 +27,52 @@ internal sealed class PersonIdentifierConfiguration : IEntityTypeConfiguration<P
         builder.Property(x => x.SourceSystemCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Ignore(x => x.DomainEvents);
+        builder.HasData(DemoSeedData.MockPassStudents.SelectMany(Seed));
     }
+
+    private static IEnumerable<object> Seed(MockPassStudentSeed student)
+    {
+        long baseId = student.PersonId * 10;
+
+        yield return new
+        {
+            Id = baseId + 1,
+            PersonId = student.PersonId,
+            IdentifierTypeCode = "SINGPASS_SUBJECT",
+            IdentifierValueEncrypted = (byte[]?)null,
+            IdentifierValueHash = Hash($"{DemoSeedData.MockPassIssuer}|{student.SingpassSubjectId}"),
+            IdentifierMasked = student.SingpassSubjectId,
+            IsPrimary = false,
+            IssuingCountryCode = "SG",
+            IssuedByAuthority = "MOCKPASS",
+            IdentifierStatusCode = "ACTIVE",
+            EffectiveFrom = new DateOnly(2026, 1, 1),
+            EffectiveTo = (DateOnly?)null,
+            SourceSystemCode = "MOCKPASS_DEMO",
+            CreatedAtUtc = DemoSeedData.SeededAtUtc,
+            UpdatedAtUtc = DemoSeedData.SeededAtUtc
+        };
+
+        yield return new
+        {
+            Id = baseId + 2,
+            PersonId = student.PersonId,
+            IdentifierTypeCode = "IDENTITY_NUMBER",
+            IdentifierValueEncrypted = (byte[]?)null,
+            IdentifierValueHash = Hash(student.Nric),
+            IdentifierMasked = student.Nric,
+            IsPrimary = true,
+            IssuingCountryCode = "SG",
+            IssuedByAuthority = "MOCKPASS",
+            IdentifierStatusCode = "ACTIVE",
+            EffectiveFrom = new DateOnly(2026, 1, 1),
+            EffectiveTo = (DateOnly?)null,
+            SourceSystemCode = "MOCKPASS_DEMO",
+            CreatedAtUtc = DemoSeedData.SeededAtUtc,
+            UpdatedAtUtc = DemoSeedData.SeededAtUtc
+        };
+    }
+
+    private static byte[] Hash(string value)
+        => SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim().ToUpperInvariant()));
 }
