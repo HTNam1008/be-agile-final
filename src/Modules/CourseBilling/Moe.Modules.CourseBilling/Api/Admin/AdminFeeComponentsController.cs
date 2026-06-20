@@ -7,6 +7,9 @@ using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Api;
 using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
+using ContractCreateFeeComponentRequest = Moe.Modules.CourseBilling.Contracts.AdminFeeComponents.CreateFeeComponentRequest;
+using ContractFeeComponentQueryRequest = Moe.Modules.CourseBilling.Contracts.AdminFeeComponents.FeeComponentQueryRequest;
+using ContractUpdateFeeComponentRequest = Moe.Modules.CourseBilling.Contracts.AdminFeeComponents.UpdateFeeComponentRequest;
 
 namespace Moe.Modules.CourseBilling.Api.Admin;
 
@@ -14,14 +17,13 @@ namespace Moe.Modules.CourseBilling.Api.Admin;
 [ApiVersion(1.0)]
 [Route("api/admin/v{version:apiVersion}/fee-components")]
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
-//[Authorize(Policy = AuthorizationPolicies.ManageCourses)]
 [EnableCors("AdminCors")]
 public sealed class AdminFeeComponentsController(
     ICommandDispatcher commands,
     IQueryDispatcher queries) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] FeeComponentQueryRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> List([FromQuery] ContractFeeComponentQueryRequest request, CancellationToken cancellationToken)
         => this.ToCourseBillingResponse(await queries.Send(new ListFeeComponentsQuery(request), cancellationToken));
 
     [HttpGet("{feeComponentId:long}")]
@@ -29,7 +31,7 @@ public sealed class AdminFeeComponentsController(
         => this.ToCourseBillingResponse(await queries.Send(new GetFeeComponentQuery(feeComponentId), cancellationToken));
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateFeeComponentRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Create([FromBody] ContractCreateFeeComponentRequest request, CancellationToken cancellationToken)
         => this.ToCourseBillingResponse(
             await commands.Send(new CreateFeeComponentCommand(request), cancellationToken),
             created: true);
@@ -37,7 +39,7 @@ public sealed class AdminFeeComponentsController(
     [HttpPut("{feeComponentId:long}")]
     public async Task<IActionResult> Update(
         long feeComponentId,
-        [FromBody] UpdateFeeComponentRequest request,
+        [FromBody] ContractUpdateFeeComponentRequest request,
         CancellationToken cancellationToken)
         => this.ToCourseBillingResponse(
             await commands.Send(new UpdateFeeComponentCommand(feeComponentId, request), cancellationToken));

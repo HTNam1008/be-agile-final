@@ -18,7 +18,6 @@ namespace Moe.Modules.CourseBilling.Api.EService;
 public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : ControllerBase
 {
     [HttpPost]
-    [AllowAnonymous]
     public async Task<IActionResult> JoinCourse(
         [FromBody] SelfJoinCourseRequest request,
         CancellationToken cancellationToken)

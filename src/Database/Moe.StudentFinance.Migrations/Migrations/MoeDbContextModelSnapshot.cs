@@ -758,7 +758,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 4002L,
                             AccountNumber = "EA-DEMO-0002",
-                            CachedBalance = 125.50m,
+                            CachedBalance = 0m,
                             OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             OpenedByUserId = 1001L,
                             OpeningModeCode = "MANUAL",
@@ -770,7 +770,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 4003L,
                             AccountNumber = "EA-DEMO-0003",
-                            CachedBalance = 480m,
+                            CachedBalance = 0m,
                             OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             OpenedByUserId = 1001L,
                             OpeningModeCode = "MANUAL",
@@ -782,13 +782,13 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 4004L,
                             AccountNumber = "EA-DEMO-0004",
-                            CachedBalance = 35.75m,
+                            CachedBalance = 0m,
                             OpenedAtUtc = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             OpenedByUserId = 1001L,
                             OpeningModeCode = "MANUAL",
                             OpeningRemarks = "Demo seeded account for top-up search",
                             PersonId = 2004L,
-                            StatusCode = "CLOSING"
+                            StatusCode = "ACTIVE"
                         });
                 });
 
@@ -2275,7 +2275,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 1L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "ORG_VIEW_ALL",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2283,7 +2283,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 2L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "SCHOOL_STUDENT_VIEW",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2291,7 +2291,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 3L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "SCHOOL_ADMIN_PROVISION",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2299,7 +2299,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 4L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "LOGIN_DISABLE",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2307,7 +2307,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 5L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "EXTERNAL_ACCOUNTS_PROVISION",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2315,7 +2315,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 6L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "ACCESS_SCOPE_MANAGE",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2323,7 +2323,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 7L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "ACCOUNT_VIEW_ALL",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2331,7 +2331,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 8L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "ACCOUNT_MANUAL_CREATE",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2339,7 +2339,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 9L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "ACCOUNT_LIFECYCLE_MANAGE",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2347,7 +2347,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 10L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "ACCOUNT_SETTLEMENT_VIEW",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2355,7 +2355,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 11L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "TOPUP_VIEW_ALL",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2363,7 +2363,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 12L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "COURSE_VIEW_ALL",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2371,7 +2371,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 13L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "COURSE_DISABLE_ANY",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2379,7 +2379,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 14L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "FAS_SCHEME_MANAGE",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2387,7 +2387,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 15L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "FAS_REVIEW",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2395,7 +2395,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 16L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "PAYMENT_EXCEPTIONS_REVIEW",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2403,7 +2403,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 17L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "AUDIT_VIEW_ALL",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2411,7 +2411,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             Id = 18L,
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "REPORT_EXPORT_ALL",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE"
                         },
                         new
@@ -2539,7 +2539,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             OrganizationUnitId = 1L,
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             StatusCode = "ACTIVE",
                             UserAccountId = 1001L
                         },
@@ -2564,6 +2564,39 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             RoleCode = "STUDENT",
                             StatusCode = "ACTIVE",
                             UserAccountId = 1003L
+                        },
+                        new
+                        {
+                            Id = 1004L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserAccountId = 1001L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            OrganizationUnitId = 2L,
+                            RoleCode = "STUDENT",
+                            StatusCode = "ACTIVE",
+                            UserAccountId = 1004L
+                        },
+                        new
+                        {
+                            Id = 1005L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserAccountId = 1001L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            OrganizationUnitId = 2L,
+                            RoleCode = "STUDENT",
+                            StatusCode = "ACTIVE",
+                            UserAccountId = 1005L
+                        },
+                        new
+                        {
+                            Id = 1006L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserAccountId = 1001L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            OrganizationUnitId = 2L,
+                            RoleCode = "STUDENT",
+                            StatusCode = "ACTIVE",
+                            UserAccountId = 1006L
                         });
                 });
 
@@ -2718,7 +2751,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AdminOrganizationId = 1L,
                             ContactEmail = "system.admin@moe.local",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayNameSnapshot = "MOE System Admin",
+                            DisplayNameSnapshot = "MOE HQ Admin",
                             ExternalIssuer = "https://sts.windows.net/ea71ddeb-596c-4034-84d4-d65f91edc14a/",
                             ExternalObjectId = "731f2a50-4fa7-4530-9294-1a5b912daf31",
                             ExternalSubjectId = "731f2a50-4fa7-4530-9294-1a5b912daf31",
@@ -2727,10 +2760,10 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             LastSyncedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             LoginEmailNormalized = "SYSTEM.ADMIN@MOE.LOCAL",
                             PortalAccessCode = "ADMIN",
-                            ProviderDisplayName = "MOE System Admin",
+                            ProviderDisplayName = "MOE HQ Admin",
                             ProviderEmail = "system.admin@moe.local",
                             ProviderLoginName = "system.admin@moe.local",
-                            RoleCode = "SYSTEM_ADMIN",
+                            RoleCode = "HQ_ADMIN",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UserTypeCode = "INTERNAL"
                         },
@@ -2762,7 +2795,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             Id = 1003L,
                             AccountStatusCode = "ACTIVE",
-                            ContactEmail = "student@example.test",
+                            ContactEmail = "tan.mei.ling@student.example.test",
                             ContactMobile = "+6590000001",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedByUserAccountId = 1001L,
@@ -2775,6 +2808,69 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             PortalAccessCode = "ESERVICE",
                             ProviderDisplayName = "Tan Mei Ling",
                             ProviderLoginName = "S1234567A",
+                            RoleCode = "STUDENT",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UserTypeCode = "ESERVICE"
+                        },
+                        new
+                        {
+                            Id = 1004L,
+                            AccountStatusCode = "ACTIVE",
+                            ContactEmail = "aisha.tan@student.example.test",
+                            ContactMobile = "+6590000002",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserAccountId = 1001L,
+                            DisplayNameSnapshot = "Aisha Tan",
+                            ExternalIssuer = "http://localhost:5156/singpass/v3/fapi",
+                            ExternalSubjectId = "a9865837-7bd7-46ac-bef4-42a76a946424",
+                            IdentityProviderCode = "SINGPASS",
+                            LastSyncedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            PersonId = 2002L,
+                            PortalAccessCode = "ESERVICE",
+                            ProviderDisplayName = "Aisha Tan",
+                            ProviderLoginName = "S8979373D",
+                            RoleCode = "STUDENT",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UserTypeCode = "ESERVICE"
+                        },
+                        new
+                        {
+                            Id = 1005L,
+                            AccountStatusCode = "ACTIVE",
+                            ContactEmail = "benjamin.lee@student.example.test",
+                            ContactMobile = "+6590000003",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserAccountId = 1001L,
+                            DisplayNameSnapshot = "Benjamin Lee",
+                            ExternalIssuer = "http://localhost:5156/singpass/v3/fapi",
+                            ExternalSubjectId = "f4b70aea-d639-4b79-b8d9-8ace5875f6b1",
+                            IdentityProviderCode = "SINGPASS",
+                            LastSyncedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            PersonId = 2003L,
+                            PortalAccessCode = "ESERVICE",
+                            ProviderDisplayName = "Benjamin Lee",
+                            ProviderLoginName = "S8116474F",
+                            RoleCode = "STUDENT",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UserTypeCode = "ESERVICE"
+                        },
+                        new
+                        {
+                            Id = 1006L,
+                            AccountStatusCode = "ACTIVE",
+                            ContactEmail = "chloe.fernandez@student.example.test",
+                            ContactMobile = "+6590000004",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserAccountId = 1001L,
+                            DisplayNameSnapshot = "Chloe Fernandez",
+                            ExternalIssuer = "http://localhost:5156/singpass/v3/fapi",
+                            ExternalSubjectId = "2135fe5c-d07b-49d3-b960-aabb0ff2e05a",
+                            IdentityProviderCode = "SINGPASS",
+                            LastSyncedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            PersonId = 2004L,
+                            PortalAccessCode = "ESERVICE",
+                            ProviderDisplayName = "Chloe Fernandez",
+                            ProviderLoginName = "F9477325W",
                             RoleCode = "STUDENT",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UserTypeCode = "ESERVICE"
@@ -2957,13 +3053,73 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             IdentityNumberMasked = "S1234567A",
                             NationalityCode = "SG",
                             OfficialAddress = "1 Demo Street, Singapore 000001",
-                            OfficialEmail = "student.official@example.test",
+                            OfficialEmail = "tan.mei.ling@student.example.test",
                             OfficialFullName = "Tan Mei Ling",
                             OfficialMobile = "+6590000001",
                             PersonStatusCode = "ACTIVE",
                             PreferredAddress = "1 Demo Street, Singapore 000001",
-                            PreferredEmail = "student@example.test",
+                            PreferredEmail = "tan.mei.ling@student.example.test",
                             PreferredMobile = "+6590000001",
+                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 2002L,
+                            CitizenshipStatusCode = "CITIZEN",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DateOfBirth = new DateOnly(2007, 3, 18),
+                            ExternalPersonReference = "a9865837-7bd7-46ac-bef4-42a76a946424",
+                            IdentityNumberMasked = "S8979373D",
+                            NationalityCode = "SG",
+                            OfficialAddress = "2 Demo Street, Singapore 000002",
+                            OfficialEmail = "aisha.tan@student.example.test",
+                            OfficialFullName = "Aisha Tan",
+                            OfficialMobile = "+6590000002",
+                            PersonStatusCode = "ACTIVE",
+                            PreferredAddress = "2 Demo Street, Singapore 000002",
+                            PreferredEmail = "aisha.tan@student.example.test",
+                            PreferredMobile = "+6590000002",
+                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 2003L,
+                            CitizenshipStatusCode = "CITIZEN",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DateOfBirth = new DateOnly(2006, 9, 24),
+                            ExternalPersonReference = "f4b70aea-d639-4b79-b8d9-8ace5875f6b1",
+                            IdentityNumberMasked = "S8116474F",
+                            NationalityCode = "SG",
+                            OfficialAddress = "3 Demo Street, Singapore 000003",
+                            OfficialEmail = "benjamin.lee@student.example.test",
+                            OfficialFullName = "Benjamin Lee",
+                            OfficialMobile = "+6590000003",
+                            PersonStatusCode = "ACTIVE",
+                            PreferredAddress = "3 Demo Street, Singapore 000003",
+                            PreferredEmail = "benjamin.lee@student.example.test",
+                            PreferredMobile = "+6590000003",
+                            SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 2004L,
+                            CitizenshipStatusCode = "VALID_PASS_HOLDER",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DateOfBirth = new DateOnly(2005, 11, 2),
+                            ExternalPersonReference = "2135fe5c-d07b-49d3-b960-aabb0ff2e05a",
+                            IdentityNumberMasked = "F9477325W",
+                            NationalityCode = "FOREIGN",
+                            OfficialAddress = "4 Demo Street, Singapore 000004",
+                            OfficialEmail = "chloe.fernandez@student.example.test",
+                            OfficialFullName = "Chloe Fernandez",
+                            OfficialMobile = "+6590000004",
+                            PersonStatusCode = "ACTIVE",
+                            PreferredAddress = "4 Demo Street, Singapore 000004",
+                            PreferredEmail = "chloe.fernandez@student.example.test",
+                            PreferredMobile = "+6590000004",
                             SourceUpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
@@ -3050,6 +3206,136 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasFilter("[IdentifierStatusCode] = 'ACTIVE' AND [IsPrimary] = 1");
 
                     b.ToTable("PersonIdentifier", "person");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 20011L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "ef39a074-b64d-4990-a937-6f80772e2bb8",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "SINGPASS_SUBJECT",
+                            IdentifierValueHash = new byte[] { 143, 78, 16, 67, 202, 168, 233, 100, 254, 230, 253, 112, 0, 85, 30, 152, 119, 0, 18, 97, 181, 94, 50, 189, 7, 61, 62, 10, 243, 123, 21, 28 },
+                            IsPrimary = false,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2001L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20012L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "S1234567A",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "IDENTITY_NUMBER",
+                            IdentifierValueHash = new byte[] { 112, 242, 185, 91, 219, 40, 139, 55, 222, 102, 239, 5, 72, 249, 127, 18, 78, 132, 214, 143, 112, 14, 253, 216, 147, 247, 170, 72, 70, 42, 214, 249 },
+                            IsPrimary = true,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2001L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20021L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "a9865837-7bd7-46ac-bef4-42a76a946424",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "SINGPASS_SUBJECT",
+                            IdentifierValueHash = new byte[] { 178, 115, 253, 212, 104, 58, 115, 121, 164, 32, 96, 165, 222, 151, 65, 131, 45, 237, 43, 141, 197, 227, 105, 61, 134, 240, 234, 253, 99, 124, 53, 190 },
+                            IsPrimary = false,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2002L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20022L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "S8979373D",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "IDENTITY_NUMBER",
+                            IdentifierValueHash = new byte[] { 217, 24, 1, 94, 198, 81, 188, 158, 167, 90, 220, 111, 212, 54, 133, 57, 127, 62, 107, 132, 56, 116, 244, 64, 69, 97, 172, 228, 224, 100, 248, 35 },
+                            IsPrimary = true,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2002L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20031L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "f4b70aea-d639-4b79-b8d9-8ace5875f6b1",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "SINGPASS_SUBJECT",
+                            IdentifierValueHash = new byte[] { 219, 200, 191, 149, 29, 39, 62, 132, 65, 86, 70, 146, 171, 30, 126, 81, 124, 200, 87, 241, 196, 118, 119, 63, 4, 213, 242, 145, 190, 118, 41, 253 },
+                            IsPrimary = false,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2003L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20032L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "S8116474F",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "IDENTITY_NUMBER",
+                            IdentifierValueHash = new byte[] { 180, 97, 139, 217, 161, 240, 208, 65, 157, 240, 232, 254, 49, 90, 9, 62, 131, 128, 254, 98, 49, 88, 90, 164, 46, 193, 252, 83, 32, 194, 217, 24 },
+                            IsPrimary = true,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2003L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20041L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "2135fe5c-d07b-49d3-b960-aabb0ff2e05a",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "SINGPASS_SUBJECT",
+                            IdentifierValueHash = new byte[] { 9, 16, 202, 164, 104, 3, 223, 70, 146, 34, 54, 119, 97, 133, 219, 53, 21, 100, 112, 249, 106, 131, 227, 213, 116, 146, 194, 39, 223, 24, 237, 131 },
+                            IsPrimary = false,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2004L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 20042L,
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            IdentifierMasked = "F9477325W",
+                            IdentifierStatusCode = "ACTIVE",
+                            IdentifierTypeCode = "IDENTITY_NUMBER",
+                            IdentifierValueHash = new byte[] { 118, 252, 211, 152, 161, 67, 193, 130, 176, 160, 137, 248, 216, 85, 126, 95, 161, 98, 160, 1, 222, 220, 199, 130, 139, 221, 25, 118, 62, 151, 81, 252 },
+                            IsPrimary = true,
+                            IssuedByAuthority = "MOCKPASS",
+                            IssuingCountryCode = "SG",
+                            PersonId = 2004L,
+                            SourceSystemCode = "MOCKPASS_DEMO",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("Moe.Modules.IdentityPlatform.Domain.Schooling.SchoolEnrollment", b =>
@@ -3143,6 +3429,51 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             SourceCode = "DEMO_SEED",
                             StartDate = new DateOnly(2026, 1, 2),
                             StudentNumber = "DEMO-STU-0001",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 3002L,
+                            AcademicYear = "2026",
+                            ClassCode = "5B",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LevelCode = "SEC_5",
+                            OrganizationId = 2L,
+                            PersonId = 2002L,
+                            SchoolingStatusCode = "ACTIVE",
+                            SourceCode = "DEMO_SEED",
+                            StartDate = new DateOnly(2026, 1, 2),
+                            StudentNumber = "DEMO-STU-0002",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 3003L,
+                            AcademicYear = "2026",
+                            ClassCode = "IT1A",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LevelCode = "ITE_Y1",
+                            OrganizationId = 2L,
+                            PersonId = 2003L,
+                            SchoolingStatusCode = "ACTIVE",
+                            SourceCode = "DEMO_SEED",
+                            StartDate = new DateOnly(2026, 1, 2),
+                            StudentNumber = "DEMO-STU-0003",
+                            UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 3004L,
+                            AcademicYear = "2026",
+                            ClassCode = "P2C",
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LevelCode = "POLY_Y2",
+                            OrganizationId = 2L,
+                            PersonId = 2004L,
+                            SchoolingStatusCode = "ACTIVE",
+                            SourceCode = "DEMO_SEED",
+                            StartDate = new DateOnly(2026, 1, 2),
+                            StudentNumber = "DEMO-STU-0004",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });

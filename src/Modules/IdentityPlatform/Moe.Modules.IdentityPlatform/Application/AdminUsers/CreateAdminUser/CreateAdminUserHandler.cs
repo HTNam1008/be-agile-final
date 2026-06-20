@@ -34,21 +34,21 @@ internal sealed class CreateAdminUserHandler(
         string normalizedEmail = NormalizeEmail(command.Email);
         string adminRoleCode = command.RoleCode.Trim().ToUpperInvariant();
 
-        if (adminRoleCode is not (RoleCodes.SystemAdmin or RoleCodes.SchoolAdmin))
+        if (adminRoleCode is not (RoleCodes.HqAdmin or RoleCodes.SchoolAdmin))
         {
             return Result<CreateAdminUserResponse>.Failure(IdentityErrors.InvalidAdminRole);
         }
 
-        if (!currentUser.Roles.Contains(RoleCodes.SystemAdmin))
+        if (!currentUser.Roles.Contains(RoleCodes.HqAdmin))
         {
-            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.SystemAdminRequired);
+            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.HqAdminRequired);
         }
 
         UserAccount? actor = await userAccounts.FindByIdAsync(actorUserAccountId, cancellationToken);
 
         if (actor is null || actor.PortalAccessCode != PortalAccessCodes.Admin)
         {
-            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.SystemAdminRequired);
+            return Result<CreateAdminUserResponse>.Failure(IdentityErrors.HqAdminRequired);
         }
 
         if (actor.LoginEmailNormalized == normalizedEmail)
@@ -156,7 +156,7 @@ internal sealed class CreateAdminUserHandler(
     {
         return roleCode switch
         {
-            RoleCodes.SystemAdmin => organizationUnitId == OrganizationUnitCodes.MoeHeadquartersId
+            RoleCodes.HqAdmin => organizationUnitId == OrganizationUnitCodes.MoeHeadquartersId
                 && organizationType == "HQ",
             RoleCodes.SchoolAdmin => organizationType == "SCHOOL",
             _ => false

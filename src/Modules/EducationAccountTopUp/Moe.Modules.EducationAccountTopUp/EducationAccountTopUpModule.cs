@@ -66,10 +66,6 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
         services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
-        services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
-        services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
-        services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
-        services.AddScoped<ITopUpRunDispatcher, InProcessTopUpRunDispatcher>();
         services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();

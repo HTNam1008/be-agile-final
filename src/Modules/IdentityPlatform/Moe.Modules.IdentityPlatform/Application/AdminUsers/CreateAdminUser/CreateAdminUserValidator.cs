@@ -39,7 +39,7 @@ public sealed class CreateAdminUserValidator : AbstractValidator<CreateAdminUser
         RuleFor(x => x.RoleCode)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .Must(role => role is "SYSTEM_ADMIN" or "SCHOOL_ADMIN")
-            .WithMessage("Role code must be SYSTEM_ADMIN or SCHOOL_ADMIN.");
+            .Must(role => role is "HQ_ADMIN" or "SCHOOL_ADMIN")
+            .WithMessage("Role code must be HQ_ADMIN or SCHOOL_ADMIN.");
     }
 }

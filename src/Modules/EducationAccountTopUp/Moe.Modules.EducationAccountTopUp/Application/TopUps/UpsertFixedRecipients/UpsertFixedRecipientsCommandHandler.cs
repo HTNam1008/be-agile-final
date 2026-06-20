@@ -13,6 +13,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipi
 internal sealed class UpsertFixedRecipientsCommandHandler(
     MoeDbContext dbContext,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock,
     ITopUpAccountSelectionResolver selectionResolver)
     : ICommandHandler<UpsertFixedRecipientsCommand, UpsertFixedRecipientsResponse>
@@ -29,8 +30,8 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
             return Result<UpsertFixedRecipientsResponse>.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
-            && currentUser.OrganizationUnitId != campaign.OrganizationId)
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
         {
             return Result<UpsertFixedRecipientsResponse>.Failure(TopUpErrors.OrganizationOutsideScope);
         }

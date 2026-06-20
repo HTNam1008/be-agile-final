@@ -67,7 +67,8 @@ public sealed class GetRunSummaryQueryHandlerTests
         GetRunSummaryQueryHandler handler = CreateHandler(
             projection,
             permissions: [],
-            organizationIds: [10]);
+            organizationIds: [10],
+            roles: []);
 
         var result = await handler.Handle(
             new GetRunSummaryQuery(projection.RunId),
@@ -84,7 +85,8 @@ public sealed class GetRunSummaryQueryHandlerTests
         GetRunSummaryQueryHandler handler = CreateHandler(
             projection,
             permissions: ["TOPUP_VIEW_ALL"],
-            organizationIds: []);
+            organizationIds: [],
+            roles: ["HQ_ADMIN"]);
 
         var result = await handler.Handle(
             new GetRunSummaryQuery(projection.RunId),
@@ -129,9 +131,10 @@ public sealed class GetRunSummaryQueryHandlerTests
     private static GetRunSummaryQueryHandler CreateHandler(
         RunSummaryProjection? projection,
         IReadOnlyCollection<string> permissions,
-        IReadOnlyCollection<long> organizationIds)
+        IReadOnlyCollection<long> organizationIds,
+        IReadOnlyCollection<string>? roles = null)
     {
-        FakeCurrentUser currentUser = new(permissions, organizationIds);
+        FakeCurrentUser currentUser = new(permissions, organizationIds, roles ?? ["SCHOOL_ADMIN"]);
         return new GetRunSummaryQueryHandler(
             new FakeRunSummaryReader(projection),
             new TopUpAccessScopeResolver(currentUser));
@@ -165,13 +168,14 @@ public sealed class GetRunSummaryQueryHandlerTests
 
     private sealed class FakeCurrentUser(
         IReadOnlyCollection<string> permissions,
-        IReadOnlyCollection<long> organizationIds) : ICurrentUser
+        IReadOnlyCollection<long> organizationIds,
+        IReadOnlyCollection<string> roles) : ICurrentUser
     {
         public long? UserAccountId => 1;
         public long? PersonId => null;
         public long? OrganizationUnitId => organizationIds.FirstOrDefault();
         public IReadOnlyCollection<long> OrganizationUnitIds => organizationIds;
-        public IReadOnlyCollection<string> Roles => ["SCHOOL_ADMIN"];
+        public IReadOnlyCollection<string> Roles => roles;
         public IReadOnlyCollection<string> Permissions => permissions;
         public string Portal => "ADMIN";
         public bool IsAuthenticated => true;

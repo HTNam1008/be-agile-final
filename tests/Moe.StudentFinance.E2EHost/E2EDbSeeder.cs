@@ -110,7 +110,7 @@ public class E2EDbSeeder : IHostedService
                 "e2e-tenant-id",
                 "e2e-admin-object-id",
                 "system.admin@moe.local",
-                "MOE System Admin",
+                "MOE HQ Admin",
                 DateTime.UtcNow
             ])!;
             SetId(admin, 1001);

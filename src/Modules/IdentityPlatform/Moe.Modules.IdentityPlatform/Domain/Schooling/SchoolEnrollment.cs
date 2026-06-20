@@ -6,6 +6,29 @@ public class SchoolEnrollment : Entity<long>
 {
     private SchoolEnrollment() : base(0) { }
 
+    public SchoolEnrollment(
+        long personId,
+        long organizationId,
+        string studentNumber,
+        string academicYear,
+        string levelCode,
+        string classCode,
+        DateOnly startDate,
+        DateTime utcNow) : base(0)
+    {
+        PersonId = personId;
+        OrganizationId = organizationId;
+        StudentNumber = studentNumber.Trim().ToUpperInvariant();
+        AcademicYear = academicYear.Trim();
+        LevelCode = levelCode.Trim().ToUpperInvariant();
+        ClassCode = classCode.Trim().ToUpperInvariant();
+        SchoolingStatusCode = "ACTIVE";
+        StartDate = startDate;
+        SourceCode = "ADMIN_MANUAL";
+        CreatedAtUtc = utcNow;
+        UpdatedAtUtc = utcNow;
+    }
+
     public long PersonId { get; private set; }
     public long OrganizationId { get; private set; }
     public string StudentNumber { get; private set; } = string.Empty;

@@ -28,7 +28,7 @@ internal static class UserTypeCodes
 
 internal static class RoleCodes
 {
-    public const string SystemAdmin = "SYSTEM_ADMIN";
+    public const string HqAdmin = "HQ_ADMIN";
     public const string SchoolAdmin = "SCHOOL_ADMIN";
     public const string Student = "STUDENT";
 }

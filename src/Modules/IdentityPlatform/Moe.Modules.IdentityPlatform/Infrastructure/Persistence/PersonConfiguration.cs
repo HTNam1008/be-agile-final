@@ -29,25 +29,28 @@ public sealed class PersonConfiguration : IEntityTypeConfiguration<Person>
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Ignore(x => x.DomainEvents);
-        builder.HasData(new
+        builder.HasData(DemoSeedData.MockPassStudents.Select(Seed));
+    }
+
+    private static object Seed(MockPassStudentSeed student)
+        => new
         {
-            Id = DemoSeedData.StudentPersonId,
-            ExternalPersonReference = DemoSeedData.MockPassSubject,
-            IdentityNumberMasked = DemoSeedData.MockPassNric,
-            OfficialFullName = "Tan Mei Ling",
-            DateOfBirth = DemoSeedData.StudentDateOfBirth,
-            NationalityCode = "SG",
-            CitizenshipStatusCode = "CITIZEN",
-            OfficialEmail = "student.official@example.test",
-            PreferredEmail = "student@example.test",
-            OfficialMobile = "+6590000001",
-            PreferredMobile = "+6590000001",
-            OfficialAddress = "1 Demo Street, Singapore 000001",
-            PreferredAddress = "1 Demo Street, Singapore 000001",
+            Id = student.PersonId,
+            ExternalPersonReference = student.SingpassSubjectId,
+            IdentityNumberMasked = student.Nric,
+            OfficialFullName = student.FullName,
+            DateOfBirth = student.DateOfBirth,
+            NationalityCode = student.Nric.StartsWith('F') ? "FOREIGN" : "SG",
+            CitizenshipStatusCode = student.Nric.StartsWith('F') ? "VALID_PASS_HOLDER" : "CITIZEN",
+            OfficialEmail = student.Email,
+            PreferredEmail = student.Email,
+            OfficialMobile = student.Mobile,
+            PreferredMobile = student.Mobile,
+            OfficialAddress = student.Address,
+            PreferredAddress = student.Address,
             PersonStatusCode = "ACTIVE",
             SourceUpdatedAtUtc = (DateTime?)DemoSeedData.SeededAtUtc,
             CreatedAtUtc = DemoSeedData.SeededAtUtc,
             UpdatedAtUtc = DemoSeedData.SeededAtUtc
-        });
-    }
+        };
 }

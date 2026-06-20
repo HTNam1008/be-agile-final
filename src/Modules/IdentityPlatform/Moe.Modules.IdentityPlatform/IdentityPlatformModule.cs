@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Application.Abstractions.Security;
 using Moe.Modules.IdentityPlatform.Api.Admin;
 using Moe.Modules.IdentityPlatform.Api.EService;
 using Moe.Modules.IdentityPlatform.Application.Access.AssignAccessScope;
@@ -24,6 +25,7 @@ using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.RetryIdentit
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
+using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.IGateway.AdminDashboard;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
@@ -52,6 +54,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddMemoryCache();
         services.AddHostedService<AdminBootstrapHostedService>();
         services.AddScoped<IClaimsTransformation, LocalClaimsTransformation>();
+        services.AddScoped<IStudentAccessControl, StudentAccessControl>();
         services.AddScoped<IEServiceLoginResolver, EServiceLoginResolver>();
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         services.AddHttpClient<ISingpassLoginGateway, MockPassFapiLoginGateway>();
@@ -64,6 +67,8 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IExternalIdentityProvisioningRepository, UserAccountRepository>();
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();
         services.AddScoped<IAccessScopeRepository, AccessScopeRepository>();
+        services.AddScoped<IOrganizationUnitRepository, OrganizationUnitRepository>();
+        services.AddScoped<IStudentOnboardingRepository, StudentOnboardingRepository>();
         services.AddScoped<IIdentityProvisioningRequestRepository, IdentityProvisioningRequestRepository>();
         services.AddScoped<IStudentSingpassProvisioningRepository, StudentSingpassProvisioningRepository>();
         services.AddScoped<IStudentProfileRepository, StudentProfileRepository>();
@@ -74,6 +79,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IQueryHandler<GetMyAdminProfileQuery, AdminProfileResponse>, GetMyAdminProfileHandler>();
         services.AddScoped<IQueryHandler<GetMyStudentProfileQuery, StudentProfileResponse>, GetMyStudentProfileHandler>();
         services.AddScoped<ICommandHandler<CreateAdminUserCommand, CreateAdminUserResponse>, CreateAdminUserHandler>();
+        services.AddScoped<ICommandHandler<CreateStudentCommand, CreateStudentResponse>, CreateStudentHandler>();
         services.AddScoped<ICommandHandler<UpdateMyAdminContactCommand, AdminProfileResponse>, UpdateMyAdminContactHandler>();
         services.AddScoped<ICommandHandler<UpdateMyStudentContactCommand, StudentProfileResponse>, UpdateMyStudentContactHandler>();
         services.AddScoped<IQueryHandler<GetIdentityProvisioningRequestQuery, IdentityProvisioningRequestResponse>, GetIdentityProvisioningRequestHandler>();
@@ -84,11 +90,13 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<ICommandHandler<RevokeAccessScopeCommand, RevokeAccessScopeResponse>, RevokeAccessScopeHandler>();
         services.AddScoped<IValidator<AssignAccessScopeCommand>, AssignAccessScopeValidator>();
         services.AddScoped<IValidator<CreateAdminUserCommand>, CreateAdminUserValidator>();
+        services.AddScoped<IValidator<CreateStudentCommand>, CreateStudentValidator>();
         services.AddScoped<IValidator<UpdateMyAdminContactCommand>, UpdateMyAdminContactValidator>();
         services.AddScoped<IValidator<UpdateMyStudentContactCommand>, UpdateMyStudentContactValidator>();
         services.AddScoped<IValidator<ProvisionStudentSingpassAccountCommand>, ProvisionStudentSingpassAccountValidator>();
         services.AddScoped<IValidator<AssignAccessScopeRequest>, AssignAccessScopeRequestValidator>();
         services.AddScoped<IValidator<CreateAdminUserRequest>, CreateAdminUserRequestValidator>();
+        services.AddScoped<IValidator<CreateStudentRequest>, CreateStudentRequestValidator>();
         services.AddScoped<IValidator<UpdateMyAdminContactRequest>, UpdateMyAdminContactRequestValidator>();
         services.AddScoped<IValidator<UpdateMyStudentContactRequest>, UpdateMyStudentContactRequestValidator>();
         services.AddScoped<IValidator<ProvisionStudentSingpassAccountRequest>, ProvisionStudentSingpassAccountRequestValidator>();

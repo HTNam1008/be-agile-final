@@ -17,6 +17,40 @@ public sealed class Person : AggregateRoot<long>
         UpdatedAtUtc = CreatedAtUtc;
     }
 
+    public static Person CreateStudent(
+        string externalReference,
+        string identityNumberMasked,
+        string fullName,
+        DateOnly dateOfBirth,
+        string nationalityCode,
+        string citizenshipStatusCode,
+        string? email,
+        string? mobile,
+        string? address,
+        DateTime utcNow)
+    {
+        Person person = new(
+            0,
+            externalReference,
+            fullName.Trim(),
+            dateOfBirth,
+            nationalityCode.Trim().ToUpperInvariant(),
+            citizenshipStatusCode.Trim().ToUpperInvariant());
+
+        person.IdentityNumberMasked = identityNumberMasked.Trim().ToUpperInvariant();
+        person.OfficialEmail = NormalizeNullable(email);
+        person.PreferredEmail = NormalizeNullable(email);
+        person.OfficialMobile = NormalizeNullable(mobile);
+        person.PreferredMobile = NormalizeNullable(mobile);
+        person.OfficialAddress = NormalizeNullable(address);
+        person.PreferredAddress = NormalizeNullable(address);
+        person.PersonStatusCode = PersonStatusCodes.Active;
+        person.SourceUpdatedAtUtc = utcNow;
+        person.CreatedAtUtc = utcNow;
+        person.UpdatedAtUtc = utcNow;
+        return person;
+    }
+
     public string ExternalPersonReference { get; private set; } = string.Empty;
     public string? IdentityNumberMasked { get; private set; }
     public string OfficialFullName { get; private set; } = string.Empty;

@@ -11,10 +11,9 @@ internal sealed class AdminCourseAccess(
     IAdminCourseRepository courses,
     ICurrentAdminContext currentAdmin,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock)
 {
-    private const long MoeHeadquartersOrganizationId = 1;
-
     public IAdminCourseRepository Courses => courses;
     public ICurrentUser CurrentUser => currentUser;
 
@@ -24,14 +23,12 @@ internal sealed class AdminCourseAccess(
         => currentAdmin.IsAdmin ? Result.Success() : Result.Failure(CourseErrors.AdminRequired);
 
     public IReadOnlyCollection<long>? OrganizationScope
-        => HasGlobalOrganizationScope
+        => adminAccess.IsHqAdmin
             ? null
-            : currentUser.OrganizationUnitIds;
+            : adminAccess.ScopedOrganizationIds;
 
     public bool CanAccessOrganization(long organizationId)
-        => HasGlobalOrganizationScope
-            || currentUser.OrganizationUnitIds.Contains(organizationId)
-            || currentUser.OrganizationUnitId == organizationId;
+        => adminAccess.CanAccessOrganization(organizationId);
 
     public Error OrganizationForbidden()
         => new("COURSE.ORGANIZATION_FORBIDDEN", "User does not have access to this organization unit.");
@@ -126,9 +123,4 @@ internal sealed class AdminCourseAccess(
 
         return Result.Success();
     }
-
-    private bool HasGlobalOrganizationScope
-        => currentUser.HasPermission("ORG_VIEW_ALL")
-            || currentUser.OrganizationUnitId == MoeHeadquartersOrganizationId
-            || currentUser.OrganizationUnitIds.Contains(MoeHeadquartersOrganizationId);
 }

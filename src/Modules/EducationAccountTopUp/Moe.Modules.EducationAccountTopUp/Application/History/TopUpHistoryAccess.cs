@@ -1,5 +1,4 @@
 using Moe.Application.Abstractions.Security;
-using Moe.Modules.EducationAccountTopUp.Contracts.TopUps;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.History;
@@ -20,21 +19,15 @@ internal sealed class TopUpAccessScopeResolver(ICurrentUser currentUser) : ITopU
 {
     public Result<TopUpAccessScope> Resolve(long? requestedOrganizationId)
     {
-        bool hasGlobalAccess = currentUser.HasPermission(TopUpPermissions.ViewAll);
-        bool hasScopedAccess = currentUser.HasPermission(TopUpPermissions.Manage);
+        bool hasGlobalAccess = IsHqAdmin;
+        bool hasScopedAccess = IsSchoolAdmin;
 
         if (!hasGlobalAccess && !hasScopedAccess)
         {
             return Result<TopUpAccessScope>.Failure(TopUpHistoryErrors.AccessDenied);
         }
 
-        IEnumerable<long> currentOrganizationIds = currentUser.OrganizationUnitId is long currentOrganizationId
-            ? currentUser.OrganizationUnitIds.Append(currentOrganizationId)
-            : currentUser.OrganizationUnitIds;
-
-        long[] organizationIds = currentOrganizationIds
-            .Distinct()
-            .ToArray();
+        long[] organizationIds = ScopedOrganizationIds;
 
         if (requestedOrganizationId.HasValue)
         {
@@ -54,6 +47,25 @@ internal sealed class TopUpAccessScopeResolver(ICurrentUser currentUser) : ITopU
 
         return Result<TopUpAccessScope>.Success(
             new TopUpAccessScope(hasGlobalAccess, organizationIds));
+    }
+
+    private bool IsHqAdmin => currentUser.Roles.Contains("HQ_ADMIN", StringComparer.OrdinalIgnoreCase);
+
+    private bool IsSchoolAdmin => currentUser.Roles.Contains("SCHOOL_ADMIN", StringComparer.OrdinalIgnoreCase);
+
+    private long[] ScopedOrganizationIds
+    {
+        get
+        {
+            IEnumerable<long> organizationIds = currentUser.OrganizationUnitId is long currentOrganizationId
+                ? currentUser.OrganizationUnitIds.Append(currentOrganizationId)
+                : currentUser.OrganizationUnitIds;
+
+            return organizationIds
+                .Where(id => id > 0)
+                .Distinct()
+                .ToArray();
+        }
     }
 }
 

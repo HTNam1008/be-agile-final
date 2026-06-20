@@ -23,15 +23,19 @@ internal sealed class SchoolEnrollmentConfiguration : IEntityTypeConfiguration<S
         builder.Property(x => x.SourceCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
-        builder.HasData(new
+        builder.HasData(DemoSeedData.MockPassStudents.Select(Seed));
+    }
+
+    private static object Seed(MockPassStudentSeed student)
+        => new
         {
-            Id = DemoSeedData.StudentSchoolEnrollmentId,
-            PersonId = DemoSeedData.StudentPersonId,
+            Id = student.EnrollmentId,
+            PersonId = student.PersonId,
             OrganizationId = OrganizationUnitCodes.DemoSchoolId,
-            StudentNumber = "DEMO-STU-0001",
+            StudentNumber = student.StudentNumber,
             AcademicYear = "2026",
-            LevelCode = "SEC_4",
-            ClassCode = "4A",
+            LevelCode = student.LevelCode,
+            ClassCode = student.ClassCode,
             SchoolingStatusCode = "ACTIVE",
             StatusReasonCode = (string?)null,
             StartDate = new DateOnly(2026, 1, 2),
@@ -39,6 +43,5 @@ internal sealed class SchoolEnrollmentConfiguration : IEntityTypeConfiguration<S
             SourceCode = "DEMO_SEED",
             CreatedAtUtc = DemoSeedData.SeededAtUtc,
             UpdatedAtUtc = DemoSeedData.SeededAtUtc
-        });
-    }
+        };
 }

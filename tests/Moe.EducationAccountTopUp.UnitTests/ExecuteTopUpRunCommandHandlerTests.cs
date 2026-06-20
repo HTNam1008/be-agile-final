@@ -67,6 +67,17 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
         public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
     }
 
+    private sealed class AllowAllAdminAccess : IAdminAccessControl
+    {
+        public bool IsHqAdmin => true;
+        public bool IsSchoolAdmin => false;
+        public System.Collections.Generic.IReadOnlyCollection<long> ScopedOrganizationIds => Array.Empty<long>();
+        public bool CanAccessOrganization(long organizationId) => true;
+        public Moe.SharedKernel.Results.Result EnsureCanAccessOrganization(long organizationId) => Moe.SharedKernel.Results.Result.Success();
+        public AdminOrganizationScope ResolveOrganizationFilter(long? requestedOrganizationId)
+            => new(true, true, requestedOrganizationId, Array.Empty<long>());
+    }
+
     private sealed class MockEventPublisher : ITopUpExecutionEventPublisher
     {
         public Task PublishTopUpFailedEvent(long transactionId, string reason) => Task.CompletedTask;
@@ -129,7 +140,7 @@ public sealed class ExecuteTopUpRunCommandHandlerTests
             dbContext,
             new MockClock(),
             NullLogger<RecipientProcessingService>.Instance);
-        var handler = new ExecuteTopUpRunCommandHandler(dbContext, new MockCurrentUser(), new MockClock(), processor);
+        var handler = new ExecuteTopUpRunCommandHandler(dbContext, new MockCurrentUser(), new AllowAllAdminAccess(), new MockClock(), processor);
         var command = new ExecuteTopUpRunCommand(campaign.Id);
 
         // Act

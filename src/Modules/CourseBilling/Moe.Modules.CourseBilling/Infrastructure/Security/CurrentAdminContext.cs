@@ -6,5 +6,5 @@ internal sealed class CurrentAdminContext(ICurrentUser currentUser) : ICurrentAd
 {
     public string RoleCode => currentUser.Roles.FirstOrDefault() ?? string.Empty;
     public bool IsAdmin => currentUser.IsAuthenticated
-        && currentUser.Roles.Any(role => role is "SYSTEM_ADMIN" or "SCHOOL_ADMIN");
+        && currentUser.Roles.Any(role => role is "HQ_ADMIN" or "SCHOOL_ADMIN");
 }

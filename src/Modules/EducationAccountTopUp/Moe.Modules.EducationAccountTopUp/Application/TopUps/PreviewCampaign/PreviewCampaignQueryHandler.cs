@@ -14,7 +14,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 
 internal sealed class PreviewCampaignQueryHandler(
     MoeDbContext dbContext,
-    ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     ITopUpAccountProjectionRepository accounts,
     ITopUpStudentSearchDirectory students) : IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>
 {
@@ -27,9 +27,9 @@ internal sealed class PreviewCampaignQueryHandler(
         if (campaign is null)
             return Result<PreviewCampaignResult>.Failure(new Error("NotFound", "Campaign not found."));
 
-        // Cross-Cutting Auth Scope Check
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
-            return Result<PreviewCampaignResult>.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
+            return Result<PreviewCampaignResult>.Failure(TopUpErrors.OrganizationOutsideScope);
 
         var accountsQuery = dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>()
             .AsNoTracking();
