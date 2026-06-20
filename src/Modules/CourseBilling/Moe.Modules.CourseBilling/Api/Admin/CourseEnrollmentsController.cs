@@ -3,9 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
-using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.CourseBilling.Api;
 using Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
+using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
 
 namespace Moe.Modules.CourseBilling.Api.Admin;
 
@@ -25,6 +26,6 @@ public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : C
         var command = new AdminEnrollPersonCommand(courseId, request.PersonId);
 
         var result = await commands.Send(command, cancellationToken);
-        return result.ToCreatedApiResponse(this);
+        return this.ToCourseBillingResponse(result, created: true);
     }
 }
