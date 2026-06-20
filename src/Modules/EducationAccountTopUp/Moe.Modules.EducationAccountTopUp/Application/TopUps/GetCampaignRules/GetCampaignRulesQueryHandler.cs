@@ -8,7 +8,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
 
 internal sealed class GetCampaignRulesQueryHandler(
     ITopUpCampaignRepository campaigns,
-    ICurrentUser currentUser)
+    IAdminAccessControl adminAccess)
     : IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>
 {
     public async Task<Result<IReadOnlyList<CampaignRuleDto>>> Handle(
@@ -22,8 +22,8 @@ internal sealed class GetCampaignRulesQueryHandler(
             return Result<IReadOnlyList<CampaignRuleDto>>.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
-            && currentUser.OrganizationUnitId != campaign.OrganizationId)
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
         {
             return Result<IReadOnlyList<CampaignRuleDto>>.Failure(TopUpErrors.OrganizationOutsideScope);
         }

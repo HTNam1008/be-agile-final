@@ -1,4 +1,4 @@
-using FluentValidation;
+﻿using FluentValidation;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +14,8 @@ using Moe.Modules.CourseBilling.Application.AdminCourses.Enrollments;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Fees;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Materials;
 using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
+using Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
+using Moe.Modules.CourseBilling.Application.Dashboard.GetStudentDashboard;
 using Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
@@ -23,12 +25,11 @@ using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
-
-using Moe.Modules.CourseBilling.Application.AdminCourses;
-using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
-using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.Security;
 using Moe.Modules.CourseBilling.Infrastructure.Storage;
+using ContractCreateFeeComponentRequest = Moe.Modules.CourseBilling.Contracts.AdminFeeComponents.CreateFeeComponentRequest;
+using ContractUpdateFeeComponentRequest = Moe.Modules.CourseBilling.Contracts.AdminFeeComponents.UpdateFeeComponentRequest;
+
 namespace Moe.Modules.CourseBilling;
 
 public sealed class CourseBillingModule : IModule
@@ -42,7 +43,8 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICourseEnrollmentRepository, CourseEnrollmentRepository>();
         services.AddScoped<IAdminCourseRepository, AdminCourseRepository>();
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
-
+        services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
+        services.AddScoped<IStudentDashboardCourseRepository, StudentDashboardCourseRepository>();
         services.AddScoped<AdminCourseAccess>();
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
@@ -80,6 +82,8 @@ public sealed class CourseBillingModule : IModule
 
         services.AddScoped<ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>, AdminEnrollPersonHandler>();
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
+        services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();
+        services.AddScoped<IQueryHandler<GetStudentDashboardQuery, StudentDashboardResponse>, GetStudentDashboardHandler>();
 
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();
         services.AddScoped<IValidator<SelfJoinCourseRequest>, SelfJoinCourseRequestValidator>();
@@ -89,8 +93,8 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IValidator<UpdateCourseMaterialRequest>, UpdateCourseMaterialRequestValidator>();
         services.AddScoped<IValidator<CreateCourseFeeRequest>, CreateCourseFeeRequestValidator>();
         services.AddScoped<IValidator<UpdateCourseFeeRequest>, UpdateCourseFeeRequestValidator>();
-        services.AddScoped<IValidator<CreateFeeComponentRequest>, CreateFeeComponentRequestValidator>();
-        services.AddScoped<IValidator<UpdateFeeComponentRequest>, UpdateFeeComponentRequestValidator>();
+        services.AddScoped<IValidator<ContractCreateFeeComponentRequest>, CreateFeeComponentRequestValidator>();
+        services.AddScoped<IValidator<ContractUpdateFeeComponentRequest>, UpdateFeeComponentRequestValidator>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }

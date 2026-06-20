@@ -181,7 +181,8 @@ public sealed class TopUpHistoryTests : IAsyncLifetime
     {
         FakeCurrentUser user = new(
             permissions: [TopUpPermissions.ViewAll],
-            organizationIds: []);
+            organizationIds: [],
+            isHqAdmin: true);
         GetCampaignHistoryHandler handler = new(
             new TopUpAccessScopeResolver(user),
             _reader);
@@ -291,7 +292,8 @@ public sealed class TopUpHistoryTests : IAsyncLifetime
 
     private sealed class FakeCurrentUser(
         IReadOnlyCollection<string> permissions,
-        IReadOnlyCollection<long> organizationIds) : ICurrentUser
+        IReadOnlyCollection<long> organizationIds,
+        bool isHqAdmin = false) : ICurrentUser
     {
         public long? UserAccountId => 100;
         public long? PersonId => null;
@@ -299,7 +301,7 @@ public sealed class TopUpHistoryTests : IAsyncLifetime
             ? null
             : organizationIds.First();
         public IReadOnlyCollection<long> OrganizationUnitIds => organizationIds;
-        public IReadOnlyCollection<string> Roles => ["SYSTEM_ADMIN"];
+        public IReadOnlyCollection<string> Roles => isHqAdmin ? ["HQ_ADMIN"] : ["SCHOOL_ADMIN"];
         public IReadOnlyCollection<string> Permissions => permissions;
         public string Portal => "ADMIN";
         public bool IsAuthenticated => true;

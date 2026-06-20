@@ -109,48 +109,84 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
 
         return await strategy.ExecuteAsync(async () =>
         {
+            if (IsInMemoryDatabase())
+            {
+                return await AddEnrollmentAndBillRowsAsync(
+                    enrollment,
+                    billNumber,
+                    issuedAtUtc,
+                    dueDate,
+                    feeLines,
+                    cancellationToken);
+            }
+
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-            await dbContext.Set<CourseEnrollment>().AddAsync(enrollment, cancellationToken);
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            decimal grossAmount = feeLines.Sum(x => x.FeeValue);
-            Result<Bill> billResult = Bill.IssueForCourseEnrollment(
-                enrollment.Id,
+            CourseEnrollmentBillingResult result = await AddEnrollmentAndBillRowsAsync(
+                enrollment,
                 billNumber,
                 issuedAtUtc,
                 dueDate,
-                grossAmount);
+                feeLines,
+                cancellationToken);
 
-            if (billResult.IsFailure)
-            {
-                throw new InvalidOperationException(billResult.Error.Message);
-            }
-
-            await dbContext.Set<Bill>().AddAsync(billResult.Value, cancellationToken);
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            foreach (CourseFeeBillingLine feeLine in feeLines)
-            {
-                Result<BillLine> billLineResult = BillLine.FromCourseFee(
-                    billResult.Value.Id,
-                    feeLine.FeeComponentId,
-                    feeLine.CourseFeeId,
-                    feeLine.FeeComponentName,
-                    feeLine.FeeValue);
-
-                if (billLineResult.IsFailure)
-                {
-                    throw new InvalidOperationException(billLineResult.Error.Message);
-                }
-
-                await dbContext.Set<BillLine>().AddAsync(billLineResult.Value, cancellationToken);
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-
-            return new CourseEnrollmentBillingResult(enrollment, billResult.Value, feeLines.Count);
+            return result;
         });
+    }
+
+    private bool IsInMemoryDatabase()
+    {
+        return string.Equals(
+            dbContext.Database.ProviderName,
+            "Microsoft.EntityFrameworkCore.InMemory",
+            StringComparison.Ordinal);
+    }
+
+    private async Task<CourseEnrollmentBillingResult> AddEnrollmentAndBillRowsAsync(
+        CourseEnrollment enrollment,
+        string billNumber,
+        DateTime issuedAtUtc,
+        DateOnly dueDate,
+        IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Set<CourseEnrollment>().AddAsync(enrollment, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        decimal grossAmount = feeLines.Sum(x => x.FeeValue);
+        Result<Bill> billResult = Bill.IssueForCourseEnrollment(
+            enrollment.Id,
+            billNumber,
+            issuedAtUtc,
+            dueDate,
+            grossAmount);
+
+        if (billResult.IsFailure)
+        {
+            throw new InvalidOperationException(billResult.Error.Message);
+        }
+
+        await dbContext.Set<Bill>().AddAsync(billResult.Value, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (CourseFeeBillingLine feeLine in feeLines)
+        {
+            Result<BillLine> billLineResult = BillLine.FromCourseFee(
+                billResult.Value.Id,
+                feeLine.FeeComponentId,
+                feeLine.CourseFeeId,
+                feeLine.FeeComponentName,
+                feeLine.FeeValue);
+
+            if (billLineResult.IsFailure)
+            {
+                throw new InvalidOperationException(billLineResult.Error.Message);
+            }
+
+            await dbContext.Set<BillLine>().AddAsync(billLineResult.Value, cancellationToken);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new CourseEnrollmentBillingResult(enrollment, billResult.Value, feeLines.Count);
     }
 }

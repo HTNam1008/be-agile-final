@@ -109,13 +109,13 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
     [
         new(JwtRegisteredClaimNames.Sub, "dev-admin-1"),
         new(JwtRegisteredClaimNames.Email, "system.admin@moe.local"),
-        new("name", "System Admin"),
+        new("name", "HQ Admin"),
         new("oid", "731f2a50-4fa7-4530-9294-1a5b912daf31"),
         new("tid", "ea71ddeb-596c-4034-84d4-d65f91edc14a"),
         new(LocalIdentityClaimNames.UserAccountId, "1"),
         new(LocalIdentityClaimNames.PersonId, "1"),
         new(LocalIdentityClaimNames.OrganizationUnitId, "2"),
-        new(LocalIdentityClaimNames.Role, "SYSTEM_ADMIN"),
+        new(LocalIdentityClaimNames.Role, "HQ_ADMIN"),
         new(LocalIdentityClaimNames.Permission, "TOPUPS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCESS_SCOPE_MANAGE"),
@@ -218,6 +218,7 @@ static string GetSwaggerTag(string path)
 
     if (path.Contains("/identity", StringComparison.OrdinalIgnoreCase)
         || path.Contains("/admin-users", StringComparison.OrdinalIgnoreCase)
+        || path.Contains("/students", StringComparison.OrdinalIgnoreCase)
         || path.Contains("/user-account", StringComparison.OrdinalIgnoreCase)
         || path.EndsWith("/me", StringComparison.OrdinalIgnoreCase))
     {

@@ -13,6 +13,7 @@ namespace Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
 
 internal sealed class GetAdminDashboardHandler(
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock,
     IAdminDashboardIdentityDirectory identities,
     IAdminDashboardTopUpDirectory topUps,
@@ -32,11 +33,12 @@ internal sealed class GetAdminDashboardHandler(
             return Result<AdminDashboardResponse>.Failure(DashboardErrors.AuthenticatedAdminRequired);
         }
 
-        long? organizationId = ResolveOrganizationId(query.OrganizationId);
-        if (organizationId is null && !IsSystemAdmin())
+        AdminOrganizationScope organizationScope = adminAccess.ResolveOrganizationFilter(query.OrganizationId);
+        if (!organizationScope.HasAccess)
         {
             return Result<AdminDashboardResponse>.Failure(DashboardErrors.AdminOrganizationScopeRequired);
         }
+        long? organizationId = organizationScope.OrganizationId;
 
         int year = query.Year.GetValueOrDefault(clock.UtcNow.Year);
         if (year is < 2000 or > 2100)
@@ -94,45 +96,6 @@ internal sealed class GetAdminDashboardHandler(
                     point.Amount,
                     ToAmountDisplay(topUpSummary.CurrencyCode, point.Amount))).ToArray())));
     }
-
-    private long? ResolveOrganizationId(long? requestedOrganizationId)
-    {
-        long[] scopedOrganizationIds = GetScopedOrganizationIds();
-        if (requestedOrganizationId.HasValue)
-        {
-            return IsSystemAdmin() || scopedOrganizationIds.Contains(requestedOrganizationId.Value)
-                ? requestedOrganizationId.Value
-                : null;
-        }
-
-        if (IsSystemAdmin())
-        {
-            return null;
-        }
-
-        if (currentUser.OrganizationUnitId is long currentOrganizationId
-            && scopedOrganizationIds.Contains(currentOrganizationId))
-        {
-            return currentOrganizationId;
-        }
-
-        return scopedOrganizationIds.Length == 1 ? scopedOrganizationIds[0] : null;
-    }
-
-    private long[] GetScopedOrganizationIds()
-    {
-        IEnumerable<long> organizationIds = currentUser.OrganizationUnitId is long currentOrganizationId
-            ? currentUser.OrganizationUnitIds.Append(currentOrganizationId)
-            : currentUser.OrganizationUnitIds;
-
-        return organizationIds
-            .Where(id => id > 0)
-            .Distinct()
-            .ToArray();
-    }
-
-    private bool IsSystemAdmin()
-        => currentUser.Roles.Contains("SYSTEM_ADMIN", StringComparer.OrdinalIgnoreCase);
 
     private static string ToNumberDisplay(long value)
         => value.ToString("N0", SingaporeCulture);

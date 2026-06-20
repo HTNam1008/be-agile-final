@@ -14,6 +14,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 internal sealed class ExecuteTopUpRunCommandHandler(
     MoeDbContext dbContext,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock,
     RecipientProcessingService recipientProcessingService) : ICommandHandler<ExecuteTopUpRunCommand, long>
 {
@@ -25,9 +26,9 @@ internal sealed class ExecuteTopUpRunCommandHandler(
         if (campaign is null)
             return Result<long>.Failure(new Error("NotFound", "Campaign not found."));
 
-        // Cross-Cutting Auth Scope Check
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
-            return Result<long>.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
+            return Result<long>.Failure(TopUpErrors.OrganizationOutsideScope);
 
         if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Active)
             return Result<long>.Failure(new Error("InvalidStatus", "Only ACTIVE campaigns can be executed."));

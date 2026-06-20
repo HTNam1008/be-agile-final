@@ -14,7 +14,6 @@ namespace Moe.Modules.CourseBilling.Api.Admin;
 [ApiVersion(1.0)]
 [Route("api/admin/v{version:apiVersion}/courses/{courseId:long}/materials")]
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
-//[Authorize(Policy = AuthorizationPolicies.ManageCourses)]
 [EnableCors("AdminCors")]
 public sealed class AdminCourseMaterialsController(
     ICommandDispatcher commands,

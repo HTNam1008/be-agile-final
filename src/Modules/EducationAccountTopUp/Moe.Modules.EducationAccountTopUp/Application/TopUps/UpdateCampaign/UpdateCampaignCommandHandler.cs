@@ -4,36 +4,38 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.SharedKernel.Results;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 
 internal sealed class UpdateCampaignCommandHandler(
-    MoeDbContext dbContext,
+    ITopUpCampaignRepository campaigns,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<UpdateCampaignCommand>
 {
     public async Task<Result> Handle(UpdateCampaignCommand command, CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.Set<TopUpCampaign>()
-            .FirstOrDefaultAsync(x => x.Id == command.TopUpCampaignId, cancellationToken);
+        TopUpCampaign? campaign = await campaigns.GetByIdAsync(command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
-            return Result.Failure(new Error("NotFound", "Campaign not found."));
-
-        // Cross-Cutting Auth Scope Check
-        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId) && currentUser.OrganizationUnitId != campaign.OrganizationId)
-            return Result.Failure(new Error("Forbidden", "User does not have access to the requested OrganizationId."));
-
-        // Validation constraint: Cannot update unless DRAFT or PAUSED.
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
-            campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
-            return Result.Failure(new Error("InvalidStatus", "Only DRAFT or PAUSED campaigns can be modified."));
+            return Result.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        // Concurrency check based on version
+        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
+        if (access.IsFailure)
+        {
+            return Result.Failure(TopUpErrors.OrganizationOutsideScope);
+        }
+
+        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft
+            && campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
+        {
+            return Result.Failure(TopUpErrors.InvalidCampaignStatus);
+        }
+
         if (campaign.CampaignVersion != command.Request.CampaignVersion)
         {
             return Result.Failure(new Error("ConcurrencyException", "The campaign has been modified by another process."));
@@ -64,12 +66,11 @@ internal sealed class UpdateCampaignCommandHandler(
             frequencyCode: frequencyCode,
             frequencyInterval: frequencyInterval,
             currentUserId: currentUser.UserAccountId ?? 0,
-            nowUtc: clock.UtcNow.UtcDateTime
-        );
+            nowUtc: clock.UtcNow.UtcDateTime);
 
         try
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await campaigns.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {

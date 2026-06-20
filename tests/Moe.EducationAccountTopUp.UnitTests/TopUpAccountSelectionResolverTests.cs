@@ -122,7 +122,7 @@ public sealed class TopUpAccountSelectionResolverTests
         FakeTopUpStudentSearchDirectory students,
         IReadOnlyCollection<long> scopedOrganizationIds)
         => new(
-            new FakeCurrentUser(scopedOrganizationIds),
+            new FakeAdminAccessControl(scopedOrganizationIds),
             new TopUpAccountSelectionValidator(),
             accounts,
             students);
@@ -140,17 +140,31 @@ public sealed class TopUpAccountSelectionResolverTests
 
     private sealed record StudentScope(long PersonId, long OrganizationId);
 
-    private sealed class FakeCurrentUser(IReadOnlyCollection<long> organizationUnitIds) : ICurrentUser
+    private sealed class FakeAdminAccessControl(IReadOnlyCollection<long> organizationUnitIds) : IAdminAccessControl
     {
-        public long? UserAccountId => 1;
-        public long? PersonId => null;
-        public long? OrganizationUnitId => organizationUnitIds.FirstOrDefault();
-        public IReadOnlyCollection<long> OrganizationUnitIds => organizationUnitIds;
-        public IReadOnlyCollection<string> Roles => Array.Empty<string>();
-        public IReadOnlyCollection<string> Permissions => Array.Empty<string>();
-        public string Portal => "ADMIN";
-        public bool IsAuthenticated => true;
-        public bool HasPermission(string permission) => Permissions.Contains(permission);
+        public bool IsHqAdmin => false;
+        public bool IsSchoolAdmin => true;
+        public IReadOnlyCollection<long> ScopedOrganizationIds => organizationUnitIds;
+        public bool CanAccessOrganization(long organizationId) => organizationUnitIds.Contains(organizationId);
+
+        public Moe.SharedKernel.Results.Result EnsureCanAccessOrganization(long organizationId)
+            => CanAccessOrganization(organizationId)
+                ? Moe.SharedKernel.Results.Result.Success()
+                : Moe.SharedKernel.Results.Result.Failure(TopUpErrors.OrganizationOutsideScope);
+
+        public AdminOrganizationScope ResolveOrganizationFilter(long? requestedOrganizationId)
+        {
+            if (requestedOrganizationId is long requested)
+            {
+                return new AdminOrganizationScope(
+                    organizationUnitIds.Contains(requested),
+                    false,
+                    requested,
+                    organizationUnitIds);
+            }
+
+            return new AdminOrganizationScope(true, false, null, organizationUnitIds);
+        }
     }
 
     private sealed class FakeAccountProjectionRepository(

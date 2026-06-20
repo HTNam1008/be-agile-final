@@ -1,4 +1,4 @@
-using Moe.Application.Abstractions.Clock;
+﻿using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
@@ -11,6 +11,7 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICurrentUser currentUser,
+    IStudentAccessControl studentAccess,
     IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
@@ -18,32 +19,44 @@ internal sealed class SelfJoinCourseHandler(
         CancellationToken cancellationToken)
     {
         long? actorId = currentUser.UserAccountId;
+
         if (actorId is null)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.ActorRequired);
         }
 
-        long? personId = currentUser.PersonId;
-        if (personId is null)
+        long? personId = studentAccess.PersonId;
+
+        if (personId is null || !studentAccess.IsStudent)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.StudentIdentityRequired);
         }
 
-        long? courseOrganizationId = await enrollments.FindCourseOrganizationIdAsync(command.CourseId, cancellationToken);
+        Course? course = await enrollments.FindCourseAsync(command.CourseId, cancellationToken);
 
-        if (courseOrganizationId is null)
+        if (course is null)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseNotFound);
         }
 
-        DateTime utcNow = clock.UtcNow.UtcDateTime;
-        DateOnly today = DateOnly.FromDateTime(utcNow);
+        if (course.IsDisabled)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseErrors.CourseDisabled);
+        }
 
-        if (!await enrollments.PersonHasActiveSchoolEnrollmentAsync(
-            personId.Value,
-            courseOrganizationId.Value,
-            today,
-            cancellationToken))
+        if (!course.IsPublished)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseErrors.CourseNotPublished);
+        }
+
+        DateTime utcNow = clock.UtcNow.UtcDateTime;
+
+        if (utcNow < course.EnrollmentOpenAtUtc || utcNow > course.EnrollmentCloseAtUtc)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseErrors.EnrollmentWindowClosed);
+        }
+
+        if (!await studentAccess.CanUseSchoolServiceAsync(course.OrganizationId, cancellationToken))
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PersonNotInCourseOrganization);
         }
