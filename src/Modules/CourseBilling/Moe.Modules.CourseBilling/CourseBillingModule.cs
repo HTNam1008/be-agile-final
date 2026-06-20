@@ -15,10 +15,12 @@ using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
+
+using Moe.Modules.CourseBilling.Application.AdminCourses;
+using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
+using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.Security;
 using Moe.Modules.CourseBilling.Infrastructure.Storage;
-
-
 namespace Moe.Modules.CourseBilling;
 
 public sealed class CourseBillingModule : IModule
