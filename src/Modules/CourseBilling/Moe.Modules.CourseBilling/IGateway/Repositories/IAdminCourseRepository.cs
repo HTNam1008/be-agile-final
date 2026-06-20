@@ -1,5 +1,5 @@
 using Moe.Infrastructure.Shared.Api;
-using Moe.Modules.CourseBilling.Application.AdminCourses;
+using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.SharedKernel.Results;
 

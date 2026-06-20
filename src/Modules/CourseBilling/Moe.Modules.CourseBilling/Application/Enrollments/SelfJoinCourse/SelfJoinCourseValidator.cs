@@ -1,6 +1,7 @@
 using FluentValidation;
+using Moe.Modules.CourseBilling.Contracts.Enrollments;
 
-namespace Moe.Modules.CourseBilling.Api.EService;
+namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 
 public sealed class SelfJoinCourseRequestValidator : AbstractValidator<SelfJoinCourseRequest>
 {
