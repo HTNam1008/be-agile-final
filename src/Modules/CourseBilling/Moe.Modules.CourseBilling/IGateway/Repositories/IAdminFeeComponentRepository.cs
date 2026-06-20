@@ -1,5 +1,5 @@
 using Moe.Infrastructure.Shared.Api;
-using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
+using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Domain.Courses;
 
 namespace Moe.Modules.CourseBilling.IGateway.Repositories;

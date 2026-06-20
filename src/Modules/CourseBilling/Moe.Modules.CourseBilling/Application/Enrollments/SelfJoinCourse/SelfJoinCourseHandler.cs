@@ -1,37 +1,29 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.SharedKernel.Results;
-using Microsoft.Extensions.Hosting;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICurrentUser currentUser,
-    IClock clock,
-    IHostEnvironment environment) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
+    IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
 {
-    private const long DevelopmentStudentLoginAccountId = 1003;
-    private const long DevelopmentStudentPersonId = 2001;
-
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         SelfJoinCourseCommand command,
         CancellationToken cancellationToken)
     {
-        long? currentActorId = currentUser.UserAccountId;
-        long? actorId = currentActorId ?? (environment.IsDevelopment() ? DevelopmentStudentLoginAccountId : null);
-
+        long? actorId = currentUser.UserAccountId;
         if (actorId is null)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.ActorRequired);
         }
 
-        long? currentPersonId = currentUser.PersonId;
-        long? personId = currentPersonId ?? (environment.IsDevelopment() ? DevelopmentStudentPersonId : null);
-
+        long? personId = currentUser.PersonId;
         if (personId is null)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.StudentIdentityRequired);
