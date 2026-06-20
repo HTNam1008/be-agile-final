@@ -1,4 +1,4 @@
-namespace Moe.Modules.CourseBilling.Application.Enrollments;
+namespace Moe.Modules.CourseBilling.Contracts.Enrollments;
 
 public sealed record CourseEnrollmentResponse(
     long CourseEnrollmentId,

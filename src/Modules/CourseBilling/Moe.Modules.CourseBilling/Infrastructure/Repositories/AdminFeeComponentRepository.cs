@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Infrastructure.Shared.Api;
-using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
+using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
