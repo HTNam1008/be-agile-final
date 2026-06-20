@@ -7,6 +7,7 @@ internal sealed class Course : Entity<long>
     private Course() : base(0) { }
 
     public Course(
+        long organizationId,
         string courseCode,
         string courseName,
         string? description,
@@ -14,9 +15,10 @@ internal sealed class Course : Entity<long>
         DateOnly startDate,
         DateOnly endDate,
         DateTime enrollmentCloseAtUtc,
+        long actorLoginAccountId,
         DateTime utcNow) : base(0)
     {
-        OrganizationId = 0;
+        OrganizationId = organizationId;
         CourseCode = courseCode.Trim();
         CourseName = courseName.Trim();
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
@@ -25,8 +27,8 @@ internal sealed class Course : Entity<long>
         EnrollmentOpenAtUtc = utcNow;
         EnrollmentCloseAtUtc = enrollmentCloseAtUtc;
         CourseStatusCode = CourseStatusCodes.Draft;
-        CreatedByLoginAccountId = 0;
-        UpdatedByLoginAccountId = 0;
+        CreatedByLoginAccountId = actorLoginAccountId;
+        UpdatedByLoginAccountId = actorLoginAccountId;
         UpdatedAtUtc = utcNow;
     }
 
@@ -56,6 +58,7 @@ internal sealed class Course : Entity<long>
         DateOnly startDate,
         DateOnly endDate,
         DateTime enrollmentCloseAtUtc,
+        long actorLoginAccountId,
         DateTime utcNow)
     {
         CourseCode = courseCode.Trim();
@@ -65,29 +68,29 @@ internal sealed class Course : Entity<long>
         EndDate = endDate;
         EnrollmentCloseAtUtc = enrollmentCloseAtUtc;
         UpdatedAtUtc = utcNow;
-        UpdatedByLoginAccountId = 0;
+        UpdatedByLoginAccountId = actorLoginAccountId;
     }
 
-    public void Disable(DateTime utcNow)
+    public void Disable(long actorLoginAccountId, DateTime utcNow)
     {
         CourseStatusCode = CourseStatusCodes.Disabled;
         DisabledAtUtc = utcNow;
-        DisabledByLoginAccountId = null;
+        DisabledByLoginAccountId = actorLoginAccountId;
         UpdatedAtUtc = utcNow;
-        UpdatedByLoginAccountId = 0;
+        UpdatedByLoginAccountId = actorLoginAccountId;
     }
 
-    public void Publish(DateTime utcNow)
+    public void Publish(long actorLoginAccountId, DateTime utcNow)
     {
         CourseStatusCode = CourseStatusCodes.Published;
         DisabledAtUtc = null;
         DisabledByLoginAccountId = null;
         UpdatedAtUtc = utcNow;
-        UpdatedByLoginAccountId = 0;
+        UpdatedByLoginAccountId = actorLoginAccountId;
     }
 
-    public void Enable(DateTime utcNow)
+    public void Enable(long actorLoginAccountId, DateTime utcNow)
     {
-        Publish(utcNow);
+        Publish(actorLoginAccountId, utcNow);
     }
 }

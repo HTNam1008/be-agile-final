@@ -75,6 +75,13 @@ internal sealed class CourseEnrollment : Entity<long>
         return Result<CourseEnrollment>.Success(enrollment);
     }
 
+    public void Cancel(DateTime utcNow)
+    {
+        EnrollmentStatusCode = CourseEnrollmentStatusCodes.Cancelled;
+        ExitAtUtc = utcNow;
+        ExitReasonCode = "ADMIN_REMOVED";
+    }
+
     private static Result ValidateEnrollment(long personId, long courseId, long enrolledByLoginAccountId)
     {
         if (personId <= 0)
@@ -115,4 +122,5 @@ public static class CourseBillingErrors
     public static readonly Error StudentIdentityRequired = new("COURSE.STUDENT_IDENTITY_REQUIRED", "An authenticated student identity is required.");
     public static readonly Error CourseFeesNotConfigured = new("COURSE.FEES_NOT_CONFIGURED", "The course has no active fee lines to bill.");
     public static readonly Error PersonNotInCourseOrganization = new("COURSE.PERSON_NOT_IN_ORGANIZATION", "The person is not actively enrolled in the course organization.");
+    public static readonly Error CourseOrganizationForbidden = new("COURSE.ORGANIZATION_FORBIDDEN", "The administrator cannot manage courses in this organization.");
 }

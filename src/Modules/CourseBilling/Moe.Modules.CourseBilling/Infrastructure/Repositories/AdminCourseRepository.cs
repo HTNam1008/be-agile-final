@@ -1,20 +1,35 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.Application.AdminCourses;
+using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
 internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCourseRepository
 {
-    public async Task<PageResponse<CourseSummaryDto>> ListCoursesAsync(CourseQueryRequest request, CancellationToken cancellationToken)
+    public async Task<PageResponse<CourseSummaryDto>> ListCoursesAsync(
+        CourseQueryRequest request,
+        IReadOnlyCollection<long>? scopedOrganizationIds,
+        CancellationToken cancellationToken)
     {
         int page = Math.Max(1, request.Page);
         int pageSize = Math.Clamp(request.PageSize, 1, 100);
 
         IQueryable<Course> query = dbContext.Set<Course>().AsNoTracking();
+
+        if (scopedOrganizationIds is not null)
+        {
+            query = query.Where(x => scopedOrganizationIds.Contains(x.OrganizationId));
+        }
+
+        if (request.OrganizationId.HasValue)
+        {
+            query = query.Where(x => x.OrganizationId == request.OrganizationId.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
         {
@@ -22,10 +37,28 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
             query = query.Where(x => x.CourseCode.Contains(keyword) || x.CourseName.Contains(keyword));
         }
 
+        if (!string.IsNullOrWhiteSpace(request.CourseName))
+        {
+            string courseName = request.CourseName.Trim();
+            query = query.Where(x => x.CourseName.Contains(courseName));
+        }
+
         if (!string.IsNullOrWhiteSpace(request.StatusCode))
         {
-            string statusCode = request.StatusCode.Trim();
+            string statusCode = request.StatusCode.Trim().ToUpperInvariant();
             query = query.Where(x => x.CourseStatusCode == statusCode);
+        }
+
+        if (request.StartDate.HasValue)
+        {
+            DateOnly filterStartDate = request.StartDate.Value;
+            query = query.Where(x => x.EndDate >= filterStartDate);
+        }
+
+        if (request.EndDate.HasValue)
+        {
+            DateOnly filterEndDate = request.EndDate.Value;
+            query = query.Where(x => x.StartDate <= filterEndDate);
         }
 
         long total = await query.LongCountAsync(cancellationToken);
@@ -35,6 +68,7 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
             .Take(pageSize)
             .Select(x => new CourseSummaryDto(
                 x.Id,
+                x.OrganizationId,
                 x.CourseCode,
                 x.CourseName,
                 x.Description,
@@ -43,11 +77,47 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
                 x.EnrollmentOpenAtUtc,
                 x.EnrollmentCloseAtUtc,
                 x.CourseStatusCode,
+                dbContext.Set<CourseFee>()
+                    .Where(fee => fee.CourseId == x.Id && fee.IsActive)
+                    .Sum(fee => (decimal?)fee.FeeValue) ?? 0m,
+                dbContext.Set<CourseEnrollment>()
+                    .Count(enrollment => enrollment.CourseId == x.Id
+                        && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled),
                 x.UpdatedAtUtc,
                 x.DisabledAtUtc))
             .ToListAsync(cancellationToken);
 
         return new PageResponse<CourseSummaryDto>(items, page, pageSize, total);
+    }
+
+    public async Task<int> DisableEndedCoursesAsync(
+        DateOnly today,
+        DateTime utcNow,
+        long actorLoginAccountId,
+        IReadOnlyCollection<long>? scopedOrganizationIds,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<Course> query = dbContext.Set<Course>()
+            .Where(x => x.EndDate < today && x.CourseStatusCode != CourseStatusCodes.Disabled);
+
+        if (scopedOrganizationIds is not null)
+        {
+            query = query.Where(x => scopedOrganizationIds.Contains(x.OrganizationId));
+        }
+
+        List<Course> endedCourses = await query.ToListAsync(cancellationToken);
+
+        foreach (Course course in endedCourses)
+        {
+            course.Disable(actorLoginAccountId, utcNow);
+        }
+
+        if (endedCourses.Count > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return endedCourses.Count;
     }
 
     public Task<Course?> FindCourseAsync(long courseId, CancellationToken cancellationToken)
@@ -90,12 +160,13 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         return new CourseAggregate(course, materials, fees, summary);
     }
 
-    public Task<bool> CourseCodeExistsAsync(string courseCode, long? excludeCourseId, CancellationToken cancellationToken)
+    public Task<bool> CourseCodeExistsAsync(long organizationId, string courseCode, long? excludeCourseId, CancellationToken cancellationToken)
     {
         string normalizedCourseCode = courseCode.Trim();
 
         return dbContext.Set<Course>().AnyAsync(x =>
-            x.CourseCode == normalizedCourseCode
+            x.OrganizationId == organizationId
+            && x.CourseCode == normalizedCourseCode
             && (excludeCourseId == null || x.Id != excludeCourseId.Value), cancellationToken);
     }
 
@@ -103,6 +174,33 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
     {
         await dbContext.Set<Course>().AddAsync(course, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveDraftCourseAsync(long courseId, CancellationToken cancellationToken)
+    {
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+            await dbContext.Set<CourseTarget>()
+                .Where(x => x.CourseId == courseId)
+                .ExecuteDeleteAsync(cancellationToken);
+            await dbContext.Set<CourseMaterial>()
+                .Where(x => x.CourseId == courseId)
+                .ExecuteDeleteAsync(cancellationToken);
+            await dbContext.Set<CourseFee>()
+                .Where(x => x.CourseId == courseId)
+                .ExecuteDeleteAsync(cancellationToken);
+            await dbContext.Set<CourseEnrollment>()
+                .Where(x => x.CourseId == courseId)
+                .ExecuteDeleteAsync(cancellationToken);
+            await dbContext.Set<Course>()
+                .Where(x => x.Id == courseId)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        });
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)
@@ -177,8 +275,111 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
     public Task<CourseEnrollment?> FindEnrollmentAsync(long courseEnrollmentId, CancellationToken cancellationToken)
         => dbContext.Set<CourseEnrollment>().SingleOrDefaultAsync(x => x.Id == courseEnrollmentId, cancellationToken);
 
-    public void RemoveEnrollment(CourseEnrollment enrollment)
-        => dbContext.Set<CourseEnrollment>().Remove(enrollment);
+    public async Task<int> IssueBillsForUnbilledEnrollmentsAsync(
+        long courseId,
+        string billNumberPrefix,
+        DateTime issuedAtUtc,
+        DateOnly dueDate,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<CourseFeeDetail> fees = await ListFeesQuery(courseId, activeOnly: true)
+            .ToListAsync(cancellationToken);
+
+        if (fees.Count == 0)
+        {
+            return 0;
+        }
+
+        List<CourseEnrollment> enrollments = await dbContext.Set<CourseEnrollment>()
+            .Where(enrollment => enrollment.CourseId == courseId
+                && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled
+                && !dbContext.Set<Bill>().Any(bill => bill.CourseEnrollmentId == enrollment.Id))
+            .OrderBy(enrollment => enrollment.Id)
+            .ToListAsync(cancellationToken);
+
+        if (enrollments.Count == 0)
+        {
+            return 0;
+        }
+
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+            int issuedCount = 0;
+            decimal grossAmount = fees.Sum(x => x.CourseFee.FeeValue);
+
+            foreach (CourseEnrollment enrollment in enrollments)
+            {
+                Result<Bill> billResult = Bill.IssueForCourseEnrollment(
+                    enrollment.Id,
+                    $"{billNumberPrefix}-{enrollment.Id}".ToUpperInvariant(),
+                    issuedAtUtc,
+                    dueDate,
+                    grossAmount);
+
+                if (billResult.IsFailure)
+                {
+                    throw new InvalidOperationException(billResult.Error.Message);
+                }
+
+                await dbContext.Set<Bill>().AddAsync(billResult.Value, cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                foreach (CourseFeeDetail fee in fees)
+                {
+                    Result<BillLine> billLineResult = BillLine.FromCourseFee(
+                        billResult.Value.Id,
+                        fee.FeeComponent.Id,
+                        fee.CourseFee.Id,
+                        fee.FeeComponent.ComponentName,
+                        fee.CourseFee.FeeValue);
+
+                    if (billLineResult.IsFailure)
+                    {
+                        throw new InvalidOperationException(billLineResult.Error.Message);
+                    }
+
+                    await dbContext.Set<BillLine>().AddAsync(billLineResult.Value, cancellationToken);
+                }
+
+                issuedCount++;
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return issuedCount;
+        });
+    }
+
+    public async Task<Result> CancelEnrollmentAndBillAsync(
+        CourseEnrollment enrollment,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        Bill? bill = await dbContext.Set<Bill>()
+            .SingleOrDefaultAsync(x => x.CourseEnrollmentId == enrollment.Id, cancellationToken);
+
+        if (bill is null)
+        {
+            enrollment.Cancel(utcNow);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+
+        Result billCancellation = bill.Cancel();
+        if (billCancellation.IsFailure)
+        {
+            return billCancellation;
+        }
+
+        enrollment.Cancel(utcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
 
     private IQueryable<CourseFeeDetail> ListFeesQuery(long courseId, bool activeOnly = false)
         => from fee in dbContext.Set<CourseFee>().AsNoTracking()

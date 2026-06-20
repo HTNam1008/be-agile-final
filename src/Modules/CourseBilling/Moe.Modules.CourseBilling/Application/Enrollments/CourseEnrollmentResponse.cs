@@ -7,9 +7,10 @@ public sealed record CourseEnrollmentResponse(
     string EnrollmentSourceCode,
     long EnrolledByLoginAccountId,
     string EnrollmentStatusCode,
-    long BillId,
-    string BillNumber,
-    string BillStatusCode,
+    long? BillId,
+    string? BillNumber,
+    string? BillStatusCode,
+    int BillLineCount,
     decimal GrossAmount,
     decimal NetPayableAmount,
     decimal OutstandingAmount);

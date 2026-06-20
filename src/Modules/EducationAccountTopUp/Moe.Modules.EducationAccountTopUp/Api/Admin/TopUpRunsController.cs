@@ -25,7 +25,7 @@ public sealed class TopUpRunsController(
     IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [Authorize(Policy = AuthorizationPolicies.ViewTopUps)]
     [ProducesResponseType(typeof(ApiResponse<RequestManualRunResponse>), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
@@ -50,7 +50,7 @@ public sealed class TopUpRunsController(
     }
 
     [HttpPost("{runId:long}/reconcile")]
-    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [Authorize(Policy = AuthorizationPolicies.ViewTopUps)]
     [ProducesResponseType(typeof(ApiResponse<ReconciliationResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReconcileRun(

@@ -5,6 +5,6 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Security;
 internal sealed class CurrentAdminContext(ICurrentUser currentUser) : ICurrentAdminContext
 {
     public string RoleCode => currentUser.Roles.FirstOrDefault() ?? string.Empty;
-    // TODO: Temporary development bypass until the admin authentication flow is ready.
-    public bool IsAdmin => true;
+    public bool IsAdmin => currentUser.IsAuthenticated
+        && currentUser.Roles.Any(role => role is "SYSTEM_ADMIN" or "SCHOOL_ADMIN");
 }
