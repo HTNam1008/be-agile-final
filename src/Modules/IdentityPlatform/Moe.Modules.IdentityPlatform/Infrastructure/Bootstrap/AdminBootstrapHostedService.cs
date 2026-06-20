@@ -17,6 +17,20 @@ internal sealed class AdminBootstrapHostedService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        try
+        {
+            await BootstrapAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Admin bootstrap failed during application startup. The application will continue to start; apply migrations and verify database access, then restart the app.");
+        }
+    }
+
+    private async Task BootstrapAsync(CancellationToken cancellationToken)
+    {
         AdminBootstrapOptions bootstrap = bootstrapOptions.Value;
 
         if (!bootstrap.Enabled)

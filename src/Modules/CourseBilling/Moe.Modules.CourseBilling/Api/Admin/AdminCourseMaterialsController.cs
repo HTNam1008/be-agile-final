@@ -12,9 +12,9 @@ namespace Moe.Modules.CourseBilling.Api.Admin;
 [ApiController]
 [ApiVersion(1.0)]
 [Route("api/admin/v{version:apiVersion}/courses/{courseId:long}/materials")]
-//[Authorize(Policy = AuthorizationPolicies.AdminPortal)]
+[Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 //[Authorize(Policy = AuthorizationPolicies.ManageCourses)]
-//[EnableCors("AdminCors")]
+[EnableCors("AdminCors")]
 public sealed class AdminCourseMaterialsController(IAdminCourseService courses) : ControllerBase
 {
     [HttpGet]

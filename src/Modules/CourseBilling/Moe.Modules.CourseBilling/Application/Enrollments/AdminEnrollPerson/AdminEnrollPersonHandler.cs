@@ -3,51 +3,68 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.SharedKernel.Results;
-using Microsoft.Extensions.Hosting;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 
 internal sealed class AdminEnrollPersonHandler(
     ICourseEnrollmentRepository enrollments,
-    IPersonDirectory people,
     ICurrentUser currentUser,
-    IClock clock,
-    IHostEnvironment environment) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
+    IClock clock) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
 {
-    private const long DevelopmentAdminLoginAccountId = 1001;
+    private const long MoeHeadquartersOrganizationId = 1;
 
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         AdminEnrollPersonCommand command,
         CancellationToken cancellationToken)
     {
-        long? currentActorId = currentUser.UserAccountId;
-        long? actorId = currentActorId ?? (environment.IsDevelopment() ? DevelopmentAdminLoginAccountId : null);
+        long? actorId = currentUser.UserAccountId;
 
         if (actorId is null)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.ActorRequired);
         }
 
-        if (await people.FindAsync(command.PersonId, cancellationToken) is null)
+        if (!await enrollments.PersonExistsAsync(command.PersonId, cancellationToken))
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PersonNotFound);
         }
 
-        long? courseOrganizationId = await enrollments.FindCourseOrganizationIdAsync(command.CourseId, cancellationToken);
+        Course? course = await enrollments.FindCourseAsync(command.CourseId, cancellationToken);
 
-        if (courseOrganizationId is null)
+        if (course is null)
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseNotFound);
         }
 
+        if (course.IsDisabled)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseErrors.CourseDisabled);
+        }
+
         DateTime utcNow = clock.UtcNow.UtcDateTime;
+
+        if (utcNow < course.EnrollmentOpenAtUtc || utcNow > course.EnrollmentCloseAtUtc)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseErrors.EnrollmentWindowClosed);
+        }
+
+        bool hasGlobalScope = currentUser.HasPermission("ORG_VIEW_ALL")
+            || currentUser.OrganizationUnitId == MoeHeadquartersOrganizationId
+            || currentUser.OrganizationUnitIds.Contains(MoeHeadquartersOrganizationId);
+
+        if (!hasGlobalScope
+            && currentUser.OrganizationUnitId != course.OrganizationId
+            && !currentUser.OrganizationUnitIds.Contains(course.OrganizationId))
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseOrganizationForbidden);
+        }
+
         DateOnly today = DateOnly.FromDateTime(utcNow);
 
         if (!await enrollments.PersonHasActiveSchoolEnrollmentAsync(
             command.PersonId,
-            courseOrganizationId.Value,
+            course.OrganizationId,
             today,
             cancellationToken))
         {
@@ -59,15 +76,6 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.DuplicateEnrollment);
         }
 
-        IReadOnlyCollection<CourseFeeBillingLine> feeLines = await enrollments.ListActiveCourseFeesAsync(
-            command.CourseId,
-            cancellationToken);
-
-        if (feeLines.Count == 0)
-        {
-            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
-        }
-
         Result<CourseEnrollment> enrollmentResult = CourseEnrollment.EnrollByAdmin(
             command.PersonId,
             command.CourseId,
@@ -77,6 +85,21 @@ internal sealed class AdminEnrollPersonHandler(
         if (enrollmentResult.IsFailure)
         {
             return Result<CourseEnrollmentResponse>.Failure(enrollmentResult.Error);
+        }
+
+        if (course.IsDraft)
+        {
+            await enrollments.AddEnrollmentAsync(enrollmentResult.Value, cancellationToken);
+            return Result<CourseEnrollmentResponse>.Success(ToPendingResponse(enrollmentResult.Value));
+        }
+
+        IReadOnlyCollection<CourseFeeBillingLine> feeLines = await enrollments.ListActiveCourseFeesAsync(
+            command.CourseId,
+            cancellationToken);
+
+        if (feeLines.Count == 0)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
         }
 
         CourseEnrollmentBillingResult billingResult = await enrollments.AddEnrollmentAndIssueBillAsync(
@@ -101,9 +124,26 @@ internal sealed class AdminEnrollPersonHandler(
             result.Bill.Id,
             result.Bill.BillNumber,
             result.Bill.BillStatusCode,
+            result.BillLineCount,
             result.Bill.GrossAmount,
             result.Bill.NetPayableAmount,
             result.Bill.OutstandingAmount);
+
+    private static CourseEnrollmentResponse ToPendingResponse(CourseEnrollment enrollment)
+        => new(
+            enrollment.Id,
+            enrollment.PersonId,
+            enrollment.CourseId,
+            enrollment.EnrollmentSourceCode,
+            enrollment.EnrolledByLoginAccountId,
+            enrollment.EnrollmentStatusCode,
+            null,
+            null,
+            null,
+            0,
+            0m,
+            0m,
+            0m);
 
     private static string CreateBillNumber(DateTime utcNow)
         => $"BILL-{utcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..30].ToUpperInvariant();

@@ -72,6 +72,18 @@ internal sealed class Bill : Entity<long>
         return Result<Bill>.Success(bill);
     }
 
+    public Result Cancel()
+    {
+        if (BillStatusCode == BillStatusCodes.Paid)
+        {
+            return Result.Failure(BillingErrors.PaidBillCannotBeCancelled);
+        }
+
+        BillStatusCode = BillStatusCodes.Cancelled;
+        OutstandingAmount = 0m;
+        return Result.Success();
+    }
+
     private static decimal Money(decimal amount)
         => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
 }
@@ -80,6 +92,7 @@ public static class BillStatusCodes
 {
     public const string Issued = "ISSUED";
     public const string Paid = "PAID";
+    public const string Cancelled = "CANCELLED";
 }
 
 public static class BillingErrors
@@ -88,4 +101,5 @@ public static class BillingErrors
     public static readonly Error InvalidBillNumber = new("BILL.INVALID_NUMBER", "A valid bill number is required.");
     public static readonly Error InvalidBillAmount = new("BILL.INVALID_AMOUNT", "Bill amounts are invalid.");
     public static readonly Error InvalidBillLine = new("BILL.INVALID_LINE", "A valid bill line is required.");
+    public static readonly Error PaidBillCannotBeCancelled = new("BILL.PAID_CANNOT_CANCEL", "A paid bill cannot be cancelled.");
 }

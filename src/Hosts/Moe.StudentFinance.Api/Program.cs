@@ -86,13 +86,16 @@ builder.Services.AddOpenApiDocument(settings =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
+bool exposeSwagger = app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT");
+if (exposeSwagger)
 {
     app.UseOpenApi();
     app.UseSwaggerUi(settings => settings.Path = "/swagger");
 }
 
-app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
+app.MapGet("/", () => exposeSwagger
+    ? Results.Redirect("/swagger")
+    : Results.Ok(new { status = "running", service = "MOE Student Finance API" })).AllowAnonymous();
 
 app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 {

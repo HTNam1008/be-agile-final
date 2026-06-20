@@ -1,6 +1,7 @@
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.Application.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.IGateway.Repositories;
 
@@ -14,11 +15,21 @@ internal sealed record CourseFeeDetail(CourseFee CourseFee, FeeComponent FeeComp
 
 internal interface IAdminCourseRepository
 {
-    Task<PageResponse<CourseSummaryDto>> ListCoursesAsync(CourseQueryRequest request, CancellationToken cancellationToken);
+    Task<PageResponse<CourseSummaryDto>> ListCoursesAsync(
+        CourseQueryRequest request,
+        IReadOnlyCollection<long>? scopedOrganizationIds,
+        CancellationToken cancellationToken);
+    Task<int> DisableEndedCoursesAsync(
+        DateOnly today,
+        DateTime utcNow,
+        long actorLoginAccountId,
+        IReadOnlyCollection<long>? scopedOrganizationIds,
+        CancellationToken cancellationToken);
     Task<Course?> FindCourseAsync(long courseId, CancellationToken cancellationToken);
     Task<CourseAggregate?> GetCourseAggregateAsync(long courseId, CancellationToken cancellationToken);
-    Task<bool> CourseCodeExistsAsync(string courseCode, long? excludeCourseId, CancellationToken cancellationToken);
+    Task<bool> CourseCodeExistsAsync(long organizationId, string courseCode, long? excludeCourseId, CancellationToken cancellationToken);
     Task AddCourseAsync(Course course, CancellationToken cancellationToken);
+    Task RemoveDraftCourseAsync(long courseId, CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<CourseMaterial>> ListMaterialsAsync(long courseId, CancellationToken cancellationToken);
     Task<CourseMaterial?> FindMaterialAsync(long courseId, long courseMaterialId, CancellationToken cancellationToken);
@@ -32,5 +43,14 @@ internal interface IAdminCourseRepository
     Task AddEnrollmentAsync(CourseEnrollment enrollment, CancellationToken cancellationToken);
     Task<IReadOnlyList<AdminCourseEnrollmentDto>> ListEnrollmentsAsync(long courseId, CancellationToken cancellationToken);
     Task<CourseEnrollment?> FindEnrollmentAsync(long courseEnrollmentId, CancellationToken cancellationToken);
-    void RemoveEnrollment(CourseEnrollment enrollment);
+    Task<int> IssueBillsForUnbilledEnrollmentsAsync(
+        long courseId,
+        string billNumberPrefix,
+        DateTime issuedAtUtc,
+        DateOnly dueDate,
+        CancellationToken cancellationToken);
+    Task<Result> CancelEnrollmentAndBillAsync(
+        CourseEnrollment enrollment,
+        DateTime utcNow,
+        CancellationToken cancellationToken);
 }
