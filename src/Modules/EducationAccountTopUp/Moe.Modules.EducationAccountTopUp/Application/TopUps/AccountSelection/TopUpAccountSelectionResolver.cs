@@ -10,7 +10,7 @@ using Moe.SharedKernel.Results;
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 
 internal sealed class TopUpAccountSelectionResolver(
-    ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IValidator<TopUpAccountSelection> validator,
     ITopUpAccountProjectionRepository accounts,
     ITopUpStudentSearchDirectory students) : ITopUpAccountSelectionResolver
@@ -26,12 +26,12 @@ internal sealed class TopUpAccountSelectionResolver(
             return Result<TopUpAccountSelectionResolution>.Failure(TopUpErrors.InvalidAccountSelection);
         }
 
-        long[] scopedOrganizationIds = currentUser.OrganizationUnitIds.ToArray();
-
-        if (scopedOrganizationIds.Length == 0)
+        AdminOrganizationScope scope = adminAccess.ResolveOrganizationFilter(selection.Filter?.OrganizationId);
+        if (!scope.HasAccess)
         {
-            return Result<TopUpAccountSelectionResolution>.Failure(TopUpErrors.AdminOrganizationScopeRequired);
+            return Result<TopUpAccountSelectionResolution>.Failure(TopUpErrors.OrganizationOutsideScope);
         }
+        long[] scopedOrganizationIds = scope.HasGlobalAccess ? [] : scope.ScopedOrganizationIds.ToArray();
 
         return selection.Mode switch
         {
@@ -42,6 +42,7 @@ internal sealed class TopUpAccountSelectionResolver(
             TopUpAccountSelectionMode.AllMatchingFilter => await ResolveAllMatchingAsync(
                 selection.Filter!,
                 selection.ExcludedEducationAccountIds,
+                scope.HasGlobalAccess,
                 scopedOrganizationIds,
                 cancellationToken),
             _ => Result<TopUpAccountSelectionResolution>.Failure(TopUpErrors.InvalidAccountSelection)
@@ -85,10 +86,11 @@ internal sealed class TopUpAccountSelectionResolver(
     private async Task<Result<TopUpAccountSelectionResolution>> ResolveAllMatchingAsync(
         TopUpAccountFilter filter,
         IReadOnlyCollection<long> excludedEducationAccountIds,
+        bool hasGlobalAccess,
         IReadOnlyCollection<long> scopedOrganizationIds,
         CancellationToken cancellationToken)
     {
-        if (filter.OrganizationId.HasValue && !scopedOrganizationIds.Contains(filter.OrganizationId.Value))
+        if (!hasGlobalAccess && filter.OrganizationId.HasValue && !scopedOrganizationIds.Contains(filter.OrganizationId.Value))
         {
             return Result<TopUpAccountSelectionResolution>.Failure(TopUpErrors.OrganizationOutsideScope);
         }

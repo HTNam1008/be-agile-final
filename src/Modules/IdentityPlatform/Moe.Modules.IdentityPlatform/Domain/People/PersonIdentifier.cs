@@ -25,6 +25,21 @@ internal sealed class PersonIdentifier : AggregateRoot<long>
         UpdatedAtUtc = createdAtUtc;
     }
 
+    public static PersonIdentifier CreateIdentityNumber(
+        long personId,
+        byte[] identifierValueHash,
+        string identifierMasked,
+        DateTime createdAtUtc)
+    {
+        return new PersonIdentifier(
+            personId,
+            "IDENTITY_NUMBER",
+            identifierValueHash,
+            identifierMasked.Trim().ToUpperInvariant(),
+            "ADMIN_MANUAL",
+            createdAtUtc);
+    }
+
     public long PersonId { get; private set; }
     public string IdentifierTypeCode { get; private set; } = string.Empty;
     public byte[]? IdentifierValueEncrypted { get; private set; }

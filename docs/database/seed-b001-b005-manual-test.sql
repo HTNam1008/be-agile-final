@@ -36,7 +36,7 @@ BEGIN TRY
 
     DECLARE @HqOrganizationId bigint = 1;
     DECLARE @SchoolOrganizationId bigint = 2;
-    DECLARE @SystemAdminId bigint = 1001;
+    DECLARE @HqAdminId bigint = 1001;
     DECLARE @SchoolAdminId bigint = 1002;
     DECLARE @SeededAt datetime2 = '2026-06-18T08:00:00';
 
@@ -95,7 +95,7 @@ BEGIN TRY
 
     IF NOT EXISTS (
         SELECT 1 FROM iam.LoginAccount
-        WHERE LoginAccountId = @SystemAdminId
+        WHERE LoginAccountId = @HqAdminId
     )
         THROW 50111, 'Login account 1001 is missing.', 1;
 
@@ -283,16 +283,16 @@ BEGIN TRY
         CurrentBalance
     )
     VALUES
-    (98301, 98101, N'EA-B01X05-0001', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  25.00),
-    (98302, 98102, N'EA-B01X05-0002', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 125.50),
-    (98303, 98103, N'EA-B01X05-0003', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 480.00),
-    (98304, 98104, N'EA-B01X05-0004', 'CLOSING', TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, '2026-06-30T00:00:00+00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 35.75),
-    (98305, 98105, N'EA-B01X05-0005', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,   0.00),
-    (98306, 98106, N'EA-B01X05-0006', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 999.99),
-    (98307, 98107, N'EA-B01X05-0007', 'CLOSED',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, '2026-06-01T00:00:00+00:00', 'MANUAL', N'B01X05 closed account', @SystemAdminId, 10.00),
-    (98308, 98108, N'EA-B01X05-0008', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 250.00),
-    (98309, 98109, N'EA-B01X05-0009', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 HQ out-of-scope seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  60.00),
-    (98310, 98110, N'EA-B01X05-0010', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 HQ out-of-scope seed', @SystemAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 360.00);
+    (98301, 98101, N'EA-B01X05-0001', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  25.00),
+    (98302, 98102, N'EA-B01X05-0002', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 125.50),
+    (98303, 98103, N'EA-B01X05-0003', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 480.00),
+    (98304, 98104, N'EA-B01X05-0004', 'CLOSING', TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, '2026-06-30T00:00:00+00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 35.75),
+    (98305, 98105, N'EA-B01X05-0005', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,   0.00),
+    (98306, 98106, N'EA-B01X05-0006', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 999.99),
+    (98307, 98107, N'EA-B01X05-0007', 'CLOSED',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, '2026-06-01T00:00:00+00:00', 'MANUAL', N'B01X05 closed account', @HqAdminId, 10.00),
+    (98308, 98108, N'EA-B01X05-0008', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 test seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 250.00),
+    (98309, 98109, N'EA-B01X05-0009', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 HQ out-of-scope seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  60.00),
+    (98310, 98110, N'EA-B01X05-0010', 'ACTIVE',  TODATETIMEOFFSET(@SeededAt, '+00:00'), 'MANUAL', N'B01X05 HQ out-of-scope seed', @HqAdminId, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 360.00);
 
     SET IDENTITY_INSERT account.EducationAccount OFF;
 
@@ -332,8 +332,8 @@ BEGIN TRY
         N'B-002 explicit/select-all testing campaign.',
         'FIXED_SELECTION', 50.00, N'B-002 select-all test',
         'IMMEDIATE', '2026-06-01', NULL, NULL, NULL, NULL,
-        'DRAFT', 1, @SystemAdminId, '2026-06-01T01:00:00',
-        @SystemAdminId, '2026-06-01T01:00:00'
+        'DRAFT', 1, @HqAdminId, '2026-06-01T01:00:00',
+        @HqAdminId, '2026-06-01T01:00:00'
     ),
     (
         @ActiveCampaignId, @SchoolOrganizationId,
@@ -342,7 +342,7 @@ BEGIN TRY
         'FIXED_SELECTION', 100.00, N'B-003 to B-005 test',
         'RECURRING', '2026-05-01', '2026-12-31', 'MONTHLY', 1, '2026-07-01T00:00:00',
         'ACTIVE', 3, @SchoolAdminId, '2026-05-01T02:00:00',
-        @SystemAdminId, '2026-06-15T02:00:00'
+        @HqAdminId, '2026-06-15T02:00:00'
     ),
     (
         @PausedCampaignId, @SchoolOrganizationId,
@@ -359,8 +359,8 @@ BEGIN TRY
         N'Out-of-scope HQ draft campaign for B-005.',
         'DYNAMIC_RULES', 125.00, N'B-005 HQ scope test',
         'IMMEDIATE', '2026-06-05', NULL, NULL, NULL, NULL,
-        'DRAFT', 1, @SystemAdminId, '2026-06-05T04:00:00',
-        @SystemAdminId, '2026-06-05T04:00:00'
+        'DRAFT', 1, @HqAdminId, '2026-06-05T04:00:00',
+        @HqAdminId, '2026-06-05T04:00:00'
     ),
     (
         @CancelledCampaignId, @SchoolOrganizationId,
@@ -392,10 +392,10 @@ BEGIN TRY
         AddedAt
     )
     VALUES
-    (98801, @SelectionCampaignId, 98301, NULL,  1, @SystemAdminId, '2026-06-18T08:10:00'),
-    (98802, @SelectionCampaignId, 98302, 60.00, 1, @SystemAdminId, '2026-06-18T08:10:00'),
-    (98803, @SelectionCampaignId, 98303, NULL,  1, @SystemAdminId, '2026-06-18T08:10:00'),
-    (98804, @SelectionCampaignId, 98305, NULL,  1, @SystemAdminId, '2026-06-18T08:10:00');
+    (98801, @SelectionCampaignId, 98301, NULL,  1, @HqAdminId, '2026-06-18T08:10:00'),
+    (98802, @SelectionCampaignId, 98302, 60.00, 1, @HqAdminId, '2026-06-18T08:10:00'),
+    (98803, @SelectionCampaignId, 98303, NULL,  1, @HqAdminId, '2026-06-18T08:10:00'),
+    (98804, @SelectionCampaignId, 98305, NULL,  1, @HqAdminId, '2026-06-18T08:10:00');
 
     SET IDENTITY_INSERT topup.TopUpCampaignRecipient OFF;
 
@@ -464,7 +464,7 @@ BEGIN TRY
     ),
     (
         @HqRunId, @DraftCampaignId, 1,
-        '2026-06-17T07:00:00', 'MANUAL', @SystemAdminId, 'COMPLETED', NULL,
+        '2026-06-17T07:00:00', 'MANUAL', @HqAdminId, 'COMPLETED', NULL,
         2, 2, 2, 0, 0, 250.00,
         '2026-06-17T07:00:05', '2026-06-17T07:01:00',
         N'B01X05-RUN-HQ', N'Out-of-scope HQ run.'
@@ -503,8 +503,8 @@ BEGIN TRY
     (98607, 98303, 'TOP_UP', 100.00, '2026-06-18T04:00:30', 'TOP_UP_RUN', @ProcessingRunId,N'B01X05-LEDGER-0007', NULL, 680.00,  N'B01X05 processing-run credit', NULL),
     (98608, 98301, 'TOP_UP',  40.00, '2026-05-01T06:00:30', 'TOP_UP_RUN', @OlderRunId,     N'B01X05-LEDGER-0008', NULL,  65.00,  N'B01X05 older-run credit', @SchoolAdminId),
     (98609, 98302, 'TOP_UP',  40.00, '2026-05-01T06:00:40', 'TOP_UP_RUN', @OlderRunId,     N'B01X05-LEDGER-0009', NULL, 165.50,  N'B01X05 older-run credit', @SchoolAdminId),
-    (98610, 98309, 'TOP_UP', 125.00, '2026-06-17T07:00:30', 'TOP_UP_RUN', @HqRunId,        N'B01X05-LEDGER-0010', NULL, 185.00,  N'B01X05 HQ credit', @SystemAdminId),
-    (98611, 98310, 'TOP_UP', 125.00, '2026-06-17T07:00:40', 'TOP_UP_RUN', @HqRunId,        N'B01X05-LEDGER-0011', NULL, 485.00,  N'B01X05 HQ credit', @SystemAdminId);
+    (98610, 98309, 'TOP_UP', 125.00, '2026-06-17T07:00:30', 'TOP_UP_RUN', @HqRunId,        N'B01X05-LEDGER-0010', NULL, 185.00,  N'B01X05 HQ credit', @HqAdminId),
+    (98611, 98310, 'TOP_UP', 125.00, '2026-06-17T07:00:40', 'TOP_UP_RUN', @HqRunId,        N'B01X05-LEDGER-0011', NULL, 485.00,  N'B01X05 HQ credit', @HqAdminId);
 
     SET IDENTITY_INSERT account.AccountTransaction OFF;
 

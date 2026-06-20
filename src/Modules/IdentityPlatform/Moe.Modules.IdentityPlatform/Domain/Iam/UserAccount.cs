@@ -119,7 +119,7 @@ internal sealed class UserAccount : AggregateRoot<long>
             UserAccountStatusCodes.PendingFirstLogin,
             utcNow);
 
-        account.RoleCode = RoleCodes.SystemAdmin;
+        account.RoleCode = RoleCodes.HqAdmin;
         account.AdminOrganizationId = OrganizationUnitCodes.MoeHeadquartersId;
         return account;
     }

@@ -6,6 +6,7 @@ using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRu
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.SharedKernel.Results;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests.RunExecution;
@@ -65,15 +66,18 @@ public sealed class RequestManualRunCommandHandlerTests
     }
 
     [Fact]
-    public async Task Should_Fail_When_User_Lacks_Permission()
+    public async Task Should_Fail_When_Campaign_Is_Outside_Admin_Scope()
     {
-        _currentUser.AllowTopUpsManage = false;
+        var campaign = TopUpCampaign.Create(2, "CAMPAIGN-02", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
 
-        RequestManualRunCommandHandler handler = CreateHandler();
+        RequestManualRunCommandHandler handler = CreateHandler(new ScopedAdminAccess([1]));
         var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(TopUpErrors.Unauthorized);
+        result.Error.Code.Should().Be("AUTH.ORGANIZATION_OUTSIDE_SCOPE");
         _runs.AddCalls.Should().Be(0);
     }
 
@@ -146,14 +150,40 @@ public sealed class RequestManualRunCommandHandlerTests
         domainEvent.RequestedByUserId.Should().Be(_currentUser.UserAccountId);
     }
 
-    private RequestManualRunCommandHandler CreateHandler()
+    private RequestManualRunCommandHandler CreateHandler(IAdminAccessControl? adminAccess = null)
     {
         return new RequestManualRunCommandHandler(
             _campaigns,
             _runs,
             _dispatcher,
             _currentUser,
+            adminAccess ?? new AllowAllAdminAccess(),
             _clock);
+    }
+
+    private sealed class AllowAllAdminAccess : IAdminAccessControl
+    {
+        public bool IsHqAdmin => true;
+        public bool IsSchoolAdmin => false;
+        public IReadOnlyCollection<long> ScopedOrganizationIds => [];
+        public bool CanAccessOrganization(long organizationId) => true;
+        public Result EnsureCanAccessOrganization(long organizationId) => Result.Success();
+        public AdminOrganizationScope ResolveOrganizationFilter(long? requestedOrganizationId)
+            => new(true, true, requestedOrganizationId, []);
+    }
+
+    private sealed class ScopedAdminAccess(IReadOnlyCollection<long> organizationIds) : IAdminAccessControl
+    {
+        public bool IsHqAdmin => false;
+        public bool IsSchoolAdmin => true;
+        public IReadOnlyCollection<long> ScopedOrganizationIds => organizationIds;
+        public bool CanAccessOrganization(long organizationId) => organizationIds.Contains(organizationId);
+        public Result EnsureCanAccessOrganization(long organizationId)
+            => CanAccessOrganization(organizationId)
+                ? Result.Success()
+                : Result.Failure(new Error("AUTH.ORGANIZATION_OUTSIDE_SCOPE", "The requested organization is outside the current admin's scope."));
+        public AdminOrganizationScope ResolveOrganizationFilter(long? requestedOrganizationId)
+            => new(requestedOrganizationId is null || CanAccessOrganization(requestedOrganizationId.Value), false, requestedOrganizationId, organizationIds);
     }
 
     private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository
@@ -168,8 +198,17 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(campaign);
         }
 
+        public Task<bool> CampaignCodeExistsAsync(
+            long organizationId,
+            string campaignCode,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_campaigns.Values.Any(x => x.OrganizationId == organizationId
+                && x.CampaignCode == campaignCode));
+        }
+
         public Task<IReadOnlyList<Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns.CampaignListItem>> ListAsync(
-            IReadOnlyCollection<long> accessibleOrgIds,
+            IReadOnlyCollection<long>? accessibleOrgIds,
             CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
@@ -189,6 +228,27 @@ public sealed class RequestManualRunCommandHandlerTests
         {
             IReadOnlyList<TopUpCampaignRecipient> recipients = [];
             return Task.FromResult(recipients);
+        }
+
+        public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0);
+        }
+
+        public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0);
+        }
+
+        public Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
+        {
+            Add(campaign);
+            return Task.CompletedTask;
+        }
+
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
     private sealed class FakeTopUpRunRepository : ITopUpRunRepository
@@ -255,7 +315,7 @@ public sealed class RequestManualRunCommandHandlerTests
         public long? PersonId => null;
         public long? OrganizationUnitId => 1;
         public IReadOnlyCollection<long> OrganizationUnitIds { get; } = [1];
-        public IReadOnlyCollection<string> Roles { get; } = ["SYSTEM_ADMIN"];
+        public IReadOnlyCollection<string> Roles { get; } = ["HQ_ADMIN"];
         public IReadOnlyCollection<string> Permissions => AllowTopUpsManage ? ["TOPUPS_MANAGE"] : [];
         public string Portal => "ADMIN";
         public bool IsAuthenticated => true;

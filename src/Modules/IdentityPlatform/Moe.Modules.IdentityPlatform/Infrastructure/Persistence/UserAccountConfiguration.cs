@@ -43,14 +43,15 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
         builder.Property(x => x.LastLoginAtUtc).HasColumnName("LastLoginAt");
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Ignore(x => x.DomainEvents);
-        builder.HasData(
+        object[] adminAccounts =
+        [
             SeedAdmin(
-                DemoSeedData.SystemAdminLoginAccountId,
+                DemoSeedData.HqAdminLoginAccountId,
                 OrganizationUnitCodes.MoeHeadquartersId,
-                RoleCodes.SystemAdmin,
-                DemoSeedData.SystemAdminObjectId,
+                RoleCodes.HqAdmin,
+                DemoSeedData.HqAdminObjectId,
                 "system.admin@moe.local",
-                "MOE System Admin",
+                "MOE HQ Admin",
                 createdByLoginAccountId: null),
             SeedAdmin(
                 DemoSeedData.SchoolAdminLoginAccountId,
@@ -59,36 +60,10 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
                 DemoSeedData.SchoolAdminObjectId,
                 "school.admin@demo-school.local",
                 "Demo School Admin",
-                DemoSeedData.SystemAdminLoginAccountId),
-            new
-            {
-                Id = DemoSeedData.StudentLoginAccountId,
-                PersonId = (long?)DemoSeedData.StudentPersonId,
-                AdminOrganizationId = (long?)null,
-                RoleCode = RoleCodes.Student,
-                IdentityProviderCode = IdentityProviderCodes.Singpass,
-                ExternalTenantId = (string?)null,
-                ExternalIssuer = DemoSeedData.MockPassIssuer,
-                ExternalSubjectId = DemoSeedData.MockPassSubject,
-                ExternalObjectId = (string?)null,
-                ProviderDisplayName = "Tan Mei Ling",
-                ProviderLoginName = DemoSeedData.MockPassNric,
-                ProviderEmail = (string?)null,
-                ProviderMobile = (string?)null,
-                ContactEmail = "student@example.test",
-                ContactMobile = "+6590000001",
-                LoginEmailNormalized = (string?)null,
-                DisplayNameSnapshot = "Tan Mei Ling",
-                UserTypeCode = UserTypeCodes.EService,
-                PortalAccessCode = PortalAccessCodes.EService,
-                AccountStatusCode = UserAccountStatusCodes.Active,
-                FirstLoginAtUtc = (DateTime?)null,
-                LastLoginAtUtc = (DateTime?)null,
-                LastSyncedAtUtc = DemoSeedData.SeededAtUtc,
-                CreatedAtUtc = DemoSeedData.SeededAtUtc,
-                CreatedByUserAccountId = (long?)DemoSeedData.SystemAdminLoginAccountId,
-                UpdatedAtUtc = DemoSeedData.SeededAtUtc
-            });
+                DemoSeedData.HqAdminLoginAccountId)
+        ];
+
+        builder.HasData(adminAccounts.Concat(DemoSeedData.MockPassStudents.Select(SeedStudent)));
     }
 
     private static object SeedAdmin(
@@ -126,6 +101,37 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
             LastSyncedAtUtc = DemoSeedData.SeededAtUtc,
             CreatedAtUtc = DemoSeedData.SeededAtUtc,
             CreatedByUserAccountId = createdByLoginAccountId,
+            UpdatedAtUtc = DemoSeedData.SeededAtUtc
+        };
+
+    private static object SeedStudent(MockPassStudentSeed student)
+        => new
+        {
+            Id = student.LoginAccountId,
+            PersonId = (long?)student.PersonId,
+            AdminOrganizationId = (long?)null,
+            RoleCode = RoleCodes.Student,
+            IdentityProviderCode = IdentityProviderCodes.Singpass,
+            ExternalTenantId = (string?)null,
+            ExternalIssuer = DemoSeedData.MockPassIssuer,
+            ExternalSubjectId = student.SingpassSubjectId,
+            ExternalObjectId = (string?)null,
+            ProviderDisplayName = student.FullName,
+            ProviderLoginName = student.Nric,
+            ProviderEmail = (string?)null,
+            ProviderMobile = (string?)null,
+            ContactEmail = student.Email,
+            ContactMobile = student.Mobile,
+            LoginEmailNormalized = (string?)null,
+            DisplayNameSnapshot = student.FullName,
+            UserTypeCode = UserTypeCodes.EService,
+            PortalAccessCode = PortalAccessCodes.EService,
+            AccountStatusCode = UserAccountStatusCodes.Active,
+            FirstLoginAtUtc = (DateTime?)null,
+            LastLoginAtUtc = (DateTime?)null,
+            LastSyncedAtUtc = DemoSeedData.SeededAtUtc,
+            CreatedAtUtc = DemoSeedData.SeededAtUtc,
+            CreatedByUserAccountId = (long?)DemoSeedData.HqAdminLoginAccountId,
             UpdatedAtUtc = DemoSeedData.SeededAtUtc
         };
 }

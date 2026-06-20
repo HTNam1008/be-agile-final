@@ -2,13 +2,10 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.IdentityPlatform.Application.Organizations;
-using Moe.Modules.IdentityPlatform.Domain.Iam;
-using Moe.StudentFinance.Persistence;
+using Moe.Modules.IdentityPlatform.IGateway.Repositories;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -18,33 +15,18 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 [EnableCors("AdminCors")]
 public sealed class OrganizationUnitsController(
-    MoeDbContext dbContext,
-    ICurrentUser currentUser) : ControllerBase
+    IOrganizationUnitRepository organizations,
+    IAdminAccessControl adminAccess) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
-        IQueryable<OrganizationUnit> query = dbContext.Set<OrganizationUnit>().AsNoTracking();
+        IReadOnlyCollection<long>? organizationIds = adminAccess.IsHqAdmin
+            ? null
+            : adminAccess.ScopedOrganizationIds;
 
-        if (!currentUser.HasPermission("ORG_VIEW_ALL"))
-        {
-            long[] scopedOrganizationIds = currentUser.OrganizationUnitIds.ToArray();
-            query = query.Where(x => scopedOrganizationIds.Contains(x.Id));
-        }
+        var result = await organizations.ListActiveAsync(organizationIds, cancellationToken);
 
-        OrganizationUnitSummary[] organizations = await query
-            .Where(x => x.StatusCode == "ACTIVE")
-            .OrderBy(x => x.UnitTypeCode)
-            .ThenBy(x => x.UnitName)
-            .Select(x => new OrganizationUnitSummary(
-                x.Id,
-                x.ParentOrganizationUnitId,
-                x.UnitCode,
-                x.UnitName,
-                x.UnitTypeCode,
-                x.StatusCode))
-            .ToArrayAsync(cancellationToken);
-
-        return ApiResponseFactory.Ok(organizations, HttpContext.TraceIdentifier);
+        return ApiResponseFactory.Ok(result, HttpContext.TraceIdentifier);
     }
 }

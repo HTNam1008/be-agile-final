@@ -34,6 +34,10 @@ internal static class CourseBillingApiResponses
             "COURSE.FEE_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.ENROLLMENT_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.FEE_COMPONENT_DUPLICATE_CODE" => ApiResponseCodes.Conflict,
+            "COURSE.DISABLED" => ApiResponseCodes.Conflict,
+            "COURSE.NOT_PUBLISHED" => ApiResponseCodes.Conflict,
+            "COURSE.ENROLLMENT_WINDOW_CLOSED" => ApiResponseCodes.Conflict,
+            "COURSE.PERSON_NOT_IN_ORGANIZATION" => ApiResponseCodes.Conflict,
             _ => ApiResponseCodes.BadRequest
         };
 }

@@ -74,6 +74,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireAuthenticatedUser();
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
                 });
+
+                options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
+                    policy.RequireClaim(ClaimNames.Role, "STUDENT");
+                });
             });
         });
     }
@@ -86,6 +95,7 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
         using var scope = serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
 
+        SeedDemoSchool(db);
         SeedStudent(db, 2101, "IT-STU-0001", "Integration Student One", new DateOnly(2008, 2, 10), "SEC_4", "4A", 1);
         SeedStudent(db, 2102, "IT-STU-0002", "Integration Student Two", new DateOnly(2009, 7, 15), "SEC_3", "3B", 1);
         SeedAccount(db, 2101, "EA-IT-0001", 125.00m);
@@ -95,6 +105,41 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static void SeedDemoSchool(MoeDbContext db)
+    {
+        Type schoolType = typeof(Person).Assembly.GetType(
+            "Moe.Modules.IdentityPlatform.Domain.Iam.OrganizationUnit",
+            throwOnError: true)!;
+
+        if (db.Find(schoolType, 1L) is null)
+        {
+            object school = Activator.CreateInstance(
+                schoolType,
+                "MOEDEMO",
+                "Demo Secondary School",
+                "SCHOOL",
+                DateTime.UtcNow)!;
+
+            SetId(school, 1);
+            db.Add(school);
+        }
+
+        if (db.Find(schoolType, 2L) is not null)
+        {
+            return;
+        }
+
+        object otherSchool = Activator.CreateInstance(
+            schoolType,
+            "MOEOTHER",
+            "Other Secondary School",
+            "SCHOOL",
+            DateTime.UtcNow)!;
+
+        SetId(otherSchool, 2);
+        db.Add(otherSchool);
+    }
 
     private static void SeedStudent(
         MoeDbContext db,
@@ -185,23 +230,26 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        string requestedRole = Request.Headers.TryGetValue("X-Test-Role", out var values)
+            ? values.ToString()
+            : "SCHOOL_ADMIN";
+
         Claim[] claims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
             ? [
                 new Claim(ClaimTypes.Name, "Test Student"),
                 new Claim(ClaimTypes.NameIdentifier, "test-student-id"),
                 new Claim(ClaimNames.Portal, PortalCodes.EService),
                 new Claim(ClaimNames.Role, "STUDENT"),
-                new Claim(ClaimNames.PersonId, "2001"),
-                new Claim(ClaimNames.UserAccountId, "1003")
+                new Claim(ClaimNames.PersonId, GetHeaderValue("X-Test-PersonId", "2001")),
+                new Claim(ClaimNames.UserAccountId, GetHeaderValue("X-Test-UserAccountId", "1003"))
             ]
             : [
                 new Claim(ClaimTypes.Name, "Test User"),
                 new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
                 new Claim(ClaimNames.Portal, PortalCodes.Admin),
-                new Claim(ClaimNames.Role, "SYSTEM_ADMIN"),
+                new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
                 new Claim(ClaimNames.OrganizationUnitId, "1"),
-                new Claim(ClaimNames.OrganizationUnitId, "2"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             ];
         var identity = new ClaimsIdentity(claims, "Test");
@@ -211,5 +259,12 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         var result = AuthenticateResult.Success(ticket);
 
         return Task.FromResult(result);
+    }
+
+    private string GetHeaderValue(string name, string fallback)
+    {
+        return Request.Headers.TryGetValue(name, out var values) && !string.IsNullOrWhiteSpace(values.ToString())
+            ? values.ToString()
+            : fallback;
     }
 }

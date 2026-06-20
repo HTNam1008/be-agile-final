@@ -82,12 +82,16 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()
                 on enrollment.PersonId equals person.Id
-            where scopedOrganizationIds.Contains(enrollment.OrganizationId)
             select new
             {
                 Person = person,
                 Enrollment = enrollment
             };
+
+        if (scopedOrganizationIds.Count > 0)
+        {
+            query = query.Where(x => scopedOrganizationIds.Contains(x.Enrollment.OrganizationId));
+        }
 
         if (criteria.CandidatePersonIds is not null)
         {

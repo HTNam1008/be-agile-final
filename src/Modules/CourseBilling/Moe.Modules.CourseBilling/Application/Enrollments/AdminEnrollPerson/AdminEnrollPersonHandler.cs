@@ -11,10 +11,9 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 internal sealed class AdminEnrollPersonHandler(
     ICourseEnrollmentRepository enrollments,
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
 {
-    private const long MoeHeadquartersOrganizationId = 1;
-
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         AdminEnrollPersonCommand command,
         CancellationToken cancellationToken)
@@ -50,13 +49,7 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseErrors.EnrollmentWindowClosed);
         }
 
-        bool hasGlobalScope = currentUser.HasPermission("ORG_VIEW_ALL")
-            || currentUser.OrganizationUnitId == MoeHeadquartersOrganizationId
-            || currentUser.OrganizationUnitIds.Contains(MoeHeadquartersOrganizationId);
-
-        if (!hasGlobalScope
-            && currentUser.OrganizationUnitId != course.OrganizationId
-            && !currentUser.OrganizationUnitIds.Contains(course.OrganizationId))
+        if (!adminAccess.CanAccessOrganization(course.OrganizationId))
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseOrganizationForbidden);
         }

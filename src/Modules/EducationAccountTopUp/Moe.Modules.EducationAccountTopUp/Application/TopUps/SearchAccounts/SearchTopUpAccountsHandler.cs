@@ -11,7 +11,7 @@ using Moe.SharedKernel.Results;
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 
 internal sealed class SearchTopUpAccountsHandler(
-    ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
     IClock clock,
     ITopUpAccountProjectionRepository accounts,
     ITopUpStudentSearchDirectory students)
@@ -21,21 +21,16 @@ internal sealed class SearchTopUpAccountsHandler(
         SearchTopUpAccountsQuery query,
         CancellationToken cancellationToken)
     {
-        long[] scopedOrganizationIds = currentUser.OrganizationUnitIds.ToArray();
-
-        if (scopedOrganizationIds.Length == 0)
-        {
-            return Result<SearchTopUpAccountsResponse>.Failure(TopUpErrors.AdminOrganizationScopeRequired);
-        }
-
-        if (query.OrganizationId.HasValue && !scopedOrganizationIds.Contains(query.OrganizationId.Value))
+        AdminOrganizationScope scope = adminAccess.ResolveOrganizationFilter(query.OrganizationId);
+        if (!scope.HasAccess)
         {
             return Result<SearchTopUpAccountsResponse>.Failure(TopUpErrors.OrganizationOutsideScope);
         }
+        long[] scopedOrganizationIds = scope.HasGlobalAccess ? [] : scope.ScopedOrganizationIds.ToArray();
 
         TopUpAccountFilter filter = new(
             query.Search,
-            query.OrganizationId,
+            scope.OrganizationId,
             query.SchoolingStatusCode,
             query.LevelCode,
             query.ClassCode,

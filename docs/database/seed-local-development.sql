@@ -27,7 +27,7 @@ BEGIN TRANSACTION;
 
 DECLARE @HqOrganizationId bigint = 1;
 DECLARE @SchoolOrganizationId bigint = 2;
-DECLARE @SystemAdminId bigint = 1001;
+DECLARE @HqAdminId bigint = 1001;
 DECLARE @SchoolAdminId bigint = 1002;
 
 DECLARE @HqCampaignId bigint = 95001;
@@ -158,9 +158,9 @@ IF NOT EXISTS (
 IF NOT EXISTS (
     SELECT 1
     FROM iam.LoginAccount
-    WHERE LoginAccountId = @SystemAdminId
+    WHERE LoginAccountId = @HqAdminId
 )
-    THROW 50007, 'Seed system admin 1001 is missing. Apply the standard migrations first.', 1;
+    THROW 50007, 'Seed HQ admin 1001 is missing. Apply the standard migrations first.', 1;
 
 IF NOT EXISTS (
     SELECT 1
@@ -341,7 +341,7 @@ SET
     CurrentBalance = demo.CurrentBalance,
     AccountStatusCode = demo.AccountStatusCode,
     OpenedAt = '2026-01-02T00:00:00',
-    OpenedByLoginAccountId = @SystemAdminId,
+    OpenedByLoginAccountId = @HqAdminId,
     OpeningTypeCode = 'MANUAL',
     OpeningReason = 'Local TopUp demo seed',
     PendingClosureAt = NULL,
@@ -382,7 +382,7 @@ SELECT
     demo.CurrentBalance,
     demo.AccountStatusCode,
     '2026-01-02T00:00:00',
-    @SystemAdminId,
+    @HqAdminId,
     'MANUAL',
     'Local TopUp demo seed',
     NULL,
@@ -466,8 +466,8 @@ VALUES
     '2026-06-01T00:00:00',
     '2026-07-15T23:59:59',
     'PUBLISHED',
-    @SystemAdminId,
-    @SystemAdminId,
+    @HqAdminId,
+    @HqAdminId,
     '2026-06-01T00:00:00',
     NULL,
     NULL
@@ -837,9 +837,9 @@ VALUES
     NULL,
     'ACTIVE',
     1,
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-01T00:00:00',
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-01T00:00:00'
 ),
 (
@@ -881,7 +881,7 @@ SELECT
     demo.EducationAccountId,
     CASE WHEN demo.EducationAccountId = 41008 THEN 125.00 ELSE NULL END,
     1,
-    @SystemAdminId,
+    @HqAdminId,
     '2026-06-01T00:05:00'
 FROM @DemoStudents AS demo
 WHERE demo.OrganizationId = @HqOrganizationId
@@ -947,7 +947,7 @@ VALUES
     1,
     '2026-06-10T01:00:00',
     'MANUAL',
-    @SystemAdminId,
+    @HqAdminId,
     'COMPLETED',
     NULL,
     3,
