@@ -23,7 +23,7 @@ public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : C
         [FromBody] AdminEnrollPersonRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new AdminEnrollPersonCommand(courseId, request.PersonId);
+        var command = new AdminEnrollPersonCommand(courseId, request.StudentNumber);
 
         var result = await commands.Send(command, cancellationToken);
         return this.ToCourseBillingResponse(result, created: true);

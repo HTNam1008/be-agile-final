@@ -42,4 +42,102 @@ internal sealed class StudentDirectory(MoeDbContext dbContext) : IStudentDirecto
                 IsAccountHolder: true,
                 student.SchoolName);
     }
+
+    public async Task<IReadOnlyList<AdminStudentSearchSummary>> ListByOrganizationAsync(
+        AdminStudentSearchCriteria criteria,
+        CancellationToken cancellationToken)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var query =
+            from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
+            join person in dbContext.Set<Person>().AsNoTracking()
+                on enrollment.PersonId equals person.Id
+            where enrollment.OrganizationId == criteria.OrganizationId
+                && enrollment.SchoolingStatusCode == "ACTIVE"
+                && enrollment.StartDate <= today
+                && (enrollment.EndDate == null || enrollment.EndDate >= today)
+            select new
+            {
+                Enrollment = enrollment,
+                Person = person
+            };
+
+        if (!string.IsNullOrWhiteSpace(criteria.Search))
+        {
+            string search = criteria.Search.Trim();
+            query = query.Where(x =>
+                x.Enrollment.StudentNumber.Contains(search)
+                || x.Person.OfficialFullName.Contains(search));
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.LevelCode))
+        {
+            string levelCode = criteria.LevelCode.Trim().ToUpperInvariant();
+            query = query.Where(x => x.Enrollment.LevelCode == levelCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.ClassCode))
+        {
+            string classCode = criteria.ClassCode.Trim().ToUpperInvariant();
+            query = query.Where(x => x.Enrollment.ClassCode == classCode);
+        }
+
+        return await query
+            .OrderBy(x => x.Person.OfficialFullName)
+            .ThenBy(x => x.Enrollment.StudentNumber)
+            .Skip((criteria.Page - 1) * criteria.PageSize)
+            .Take(criteria.PageSize)
+            .Select(x => new AdminStudentSearchSummary(
+                x.Person.Id,
+                x.Enrollment.StudentNumber,
+                x.Person.OfficialFullName,
+                x.Person.DateOfBirth,
+                x.Enrollment.LevelCode,
+                x.Enrollment.ClassCode,
+                x.Enrollment.SchoolingStatusCode,
+                x.Enrollment.OrganizationId))
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public Task<long> CountByOrganizationAsync(
+        AdminStudentSearchCriteria criteria,
+        CancellationToken cancellationToken)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var query =
+            from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
+            join person in dbContext.Set<Person>().AsNoTracking()
+                on enrollment.PersonId equals person.Id
+            where enrollment.OrganizationId == criteria.OrganizationId
+                && enrollment.SchoolingStatusCode == "ACTIVE"
+                && enrollment.StartDate <= today
+                && (enrollment.EndDate == null || enrollment.EndDate >= today)
+            select new
+            {
+                Enrollment = enrollment,
+                Person = person
+            };
+
+        if (!string.IsNullOrWhiteSpace(criteria.Search))
+        {
+            string search = criteria.Search.Trim();
+            query = query.Where(x =>
+                x.Enrollment.StudentNumber.Contains(search)
+                || x.Person.OfficialFullName.Contains(search));
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.LevelCode))
+        {
+            string levelCode = criteria.LevelCode.Trim().ToUpperInvariant();
+            query = query.Where(x => x.Enrollment.LevelCode == levelCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.ClassCode))
+        {
+            string classCode = criteria.ClassCode.Trim().ToUpperInvariant();
+            query = query.Where(x => x.Enrollment.ClassCode == classCode);
+        }
+
+        return query.LongCountAsync(cancellationToken);
+    }
 }

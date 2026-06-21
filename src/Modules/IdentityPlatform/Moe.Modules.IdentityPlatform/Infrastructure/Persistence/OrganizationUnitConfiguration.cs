@@ -24,34 +24,37 @@ internal sealed class OrganizationUnitConfiguration : IEntityTypeConfiguration<O
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Ignore(x => x.DomainEvents);
         builder.ToTable(x => x.HasCheckConstraint("CK_Organization_Parent_NotSelf", "[ParentOrganizationId] IS NULL OR [ParentOrganizationId] <> [OrganizationId]"));
-        builder.HasData(
-            new
-            {
-                Id = OrganizationUnitCodes.MoeHeadquartersId,
-                ParentOrganizationUnitId = (long?)null,
-                UnitCode = OrganizationUnitCodes.MoeHeadquarters,
-                UnitName = "Ministry of Education Headquarters",
-                UnitTypeCode = "HQ",
-                MockPassSchoolCode = (string?)null,
-                StatusCode = "ACTIVE",
-                CreatedAtUtc = DemoSeedData.SeededAtUtc,
-                UpdatedAtUtc = DemoSeedData.SeededAtUtc,
-                EffectiveFromUtc = DemoSeedData.SeededAtUtc,
-                EffectiveToUtc = (DateTime?)null
-            },
-            new
-            {
-                Id = OrganizationUnitCodes.DemoSchoolId,
-                ParentOrganizationUnitId = (long?)OrganizationUnitCodes.MoeHeadquartersId,
-                UnitCode = OrganizationUnitCodes.DemoSchool,
-                UnitName = "Demo Secondary School",
-                UnitTypeCode = "SCHOOL",
-                MockPassSchoolCode = "MOEDEMO",
-                StatusCode = "ACTIVE",
-                CreatedAtUtc = DemoSeedData.SeededAtUtc,
-                UpdatedAtUtc = DemoSeedData.SeededAtUtc,
-                EffectiveFromUtc = DemoSeedData.SeededAtUtc,
-                EffectiveToUtc = (DateTime?)null
-            });
+        object headquarters = new
+        {
+            Id = OrganizationUnitCodes.MoeHeadquartersId,
+            ParentOrganizationUnitId = (long?)null,
+            UnitCode = OrganizationUnitCodes.MoeHeadquarters,
+            UnitName = "Ministry of Education Headquarters",
+            UnitTypeCode = "HQ",
+            MockPassSchoolCode = (string?)null,
+            StatusCode = "ACTIVE",
+            CreatedAtUtc = DemoSeedData.SeededAtUtc,
+            UpdatedAtUtc = DemoSeedData.SeededAtUtc,
+            EffectiveFromUtc = DemoSeedData.SeededAtUtc,
+            EffectiveToUtc = (DateTime?)null
+        };
+
+        builder.HasData(new[] { headquarters }.Concat(DemoSeedData.MockSchools.Select(SeedSchool)));
     }
+
+    private static object SeedSchool(MockSchoolSeed school)
+        => new
+        {
+            Id = school.OrganizationId,
+            ParentOrganizationUnitId = (long?)OrganizationUnitCodes.MoeHeadquartersId,
+            UnitCode = school.SchoolCode,
+            UnitName = school.SchoolName,
+            UnitTypeCode = "SCHOOL",
+            MockPassSchoolCode = school.MockPassSchoolCode,
+            StatusCode = "ACTIVE",
+            CreatedAtUtc = DemoSeedData.SeededAtUtc,
+            UpdatedAtUtc = DemoSeedData.SeededAtUtc,
+            EffectiveFromUtc = DemoSeedData.SeededAtUtc,
+            EffectiveToUtc = (DateTime?)null
+        };
 }
