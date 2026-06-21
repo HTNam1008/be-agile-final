@@ -7,6 +7,9 @@ public sealed class AdminEnrollPersonRequestValidator : AbstractValidator<AdminE
 {
     public AdminEnrollPersonRequestValidator()
     {
-        RuleFor(x => x.PersonId).GreaterThan(0);
+        RuleFor(x => x.StudentNumber)
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty()
+            .MaximumLength(50);
     }
 }

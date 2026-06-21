@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.IdentityPlatform.Application;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -14,8 +17,59 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 [Route("api/admin/v{version:apiVersion}/students")]
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 [EnableCors("AdminCors")]
-public sealed class StudentsController(ICommandDispatcher commands) : ControllerBase
+public sealed class StudentsController(
+    ICommandDispatcher commands,
+    IStudentDirectory students,
+    IAdminAccessControl adminAccess) : ControllerBase
 {
+    [HttpGet]
+    public async Task<IActionResult> List(
+        [FromQuery] long organizationId,
+        [FromQuery] string? search,
+        [FromQuery] string? levelCode,
+        [FromQuery] string? classCode,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (organizationId <= 0)
+        {
+            return ApiResponseFactory.Failure(
+                IdentityErrors.OrganizationUnitNotFound,
+                ApiResponseCodes.NotFound,
+                HttpContext.TraceIdentifier);
+        }
+
+        if (!adminAccess.CanAccessOrganization(organizationId))
+        {
+            return ApiResponseFactory.Failure(
+                IdentityErrors.SchoolOutsideScope,
+                ApiResponseCodes.Forbidden,
+                HttpContext.TraceIdentifier);
+        }
+
+        AdminStudentSearchCriteria criteria = new(
+            organizationId,
+            search,
+            levelCode,
+            classCode,
+            Math.Max(page, 1),
+            Math.Clamp(pageSize, 1, 100));
+
+        long totalCount = await students.CountByOrganizationAsync(criteria, cancellationToken);
+        IReadOnlyList<AdminStudentSearchSummary> items = await students.ListByOrganizationAsync(
+            criteria,
+            cancellationToken);
+
+        return ApiResponseFactory.Ok(
+            new PageResponse<AdminStudentSearchSummary>(
+                items,
+                criteria.Page,
+                criteria.PageSize,
+                totalCount),
+            HttpContext.TraceIdentifier);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] CreateStudentRequest request,

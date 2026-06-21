@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
@@ -39,6 +40,27 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         return exists == 1;
     }
 
+    public Task<long?> FindActiveStudentPersonIdAsync(
+        string studentNumber,
+        long organizationId,
+        DateOnly onDate,
+        CancellationToken cancellationToken)
+    {
+        string normalizedStudentNumber = studentNumber.Trim().ToUpperInvariant();
+
+        return dbContext.Set<SchoolEnrollment>()
+            .AsNoTracking()
+            .Where(x => x.StudentNumber == normalizedStudentNumber
+                && x.OrganizationId == organizationId
+                && x.SchoolingStatusCode == "ACTIVE"
+                && x.StartDate <= onDate
+                && (x.EndDate == null || x.EndDate >= onDate))
+            .OrderByDescending(x => x.StartDate)
+            .ThenByDescending(x => x.Id)
+            .Select(x => (long?)x.PersonId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<bool> PersonHasActiveSchoolEnrollmentAsync(
         long personId,
         long organizationId,
@@ -66,8 +88,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         return dbContext.Set<CourseEnrollment>()
             .AnyAsync(
                 x => x.PersonId == personId
-                    && x.CourseId == courseId
-                    && x.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled,
+                    && x.CourseId == courseId,
                 cancellationToken);
     }
 
