@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,9 +18,9 @@ using Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetStudentDashboard;
 using Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
+using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
-using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Storage;

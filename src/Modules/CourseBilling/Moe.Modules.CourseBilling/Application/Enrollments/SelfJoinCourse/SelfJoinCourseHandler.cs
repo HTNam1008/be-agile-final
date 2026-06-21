@@ -1,4 +1,4 @@
-﻿using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;

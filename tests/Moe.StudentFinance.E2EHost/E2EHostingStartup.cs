@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moe.Infrastructure.Shared.Security;
-using Moe.StudentFinance.Persistence;
 using Moe.StudentFinance.IntegrationTests; // To re-use TestAuthHandler
+using Moe.StudentFinance.Persistence;
 
 [assembly: HostingStartup(typeof(Moe.StudentFinance.E2EHost.E2EHostingStartup))]
 
@@ -77,7 +77,7 @@ public class E2EHostingStartup : IHostingStartup
         });
 
         // 3. Register the DB Seeder
-        builder.ConfigureServices(services => 
+        builder.ConfigureServices(services =>
         {
             services.AddHostedService<E2EDbSeeder>();
         });

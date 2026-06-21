@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Moe.Application.Abstractions.Persistence;
-using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.CourseBilling;
-using Moe.Modules.IdentityPlatform;
+using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.FasPayment;
+using Moe.Modules.IdentityPlatform;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.Migrations;

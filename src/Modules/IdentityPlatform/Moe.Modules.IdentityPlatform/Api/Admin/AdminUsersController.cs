@@ -49,9 +49,9 @@ public sealed class AdminUsersController(ICommandDispatcher commands) : Controll
 
     private static int GetCreateAdminUserFailureStatusCode(string errorCode)
         => errorCode switch
-    {
-        "IDENTITY.ADMIN_DIRECTORY_CREATE_FAILED" => ApiResponseCodes.BadGateway,
-        "IDENTITY.ADMIN_LOCAL_ACCOUNT_CREATE_FAILED" => ApiResponseCodes.Conflict,
-        _ => ApiResponseCodes.Conflict
-    };
+        {
+            "IDENTITY.ADMIN_DIRECTORY_CREATE_FAILED" => ApiResponseCodes.BadGateway,
+            "IDENTITY.ADMIN_LOCAL_ACCOUNT_CREATE_FAILED" => ApiResponseCodes.Conflict,
+            _ => ApiResponseCodes.Conflict
+        };
 }

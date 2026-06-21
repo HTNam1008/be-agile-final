@@ -1,19 +1,19 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using Asp.Versioning;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.EducationAccountTopUp;
-using Moe.Modules.CourseBilling;
-using Moe.Modules.IdentityPlatform;
-using Moe.Modules.FasPayment;
-using Moe.StudentFinance.Persistence;
 using Moe.Infrastructure.Shared.Validation;
+using Moe.Modules.CourseBilling;
+using Moe.Modules.EducationAccountTopUp;
+using Moe.Modules.FasPayment;
+using Moe.Modules.IdentityPlatform;
+using Moe.StudentFinance.Persistence;
 using NSwag;
 using NSwag.Generation.Processors.Security;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
