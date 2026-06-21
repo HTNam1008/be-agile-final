@@ -4,8 +4,11 @@ internal static class OrganizationUnitCodes
 {
     public const long MoeHeadquartersId = 1;
     public const string MoeHeadquarters = "MOE_HQ";
-    public const long DemoSchoolId = 2;
-    public const string DemoSchool = "DEMO_SCHOOL";
+    public const long NusId = 2;
+    public const long NtuId = 3;
+    public const long SmuId = 4;
+    public const long SutdId = 5;
+    public const long SitId = 6;
 }
 
 internal static class IamStatusCodes

@@ -31,7 +31,7 @@ internal sealed class SchoolEnrollmentConfiguration : IEntityTypeConfiguration<S
         {
             Id = student.EnrollmentId,
             PersonId = student.PersonId,
-            OrganizationId = OrganizationUnitCodes.DemoSchoolId,
+            OrganizationId = student.OrganizationId,
             StudentNumber = student.StudentNumber,
             AcademicYear = "2026",
             LevelCode = student.LevelCode,
