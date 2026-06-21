@@ -22,11 +22,11 @@ public sealed class UpsertCampaignRulesCommandValidator : AbstractValidator<Upse
                 .NotEmpty()
                 .IsEnumName(typeof(OperatorCode), caseSensitive: false);
 
-            rule.When(x => 
+            rule.When(x =>
                 string.Equals(x.CriterionCode, TopUpCriterionCode.Age.ToString(), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(x.CriterionCode, TopUpCriterionCode.AccountBalance.ToString(), StringComparison.OrdinalIgnoreCase), () =>
             {
-                rule.RuleFor(x => x.OperatorCode).Must(op => 
+                rule.RuleFor(x => x.OperatorCode).Must(op =>
                     string.Equals(op, OperatorCode.GreaterThan.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(op, OperatorCode.LessThan.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(op, OperatorCode.GreaterThanOrEqual.ToString(), StringComparison.OrdinalIgnoreCase) ||
@@ -46,12 +46,12 @@ public sealed class UpsertCampaignRulesCommandValidator : AbstractValidator<Upse
                 });
             });
 
-            rule.When(x => 
+            rule.When(x =>
                 string.Equals(x.CriterionCode, TopUpCriterionCode.SchoolingStatus.ToString(), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(x.CriterionCode, TopUpCriterionCode.Level.ToString(), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(x.CriterionCode, TopUpCriterionCode.Class.ToString(), StringComparison.OrdinalIgnoreCase), () =>
             {
-                rule.RuleFor(x => x.OperatorCode).Must(op => 
+                rule.RuleFor(x => x.OperatorCode).Must(op =>
                     string.Equals(op, OperatorCode.Equals.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(op, OperatorCode.NotEquals.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(op, OperatorCode.In.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -61,13 +61,15 @@ public sealed class UpsertCampaignRulesCommandValidator : AbstractValidator<Upse
 
                 rule.When(x => string.Equals(x.OperatorCode, OperatorCode.In.ToString(), StringComparison.OrdinalIgnoreCase), () =>
                 {
-                    rule.RuleFor(x => x.TextValue).Must(val => 
+                    rule.RuleFor(x => x.TextValue).Must(val =>
                     {
                         if (string.IsNullOrWhiteSpace(val)) return false;
-                        try {
+                        try
+                        {
                             var list = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<string>>(val);
                             return list != null && list.Count > 0;
-                        } catch { return false; }
+                        }
+                        catch { return false; }
                     }).WithMessage("TextValue must be a valid, non-empty JSON array of strings for the 'In' operator.");
                 });
             });

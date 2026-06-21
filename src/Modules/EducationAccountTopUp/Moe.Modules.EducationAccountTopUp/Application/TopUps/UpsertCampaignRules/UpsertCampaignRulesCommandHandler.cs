@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -9,6 +10,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 
 internal sealed class UpsertCampaignRulesCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     IAdminAccessControl adminAccess) : ICommandHandler<UpsertCampaignRulesCommand>
 {
     public async Task<Result> Handle(UpsertCampaignRulesCommand command, CancellationToken cancellationToken)
@@ -16,19 +18,19 @@ internal sealed class UpsertCampaignRulesCommandHandler(
         var campaign = await campaigns.GetByIdAsync(command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
-            return Result.Failure(new Error("NotFound", "Campaign not found."));
+            return Result.Failure(TopUpErrors.CampaignNotFound);
 
         Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
         if (access.IsFailure)
             return Result.Failure(TopUpErrors.OrganizationOutsideScope);
 
         if (!string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
-            return Result.Failure(new Error("InvalidRecipientMode", "Rules can only be added to DYNAMIC_RULES campaigns."));
+            return Result.Failure(TopUpErrors.RulesOnlyForDynamic);
 
         if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
             campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
-            return Result.Failure(new Error("InvalidStatus", "Rules can only be modified for DRAFT or PAUSED campaigns."));
+            return Result.Failure(TopUpErrors.InvalidCampaignStatus);
         }
 
         var existingRules = await campaigns.GetRulesAsync(campaign.Id, cancellationToken);
@@ -48,6 +50,8 @@ internal sealed class UpsertCampaignRulesCommandHandler(
 
             await campaigns.AddRuleAsync(rule, cancellationToken);
         }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }

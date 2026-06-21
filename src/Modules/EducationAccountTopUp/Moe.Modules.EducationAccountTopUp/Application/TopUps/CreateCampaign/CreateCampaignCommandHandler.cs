@@ -1,5 +1,6 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -10,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
 
 internal sealed class CreateCampaignCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<CreateCampaignCommand, long>
@@ -59,6 +61,7 @@ internal sealed class CreateCampaignCommandHandler(
             nowUtc: clock.UtcNow.UtcDateTime);
 
         await campaigns.AddAsync(campaign, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<long>.Success(campaign.Id);
     }

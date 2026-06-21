@@ -2,11 +2,11 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.IdentityPlatform.IGateway.Students.TopUpSearch;
 using Moe.SharedKernel.Results;
-using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
 

@@ -12,6 +12,7 @@ public interface ITopUpCampaignRepository
         string campaignCode,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default);
 
     Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default);
 
