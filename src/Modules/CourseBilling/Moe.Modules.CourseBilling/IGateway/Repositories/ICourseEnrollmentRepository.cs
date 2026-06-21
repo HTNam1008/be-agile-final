@@ -11,6 +11,12 @@ internal interface ICourseEnrollmentRepository
 
     Task<bool> PersonExistsAsync(long personId, CancellationToken cancellationToken);
 
+    Task<long?> FindActiveStudentPersonIdAsync(
+        string studentNumber,
+        long organizationId,
+        DateOnly onDate,
+        CancellationToken cancellationToken);
+
     Task<bool> PersonHasActiveSchoolEnrollmentAsync(
         long personId,
         long organizationId,

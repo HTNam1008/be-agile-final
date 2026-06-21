@@ -4,6 +4,8 @@ using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
@@ -258,18 +260,33 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
     }
 
     public async Task<IReadOnlyList<AdminCourseEnrollmentDto>> ListEnrollmentsAsync(long courseId, CancellationToken cancellationToken)
-        => await dbContext.Set<CourseEnrollment>().AsNoTracking()
-            .Where(x => x.CourseId == courseId)
-            .OrderByDescending(x => x.EnrolledAtUtc)
-            .Select(x => new AdminCourseEnrollmentDto(
-                x.Id,
-                x.CourseId,
-                x.PersonId,
-                null,
-                x.EnrollmentSourceCode,
-                x.EnrolledByLoginAccountId,
-                x.EnrolledAtUtc,
-                x.EnrollmentStatusCode))
+        => await (
+                from enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+                join course in dbContext.Set<Course>().AsNoTracking()
+                    on enrollment.CourseId equals course.Id
+                join person in dbContext.Set<Person>().AsNoTracking()
+                    on enrollment.PersonId equals person.Id into people
+                from person in people.DefaultIfEmpty()
+                where enrollment.CourseId == courseId
+                let schoolEnrollment = dbContext.Set<SchoolEnrollment>().AsNoTracking()
+                    .Where(x => x.PersonId == enrollment.PersonId
+                        && x.OrganizationId == course.OrganizationId)
+                    .OrderByDescending(x => x.StartDate)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault()
+                orderby enrollment.EnrolledAtUtc descending
+                select new AdminCourseEnrollmentDto(
+                    enrollment.Id,
+                    enrollment.CourseId,
+                    enrollment.PersonId,
+                    person == null ? null : person.OfficialFullName,
+                    schoolEnrollment == null ? null : schoolEnrollment.StudentNumber,
+                    schoolEnrollment == null ? null : schoolEnrollment.LevelCode,
+                    schoolEnrollment == null ? null : schoolEnrollment.ClassCode,
+                    enrollment.EnrollmentSourceCode,
+                    enrollment.EnrolledByLoginAccountId,
+                    enrollment.EnrolledAtUtc,
+                    enrollment.EnrollmentStatusCode))
             .ToListAsync(cancellationToken);
 
     public Task<CourseEnrollment?> FindEnrollmentAsync(long courseEnrollmentId, CancellationToken cancellationToken)

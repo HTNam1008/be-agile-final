@@ -53,14 +53,6 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
                 "system.admin@moe.local",
                 "MOE HQ Admin",
                 createdByLoginAccountId: null),
-            SeedAdmin(
-                DemoSeedData.SchoolAdminLoginAccountId,
-                OrganizationUnitCodes.DemoSchoolId,
-                RoleCodes.SchoolAdmin,
-                DemoSeedData.SchoolAdminObjectId,
-                "school.admin@demo-school.local",
-                "Demo School Admin",
-                DemoSeedData.HqAdminLoginAccountId)
         ];
 
         builder.HasData(adminAccounts.Concat(DemoSeedData.MockPassStudents.Select(SeedStudent)));
