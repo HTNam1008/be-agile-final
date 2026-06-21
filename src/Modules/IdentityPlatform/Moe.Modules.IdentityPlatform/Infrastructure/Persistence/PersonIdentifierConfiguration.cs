@@ -1,8 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Moe.Modules.IdentityPlatform.Infrastructure.Persistence;
 

@@ -1,7 +1,7 @@
 using Moe.Application.Abstractions.Clock;
-using Moe.Modules.EducationAccountTopUp;
-using Moe.Modules.CourseBilling;
 using Moe.Infrastructure.Shared.Clock;
+using Moe.Modules.CourseBilling;
+using Moe.Modules.EducationAccountTopUp;
 using Moe.StudentFinance.Persistence;
 
 var builder = Host.CreateApplicationBuilder(args);
