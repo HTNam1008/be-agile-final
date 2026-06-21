@@ -1,3 +1,4 @@
+using System.Globalization;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Security;
@@ -7,7 +8,6 @@ using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.SharedKernel.Results;
-using System.Globalization;
 
 namespace Moe.Modules.CourseBilling.Application.Dashboard.GetStudentDashboard;
 

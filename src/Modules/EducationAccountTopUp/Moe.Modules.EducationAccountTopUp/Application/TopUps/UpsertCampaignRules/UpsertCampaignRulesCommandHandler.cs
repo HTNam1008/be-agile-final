@@ -1,47 +1,42 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.SharedKernel.Results;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
 
 internal sealed class UpsertCampaignRulesCommandHandler(
-    MoeDbContext dbContext,
+    ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     IAdminAccessControl adminAccess) : ICommandHandler<UpsertCampaignRulesCommand>
 {
     public async Task<Result> Handle(UpsertCampaignRulesCommand command, CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.Set<TopUpCampaign>()
-            .FirstOrDefaultAsync(x => x.Id == command.TopUpCampaignId, cancellationToken);
+        var campaign = await campaigns.GetByIdAsync(command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
-            return Result.Failure(new Error("NotFound", "Campaign not found."));
+            return Result.Failure(TopUpErrors.CampaignNotFound);
 
         Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
         if (access.IsFailure)
             return Result.Failure(TopUpErrors.OrganizationOutsideScope);
 
         if (!string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
-            return Result.Failure(new Error("InvalidRecipientMode", "Rules can only be added to DYNAMIC_RULES campaigns."));
+            return Result.Failure(TopUpErrors.RulesOnlyForDynamic);
 
         if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft &&
             campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
         {
-            return Result.Failure(new Error("InvalidStatus", "Rules can only be modified for DRAFT or PAUSED campaigns."));
+            return Result.Failure(TopUpErrors.InvalidCampaignStatus);
         }
 
-        // Flush existing rules (physical delete for MVP, or logical delete if required by audit)
-        // Since MVP allows flushing, we will delete existing rules for this campaign.
-        var existingRules = await dbContext.Set<TopUpCampaignRule>()
-            .Where(x => x.TopUpCampaignId == campaign.Id)
-            .ToListAsync(cancellationToken);
+        var existingRules = await campaigns.GetRulesAsync(campaign.Id, cancellationToken);
 
-        dbContext.Set<TopUpCampaignRule>().RemoveRange(existingRules);
+        await campaigns.RemoveRulesAsync(existingRules, cancellationToken);
 
-        // Insert new rules
         foreach (var ruleDto in command.Rules)
         {
             var rule = TopUpCampaignRule.Create(
@@ -53,10 +48,10 @@ internal sealed class UpsertCampaignRulesCommandHandler(
                 textValue: ruleDto.TextValue
             );
 
-            dbContext.Set<TopUpCampaignRule>().Add(rule);
+            await campaigns.AddRuleAsync(rule, cancellationToken);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }

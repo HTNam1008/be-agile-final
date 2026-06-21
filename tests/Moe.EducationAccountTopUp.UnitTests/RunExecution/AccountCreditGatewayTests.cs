@@ -241,13 +241,15 @@ public sealed class AccountCreditGatewayTests
             int totalSucceeded,
             int totalFailed,
             int totalSkipped,
-            TimeSpan duration) { }
+            TimeSpan duration)
+        { }
 
         public void RecordRecipientProcessed(
             long topUpRunId,
             string status,
             bool duplicateIdempotencyHit,
-            bool accountCreditFailure) { }
+            bool accountCreditFailure)
+        { }
 
         public void RecordAccountCreditDbConflict() { }
     }

@@ -18,3 +18,15 @@ public sealed record PreviewCampaignQuery(
     long TopUpCampaignId,
     int PageNumber,
     int PageSize) : IQuery<PreviewCampaignResult>;
+
+/// <summary>Lightweight campaign projection for preview access checks. Infrastructure-read, Application-consumed.</summary>
+public sealed record CampaignPreviewSummary(
+    long Id,
+    long OrganizationId,
+    string RecipientModeCode,
+    decimal DefaultTopUpAmount);
+
+/// <summary>A fixed recipient row resolved for preview purposes.</summary>
+public sealed record PreviewFixedRecipient(
+    long EducationAccountId,
+    decimal EstimatedAmount);

@@ -5,6 +5,7 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.Filters;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
+using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.IdentityPlatform.IGateway.Students.TopUpSearch;

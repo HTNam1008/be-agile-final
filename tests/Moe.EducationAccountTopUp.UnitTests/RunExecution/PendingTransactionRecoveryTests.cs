@@ -205,13 +205,15 @@ public sealed class PendingTransactionRecoveryTests
             int totalSucceeded,
             int totalFailed,
             int totalSkipped,
-            TimeSpan duration) { }
+            TimeSpan duration)
+        { }
 
         public void RecordRecipientProcessed(
             long topUpRunId,
             string status,
             bool duplicateIdempotencyHit,
-            bool accountCreditFailure) { }
+            bool accountCreditFailure)
+        { }
 
         public void RecordAccountCreditDbConflict() { }
     }

@@ -6,9 +6,9 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
-using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
+using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.StudentFinance.Persistence;
 using Xunit;
 

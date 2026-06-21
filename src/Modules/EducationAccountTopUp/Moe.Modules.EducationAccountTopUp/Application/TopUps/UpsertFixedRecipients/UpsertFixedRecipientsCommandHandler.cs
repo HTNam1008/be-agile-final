@@ -1,17 +1,18 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.SharedKernel.Results;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipients;
 
 internal sealed class UpsertFixedRecipientsCommandHandler(
-    MoeDbContext dbContext,
+    ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock,
@@ -22,8 +23,7 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
         UpsertFixedRecipientsCommand command,
         CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.Set<TopUpCampaign>()
-            .FirstOrDefaultAsync(x => x.Id == command.TopUpCampaignId, cancellationToken);
+        var campaign = await campaigns.GetByIdAsync(command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
         {
@@ -72,9 +72,8 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
             return Result<UpsertFixedRecipientsResponse>.Failure(selectionResult.Error);
         }
 
-        var existingRecipients = await dbContext.Set<TopUpCampaignRecipient>()
-            .Where(x => x.TopUpCampaignId == campaign.Id)
-            .ToDictionaryAsync(x => x.EducationAccountId, cancellationToken);
+        var existingList = await campaigns.GetRecipientsAsync(campaign.Id, cancellationToken);
+        var existingRecipients = existingList.ToDictionary(x => x.EducationAccountId);
 
         TopUpAccountSelectionResolution resolution = selectionResult.Value;
         HashSet<long> incomingIds = resolution.EducationAccountIds.ToHashSet();
@@ -86,7 +85,7 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
         var userId = currentUser.UserAccountId ?? 0;
 
         var toDelete = existingRecipients.Values.Where(x => !incomingIds.Contains(x.EducationAccountId)).ToList();
-        dbContext.Set<TopUpCampaignRecipient>().RemoveRange(toDelete);
+        await campaigns.RemoveRecipientsAsync(toDelete, cancellationToken);
 
         foreach (long educationAccountId in resolution.EducationAccountIds)
         {
@@ -104,11 +103,11 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
                     amountOverride,
                     userId,
                     nowUtc);
-                dbContext.Set<TopUpCampaignRecipient>().Add(newRec);
+                await campaigns.AddRecipientAsync(newRec, cancellationToken);
             }
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<UpsertFixedRecipientsResponse>.Success(
             new UpsertFixedRecipientsResponse(

@@ -1,6 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -11,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignSta
 
 internal sealed class ChangeCampaignStatusCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<ChangeCampaignStatusCommand>
@@ -30,50 +31,40 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             return Result.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        var newStatusCode = Enum.Parse<TopUpCampaignStatusCode>(command.NewStatusCode, ignoreCase: true);
+        var newStatusCode = command.NewStatusCode.ToUpperInvariant();
 
-        if (newStatusCode == TopUpCampaignStatusCode.Active)
+        if (newStatusCode == TopUpCampaignStatusCodes.Active)
         {
             if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase)
                 && await campaigns.CountActiveRulesAsync(campaign.Id, cancellationToken) == 0)
             {
-                return Result.Failure(new Error("ValidationException", "Cannot activate a DYNAMIC_RULES campaign with zero active rules."));
+                return Result.Failure(TopUpErrors.EmptyDynamicRules);
             }
 
             if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase)
                 && await campaigns.CountActiveRecipientsAsync(campaign.Id, cancellationToken) == 0)
             {
-                return Result.Failure(new Error("ValidationException", "Cannot activate a FIXED_SELECTION campaign with zero recipients."));
+                return Result.Failure(TopUpErrors.EmptyFixedRecipients);
             }
 
             SetNextRunAt(campaign, clock.UtcNow.UtcDateTime);
         }
-        else if (newStatusCode is TopUpCampaignStatusCode.Paused or TopUpCampaignStatusCode.Cancelled)
+        else if (newStatusCode == TopUpCampaignStatusCodes.Paused || newStatusCode == TopUpCampaignStatusCodes.Cancelled)
         {
             campaign.SetNextRunAt(null);
         }
 
-        campaign.ChangeStatus(
-            newStatusCode.ToString().ToUpperInvariant(),
+        Result statusResult = campaign.ChangeStatus(
+            newStatusCode,
             currentUser.UserAccountId ?? 0,
             clock.UtcNow.UtcDateTime);
 
-        try
+        if (statusResult.IsFailure)
         {
-            await campaigns.SaveChangesAsync(cancellationToken);
+            return statusResult;
         }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Result.Failure(new Error(
-                "ConcurrencyException",
-                "The campaign was modified by another request. Please reload and try again."));
-        }
-        catch (DbUpdateException)
-        {
-            return Result.Failure(new Error(
-                "PersistenceException",
-                "The status change could not be saved. Please try again."));
-        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }

@@ -41,10 +41,7 @@ public sealed class TopUpRunSummaryController(IQueryDispatcher queries) : Contro
 
         if (result.IsFailure)
         {
-            return ApiResponseFactory.Failure(
-                result.Error,
-                GetStatusCode(result.Error),
-                HttpContext.TraceIdentifier);
+            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         }
 
         return ApiResponseFactory.Ok(
@@ -53,12 +50,4 @@ public sealed class TopUpRunSummaryController(IQueryDispatcher queries) : Contro
             "Run summary retrieved.");
     }
 
-    private static int GetStatusCode(Error error)
-        => error == TopUpErrors.RunNotFound
-            ? ApiResponseCodes.NotFound
-            : error == TopUpHistoryErrors.AccessDenied
-                || error == TopUpHistoryErrors.OrganizationOutsideScope
-                || error == TopUpHistoryErrors.OrganizationScopeRequired
-                    ? ApiResponseCodes.Forbidden
-                    : ApiResponseCodes.BadRequest;
 }
