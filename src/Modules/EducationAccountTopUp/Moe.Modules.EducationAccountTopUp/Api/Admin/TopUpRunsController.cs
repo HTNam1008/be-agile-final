@@ -17,7 +17,7 @@ namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 
 [ApiController]
 [ApiVersion(1.0)]
-[Route("api/admin/v{version:apiVersion}/campaigns/{campaignId:long}/runs")]
+[Route("api/admin/v{version:apiVersion}/top-up-campaigns/{campaignId:long}/runs")]
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 [EnableCors("AdminCors")]
 public sealed class TopUpRunsController(
@@ -25,7 +25,7 @@ public sealed class TopUpRunsController(
     IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = AuthorizationPolicies.ViewTopUps)]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
     [ProducesResponseType(typeof(ApiResponse<RequestManualRunResponse>), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
@@ -39,7 +39,7 @@ public sealed class TopUpRunsController(
         Result<RequestManualRunResponse> result = await commands.Send(command, cancellationToken);
         if (result.IsFailure)
         {
-            return ToFailureResponse(result.Error);
+            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         }
 
         Response.Headers.Location = $"/api/admin/v1/top-up/runs/{result.Value.RunId}";
@@ -50,13 +50,13 @@ public sealed class TopUpRunsController(
     }
 
     [HttpPost("{runId:long}/reconcile")]
-    [Authorize(Policy = AuthorizationPolicies.ViewTopUps)]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
     [ProducesResponseType(typeof(ApiResponse<ReconciliationResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReconcileRun(
         long campaignId,
         long runId,
-        [FromServices] RunReconciliationService reconciliationService,
+        [FromServices] IRunReconciliationService reconciliationService,
         CancellationToken cancellationToken)
     {
         Result<RunSummaryResponse> accessResult = await queries.Send(
@@ -65,7 +65,7 @@ public sealed class TopUpRunsController(
 
         if (accessResult.IsFailure)
         {
-            return ToFailureResponse(accessResult.Error);
+            return TopUpErrorResponseMapper.ToFailureResponse(accessResult.Error, HttpContext);
         }
 
         Result<ReconciliationResult> result = await reconciliationService.ReconcileRunAsync(
@@ -73,25 +73,12 @@ public sealed class TopUpRunsController(
             cancellationToken);
 
         return result.IsFailure
-            ? ToFailureResponse(result.Error)
+            ? TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext)
             : ApiResponseFactory.Ok(
                 result.Value,
                 HttpContext.TraceIdentifier,
                 $"Reconciliation: {result.Value.ReconciliationStatus}");
     }
 
-    private ObjectResult ToFailureResponse(Error error)
-    {
-        int statusCode =
-            error == TopUpErrors.CampaignNotFound || error == TopUpErrors.RunNotFound
-                ? ApiResponseCodes.NotFound
-                : error == TopUpErrors.Unauthorized
-                    || error == TopUpHistoryErrors.AccessDenied
-                    || error == TopUpHistoryErrors.OrganizationOutsideScope
-                    || error == TopUpHistoryErrors.OrganizationScopeRequired
-                        ? ApiResponseCodes.Forbidden
-                        : ApiResponseCodes.BadRequest;
 
-        return ApiResponseFactory.Failure(error, statusCode, HttpContext.TraceIdentifier);
-    }
 }
