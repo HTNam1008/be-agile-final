@@ -28,13 +28,17 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
+using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.AdminDashboard;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.RunSummary;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUps;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TransactionResults;
+using Moe.Modules.EducationAccountTopUp.IGateway.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.AdminDashboard;
@@ -66,19 +70,18 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpExecutionEventPublisher, LoggingTopUpExecutionEventPublisher>();
         services.AddSingleton<ITopUpExecutionMetrics, TopUpExecutionMetrics>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
+        services.AddScoped<ITopUpCampaignReader, TopUpCampaignReader>();
+        services.AddScoped<IDynamicRuleFilter, DynamicRuleFilter>();
+        services.AddScoped<IEducationAccountReader, EducationAccountReader>();
         services.AddScoped<ITopUpAccessScopeResolver, TopUpAccessScopeResolver>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
         services.AddScoped<ITopUpTransactionResultsReader, TopUpTransactionResultsReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IRecipientProcessingService, RecipientProcessingService>();
-        services.AddScoped<RecipientProcessingService>();
         services.AddScoped<IRunExecutionOrchestrator, RunExecutionOrchestrator>();
-        services.AddScoped<RunExecutionOrchestrator>();
         services.AddScoped<IRunReconciliationService, RunReconciliationService>();
-        services.AddScoped<RunReconciliationService>();
         services.AddScoped<IPendingTransactionRecoveryService, PendingTransactionRecoveryService>();
-        services.AddScoped<PendingTransactionRecoveryService>();
         services.AddHostedService<TopUpRunWorker>();
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsRequest>, SearchTopUpAccountsRequestValidator>();
@@ -103,6 +106,9 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<ExecuteTopUpRunCommand, long>, ExecuteTopUpRunCommandHandler>();
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
 
+        // EService Queries
+        services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
+
         // Top-Up Campaign Queries
         services.AddScoped<IQueryHandler<GetCampaignsQuery, IReadOnlyList<CampaignListItem>>, GetCampaignsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();
@@ -125,7 +131,6 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<ExecuteTopUpRunCommand>, ExecuteTopUpRunCommandValidator>();
         services.AddScoped<IValidator<RequestManualRunRequest>, RequestManualRunRequestValidator>();
         services.AddScoped<IValidator<RequestManualRunCommand>, RequestManualRunCommandValidator>();
-        services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }
