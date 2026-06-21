@@ -230,6 +230,7 @@ public sealed class RunExecutionOrchestratorTests
     {
         return new RunExecutionOrchestrator(
             _recipientProcessor,
+            new FakeTopUpCampaignRepository(),
             _runs,
             _transactions,
             _events,
@@ -382,6 +383,12 @@ public sealed class RunExecutionOrchestratorTests
                 x => x.TopUpCampaignId == campaignId && x.ScheduledForUtc == scheduledFor));
         }
 
+        public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_runs.Values.Any(
+                x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
+        }
+
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
         {
             Add(run);
@@ -485,8 +492,25 @@ public sealed class RunExecutionOrchestratorTests
             long topUpRunId,
             string status,
             bool duplicateIdempotencyHit,
-            bool accountCreditFailure) { }
+            bool accountCreditFailure)
+        { }
 
         public void RecordAccountCreditDbConflict() { }
+    }
+
+    private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository
+    {
+        public Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRecipientAsync(TopUpCampaignRecipient recipient, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> CampaignCodeExistsAsync(long organizationId, string campaignCode, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult<TopUpCampaign?>(CreateActiveCampaign());
+        public Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
+        public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
+        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRule>>([]);
+        public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

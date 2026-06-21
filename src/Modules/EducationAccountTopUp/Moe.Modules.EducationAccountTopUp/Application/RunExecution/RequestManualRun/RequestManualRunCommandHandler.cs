@@ -1,5 +1,6 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
@@ -11,6 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManu
 public sealed class RequestManualRunCommandHandler(
     ITopUpCampaignRepository campaigns,
     ITopUpRunRepository runs,
+    IUnitOfWork unitOfWork,
     ITopUpRunDispatcher dispatcher,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
@@ -37,10 +39,21 @@ public sealed class RequestManualRunCommandHandler(
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignNotExecutable);
         }
 
+        if (!campaign.ScheduleTypeCode.Equals("IMMEDIATE", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
+        }
+
         TopUpRun? existingRun = await runs.GetByIdempotencyKeyAsync(command.IdempotencyKey, cancellationToken);
         if (existingRun is not null)
         {
             return Result<RequestManualRunResponse>.Success(Map(existingRun));
+        }
+
+        bool hasExistingRuns = await runs.HasRunsForCampaignAsync(campaign.Id, cancellationToken);
+        if (hasExistingRuns)
+        {
+            return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignAlreadyExecuted);
         }
 
         if (currentUser.UserAccountId is not long requestedByUserId)
@@ -57,9 +70,10 @@ public sealed class RequestManualRunCommandHandler(
             command.Note);
 
         await runs.AddAsync(run, cancellationToken);
-
-        await dispatcher.EnqueueAsync(run.Id, cancellationToken);
         run.MarkManualRunRequested(requestedAtUtc);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await dispatcher.EnqueueAsync(run.Id, cancellationToken);
 
         return Result<RequestManualRunResponse>.Success(Map(run));
     }

@@ -98,9 +98,9 @@ public sealed class TopUpDomainTests
     public void EducationAccount_UpdateBalance_ShouldModifyCachedBalance()
     {
         var account = EducationAccount.OpenManual(1, "EA-001", DateTimeOffset.UtcNow, "Reason", "Remarks", 99).Value;
-        
+
         account.CachedBalance.Should().Be(0);
-        
+
         account.UpdateBalance(50m);
         account.CachedBalance.Should().Be(50m);
 

@@ -380,7 +380,8 @@ public sealed class RecipientProcessingServiceTests
             int totalSucceeded,
             int totalFailed,
             int totalSkipped,
-            TimeSpan duration) { }
+            TimeSpan duration)
+        { }
 
         public void RecordRecipientProcessed(
             long topUpRunId,
