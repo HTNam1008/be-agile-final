@@ -40,20 +40,11 @@ public sealed class TopUpAccountSearchController(IQueryDispatcher queries) : Con
 
         if (result.IsFailure)
         {
-            return ApiResponseFactory.Failure(
-                result.Error,
-                GetFailureStatusCode(result.Error.Code),
-                HttpContext.TraceIdentifier);
+            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         }
 
         return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
     }
 
-    private static int GetFailureStatusCode(string errorCode)
-        => errorCode switch
-        {
-            "TOPUP.ADMIN_ORGANIZATION_SCOPE_REQUIRED" => ApiResponseCodes.Forbidden,
-            "TOPUP.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
-            _ => ApiResponseCodes.Conflict
-        };
+
 }

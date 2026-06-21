@@ -8,9 +8,8 @@ using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
-using Moe.Modules.EducationAccountTopUp.Application.TopUps.ExecuteRun;
-using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
@@ -26,7 +25,7 @@ namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
 [EnableCors("AdminCors")]
 public sealed class TopUpCampaignsController(
-    ICommandDispatcher commandDispatcher, 
+    ICommandDispatcher commandDispatcher,
     IQueryDispatcher queryDispatcher) : ControllerBase
 {
     /// <summary>
@@ -38,9 +37,10 @@ public sealed class TopUpCampaignsController(
     public async Task<IActionResult> GetCampaigns(CancellationToken cancellationToken)
     {
         var result = await queryDispatcher.Send(new GetCampaignsQuery(), cancellationToken);
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return Ok(result.Value);
     }
+
     /// <summary>
     /// Creates a new Top-Up Campaign definition.
     /// </summary>
@@ -58,8 +58,8 @@ public sealed class TopUpCampaignsController(
     {
         var command = new CreateCampaignCommand(request);
         var result = await commandDispatcher.Send(command, cancellationToken);
-        
-        if (result.IsFailure) return BadRequest(result.Error);
+
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return CreatedAtAction(nameof(Get), new { id = result.Value }, result.Value);
     }
 
@@ -83,7 +83,7 @@ public sealed class TopUpCampaignsController(
         var command = new UpdateCampaignCommand(id, request);
         var result = await commandDispatcher.Send(command, cancellationToken);
 
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return NoContent();
     }
 
@@ -107,7 +107,7 @@ public sealed class TopUpCampaignsController(
         if (id != commandRequest.TopUpCampaignId) return BadRequest();
         var result = await commandDispatcher.Send(commandRequest, cancellationToken);
 
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return NoContent();
     }
 
@@ -120,7 +120,7 @@ public sealed class TopUpCampaignsController(
     public async Task<IActionResult> GetRules(long id, CancellationToken cancellationToken)
     {
         var result = await queryDispatcher.Send(new GetCampaignRulesQuery(id), cancellationToken);
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return Ok(result.Value);
     }
 
@@ -144,7 +144,7 @@ public sealed class TopUpCampaignsController(
         if (id != commandRequest.TopUpCampaignId) return BadRequest();
         var result = await commandDispatcher.Send(commandRequest, cancellationToken);
 
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return NoContent();
     }
 
@@ -157,7 +157,7 @@ public sealed class TopUpCampaignsController(
     public async Task<IActionResult> GetFixedRecipients(long id, CancellationToken cancellationToken)
     {
         var result = await queryDispatcher.Send(new GetFixedRecipientsQuery(id), cancellationToken);
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return Ok(result.Value);
     }
 
@@ -225,37 +225,17 @@ public sealed class TopUpCampaignsController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Preview(
-        long id, 
+        long id,
         [FromBody] PreviewCampaignRequest request,
         CancellationToken cancellationToken)
     {
         var query = new PreviewCampaignQuery(id, request.PageNumber, request.PageSize);
         var result = await queryDispatcher.Send(query, cancellationToken);
 
-        if (result.IsFailure) return BadRequest(result.Error);
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return Ok(result.Value);
     }
 
-    /// <summary>
-    /// Locks the campaign and dispatches it to the async execution workers.
-    /// </summary>
-    /// <param name="id">Campaign ID.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The generated TopUpRun ID.</returns>
-    [HttpPost("{id:long}/execute")]
-    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
-    [ProducesResponseType(typeof(long), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Execute(long id, CancellationToken cancellationToken)
-    {
-        var command = new ExecuteTopUpRunCommand(id);
-        var result = await commandDispatcher.Send(command, cancellationToken);
-
-        if (result.IsFailure) return BadRequest(result.Error);
-        return Ok(result.Value);
-    }
 
     /// <summary>
     /// Retrieves basic campaign information.

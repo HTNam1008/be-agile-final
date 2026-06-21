@@ -40,10 +40,7 @@ public sealed class MyEducationAccountController(
 
         if (result.IsFailure)
         {
-            return ApiResponseFactory.Failure(
-                result.Error,
-                result.Error.Code == EducationAccountErrors.NotFound.Code ? ApiResponseCodes.NotFound : ApiResponseCodes.BadRequest,
-                HttpContext.TraceIdentifier);
+            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         }
 
         return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
