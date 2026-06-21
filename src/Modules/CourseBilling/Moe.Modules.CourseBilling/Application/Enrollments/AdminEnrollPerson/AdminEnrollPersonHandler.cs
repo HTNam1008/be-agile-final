@@ -25,11 +25,6 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.ActorRequired);
         }
 
-        if (!await enrollments.PersonExistsAsync(command.PersonId, cancellationToken))
-        {
-            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PersonNotFound);
-        }
-
         Course? course = await enrollments.FindCourseAsync(command.CourseId, cancellationToken);
 
         if (course is null)
@@ -55,9 +50,19 @@ internal sealed class AdminEnrollPersonHandler(
         }
 
         DateOnly today = DateOnly.FromDateTime(utcNow);
+        long? personId = await enrollments.FindActiveStudentPersonIdAsync(
+            command.StudentNumber,
+            course.OrganizationId,
+            today,
+            cancellationToken);
+
+        if (personId is null)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PersonNotFound);
+        }
 
         if (!await enrollments.PersonHasActiveSchoolEnrollmentAsync(
-            command.PersonId,
+            personId.Value,
             course.OrganizationId,
             today,
             cancellationToken))
@@ -65,13 +70,13 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PersonNotInCourseOrganization);
         }
 
-        if (await enrollments.ExistsAsync(command.PersonId, command.CourseId, cancellationToken))
+        if (await enrollments.ExistsAsync(personId.Value, command.CourseId, cancellationToken))
         {
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.DuplicateEnrollment);
         }
 
         Result<CourseEnrollment> enrollmentResult = CourseEnrollment.EnrollByAdmin(
-            command.PersonId,
+            personId.Value,
             command.CourseId,
             actorId.Value,
             utcNow);

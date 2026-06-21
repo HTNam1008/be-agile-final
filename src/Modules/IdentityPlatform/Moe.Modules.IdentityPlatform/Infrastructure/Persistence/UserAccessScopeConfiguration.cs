@@ -18,8 +18,7 @@ internal sealed class UserAccessScopeConfiguration : IEntityTypeConfiguration<Us
         builder.Ignore(x => x.DomainEvents);
         object[] adminScopes =
         [
-            Seed(1001, DemoSeedData.HqAdminLoginAccountId, OrganizationUnitCodes.MoeHeadquartersId, RoleCodes.HqAdmin, null),
-            Seed(1002, DemoSeedData.SchoolAdminLoginAccountId, OrganizationUnitCodes.DemoSchoolId, RoleCodes.SchoolAdmin, DemoSeedData.HqAdminLoginAccountId)
+            Seed(1001, DemoSeedData.HqAdminLoginAccountId, OrganizationUnitCodes.MoeHeadquartersId, RoleCodes.HqAdmin, null)
         ];
 
         builder.HasData(adminScopes.Concat(DemoSeedData.MockPassStudents.Select(SeedStudent)));
@@ -43,7 +42,7 @@ internal sealed class UserAccessScopeConfiguration : IEntityTypeConfiguration<Us
         => Seed(
             student.UserAccessScopeId,
             student.LoginAccountId,
-            OrganizationUnitCodes.DemoSchoolId,
+            student.OrganizationId,
             RoleCodes.Student,
             DemoSeedData.HqAdminLoginAccountId);
 }
