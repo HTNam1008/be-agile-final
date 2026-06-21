@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
@@ -30,9 +29,9 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             return Result.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        var newStatusCode = Enum.Parse<TopUpCampaignStatusCode>(command.NewStatusCode, ignoreCase: true);
+        var newStatusCode = command.NewStatusCode.ToUpperInvariant();
 
-        if (newStatusCode == TopUpCampaignStatusCode.Active)
+        if (newStatusCode == TopUpCampaignStatusCodes.Active)
         {
             if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase)
                 && await campaigns.CountActiveRulesAsync(campaign.Id, cancellationToken) == 0)
@@ -48,32 +47,17 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
             SetNextRunAt(campaign, clock.UtcNow.UtcDateTime);
         }
-        else if (newStatusCode is TopUpCampaignStatusCode.Paused or TopUpCampaignStatusCode.Cancelled)
+        else if (newStatusCode == TopUpCampaignStatusCodes.Paused || newStatusCode == TopUpCampaignStatusCodes.Cancelled)
         {
             campaign.SetNextRunAt(null);
         }
 
         campaign.ChangeStatus(
-            newStatusCode.ToString().ToUpperInvariant(),
+            newStatusCode,
             currentUser.UserAccountId ?? 0,
             clock.UtcNow.UtcDateTime);
 
-        try
-        {
-            await campaigns.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Result.Failure(new Error(
-                "ConcurrencyException",
-                "The campaign was modified by another request. Please reload and try again."));
-        }
-        catch (DbUpdateException)
-        {
-            return Result.Failure(new Error(
-                "PersistenceException",
-                "The status change could not be saved. Please try again."));
-        }
+
 
         return Result.Success();
     }

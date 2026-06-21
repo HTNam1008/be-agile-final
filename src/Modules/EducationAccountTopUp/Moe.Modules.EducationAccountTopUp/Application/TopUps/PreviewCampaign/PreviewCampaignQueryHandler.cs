@@ -1,117 +1,98 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
-using Moe.Modules.EducationAccountTopUp.Application.TopUps;
-using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.IdentityPlatform.IGateway.Students.TopUpSearch;
 using Moe.SharedKernel.Results;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 
+/// <summary>
+/// Handles preview queries by delegating ALL persistence work to IGateway abstractions.
+/// Zero EF Core, zero MoeDbContext. Clean Architecture enforced.
+/// </summary>
 internal sealed class PreviewCampaignQueryHandler(
-    MoeDbContext dbContext,
+    ITopUpCampaignReader campaignReader,
+    IDynamicRuleFilter dynamicRuleFilter,
     IAdminAccessControl adminAccess,
     ITopUpAccountProjectionRepository accounts,
     ITopUpStudentSearchDirectory students) : IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>
 {
-    public async Task<Result<PreviewCampaignResult>> Handle(PreviewCampaignQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PreviewCampaignResult>> Handle(
+        PreviewCampaignQuery query,
+        CancellationToken cancellationToken)
     {
-        var campaign = await dbContext.Set<TopUpCampaign>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == query.TopUpCampaignId, cancellationToken);
+        // 1. Load lightweight campaign summary — pure interface call, no EF Core
+        CampaignPreviewSummary? campaign = await campaignReader.GetPreviewSummaryAsync(
+            query.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
-            return Result<PreviewCampaignResult>.Failure(new Error("NotFound", "Campaign not found."));
+            return Result<PreviewCampaignResult>.Failure(TopUpErrors.CampaignNotFound);
 
+        // 2. Access control
         Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
         if (access.IsFailure)
             return Result<PreviewCampaignResult>.Failure(TopUpErrors.OrganizationOutsideScope);
 
-        var accountsQuery = dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>()
-            .AsNoTracking();
+        int skip = (query.PageNumber - 1) * query.PageSize;
+        int take = query.PageSize;
 
-        int totalMatched = 0;
-        decimal estimatedTotalAmount = 0;
-        var samples = new List<PreviewAccountDto>();
+        int totalMatched;
+        decimal estimatedTotalAmount;
+        List<PreviewAccountDto> samples;
 
-        if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.FixedSelection.ToString(), StringComparison.OrdinalIgnoreCase))
+        if (IsFixedSelection(campaign.RecipientModeCode))
         {
-            var fixedRecipients = await dbContext.Set<TopUpCampaignRecipient>()
-                .AsNoTracking()
-                .Where(x => x.TopUpCampaignId == campaign.Id && x.IsActive)
-                .ToListAsync(cancellationToken);
-            
-            var accountIds = fixedRecipients.Select(x => x.EducationAccountId).ToList();
-            
-            var activeAccounts = await accountsQuery
-                .Where(x => accountIds.Contains(x.Id) && x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active)
-                .Select(x => x.Id)
-                .ToHashSetAsync(cancellationToken);
+            // 3a. Fixed selection — all DB work behind ITopUpCampaignReader
+            (int count, IReadOnlyList<PreviewFixedRecipient> items) =
+                await campaignReader.GetFixedRecipientsForPreviewAsync(
+                    campaign.Id, skip, take, cancellationToken);
 
-            foreach (var fr in fixedRecipients)
-            {
-                if (activeAccounts.Contains(fr.EducationAccountId))
-                {
-                    totalMatched++;
-                    var amt = fr.AmountOverride ?? campaign.DefaultTopUpAmount;
-                    estimatedTotalAmount += amt;
-                    
-                    var skip = (query.PageNumber - 1) * query.PageSize;
-                    if (totalMatched > skip && samples.Count < query.PageSize)
-                        samples.Add(CreatePreviewSample(fr.EducationAccountId, amt));
-                }
-            }
+            totalMatched = count;
+            estimatedTotalAmount = items.Sum(x => x.EstimatedAmount);
+
+            samples = items
+                .Select(r => CreatePreviewSample(r.EducationAccountId, r.EstimatedAmount))
+                .ToList();
         }
         else
         {
-            var rules = await dbContext.Set<TopUpCampaignRule>()
-                .AsNoTracking()
-                .Where(x => x.TopUpCampaignId == campaign.Id && x.IsActive)
-                .ToListAsync(cancellationToken);
-            
+            // 3b. Dynamic rules — load rule projections via reader, filter via IDynamicRuleFilter
+            IReadOnlyList<CampaignRuleProjection> rules =
+                await campaignReader.GetRulesAsync(campaign.Id, cancellationToken);
+
             if (rules.Count == 0)
-                return Result<PreviewCampaignResult>.Failure(new Error("ZeroRules", "Cannot preview DYNAMIC_RULES campaign without rules."));
+                return Result<PreviewCampaignResult>.Failure(
+                    new Error("TOPUP.PREVIEW_NO_RULES",
+                        "Cannot preview a DYNAMIC_RULES campaign with no active rules."));
 
-            // L-005: Dynamic Rule query specification builder
-            var activeAccountsQuery = accountsQuery
-                .Where(x => x.StatusCode == Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.AccountStatuses.Active);
+            DateTime nowUtc = DateTime.UtcNow;
 
-            activeAccountsQuery = DynamicRuleEvaluator.ApplyRules(dbContext, activeAccountsQuery, rules, DateTime.UtcNow);
+            totalMatched = await dynamicRuleFilter.CountMatchingAccountsAsync(rules, nowUtc, cancellationToken);
+            estimatedTotalAmount = totalMatched * campaign.DefaultTopUpAmount;
 
-            var totalAccounts = await activeAccountsQuery.CountAsync(cancellationToken);
-            totalMatched = totalAccounts;
-            estimatedTotalAmount = totalAccounts * campaign.DefaultTopUpAmount;
+            IReadOnlyList<long> pagedIds = await dynamicRuleFilter.FilterAccountIdsAsync(
+                rules, skip, take, nowUtc, cancellationToken);
 
-            var skip = (query.PageNumber - 1) * query.PageSize;
-            
-            var pagedAccounts = await activeAccountsQuery
-                .OrderBy(x => x.Id)
-                .Skip(skip)
-                .Take(query.PageSize)
-                .Select(x => new { x.Id })
-                .ToListAsync(cancellationToken);
-
-            foreach (var acc in pagedAccounts)
-            {
-                samples.Add(CreatePreviewSample(acc.Id, campaign.DefaultTopUpAmount));
-            }
+            samples = pagedIds
+                .Select(id => CreatePreviewSample(id, campaign.DefaultTopUpAmount))
+                .ToList();
         }
 
+        // 4. Enrich with student display info — all via IGateway
         List<PreviewAccountDto> enrichedSamples = await EnrichSamplesAsync(
-            samples,
-            campaign.OrganizationId,
-            cancellationToken);
+            samples, campaign.OrganizationId, cancellationToken);
 
-        return Result<PreviewCampaignResult>.Success(new PreviewCampaignResult(totalMatched, estimatedTotalAmount, enrichedSamples));
+        return Result<PreviewCampaignResult>.Success(
+            new PreviewCampaignResult(totalMatched, estimatedTotalAmount, enrichedSamples));
     }
 
+    private static bool IsFixedSelection(string recipientModeCode)
+        => string.Equals(recipientModeCode, "FIXED_SELECTION", StringComparison.OrdinalIgnoreCase);
+
     private static PreviewAccountDto CreatePreviewSample(long educationAccountId, decimal estimatedAmount)
-        => new(
-            educationAccountId,
+        => new(educationAccountId,
             MaskedAccountNumber: "****",
             MaskedStudentNumber: null,
             StudentDisplayName: "Unavailable",
@@ -128,20 +109,15 @@ internal sealed class PreviewCampaignQueryHandler(
             .ToArray();
 
         IReadOnlyDictionary<long, TopUpAccountProjection> accountById =
-            await accounts.FindByEducationAccountIdsAsync(
-                educationAccountIds,
-                cancellationToken);
+            await accounts.FindByEducationAccountIdsAsync(educationAccountIds, cancellationToken);
 
         long[] personIds = accountById.Values
             .Select(x => x.PersonId)
             .Distinct()
             .ToArray();
 
-        var studentByPersonId =
-            await students.FindDisplayByPersonIdsForTopUpAsync(
-                personIds,
-                organizationId,
-                cancellationToken);
+        IReadOnlyDictionary<long, TopUpStudentDisplaySummary> studentByPersonId =
+            await students.FindDisplayByPersonIdsForTopUpAsync(personIds, organizationId, cancellationToken);
 
         return samples
             .Select(sample =>
@@ -150,9 +126,7 @@ internal sealed class PreviewCampaignQueryHandler(
 
                 TopUpStudentDisplaySummary? student = null;
                 if (account is not null)
-                {
                     studentByPersonId.TryGetValue(account.PersonId, out student);
-                }
 
                 return sample with
                 {

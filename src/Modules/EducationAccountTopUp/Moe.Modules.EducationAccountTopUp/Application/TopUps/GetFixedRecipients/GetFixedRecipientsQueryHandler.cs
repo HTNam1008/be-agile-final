@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
@@ -13,7 +12,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipient
 
 internal sealed class GetFixedRecipientsQueryHandler(
     ITopUpCampaignRepository campaigns,
-    IAdminAccessControl adminAccess,
+    ITopUpCampaignReader reader,
+    ICurrentUser currentUser,
     IClock clock,
     ITopUpAccountProjectionRepository accounts,
     ITopUpStudentSearchDirectory students)
@@ -30,13 +30,13 @@ internal sealed class GetFixedRecipientsQueryHandler(
             return Result<IReadOnlyList<FixedRecipientDto>>.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
-        if (access.IsFailure)
+        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
+            && currentUser.OrganizationUnitId != campaign.OrganizationId)
         {
             return Result<IReadOnlyList<FixedRecipientDto>>.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        var recipients = await campaigns.GetActiveRecipientsAsync(query.TopUpCampaignId, cancellationToken);
+        var recipients = await reader.GetActiveRecipientsAsync(query.TopUpCampaignId, cancellationToken);
 
         if (recipients.Count == 0)
         {

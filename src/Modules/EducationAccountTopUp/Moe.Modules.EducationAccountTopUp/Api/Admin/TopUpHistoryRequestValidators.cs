@@ -1,5 +1,6 @@
 using FluentValidation;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
+using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 
@@ -20,7 +21,7 @@ public sealed class CampaignHistoryRequestValidator : AbstractValidator<Campaign
             .WithMessage("DateFromUtc must be earlier than DateToUtc.");
 
         RuleFor(x => x.Status)
-            .Must(TopUpHistoryValidationRules.BeValidEnumValue<TopUpCampaignStatusCode>)
+            .Must(TopUpCampaignStatusCodes.IsValid!)
             .When(x => !string.IsNullOrWhiteSpace(x.Status))
             .WithMessage("Status must be a valid campaign status.");
     }
