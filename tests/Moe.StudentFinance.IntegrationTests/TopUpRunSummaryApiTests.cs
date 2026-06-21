@@ -82,7 +82,7 @@ public sealed class TopUpRunSummaryApiTests : IClassFixture<CustomWebApplication
             totalCredited: 100m);
 
         HttpResponseMessage response = await _client.PostAsync(
-            $"/api/admin/v1/campaigns/999999/runs/{runId}/reconcile",
+            $"/api/admin/v1/top-up-campaigns/999999/runs/{runId}/reconcile",
             content: null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);

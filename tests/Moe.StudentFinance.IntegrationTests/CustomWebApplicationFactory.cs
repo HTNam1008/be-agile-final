@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Hosting;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
@@ -48,7 +48,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 options.DefaultChallengeScheme = "Test";
             })
             .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", options => { });
-            
+
             services.Configure<Microsoft.AspNetCore.Authorization.AuthorizationOptions>(options =>
             {
                 options.AddPolicy(AuthorizationPolicies.AdminPortal, policy =>
@@ -222,8 +222,8 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
 
 public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
-    public TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, 
-        ILoggerFactory logger, UrlEncoder encoder) 
+    public TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger, UrlEncoder encoder)
         : base(options, logger, encoder)
     {
     }

@@ -1,13 +1,6 @@
 namespace Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 
-public enum TopUpCampaignStatusCode
-{
-    Draft,
-    Active,
-    Paused,
-    Completed,
-    Cancelled
-}
+
 
 public enum TopUpRunStatusCode
 {
