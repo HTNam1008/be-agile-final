@@ -24,6 +24,13 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
                 cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpCampaign>()
+            .Where(c => c.CampaignStatusCode == TopUpCampaignStatusCodes.Active && c.NextRunAtUtc != null && c.NextRunAtUtc <= utcNow)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpCampaign>().AddAsync(campaign, cancellationToken);

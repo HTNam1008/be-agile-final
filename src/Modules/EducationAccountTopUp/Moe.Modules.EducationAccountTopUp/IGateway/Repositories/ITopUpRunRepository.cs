@@ -10,5 +10,6 @@ public interface ITopUpRunRepository
         long campaignId,
         DateTime scheduledFor,
         CancellationToken cancellationToken = default);
+    Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
     Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default);
 }

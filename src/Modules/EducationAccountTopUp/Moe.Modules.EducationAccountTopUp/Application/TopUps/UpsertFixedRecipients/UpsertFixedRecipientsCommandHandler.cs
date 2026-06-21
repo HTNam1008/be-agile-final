@@ -1,5 +1,6 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
@@ -11,6 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipi
 
 internal sealed class UpsertFixedRecipientsCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock,
@@ -104,6 +106,8 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
                 await campaigns.AddRecipientAsync(newRec, cancellationToken);
             }
         }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<UpsertFixedRecipientsResponse>.Success(
             new UpsertFixedRecipientsResponse(

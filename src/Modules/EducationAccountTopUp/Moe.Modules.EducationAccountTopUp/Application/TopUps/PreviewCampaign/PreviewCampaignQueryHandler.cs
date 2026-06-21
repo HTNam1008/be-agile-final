@@ -63,9 +63,7 @@ internal sealed class PreviewCampaignQueryHandler(
                 await campaignReader.GetRulesAsync(campaign.Id, cancellationToken);
 
             if (rules.Count == 0)
-                return Result<PreviewCampaignResult>.Failure(
-                    new Error("TOPUP.PREVIEW_NO_RULES",
-                        "Cannot preview a DYNAMIC_RULES campaign with no active rules."));
+                return Result<PreviewCampaignResult>.Failure(TopUpErrors.PreviewNoRules);
 
             DateTime nowUtc = DateTime.UtcNow;
 
@@ -89,7 +87,8 @@ internal sealed class PreviewCampaignQueryHandler(
     }
 
     private static bool IsFixedSelection(string recipientModeCode)
-        => string.Equals(recipientModeCode, "FIXED_SELECTION", StringComparison.OrdinalIgnoreCase);
+        => string.Equals(recipientModeCode, "FixedSelection", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(recipientModeCode, "FIXED_SELECTION", StringComparison.OrdinalIgnoreCase);
 
     private static PreviewAccountDto CreatePreviewSample(long educationAccountId, decimal estimatedAmount)
         => new(educationAccountId,
