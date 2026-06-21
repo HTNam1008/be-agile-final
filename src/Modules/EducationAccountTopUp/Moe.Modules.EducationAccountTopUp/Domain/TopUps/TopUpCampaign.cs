@@ -1,4 +1,5 @@
 using Moe.SharedKernel.Domain;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
@@ -120,12 +121,28 @@ public sealed class TopUpCampaign : Entity<long>
         CampaignVersion++;
     }
 
-    public void ChangeStatus(string newStatusCode, long currentUserId, DateTime nowUtc)
+    public Result ChangeStatus(string newStatusCode, long currentUserId, DateTime nowUtc, bool isSystem = false)
     {
+        if (CampaignStatusCode == newStatusCode) return Result.Success();
+
+        bool isValid = CampaignStatusCode switch
+        {
+            TopUpCampaignStatusCodes.Draft => newStatusCode is TopUpCampaignStatusCodes.Active or TopUpCampaignStatusCodes.Cancelled,
+            TopUpCampaignStatusCodes.Active => newStatusCode is TopUpCampaignStatusCodes.Paused or TopUpCampaignStatusCodes.Cancelled || (isSystem && newStatusCode == TopUpCampaignStatusCodes.Completed),
+            TopUpCampaignStatusCodes.Paused => newStatusCode is TopUpCampaignStatusCodes.Active or TopUpCampaignStatusCodes.Cancelled || (isSystem && newStatusCode == TopUpCampaignStatusCodes.Completed),
+            _ => false
+        };
+
+        if (!isValid)
+        {
+            return Result.Failure(TopUpErrors.InvalidStatusTransition);
+        }
+
         CampaignStatusCode = newStatusCode;
         UpdatedByLoginAccountId = currentUserId;
         UpdatedAtUtc = nowUtc;
         CampaignVersion++;
+        return Result.Success();
     }
 
     public void SetNextRunAt(DateTime? nextRunAtUtc)
@@ -134,19 +151,4 @@ public sealed class TopUpCampaign : Entity<long>
     }
 }
 
-public static class TopUpCampaignStatusCodes
-{
-    public const string Draft = "DRAFT";
-    public const string Active = "ACTIVE";
-    public const string Paused = "PAUSED";
-    public const string Completed = "COMPLETED";
-    public const string Cancelled = "CANCELLED";
 
-    public static readonly string[] ValidStatuses = { Draft, Active, Paused, Completed, Cancelled };
-
-    public static bool IsValid(string? status)
-    {
-        if (string.IsNullOrWhiteSpace(status)) return false;
-        return ValidStatuses.Contains(status.ToUpperInvariant());
-    }
-}
