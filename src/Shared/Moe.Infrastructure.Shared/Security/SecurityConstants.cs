@@ -24,6 +24,7 @@ public static class AuthorizationPolicies
     public const string ViewTopUps = "ViewTopUps";
     public const string ManageCourses = "ManageCourses";
     public const string ReviewFas = "ReviewFas";
+    public const string ManageFasSchemes = "ManageFasSchemes";
 }
 
 public static class LocalIdentityClaimNames
