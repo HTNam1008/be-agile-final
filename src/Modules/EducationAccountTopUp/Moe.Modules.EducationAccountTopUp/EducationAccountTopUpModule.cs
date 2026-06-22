@@ -7,6 +7,7 @@ using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.EducationAccountTopUp.Api.Admin;
+using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
@@ -99,6 +100,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandHandler>();
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
         services.AddScoped<ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>, OpenManualAccountHandler>();
+        services.AddScoped<ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>, CloseManualAccountHandler>();
 
         // Queries
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
@@ -114,12 +116,14 @@ public sealed class EducationAccountTopUpModule : IModule
 
         // Validators
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
+        services.AddScoped<IValidator<CloseManualAccountRequest>, CloseManualAccountRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsRequest>, SearchTopUpAccountsRequestValidator>();
         services.AddScoped<IValidator<UpsertFixedRecipientsRequest>, UpsertFixedRecipientsRequestValidator>();
         services.AddScoped<IValidator<CampaignHistoryRequest>, CampaignHistoryRequestValidator>();
         services.AddScoped<IValidator<RunHistoryRequest>, RunHistoryRequestValidator>();
         services.AddScoped<IValidator<TopUpTransactionResultsRequest>, TopUpTransactionResultsRequestValidator>();
         services.AddScoped<IValidator<OpenManualAccountCommand>, OpenManualAccountValidator>();
+        services.AddScoped<IValidator<CloseManualAccountCommand>, CloseManualAccountValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsQuery>, SearchTopUpAccountsValidator>();
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
         services.AddScoped<IValidator<CreateCampaignCommand>, CreateCampaignCommandValidator>();

@@ -89,7 +89,7 @@ public sealed class AccountCreditGatewayTests
     {
         using MoeDbContext dbContext = CreateDbContext();
         EducationAccount account = await AddAccountAsync(dbContext, personId: 5004, balance: 100m);
-        account.CloseManual(_clock.UtcNow, "CLOSED", "Test closure");
+        account.CloseManual(_clock.UtcNow, EducationAccountClosingReasonCodes.Other, "Test closure", 1);
         await dbContext.SaveChangesAsync();
         AccountCreditGateway gateway = CreateGateway(dbContext);
 

@@ -75,6 +75,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.ManageAccountLifecycle, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -249,6 +257,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.Portal, PortalCodes.Admin),
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
+                new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
                 new Claim(ClaimNames.OrganizationUnitId, "1"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             ];

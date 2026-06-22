@@ -124,6 +124,9 @@ public sealed class OpenManualAccountHandlerTests
         public HashSet<long> DuplicatePersonIds { get; } = [];
         public List<EducationAccount> AddedAccounts { get; } = [];
 
+        public Task<EducationAccount?> FindByIdAsync(long educationAccountId, CancellationToken cancellationToken)
+            => Task.FromResult<EducationAccount?>(AddedAccounts.SingleOrDefault(x => x.Id == educationAccountId));
+
         public Task<EducationAccount?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
             => Task.FromResult<EducationAccount?>(AddedAccounts.SingleOrDefault(x => x.PersonId == personId));
 
@@ -146,7 +149,7 @@ public sealed class OpenManualAccountHandlerTests
         {
             PersonSummary? summary = MissingPersonIds.Contains(personId)
                 ? null
-                : new PersonSummary(personId, "Test Student", new DateOnly(2010, 1, 1), "SG", "CITIZEN");
+                : new PersonSummary(personId, "Test Student", new DateOnly(2010, 1, 1), "SG", "CITIZEN", 10);
 
             return Task.FromResult(summary);
         }
