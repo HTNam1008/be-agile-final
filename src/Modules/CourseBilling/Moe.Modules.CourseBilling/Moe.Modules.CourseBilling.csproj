@@ -6,6 +6,9 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Moe.CourseBilling.UnitTests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\Moe.Application.Abstractions\Moe.Application.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\Shared\Moe.Infrastructure.Shared\Moe.Infrastructure.Shared.csproj" />
     <ProjectReference Include="..\..\..\Shared\Moe.SharedKernel\Moe.SharedKernel.csproj" />

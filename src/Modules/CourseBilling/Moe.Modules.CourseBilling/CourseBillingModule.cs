@@ -13,6 +13,7 @@ using Moe.Modules.CourseBilling.Application.AdminCourses.Courses;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Enrollments;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Fees;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Materials;
+using Moe.Modules.CourseBilling.Application.AdminStudentCourses;
 using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetStudentDashboard;
@@ -22,8 +23,10 @@ using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
+using Moe.Modules.CourseBilling.IGateway.AdminStudentCourses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Storage;
+using Moe.Modules.CourseBilling.Infrastructure.AdminStudentCourses;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
 using Moe.Modules.CourseBilling.Infrastructure.Security;
 using Moe.Modules.CourseBilling.Infrastructure.Storage;
@@ -45,6 +48,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
         services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
         services.AddScoped<IStudentDashboardCourseRepository, StudentDashboardCourseRepository>();
+        services.AddScoped<IAdminStudentEnrolledCourseReader, AdminStudentEnrolledCourseReader>();
         services.AddScoped<AdminCourseAccess>();
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
@@ -84,6 +88,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
         services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentDashboardQuery, StudentDashboardResponse>, GetStudentDashboardHandler>();
+        services.AddScoped<IQueryHandler<GetStudentEnrolledCoursesQuery, PageResponse<AdminStudentEnrolledCourseItem>>, GetStudentEnrolledCoursesHandler>();
 
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();
         services.AddScoped<IValidator<SelfJoinCourseRequest>, SelfJoinCourseRequestValidator>();
