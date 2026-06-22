@@ -73,6 +73,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountDirectory, EducationAccountDirectory>();
         services.AddScoped<EducationAccountDirectory>();
         services.AddScoped<IEducationAccountLookupGateway, EducationAccountLookupGateway>();
+        services.AddScoped<IEducationAccountBulkLookupGateway, EducationAccountBulkLookupGateway>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
         // Services & Utilities
