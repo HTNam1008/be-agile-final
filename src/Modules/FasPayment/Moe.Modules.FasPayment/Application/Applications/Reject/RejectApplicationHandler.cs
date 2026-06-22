@@ -33,7 +33,7 @@ internal sealed class RejectApplicationHandler(
 
         var decision = FasApplicationReviewDecision.CreateRejection(application.Id, reviewerId, command.RejectionReasonCode, command.Remarks);
         await repository.AddDecisionAsync(decision, cancellationToken);
-        
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<RejectApplicationResponse>.Success(

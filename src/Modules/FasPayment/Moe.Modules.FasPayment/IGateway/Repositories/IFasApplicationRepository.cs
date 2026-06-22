@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Moe.Modules.FasPayment.Domain.Fas;
-using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
+using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
+using Moe.Modules.FasPayment.Domain.Fas;
 
 namespace Moe.Modules.FasPayment.IGateway.Repositories;
 
