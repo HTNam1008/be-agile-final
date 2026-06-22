@@ -17,10 +17,10 @@ internal sealed class FasApplication : Entity<long>
     public DateTime? UpdatedAt { get; private set; }
 
     public static FasApplication Submit(
-        string applicationNo, 
-        long fasSchemeId, 
-        string studentId, 
-        string studentName, 
+        string applicationNo,
+        long fasSchemeId,
+        string studentId,
+        string studentName,
         DateOnly submittedDate)
     {
         return new FasApplication
@@ -30,30 +30,30 @@ internal sealed class FasApplication : Entity<long>
             StudentId = studentId,
             StudentName = studentName,
             SubmittedDate = submittedDate,
-            StatusCode = "PENDING_REVIEW",
+            StatusCode = FasApplicationStatuses.PendingReview,
             CreatedAt = DateTime.UtcNow
         };
     }
 
     public void Approve()
     {
-        if (StatusCode != "PENDING_REVIEW")
+        if (StatusCode != FasApplicationStatuses.PendingReview)
         {
-            throw new DomainException($"Cannot approve application with status {StatusCode}. Must be PENDING_REVIEW.");
+            throw new DomainException($"Cannot approve application with status {StatusCode}. Must be {FasApplicationStatuses.PendingReview}.");
         }
 
-        StatusCode = "APPROVED";
+        StatusCode = FasApplicationStatuses.Approved;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void Reject()
     {
-        if (StatusCode != "PENDING_REVIEW")
+        if (StatusCode != FasApplicationStatuses.PendingReview)
         {
-            throw new DomainException($"Cannot reject application with status {StatusCode}. Must be PENDING_REVIEW.");
+            throw new DomainException($"Cannot reject application with status {StatusCode}. Must be {FasApplicationStatuses.PendingReview}.");
         }
 
-        StatusCode = "REJECTED";
+        StatusCode = FasApplicationStatuses.Rejected;
         UpdatedAt = DateTime.UtcNow;
     }
 }
