@@ -22,6 +22,6 @@ public sealed record ApplicationDetailScheme(
 
 public sealed record ApplicationDetailDecision(
     string Decision,
-    string ReviewerUserId,
+    long ReviewerUserId,
     DateTime ReviewedAt,
     string? Remarks);

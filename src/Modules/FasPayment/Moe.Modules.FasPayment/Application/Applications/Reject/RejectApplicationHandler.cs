@@ -27,11 +27,11 @@ internal sealed class RejectApplicationHandler(
             return Result<RejectApplicationResponse>.Failure(new Error("Application.NotFound", "Application not found"));
         }
 
-        string reviewerId = currentUser.UserAccountId?.ToString() ?? "system";
+        long reviewerId = currentUser?.UserAccountId ?? 1111;
 
         application.Reject();
 
-        var decision = FasApplicationReviewDecision.CreateRejection(application.Id, reviewerId, command.RejectionReasonCode, command.Remarks);
+        var decision = FasApplicationReviewDecision.CreateRejection(application.Id, reviewerId, command.RejectionReasonCode, command.Remarks, DateTime.UtcNow);
         await repository.AddDecisionAsync(decision, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

@@ -22,11 +22,11 @@ internal sealed class ApproveApplicationHandler(
             return Result<ApproveApplicationResponse>.Failure(new Error("Application.NotFound", "Application not found"));
         }
 
-        string reviewerId = currentUser.UserAccountId?.ToString() ?? "system";
+        long reviewerId = currentUser?.UserAccountId ?? 1111;
 
         application.Approve();
 
-        var decision = FasApplicationReviewDecision.CreateApproval(application.Id, reviewerId, command.Remarks);
+        var decision = FasApplicationReviewDecision.CreateApproval(application.Id, reviewerId, command.Remarks, DateTime.UtcNow);
         await repository.AddDecisionAsync(decision, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
