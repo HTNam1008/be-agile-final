@@ -10,10 +10,13 @@ public static class DependencyInjection
     public static IServiceCollection AddMoePersistence(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("MoeDatabase")
-            ?? throw new InvalidOperationException("Connection string 'MoeDatabase' is required.");
-        services.AddDbContext<MoeDbContext>(options =>
+            ?? throw new InvalidOperationException("Connection string 'MoeDatabase' not found.");
+
+        services.AddScoped<DomainEventInterceptor>();
+
+        services.AddDbContext<MoeDbContext>((sp, options) =>
         {
-            if (connectionString.Contains(".db", StringComparison.OrdinalIgnoreCase))
+            if (connectionString.Contains(".db", StringComparison.OrdinalIgnoreCase) || connectionString.Contains("Mode=Memory", StringComparison.OrdinalIgnoreCase))
             {
                 options.UseSqlite(connectionString);
             }
@@ -25,6 +28,7 @@ public static class DependencyInjection
                     sql.MigrationsAssembly("Moe.StudentFinance.Migrations");
                 });
             }
+            options.AddInterceptors(sp.GetRequiredService<DomainEventInterceptor>());
             options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<MoeDbContext>());
