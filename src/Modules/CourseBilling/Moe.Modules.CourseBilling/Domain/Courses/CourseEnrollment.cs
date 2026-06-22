@@ -123,4 +123,5 @@ public static class CourseBillingErrors
     public static readonly Error CourseFeesNotConfigured = new("COURSE.FEES_NOT_CONFIGURED", "The course has no active fee lines to bill.");
     public static readonly Error PersonNotInCourseOrganization = new("COURSE.PERSON_NOT_IN_ORGANIZATION", "The person is not actively enrolled in the course organization.");
     public static readonly Error CourseOrganizationForbidden = new("COURSE.ORGANIZATION_FORBIDDEN", "The administrator cannot manage courses in this organization.");
+    public static readonly Error OrganizationOutsideScope = new("AUTH.ORGANIZATION_OUTSIDE_SCOPE", "The requested organization is outside the current admin's scope.");
 }
