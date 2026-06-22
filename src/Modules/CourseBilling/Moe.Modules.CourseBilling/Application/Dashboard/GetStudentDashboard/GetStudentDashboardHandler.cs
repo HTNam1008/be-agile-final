@@ -46,6 +46,10 @@ internal sealed class GetStudentDashboardHandler(
 
         IReadOnlyCollection<StudentDashboardCourseSummary> courses =
             await dashboardCourses.ListCurrentCoursesAsync(personId, query.Search, query.Status, cancellationToken);
+        IReadOnlyCollection<StudentDashboardCourseSummary> publishedCourses =
+            NormalizeStatus(query.Status) is null
+                ? await dashboardCourses.ListPublishedCoursesAsync(personId, query.Search, cancellationToken)
+                : [];
 
         return Result<StudentDashboardResponse>.Success(new StudentDashboardResponse(
             new StudentDashboardProfileResponse(
@@ -65,7 +69,8 @@ internal sealed class GetStudentDashboardHandler(
                 Normalize(query.Search),
                 NormalizeStatus(query.Status),
                 GetStatusOptions()),
-            courses.Select(ToResponse).ToArray()));
+            courses.Select(ToResponse).ToArray(),
+            publishedCourses.Select(ToResponse).ToArray()));
     }
 
     private bool IsAuthenticatedEServiceStudent()
@@ -100,6 +105,7 @@ internal sealed class GetStudentDashboardHandler(
             CourseEnrollmentStatusCodes.Completed => "Completed",
             CourseEnrollmentStatusCodes.Cancelled => "Cancelled",
             CourseEnrollmentStatusCodes.Exited => "Exited",
+            "AVAILABLE" => "Available",
             _ => statusCode
         };
     }

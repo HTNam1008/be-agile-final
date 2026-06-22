@@ -17,6 +17,7 @@ public sealed record CreateCourseRequest(
     string? Description,
     DateOnly StartDate,
     DateOnly EndDate,
+    DateTime EnrollmentOpenAt,
     DateTime EnrollmentCloseAt);
 
 public sealed record UpdateCourseRequest(
@@ -25,6 +26,7 @@ public sealed record UpdateCourseRequest(
     string? Description,
     DateOnly StartDate,
     DateOnly EndDate,
+    DateTime EnrollmentOpenAt,
     DateTime EnrollmentCloseAt);
 
 public sealed record DisableCourseRequest;

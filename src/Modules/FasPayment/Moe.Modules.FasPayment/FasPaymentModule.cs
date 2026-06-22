@@ -7,6 +7,10 @@ using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
+using Moe.Modules.FasPayment.Application.Applications.Approve;
+using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
+using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
+using Moe.Modules.FasPayment.Application.Applications.Reject;
 using Moe.Modules.FasPayment.IGateway.Repositories;
 using Moe.Modules.FasPayment.Infrastructure.Repositories;
 
@@ -27,6 +31,12 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IQueryHandler<GetFasSchemeQuery, FasSchemeDetail>, GetFasSchemeHandler>();
         services.AddScoped<IValidator<CreateFasSchemeRequest>, CreateFasSchemeRequestValidator>();
         services.AddScoped<IValidator<ListFasSchemesRequest>, ListFasSchemesRequestValidator>();
+        services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
+
+        services.AddScoped<IQueryHandler<GetSchemeApplicationsQuery, GetSchemeApplicationsResponse>, GetSchemeApplicationsHandler>();
+        services.AddScoped<IQueryHandler<GetApplicationDetailQuery, GetApplicationDetailResponse>, GetApplicationDetailHandler>();
+        services.AddScoped<ICommandHandler<ApproveApplicationCommand, ApproveApplicationResponse>, ApproveApplicationHandler>();
+        services.AddScoped<ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>, RejectApplicationHandler>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }
