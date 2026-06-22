@@ -39,7 +39,8 @@ builder.Services.AddControllers(options =>
     })
     .AddApplicationPart(typeof(EducationAccountTopUpModule).Assembly)
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
-    .AddApplicationPart(typeof(IdentityPlatformModule).Assembly);
+    .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
+    .AddApplicationPart(typeof(FasPaymentModule).Assembly);
 
 builder.Services.AddApiVersioning(options =>
 {
