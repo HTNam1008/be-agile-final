@@ -1,0 +1,51 @@
+namespace Moe.Modules.FasPayment.Contracts.Payments;
+
+public sealed record OutstandingBillsResponse(
+    decimal EducationAccountBalance,
+    string CurrencyCode,
+    IReadOnlyCollection<OutstandingBillDto> Bills);
+
+public sealed record OutstandingBillDto(
+    long BillId,
+    string BillNumber,
+    long CourseEnrollmentId,
+    long CourseId,
+    string CourseCode,
+    string CourseName,
+    DateTime IssuedAtUtc,
+    DateOnly DueDate,
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetPayableAmount,
+    decimal PaidAmount,
+    decimal OutstandingAmount,
+    string BillStatusCode,
+    IReadOnlyCollection<OutstandingBillLineDto> Lines);
+
+public sealed record OutstandingBillLineDto(
+    long BillLineId,
+    string Description,
+    decimal Quantity,
+    decimal UnitAmount,
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetAmount);
+
+public sealed record PayBillRequest(
+    long BillId,
+    string PaymentMethodCode,
+    string? IdempotencyKey);
+
+public sealed record PayBillResponse(
+    long PaymentId,
+    long PaymentPartId,
+    long BillId,
+    string BillNumber,
+    string PaymentNumber,
+    string ReceiptNumber,
+    string PaymentMethodCode,
+    decimal PaymentAmount,
+    string PaymentStatusCode,
+    decimal BillOutstandingAmount,
+    string BillStatusCode,
+    decimal? EducationAccountBalanceAfter);

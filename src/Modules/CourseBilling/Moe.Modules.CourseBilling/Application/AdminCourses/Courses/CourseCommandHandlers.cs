@@ -35,7 +35,7 @@ internal sealed class CreateCourseCommandHandler(AdminCourseAccess access)
             request.CourseCode,
             request.StartDate,
             request.EndDate,
-            utcNow,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             null,
             cancellationToken);
@@ -51,6 +51,7 @@ internal sealed class CreateCourseCommandHandler(AdminCourseAccess access)
             request.Description,
             request.StartDate,
             request.EndDate,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             actorId,
             utcNow);
@@ -112,7 +113,7 @@ internal sealed class UpdateCourseCommandHandler(AdminCourseAccess access)
             request.CourseCode,
             request.StartDate,
             request.EndDate,
-            course.EnrollmentOpenAtUtc,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             command.CourseId,
             cancellationToken);
@@ -127,6 +128,7 @@ internal sealed class UpdateCourseCommandHandler(AdminCourseAccess access)
             request.Description,
             request.StartDate,
             request.EndDate,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             actorId,
             access.UtcNow());
