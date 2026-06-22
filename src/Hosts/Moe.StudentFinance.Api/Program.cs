@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Asp.Versioning;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
@@ -85,6 +86,16 @@ builder.Services.AddOpenApiDocument(settings =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<Moe.StudentFinance.Persistence.MoeDbContext>();
+    if (db.Database.IsSqlite())
+    {
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+    }
+}
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
 {

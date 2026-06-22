@@ -11,11 +11,22 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("MoeDatabase")
             ?? throw new InvalidOperationException("Connection string 'MoeDatabase' is required.");
-        services.AddDbContext<MoeDbContext>(options => options.UseSqlServer(connectionString, sql =>
+        services.AddDbContext<MoeDbContext>(options =>
         {
-            sql.EnableRetryOnFailure(3);
-            sql.MigrationsAssembly("Moe.StudentFinance.Migrations");
-        }));
+            if (connectionString.Contains(".db", StringComparison.OrdinalIgnoreCase))
+            {
+                options.UseSqlite(connectionString);
+            }
+            else
+            {
+                options.UseSqlServer(connectionString, sql =>
+                {
+                    sql.EnableRetryOnFailure(3);
+                    sql.MigrationsAssembly("Moe.StudentFinance.Migrations");
+                });
+            }
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<MoeDbContext>());
         return services;
     }
