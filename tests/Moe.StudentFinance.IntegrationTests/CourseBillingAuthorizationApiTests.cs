@@ -45,6 +45,54 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     }
 
     [Fact]
+    public async Task Admin_Cannot_Create_Course_With_Past_Course_Dates()
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateTime enrollmentOpenAt = DateTime.UtcNow;
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/courses",
+            new
+            {
+                organizationId = 1,
+                courseCode = $"PAST-{NewSuffix()}",
+                courseName = "Past course",
+                description = "Invalid past course",
+                startDate = today.AddDays(-2),
+                endDate = today.AddDays(-1),
+                enrollmentOpenAt,
+                enrollmentCloseAt = enrollmentOpenAt.AddHours(1)
+            });
+
+        await AssertStatusAsync(HttpStatusCode.BadRequest, response);
+        Assert.Contains("COURSE.DATE_IN_PAST", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_Cannot_Close_Enrollment_On_Or_After_Course_Start()
+    {
+        DateOnly startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14);
+        DateTime enrollmentOpenAt = DateTime.UtcNow;
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/courses",
+            new
+            {
+                organizationId = 1,
+                courseCode = $"WINDOW-{NewSuffix()}",
+                courseName = "Invalid enrollment window",
+                description = "Enrollment closes too late",
+                startDate,
+                endDate = startDate.AddDays(30),
+                enrollmentOpenAt,
+                enrollmentCloseAt = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
+            });
+
+        await AssertStatusAsync(HttpStatusCode.BadRequest, response);
+        Assert.Contains("COURSE.ENROLLMENT_MUST_CLOSE_BEFORE_START", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Student_Can_Self_Join_Own_School_Published_Course_But_Not_Other_School_Course()
     {
         StudentLogin login = await CreateStudentAndLoginAsync();
@@ -186,16 +234,22 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     }
 
     private static object CreateCourseBody(long organizationId, string courseCode)
-        => new
+    {
+        DateTime enrollmentOpenAt = DateTime.UtcNow;
+        DateOnly startDate = DateOnly.FromDateTime(enrollmentOpenAt).AddDays(30);
+
+        return new
         {
             organizationId,
             courseCode,
             courseName = $"Course {courseCode}",
             description = "Integration course",
-            startDate = new DateOnly(2026, 1, 2),
-            endDate = new DateOnly(2026, 12, 31),
-            enrollmentCloseAt = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)
+            startDate,
+            endDate = startDate.AddDays(90),
+            enrollmentOpenAt,
+            enrollmentCloseAt = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(-1)
         };
+    }
 
     private static async Task<long> ReadLongAsync(HttpResponseMessage response, string propertyName)
     {

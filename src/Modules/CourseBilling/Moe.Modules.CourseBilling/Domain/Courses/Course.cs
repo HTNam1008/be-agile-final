@@ -14,6 +14,7 @@ internal sealed class Course : Entity<long>
 
         DateOnly startDate,
         DateOnly endDate,
+        DateTime enrollmentOpenAtUtc,
         DateTime enrollmentCloseAtUtc,
         long actorLoginAccountId,
         DateTime utcNow) : base(0)
@@ -24,7 +25,7 @@ internal sealed class Course : Entity<long>
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         StartDate = startDate;
         EndDate = endDate;
-        EnrollmentOpenAtUtc = utcNow;
+        EnrollmentOpenAtUtc = enrollmentOpenAtUtc;
         EnrollmentCloseAtUtc = enrollmentCloseAtUtc;
         CourseStatusCode = CourseStatusCodes.Draft;
         CreatedByLoginAccountId = actorLoginAccountId;
@@ -57,6 +58,7 @@ internal sealed class Course : Entity<long>
         string? description,
         DateOnly startDate,
         DateOnly endDate,
+        DateTime enrollmentOpenAtUtc,
         DateTime enrollmentCloseAtUtc,
         long actorLoginAccountId,
         DateTime utcNow)
@@ -66,6 +68,7 @@ internal sealed class Course : Entity<long>
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         StartDate = startDate;
         EndDate = endDate;
+        EnrollmentOpenAtUtc = enrollmentOpenAtUtc;
         EnrollmentCloseAtUtc = enrollmentCloseAtUtc;
         UpdatedAtUtc = utcNow;
         UpdatedByLoginAccountId = actorLoginAccountId;

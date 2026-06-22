@@ -19,23 +19,31 @@ public sealed class TopUpRunWorker(
     {
         logger.LogInformation("Top-up run worker started");
 
-        await foreach (long runId in queueReader.Reader.ReadAllAsync(stoppingToken))
+        try
         {
-            try
+            await foreach (long runId in queueReader.Reader.ReadAllAsync(stoppingToken))
             {
-                await ProcessRunAsync(runId, stoppingToken);
+                try
+                {
+                    await ProcessRunAsync(runId, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    logger.LogInformation("Top-up run worker stopping while processing run {TopUpRunId}", runId);
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(
+                        exception,
+                        "Unhandled error while processing top-up run {TopUpRunId}",
+                        runId);
+                }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                logger.LogError(
-                    exception,
-                    "Unhandled error while processing top-up run {TopUpRunId}",
-                    runId);
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            logger.LogInformation("Top-up run worker stopped");
         }
     }
 

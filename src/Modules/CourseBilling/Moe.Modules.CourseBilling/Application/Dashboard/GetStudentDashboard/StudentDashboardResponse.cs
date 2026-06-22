@@ -4,7 +4,8 @@ public sealed record StudentDashboardResponse(
     StudentDashboardProfileResponse Student,
     StudentDashboardEducationAccountResponse EducationAccount,
     StudentDashboardCourseFilterResponse Filters,
-    IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses);
+    IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses,
+    IReadOnlyCollection<StudentDashboardCourseResponse> PublishedCourses);
 
 public sealed record StudentDashboardProfileResponse(
     long PersonId,
@@ -31,7 +32,7 @@ public sealed record StudentDashboardStatusOptionResponse(
     string Label);
 
 public sealed record StudentDashboardCourseResponse(
-    long CourseEnrollmentId,
+    long? CourseEnrollmentId,
     long CourseId,
     string CourseCode,
     string CourseName,
