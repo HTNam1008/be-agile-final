@@ -12,7 +12,6 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("MoeDatabase")
             ?? throw new InvalidOperationException("Connection string 'MoeDatabase' not found.");
 
-        services.AddScoped<DomainEventInterceptor>();
 
         services.AddDbContext<MoeDbContext>((sp, options) =>
         {
@@ -28,7 +27,6 @@ public static class DependencyInjection
                     sql.MigrationsAssembly("Moe.StudentFinance.Migrations");
                 });
             }
-            options.AddInterceptors(sp.GetRequiredService<DomainEventInterceptor>());
             options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<MoeDbContext>());
