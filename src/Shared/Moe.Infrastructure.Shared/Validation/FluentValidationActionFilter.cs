@@ -40,11 +40,18 @@ public sealed class FluentValidationActionFilter : IAsyncActionFilter
                 .Distinct()
                 .ToArray();
 
-            context.Result = new BadRequestObjectResult(ApiResponse<object>.Fail(
+            int statusCode = validator is IValidationFailureStatusCodeProvider provider
+                ? provider.ValidationFailureStatusCode
+                : ApiResponseCodes.BadRequest;
+
+            context.Result = new ObjectResult(ApiResponse<object>.Fail(
                 "Validation failed.",
                 errors,
-                ApiResponseCodes.BadRequest,
-                context.HttpContext.TraceIdentifier));
+                statusCode,
+                context.HttpContext.TraceIdentifier))
+            {
+                StatusCode = statusCode
+            };
             return;
         }
 

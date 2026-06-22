@@ -23,8 +23,10 @@ using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.CourseBilling.IGateway.Courses;
 using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
+using Moe.Modules.CourseBilling.Infrastructure.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Security;
 using Moe.Modules.CourseBilling.Infrastructure.Storage;
 using ContractCreateFeeComponentRequest = Moe.Modules.CourseBilling.Contracts.AdminFeeComponents.CreateFeeComponentRequest;
@@ -45,6 +47,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
         services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
         services.AddScoped<IStudentDashboardCourseRepository, StudentDashboardCourseRepository>();
+        services.AddScoped<ICourseReferenceDirectory, CourseReferenceDirectory>();
         services.AddScoped<AdminCourseAccess>();
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();

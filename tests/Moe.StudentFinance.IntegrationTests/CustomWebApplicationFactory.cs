@@ -67,6 +67,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.ManageFasSchemes, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "FAS_SCHEME_MANAGE");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -230,11 +238,16 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.ContainsKey("X-Test-Anonymous"))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         string requestedRole = Request.Headers.TryGetValue("X-Test-Role", out var values)
             ? values.ToString()
             : "SCHOOL_ADMIN";
 
-        Claim[] claims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
+        Claim[] baseClaims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
             ? [
                 new Claim(ClaimTypes.Name, "Test Student"),
                 new Claim(ClaimTypes.NameIdentifier, "test-student-id"),
@@ -249,9 +262,15 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.Portal, PortalCodes.Admin),
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
+                new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"),
                 new Claim(ClaimNames.OrganizationUnitId, "1"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             ];
+        List<Claim> claims = baseClaims.ToList();
+        if (Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
+        {
+            claims.RemoveAll(claim => claim.Type == ClaimNames.Permission && claim.Value == "FAS_SCHEME_MANAGE");
+        }
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, "Test");
