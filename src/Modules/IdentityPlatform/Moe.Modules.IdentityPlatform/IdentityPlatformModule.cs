@@ -31,6 +31,7 @@ using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentCon
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.AdminDashboard;
+using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
@@ -64,6 +65,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         services.AddHttpClient<ISingpassLoginGateway, MockPassFapiLoginGateway>();
         services.AddScoped<ILocalIdentityDirectory, LocalIdentityDirectory>();
+        services.AddScoped<ILoginAccountDisplayDirectory, LoginAccountDisplayDirectory>();
         services.AddScoped<IAdminDashboardIdentityDirectory, AdminDashboardIdentityDirectory>();
         services.AddScoped<IStudentDirectory, StudentDirectory>();
         services.AddScoped<ITopUpStudentSearchDirectory, TopUpStudentSearchDirectory>();
