@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
+using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
-using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
-using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
 
 namespace Moe.Modules.FasPayment.Infrastructure.Repositories;
 
@@ -38,12 +38,12 @@ internal sealed class FasApplicationRepository(MoeDbContext dbContext) : IFasApp
             .Select(g => new { StatusCode = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StatusCode, x => x.Count, cancellationToken);
 
-        int pendingCount = statusCounts.GetValueOrDefault("PENDING_REVIEW", 0);
-        int approvedCount = statusCounts.GetValueOrDefault("APPROVED", 0);
-        int rejectedCount = statusCounts.GetValueOrDefault("REJECTED", 0);
+        int pendingCount = statusCounts.GetValueOrDefault(FasApplicationStatuses.PendingReview, 0);
+        int approvedCount = statusCounts.GetValueOrDefault(FasApplicationStatuses.Approved, 0);
+        int rejectedCount = statusCounts.GetValueOrDefault(FasApplicationStatuses.Rejected, 0);
 
         var summary = new SchemeApplicationsSummary(pendingCount, approvedCount, rejectedCount);
-        
+
         var dbItems = await dbContext.Set<FasApplication>()
             .Where(x => x.FasSchemeId == schemeId)
             .Select(x => new { x.Id, x.ApplicationNo, x.StudentName, x.StudentId, x.SubmittedDate, x.StatusCode })

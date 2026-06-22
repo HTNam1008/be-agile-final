@@ -5,12 +5,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
-using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
 using Moe.Modules.FasPayment.Application.Applications.Approve;
+using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
+using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Application.Applications.Reject;
 using Moe.Modules.FasPayment.Domain.Fas;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Api.Admin;
 
@@ -25,14 +27,14 @@ public sealed class AdminFasApplicationsController(ICommandDispatcher commands, 
     public async Task<IActionResult> GetSchemeApplications(long schemeId, CancellationToken cancellationToken)
     {
         var result = await queries.Send(new GetSchemeApplicationsQuery(schemeId), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : NotFound(result.Error);
+        return result.ToApiResponse(this, failureStatusCode: ApiResponseCodes.NotFound);
     }
 
     [HttpGet("applications/{applicationId}")]
     public async Task<IActionResult> GetApplicationDetail(long applicationId, CancellationToken cancellationToken)
     {
         var result = await queries.Send(new GetApplicationDetailQuery(applicationId), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : NotFound(result.Error);
+        return result.ToApiResponse(this, failureStatusCode: ApiResponseCodes.NotFound);
     }
 
     [HttpPost("applications/{applicationId}/approve")]
@@ -43,14 +45,14 @@ public sealed class AdminFasApplicationsController(ICommandDispatcher commands, 
             var result = await commands.Send(new ApproveApplicationCommand(applicationId, request.Remarks), cancellationToken);
             if (!result.IsSuccess)
             {
-                if (result.Error.Code == "Application.NotFound") return NotFound(result.Error);
-                return BadRequest(result.Error);
+                var statusCode = result.Error.Code == "Application.NotFound" ? ApiResponseCodes.NotFound : ApiResponseCodes.Conflict;
+                return ApiResponseFactory.Failure(result.Error, statusCode, HttpContext.TraceIdentifier);
             }
-            return Ok(result.Value);
+            return result.ToApiResponse(this);
         }
         catch (DomainException ex)
         {
-            return UnprocessableEntity(new { Error = ex.Message });
+            return ApiResponseFactory.Failure(new Error("Domain.Error", ex.Message), ApiResponseCodes.UnprocessableEntity, HttpContext.TraceIdentifier);
         }
     }
 
@@ -62,15 +64,19 @@ public sealed class AdminFasApplicationsController(ICommandDispatcher commands, 
             var result = await commands.Send(new RejectApplicationCommand(applicationId, request.RejectionReasonCode, request.Remarks), cancellationToken);
             if (!result.IsSuccess)
             {
-                if (result.Error.Code == "Application.NotFound") return NotFound(result.Error);
-                if (result.Error.Code == "Validation.Error") return UnprocessableEntity(result.Error);
-                return BadRequest(result.Error);
+                var statusCode = result.Error.Code switch
+                {
+                    "Application.NotFound" => ApiResponseCodes.NotFound,
+                    "Validation.Error" => ApiResponseCodes.UnprocessableEntity,
+                    _ => ApiResponseCodes.Conflict
+                };
+                return ApiResponseFactory.Failure(result.Error, statusCode, HttpContext.TraceIdentifier);
             }
-            return Ok(result.Value);
+            return result.ToApiResponse(this);
         }
         catch (DomainException ex)
         {
-            return UnprocessableEntity(new { Error = ex.Message });
+            return ApiResponseFactory.Failure(new Error("Domain.Error", ex.Message), ApiResponseCodes.UnprocessableEntity, HttpContext.TraceIdentifier);
         }
     }
 }
