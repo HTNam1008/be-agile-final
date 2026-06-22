@@ -7,7 +7,7 @@ namespace Moe.Modules.FasPayment.Domain.Fas;
 internal sealed class FasTierCriteria : Entity<long>
 {
     public FasTierCriteria(long id) : base(id) { }
-    
+
     public string CriteriaType { get; set; } = string.Empty;
     public decimal? NumberFrom { get; set; }
     public decimal? NumberTo { get; set; }

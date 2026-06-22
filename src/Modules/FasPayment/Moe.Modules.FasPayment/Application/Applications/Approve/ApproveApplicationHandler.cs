@@ -28,7 +28,7 @@ internal sealed class ApproveApplicationHandler(
 
         var decision = FasApplicationReviewDecision.CreateApproval(application.Id, reviewerId, command.Remarks);
         await repository.AddDecisionAsync(decision, cancellationToken);
-        
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<ApproveApplicationResponse>.Success(

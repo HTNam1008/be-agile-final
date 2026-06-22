@@ -23,7 +23,7 @@ public class GetSchemeApplicationsHandlerTests
         {
             new SchemeApplicationItem(1, "APP-1", "John", "STU-1", "2026-01-01", "PENDING_REVIEW")
         };
-        
+
         mockRepo
             .Setup(r => r.GetSchemeApplicationsAsync(999, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GetSchemeApplicationsResponse(summary, items));
@@ -47,7 +47,7 @@ public class GetSchemeApplicationsHandlerTests
         // backlog: pendingReview=1, approved=1, rejected=1
         var summary = new SchemeApplicationsSummary(1, 1, 1);
         var items = new List<SchemeApplicationItem>();
-        
+
         mockRepo
             .Setup(r => r.GetSchemeApplicationsAsync(999, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GetSchemeApplicationsResponse(summary, items));
