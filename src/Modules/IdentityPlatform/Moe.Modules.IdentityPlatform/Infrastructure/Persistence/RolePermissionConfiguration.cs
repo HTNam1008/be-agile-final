@@ -43,7 +43,9 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
             Seed(23, RoleCodes.SchoolAdmin, PermissionCodes.CourseAssignStudent, effectiveFromUtc),
             Seed(24, RoleCodes.SchoolAdmin, PermissionCodes.AuditViewSchool, effectiveFromUtc),
             Seed(25, RoleCodes.SchoolAdmin, PermissionCodes.ReportExportSchool, effectiveFromUtc),
-            Seed(26, RoleCodes.Student, PermissionCodes.StudentAccountViewSelf, effectiveFromUtc));
+            Seed(26, RoleCodes.Student, PermissionCodes.StudentAccountViewSelf, effectiveFromUtc),
+            Seed(27, RoleCodes.HqAdmin, PermissionCodes.AccountDetailsManage, effectiveFromUtc),
+            Seed(28, RoleCodes.SchoolAdmin, PermissionCodes.AccountDetailsManage, effectiveFromUtc));
     }
 
     private static object Seed(long id, string roleCode, string permissionCode, DateTime effectiveFromUtc)

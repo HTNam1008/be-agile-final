@@ -15,6 +15,7 @@ using Moe.Modules.IdentityPlatform.Application.Access.RevokeAccessScope;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile.GetMyAdminProfile;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile.UpdateMyAdminContact;
+using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 using Moe.Modules.IdentityPlatform.Application.AdminUsers.CreateAdminUser;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetAdminAuthFlow;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetCurrentIdentity;
@@ -75,16 +76,19 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IIdentityProvisioningRequestRepository, IdentityProvisioningRequestRepository>();
         services.AddScoped<IStudentSingpassProvisioningRepository, StudentSingpassProvisioningRepository>();
         services.AddScoped<IStudentProfileRepository, StudentProfileRepository>();
+        services.AddScoped<IAdminAccountDetailsRepository, AdminAccountDetailsRepository>();
         services.AddScoped<ILocalIdentityRepository, LocalIdentityRepository>();
         services.AddScoped<IQueryHandler<GetAdminAuthFlowQuery, AdminAuthFlowResponse>, GetAdminAuthFlowHandler>();
         services.AddScoped<IQueryHandler<GetCurrentIdentityQuery, LocalIdentitySummary>, GetCurrentIdentityHandler>();
         services.AddScoped<IQueryHandler<GetEServiceAuthFlowQuery, EServiceAuthFlowResponse>, GetEServiceAuthFlowHandler>();
         services.AddScoped<IQueryHandler<GetMyAdminProfileQuery, AdminProfileResponse>, GetMyAdminProfileHandler>();
         services.AddScoped<IQueryHandler<GetMyStudentProfileQuery, StudentProfileResponse>, GetMyStudentProfileHandler>();
+        services.AddScoped<IQueryHandler<GetAdminAccountDetailsQuery, AdminAccountDetailsResponse>, GetAdminAccountDetailsHandler>();
         services.AddScoped<ICommandHandler<CreateAdminUserCommand, CreateAdminUserResponse>, CreateAdminUserHandler>();
         services.AddScoped<ICommandHandler<CreateStudentCommand, CreateStudentResponse>, CreateStudentHandler>();
         services.AddScoped<ICommandHandler<UpdateMyAdminContactCommand, AdminProfileResponse>, UpdateMyAdminContactHandler>();
         services.AddScoped<ICommandHandler<UpdateMyStudentContactCommand, StudentProfileResponse>, UpdateMyStudentContactHandler>();
+        services.AddScoped<ICommandHandler<UpdateAdminAccountDetailsCommand, AdminAccountDetailsResponse>, UpdateAdminAccountDetailsHandler>();
         services.AddScoped<IQueryHandler<GetIdentityProvisioningRequestQuery, IdentityProvisioningRequestResponse>, GetIdentityProvisioningRequestHandler>();
         services.AddScoped<ICommandHandler<AssignAccessScopeCommand, AssignAccessScopeResponse>, AssignAccessScopeHandler>();
         services.AddScoped<ICommandHandler<DisableUserAccountCommand, DisableUserAccountResponse>, DisableUserAccountHandler>();
@@ -96,12 +100,14 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IValidator<CreateStudentCommand>, CreateStudentValidator>();
         services.AddScoped<IValidator<UpdateMyAdminContactCommand>, UpdateMyAdminContactValidator>();
         services.AddScoped<IValidator<UpdateMyStudentContactCommand>, UpdateMyStudentContactValidator>();
+        services.AddScoped<IValidator<UpdateAdminAccountDetailsCommand>, UpdateAdminAccountDetailsValidator>();
         services.AddScoped<IValidator<ProvisionStudentSingpassAccountCommand>, ProvisionStudentSingpassAccountValidator>();
         services.AddScoped<IValidator<AssignAccessScopeRequest>, AssignAccessScopeRequestValidator>();
         services.AddScoped<IValidator<CreateAdminUserRequest>, CreateAdminUserRequestValidator>();
         services.AddScoped<IValidator<CreateStudentRequest>, CreateStudentRequestValidator>();
         services.AddScoped<IValidator<UpdateMyAdminContactRequest>, UpdateMyAdminContactRequestValidator>();
         services.AddScoped<IValidator<UpdateMyStudentContactRequest>, UpdateMyStudentContactRequestValidator>();
+        services.AddScoped<IValidator<UpdateAdminAccountDetailsRequest>, UpdateAdminAccountDetailsRequestValidator>();
         services.AddScoped<IValidator<ProvisionStudentSingpassAccountRequest>, ProvisionStudentSingpassAccountRequestValidator>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }

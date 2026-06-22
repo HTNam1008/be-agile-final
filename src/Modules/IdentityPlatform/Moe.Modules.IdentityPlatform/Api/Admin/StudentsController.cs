@@ -7,6 +7,7 @@ using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application;
+using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 
@@ -19,6 +20,7 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 [EnableCors("AdminCors")]
 public sealed class StudentsController(
     ICommandDispatcher commands,
+    IQueryDispatcher queries,
     IStudentDirectory students,
     IAdminAccessControl adminAccess) : ControllerBase
 {
@@ -70,6 +72,53 @@ public sealed class StudentsController(
             HttpContext.TraceIdentifier);
     }
 
+    [HttpGet("{personId:long}/account-details")]
+    [Authorize(Policy = AuthorizationPolicies.ViewAccountDetails)]
+    public async Task<IActionResult> GetAccountDetails(
+        [FromRoute] long personId,
+        CancellationToken cancellationToken)
+    {
+        var result = await queries.Send(new GetAdminAccountDetailsQuery(personId), cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return ApiResponseFactory.Failure(
+                result.Error,
+                GetFailureStatusCode(result.Error.Code),
+                HttpContext.TraceIdentifier);
+        }
+
+        return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
+    [HttpPut("{personId:long}/account-details")]
+    [Authorize(Policy = AuthorizationPolicies.ManageAccountDetails)]
+    public async Task<IActionResult> UpdateAccountDetails(
+        [FromRoute] long personId,
+        [FromBody] UpdateAdminAccountDetailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        UpdateAdminAccountDetailsCommand command = new(
+            personId,
+            request.ClassCode,
+            request.ResidentialAddress,
+            request.Email,
+            request.ContactNumber,
+            request.ExpectedUpdatedAtUtc);
+
+        var result = await commands.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return ApiResponseFactory.Failure(
+                result.Error,
+                GetFailureStatusCode(result.Error.Code),
+                HttpContext.TraceIdentifier);
+        }
+
+        return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] CreateStudentRequest request,
@@ -113,7 +162,12 @@ public sealed class StudentsController(
         {
             "IDENTITY.AUTHENTICATED_ADMIN_REQUIRED" => ApiResponseCodes.Unauthorized,
             "IDENTITY.SCHOOL_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
+            "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "IDENTITY.ORGANIZATION_UNIT_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "IDENTITY.PERSON_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "IDENTITY.EDUCATION_ACCOUNT_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "IDENTITY.PROFILE_UPDATE_CONFLICT" => ApiResponseCodes.Conflict,
+            "IDENTITY.ACTIVE_SCHOOL_ENROLLMENT_REQUIRED" => ApiResponseCodes.Conflict,
             "IDENTITY.STUDENT_ACCOUNT_CREATE_FAILED" => ApiResponseCodes.Conflict,
             _ => ApiResponseCodes.Conflict
         };

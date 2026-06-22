@@ -18,6 +18,8 @@ public static class AuthorizationPolicies
     public const string EServicePortal = "EServicePortal";
     public const string ManageAccessScopes = "ManageAccessScopes";
     public const string ManageAccounts = "ManageAccounts";
+    public const string ViewAccountDetails = "ViewAccountDetails";
+    public const string ManageAccountDetails = "ManageAccountDetails";
     public const string ManageAccountLifecycle = "ManageAccountLifeCycle";
     public const string ManageExternalAccounts = "ManageExternalAccounts";
     public const string ManageTopUps = "ManageTopUps";

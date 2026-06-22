@@ -46,6 +46,7 @@ internal static class PermissionCodes
     public const string AccountsViewSchool = "ACCOUNT_VIEW_SCHOOL";
     public const string StudentAccountViewSelf = "STUDENT_ACCOUNT_VIEW_SELF";
     public const string AccountsManualCreate = "ACCOUNT_MANUAL_CREATE";
+    public const string AccountDetailsManage = "ACCOUNT_DETAILS_MANAGE";
     public const string AccountsLifecycleManage = "ACCOUNT_LIFECYCLE_MANAGE";
     public const string AccountsSettlementView = "ACCOUNT_SETTLEMENT_VIEW";
     public const string ExternalAccountsProvision = "EXTERNAL_ACCOUNTS_PROVISION";
