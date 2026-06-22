@@ -1,9 +1,12 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.FasPayment.Application.AdminFasSchemes;
+using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.Application.Applications.Approve;
 using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
 using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
@@ -19,6 +22,15 @@ public sealed class FasPaymentModule : IModule
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IModelConfigurationContributor, FasPaymentModelConfiguration>();
+        services.AddScoped<IFasSchemeRepository, FasSchemeRepository>();
+        services.AddScoped<ICommandHandler<CreateFasSchemeCommand, CreateFasSchemeResponse>, CreateFasSchemeHandler>();
+        services.AddScoped<ICommandHandler<SaveFasSchemeDraftCommand, CreateFasSchemeResponse>, SaveFasSchemeDraftHandler>();
+        services.AddScoped<ICommandHandler<ActivateFasSchemeDraftCommand, CreateFasSchemeResponse>, ActivateFasSchemeDraftHandler>();
+        services.AddScoped<ICommandHandler<DeleteFasSchemeDraftCommand, bool>, DeleteFasSchemeDraftHandler>();
+        services.AddScoped<IQueryHandler<ListFasSchemesQuery, FasSchemeListResponse>, ListFasSchemesHandler>();
+        services.AddScoped<IQueryHandler<GetFasSchemeQuery, FasSchemeDetail>, GetFasSchemeHandler>();
+        services.AddScoped<IValidator<CreateFasSchemeRequest>, CreateFasSchemeRequestValidator>();
+        services.AddScoped<IValidator<ListFasSchemesRequest>, ListFasSchemesRequestValidator>();
         services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
 
         services.AddScoped<IQueryHandler<GetSchemeApplicationsQuery, GetSchemeApplicationsResponse>, GetSchemeApplicationsHandler>();

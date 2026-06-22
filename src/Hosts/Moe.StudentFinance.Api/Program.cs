@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.CourseBilling;
@@ -42,6 +43,32 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
     .AddApplicationPart(typeof(FasPaymentModule).Assembly);
+
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    var defaultFactory = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        if (!context.ActionDescriptor.EndpointMetadata.OfType<UnprocessableEntityOnModelValidationAttribute>().Any())
+        {
+            return defaultFactory(context);
+        }
+
+        string[] errors = context.ModelState.Values
+            .SelectMany(entry => entry.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "Invalid request value." : error.ErrorMessage)
+            .Distinct()
+            .ToArray();
+        return new Microsoft.AspNetCore.Mvc.ObjectResult(ApiResponse<object>.Fail(
+            "Validation failed.",
+            ["FAS.INVALID_REQUEST", .. errors],
+            ApiResponseCodes.UnprocessableEntity,
+            context.HttpContext.TraceIdentifier))
+        {
+            StatusCode = ApiResponseCodes.UnprocessableEntity
+        };
+    };
+});
 
 builder.Services.AddApiVersioning(options =>
 {

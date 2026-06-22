@@ -1,0 +1,40 @@
+{
+  "schemeCode": "MOE-FAS-2026",
+  "grantCode": "FAS-2026",
+  "name": "MOE FAS 2026",
+  "description": "Standard financial assistance for 2026",
+  "startDate": "2026-01-01",
+  "endDate": "2026-12-31",
+  "courseIds": [],
+  "subsidyType": "PERCENTAGE",
+  "criteriaTemplate": [
+    { "criteriaType": "AGE", "connectorToNext": "AND", "displayOrder": 1 },
+    { "criteriaType": "GDP", "connectorToNext": "OR", "displayOrder": 2 },
+    { "criteriaType": "PCI", "connectorToNext": "AND", "displayOrder": 3 },
+    { "criteriaType": "NATIONALITY", "connectorToNext": null, "displayOrder": 4 }
+  ],
+  "tiers": [
+    {
+      "label": "Tier 1 - Full Subsidy",
+      "subsidyValue": 100,
+      "displayOrder": 1,
+      "criteriaValues": [
+        { "displayOrder": 1, "numberFrom": 13, "numberTo": 18, "nationalities": null },
+        { "displayOrder": 2, "numberFrom": 0, "numberTo": 4000, "nationalities": null },
+        { "displayOrder": 3, "numberFrom": 0, "numberTo": 1000, "nationalities": null },
+        { "displayOrder": 4, "numberFrom": null, "numberTo": null, "nationalities": ["Singapore Citizen", "Permanent Resident"] }
+      ]
+    },
+    {
+      "label": "Tier 2 - Partial Subsidy",
+      "subsidyValue": 50,
+      "displayOrder": 2,
+      "criteriaValues": [
+        { "displayOrder": 1, "numberFrom": 13, "numberTo": 21, "nationalities": null },
+        { "displayOrder": 2, "numberFrom": 4000.01, "numberTo": 7000, "nationalities": null },
+        { "displayOrder": 3, "numberFrom": 1000.01, "numberTo": 1750, "nationalities": null },
+        { "displayOrder": 4, "numberFrom": null, "numberTo": null, "nationalities": ["International Student", "Malaysian"] }
+      ]
+    }
+  ]
+}

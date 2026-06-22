@@ -68,15 +68,15 @@ internal sealed class FasApplicationRepository(MoeDbContext dbContext) : IFasApp
 
         var scheme = await dbContext.Set<FasScheme>().FirstOrDefaultAsync(x => x.Id == application.FasSchemeId, cancellationToken);
         var decisions = await dbContext.Set<FasApplicationReviewDecision>()
-            .Where(x => x.ApplicationId == applicationId)
-            .OrderBy(x => x.ReviewedAt)
+            .Where(x => x.Id == applicationId)
+            .OrderBy(x => x.ReviewedAtUtc)
             .ToListAsync(cancellationToken);
 
-        var schemeDto = new ApplicationDetailScheme(scheme?.Id ?? 0, scheme?.SchemeName ?? "Unknown");
+        var schemeDto = new ApplicationDetailScheme(scheme?.Id ?? 0, scheme?.Name ?? "Unknown");
         var decisionDtos = decisions.Select(x => new ApplicationDetailDecision(
             x.Decision,
-            x.ReviewerUserId,
-            x.ReviewedAt,
+            x.ReviewerLoginAccountId,
+            x.ReviewedAtUtc,
             x.Remarks
         )).ToList();
 
