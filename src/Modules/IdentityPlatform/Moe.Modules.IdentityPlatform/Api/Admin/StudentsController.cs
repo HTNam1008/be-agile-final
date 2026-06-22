@@ -3,13 +3,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
-using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application;
 using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
+using Moe.Modules.IdentityPlatform.Application.AdminStudentList;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
-using Moe.Modules.IdentityPlatform.IGateway.Students;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -20,56 +19,45 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 [EnableCors("AdminCors")]
 public sealed class StudentsController(
     ICommandDispatcher commands,
-    IQueryDispatcher queries,
-    IStudentDirectory students,
-    IAdminAccessControl adminAccess) : ControllerBase
+    IQueryDispatcher queries) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.ViewAccountDetails)]
     public async Task<IActionResult> List(
-        [FromQuery] long organizationId,
-        [FromQuery] string? search,
-        [FromQuery] string? levelCode,
-        [FromQuery] string? classCode,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] AdminStudentListRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (organizationId <= 0)
-        {
-            return ApiResponseFactory.Failure(
-                IdentityErrors.OrganizationUnitNotFound,
-                ApiResponseCodes.NotFound,
-                HttpContext.TraceIdentifier);
-        }
-
-        if (!adminAccess.CanAccessOrganization(organizationId))
-        {
-            return ApiResponseFactory.Failure(
-                IdentityErrors.SchoolOutsideScope,
-                ApiResponseCodes.Forbidden,
-                HttpContext.TraceIdentifier);
-        }
-
-        AdminStudentSearchCriteria criteria = new(
-            organizationId,
-            search,
-            levelCode,
-            classCode,
-            Math.Max(page, 1),
-            Math.Clamp(pageSize, 1, 100));
-
-        long totalCount = await students.CountByOrganizationAsync(criteria, cancellationToken);
-        IReadOnlyList<AdminStudentSearchSummary> items = await students.ListByOrganizationAsync(
-            criteria,
+        var result = await queries.Send(
+            new ListAdminStudentsQuery(
+                request.Search,
+                request.LevelCode,
+                request.ClassCode,
+                request.AccountStatus,
+                request.Residency,
+                request.EnrollmentStatus,
+                request.Page,
+                request.PageSize),
             cancellationToken);
 
-        return ApiResponseFactory.Ok(
-            new PageResponse<AdminStudentSearchSummary>(
-                items,
-                criteria.Page,
-                criteria.PageSize,
-                totalCount),
-            HttpContext.TraceIdentifier);
+        return result.IsFailure
+            ? ApiResponseFactory.Failure(result.Error, GetFailureStatusCode(result.Error.Code), HttpContext.TraceIdentifier)
+            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
+    [HttpGet("classes")]
+    [Authorize(Policy = AuthorizationPolicies.ViewAccountDetails)]
+    public async Task<IActionResult> ListClasses(
+        [FromQuery] long organizationId,
+        [FromQuery] string levelCode,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await queries.Send(
+            new ListAdminStudentClassesQuery(organizationId, levelCode),
+            cancellationToken);
+
+        return result.IsFailure
+            ? ApiResponseFactory.Failure(result.Error, GetFailureStatusCode(result.Error.Code), HttpContext.TraceIdentifier)
+            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
     }
 
     [HttpGet("{personId:long}/account-details")]
