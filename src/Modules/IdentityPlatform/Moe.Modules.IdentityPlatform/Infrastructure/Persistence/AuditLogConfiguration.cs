@@ -20,7 +20,7 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(x => x.EntityTypeCode).HasMaxLength(100).IsUnicode(false).IsRequired();
         builder.Property(x => x.OutcomeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.Reason).HasMaxLength(1000);
-        builder.Property(x => x.ChangedFieldsJson).HasColumnType("nvarchar(max)");
+        builder.Property(x => x.ChangedFieldsJson);
         builder.Property(x => x.CorrelationId).HasMaxLength(100);
         builder.Property(x => x.OccurredAtUtc).HasColumnName("OccurredAt");
         builder.Property(x => x.IpAddress).HasMaxLength(100);

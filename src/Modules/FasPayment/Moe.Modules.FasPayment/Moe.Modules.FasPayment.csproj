@@ -11,4 +11,8 @@
     <ProjectReference Include="..\..\..\Shared\Moe.SharedKernel\Moe.SharedKernel.csproj" />
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moe.FasPayment.UnitTests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
 </Project>
