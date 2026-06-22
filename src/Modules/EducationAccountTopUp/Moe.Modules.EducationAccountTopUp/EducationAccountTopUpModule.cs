@@ -71,6 +71,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpTransactionResultsReader, TopUpTransactionResultsReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IEducationAccountDirectory, EducationAccountDirectory>();
+        services.AddScoped<EducationAccountDirectory>();
+        services.AddScoped<IEducationAccountLookupGateway, EducationAccountLookupGateway>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
         // Services & Utilities
