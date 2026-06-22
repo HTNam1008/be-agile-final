@@ -96,9 +96,30 @@ internal sealed class AdminCourseAccess(
         long? excludeCourseId,
         CancellationToken cancellationToken)
     {
+        DateTime utcNow = UtcNow();
+        DateOnly today = DateOnly.FromDateTime(utcNow);
+        DateTime currentMinute = new(
+            utcNow.Year,
+            utcNow.Month,
+            utcNow.Day,
+            utcNow.Hour,
+            utcNow.Minute,
+            0,
+            DateTimeKind.Utc);
+
+        if (startDate < today || endDate < today)
+        {
+            return Result.Failure(CourseErrors.CourseDateInPast);
+        }
+
         if (startDate > endDate)
         {
             return Result.Failure(CourseErrors.InvalidDateRange);
+        }
+
+        if (enrollmentOpenAt < currentMinute || enrollmentCloseAt < currentMinute)
+        {
+            return Result.Failure(CourseErrors.EnrollmentDateInPast);
         }
 
         if (enrollmentOpenAt > enrollmentCloseAt)
@@ -106,9 +127,10 @@ internal sealed class AdminCourseAccess(
             return Result.Failure(CourseErrors.InvalidEnrollmentWindow);
         }
 
-        if (DateOnly.FromDateTime(enrollmentCloseAt) > endDate)
+        DateTime courseStartsAtUtc = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        if (enrollmentCloseAt >= courseStartsAtUtc)
         {
-            return Result.Failure(CourseErrors.EnrollmentCloseAfterCourseEnd);
+            return Result.Failure(CourseErrors.EnrollmentMustCloseBeforeCourseStarts);
         }
 
         if (organizationId <= 0)

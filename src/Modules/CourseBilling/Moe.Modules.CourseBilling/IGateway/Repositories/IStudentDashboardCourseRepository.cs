@@ -7,4 +7,9 @@ internal interface IStudentDashboardCourseRepository
         string? search,
         string? status,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyCollection<StudentDashboardCourseSummary>> ListPublishedCoursesAsync(
+        long personId,
+        string? search,
+        CancellationToken cancellationToken);
 }
