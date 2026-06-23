@@ -18,6 +18,7 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
@@ -86,6 +87,9 @@ builder.Services.AddOpenApiDocument(settings =>
 });
 
 var app = builder.Build();
+app.Logger.LogInformation(
+    "Data Protection keys are persisted to {DataProtectionKeysPath}",
+    Moe.Infrastructure.Shared.DependencyInjection.ResolveDataProtectionKeysDirectory().FullName);
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
 {
@@ -93,8 +97,11 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
     app.UseSwaggerUi(settings => settings.Path = "/swagger");
 }
 
-app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
-
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "MOE Student Finance API",
+    status = "running"
+})).AllowAnonymous();
 app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 {
     string issuer = configuration["Authentication:AdminEntra:Authority"]?.TrimEnd('/')
