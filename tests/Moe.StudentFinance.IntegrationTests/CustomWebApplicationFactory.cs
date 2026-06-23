@@ -238,6 +238,13 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.TryGetValue("X-Test-Unauthenticated", out var unauthenticated)
+            && bool.TryParse(unauthenticated.ToString(), out bool isUnauthenticated)
+            && isUnauthenticated)
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         string requestedRole = Request.Headers.TryGetValue("X-Test-Role", out var values)
             ? values.ToString()
             : "SCHOOL_ADMIN";

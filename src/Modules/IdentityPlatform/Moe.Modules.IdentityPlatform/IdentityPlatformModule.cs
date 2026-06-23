@@ -25,6 +25,7 @@ using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.DisableUserAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.ProvisionStudentSingpassAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.RetryIdentityProvisioning;
+using Moe.Modules.IdentityPlatform.Application.ReferenceData;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
@@ -90,6 +91,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IQueryHandler<GetAdminAccountDetailsQuery, AdminAccountDetailsResponse>, GetAdminAccountDetailsHandler>();
         services.AddScoped<IQueryHandler<ListAdminStudentsQuery, AdminStudentListPage>, ListAdminStudentsHandler>();
         services.AddScoped<IQueryHandler<ListAdminStudentClassesQuery, IReadOnlyList<string>>, ListAdminStudentClassesHandler>();
+        services.AddScoped<IQueryHandler<GetStudentManagementReferenceDataQuery, StudentManagementReferenceDataResponse>, GetStudentManagementReferenceDataHandler>();
         services.AddScoped<ICommandHandler<CreateAdminUserCommand, CreateAdminUserResponse>, CreateAdminUserHandler>();
         services.AddScoped<ICommandHandler<CreateStudentCommand, CreateStudentResponse>, CreateStudentHandler>();
         services.AddScoped<ICommandHandler<UpdateMyAdminContactCommand, AdminProfileResponse>, UpdateMyAdminContactHandler>();
