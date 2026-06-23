@@ -72,6 +72,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<ITopUpStudentSearchDirectory, TopUpStudentSearchDirectory>();
         services.AddScoped<IAdminStudentListReader, AdminStudentListReader>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
+        services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IExternalIdentityProvisioningRepository, UserAccountRepository>();
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();

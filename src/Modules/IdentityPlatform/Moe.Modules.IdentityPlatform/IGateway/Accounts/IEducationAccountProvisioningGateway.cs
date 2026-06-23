@@ -11,7 +11,8 @@ public interface IEducationAccountProvisioningGateway
         long personId,
         long openedByUserAccountId,
         DateTimeOffset openedAtUtc,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool saveChanges = true);
 
     Task<bool> HasAccountAsync(long personId, CancellationToken cancellationToken);
 }

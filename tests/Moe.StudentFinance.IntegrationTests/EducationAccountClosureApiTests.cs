@@ -19,10 +19,10 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
     [Fact]
     public async Task SchoolAdmin_Can_Close_Own_School_Education_Account()
     {
-        long accountId = await SeedAccountAsync(organizationId: 1);
+        (long personId, long accountId) = await SeedAccountAsync(organizationId: 1);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/education-accounts/{accountId}/close",
+            $"/api/admin/v1/students/{personId}/disable",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.OK, response);
@@ -30,18 +30,20 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
         using IServiceScope scope = factory.Services.CreateScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
         EducationAccount account = await db.Set<EducationAccount>().SingleAsync(x => x.Id == accountId);
+        Person person = await db.Set<Person>().SingleAsync(x => x.Id == personId);
         Assert.Equal(AccountStatuses.Closed, account.StatusCode);
         Assert.Equal(EducationAccountClosingReasonCodes.StudentIneligible, account.ClosingReasonCode);
         Assert.Equal(1001, account.ClosedByLoginAccountId);
+        Assert.Equal("DISABLED", person.PersonStatusCode);
     }
 
     [Fact]
     public async Task SchoolAdmin_Cannot_Close_OutOfScope_Education_Account()
     {
-        long accountId = await SeedAccountAsync(organizationId: 2);
+        (long personId, _) = await SeedAccountAsync(organizationId: 2);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/education-accounts/{accountId}/close",
+            $"/api/admin/v1/students/{personId}/disable",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.Forbidden, response);
@@ -52,10 +54,10 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
     [Fact]
     public async Task Close_Unknown_Education_Account_Returns_NotFound()
     {
-        long missingId = Random.Shared.NextInt64(9_000_000, 9_999_999);
+        long missingPersonId = Random.Shared.NextInt64(9_000_000, 9_999_999);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/education-accounts/{missingId}/close",
+            $"/api/admin/v1/students/{missingPersonId}/disable",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.NotFound, response);
@@ -66,10 +68,10 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
     [Fact]
     public async Task Close_AlreadyClosed_Education_Account_Returns_Conflict()
     {
-        long accountId = await SeedAccountAsync(organizationId: 1, closed: true);
+        (long personId, _) = await SeedAccountAsync(organizationId: 1, closed: true);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/education-accounts/{accountId}/close",
+            $"/api/admin/v1/students/{personId}/disable",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.Conflict, response);
@@ -77,7 +79,7 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
         Assert.Contains("ACCOUNT.ALREADY_CLOSED", body);
     }
 
-    private async Task<long> SeedAccountAsync(long organizationId, bool closed = false)
+    private async Task<(long PersonId, long AccountId)> SeedAccountAsync(long organizationId, bool closed = false)
     {
         using IServiceScope scope = factory.Services.CreateScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -125,7 +127,7 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
 
         db.Set<EducationAccount>().Add(account);
         await db.SaveChangesAsync();
-        return account.Id;
+        return (personId, account.Id);
     }
 
     private static object CloseBody()

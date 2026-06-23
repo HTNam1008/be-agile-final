@@ -20,6 +20,7 @@ public sealed class CloseManualAccountHandlerTests
     private readonly FakePersonDirectory _people = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly FakeAdminAccessControl _adminAccess = new();
+    private readonly FakePersonLifecycleGateway _personLifecycle = new();
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 6, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeAuditService _audit = new();
@@ -31,7 +32,7 @@ public sealed class CloseManualAccountHandlerTests
         _people.OrganizationByPersonId[5001] = 10;
         CloseManualAccountHandler handler = CreateHandler();
 
-        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+        var result = await handler.Handle(CreateCommand(account.PersonId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         account.StatusCode.Should().Be(AccountStatuses.Closed);
@@ -48,7 +49,25 @@ public sealed class CloseManualAccountHandlerTests
         root.GetProperty("reasonCode").GetString().Should().Be(EducationAccountClosingReasonCodes.StudentIneligible);
         root.GetProperty("closedByLoginAccountId").GetInt64().Should().Be(42);
         root.TryGetProperty("remarks", out _).Should().BeFalse();
+        _personLifecycle.DisableCalls.Should().ContainSingle()
+            .Which.Should().Be((5001, _clock.UtcNow.UtcDateTime));
         _unitOfWork.SaveCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_OnPersonDisableFailure_DoesNotSaveOrAudit()
+    {
+        EducationAccount account = AddAccount(1007, personId: 5007);
+        _people.OrganizationByPersonId[5007] = 10;
+        _personLifecycle.FailingPersonIds.Add(5007);
+        CloseManualAccountHandler handler = CreateHandler();
+
+        var result = await handler.Handle(CreateCommand(5007), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("IDENTITY.PERSON_NOT_FOUND");
+        _audit.Calls.Should().BeEmpty();
+        _unitOfWork.SaveCalls.Should().Be(0);
     }
 
     [Fact]
@@ -73,7 +92,7 @@ public sealed class CloseManualAccountHandlerTests
         _adminAccess.AccessibleOrganizationIds.Add(10);
         CloseManualAccountHandler handler = CreateHandler();
 
-        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+        var result = await handler.Handle(CreateCommand(account.PersonId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("AUTH.ORGANIZATION_OUTSIDE_SCOPE");
@@ -89,7 +108,7 @@ public sealed class CloseManualAccountHandlerTests
         _people.OrganizationByPersonId[5003] = null;
         CloseManualAccountHandler handler = CreateHandler();
 
-        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+        var result = await handler.Handle(CreateCommand(account.PersonId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("AUTH.ORGANIZATION_OUTSIDE_SCOPE");
@@ -106,7 +125,7 @@ public sealed class CloseManualAccountHandlerTests
         _adminAccess.IsHqAdmin = true;
         CloseManualAccountHandler handler = CreateHandler();
 
-        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+        var result = await handler.Handle(CreateCommand(account.PersonId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         account.StatusCode.Should().Be(AccountStatuses.Closed);
@@ -123,7 +142,7 @@ public sealed class CloseManualAccountHandlerTests
             .IsSuccess.Should().BeTrue();
         CloseManualAccountHandler handler = CreateHandler();
 
-        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+        var result = await handler.Handle(CreateCommand(account.PersonId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(AccountErrors.AlreadyClosed);
@@ -139,7 +158,7 @@ public sealed class CloseManualAccountHandlerTests
         _audit.ExceptionToThrow = new InvalidOperationException("audit failed");
         CloseManualAccountHandler handler = CreateHandler();
 
-        Func<Task> act = () => handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+        Func<Task> act = () => handler.Handle(CreateCommand(account.PersonId), CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("audit failed");
         _unitOfWork.SaveCalls.Should().Be(0);
@@ -166,13 +185,14 @@ public sealed class CloseManualAccountHandlerTests
             _people,
             _currentUser,
             _adminAccess,
+            _personLifecycle,
             _clock,
             _unitOfWork,
             _audit);
 
-    private static CloseManualAccountCommand CreateCommand(long educationAccountId)
+    private static CloseManualAccountCommand CreateCommand(long personId)
         => new(
-            educationAccountId,
+            personId,
             EducationAccountClosingReasonCodes.StudentIneligible,
             "Student no longer eligible");
 
@@ -219,6 +239,25 @@ public sealed class CloseManualAccountHandlerTests
                 "SG",
                 "CITIZEN",
                 organizationId));
+        }
+    }
+
+    private sealed class FakePersonLifecycleGateway : IPersonLifecycleGateway
+    {
+        public List<(long PersonId, DateTime UtcNow)> DisableCalls { get; } = [];
+        public HashSet<long> FailingPersonIds { get; } = [];
+
+        public Task<Result> DisableAsync(long personId, DateTime utcNow, CancellationToken cancellationToken)
+        {
+            if (FailingPersonIds.Contains(personId))
+            {
+                return Task.FromResult(Result.Failure(new Error(
+                    "IDENTITY.PERSON_NOT_FOUND",
+                    "The person was not found.")));
+            }
+
+            DisableCalls.Add((personId, utcNow));
+            return Task.FromResult(Result.Success());
         }
     }
 
