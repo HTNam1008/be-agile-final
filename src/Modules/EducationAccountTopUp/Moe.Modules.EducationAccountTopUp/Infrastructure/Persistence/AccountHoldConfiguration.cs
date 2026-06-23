@@ -12,7 +12,7 @@ internal sealed class AccountHoldConfiguration : IEntityTypeConfiguration<Accoun
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("AccountHoldId").UseIdentityColumn();
         builder.HasIndex(x => x.EducationAccountId);
-        builder.HasIndex(x => x.PaymentPartId).HasFilter("[PaymentPartId] IS NOT NULL");
+        builder.HasIndex(x => x.PaymentPartId).IsUnique().HasFilter("[PaymentPartId] IS NOT NULL");
         builder.Property(x => x.HoldAmount).HasPrecision(19, 2);
         builder.Property(x => x.HoldStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
