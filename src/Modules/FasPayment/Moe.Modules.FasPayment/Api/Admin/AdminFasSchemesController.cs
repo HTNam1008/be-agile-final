@@ -42,6 +42,7 @@ public sealed class AdminFasSchemesController(ICommandDispatcher commands, IQuer
         return result.IsSuccess ? ApiResponseFactory.Created(result.Value, HttpContext.TraceIdentifier, "FAS draft saved.") : Failure(result.Error);
     }
 
+    [HttpPut("{schemeId:long}")]
     [HttpPut("{schemeId:long}/draft")]
     public async Task<IActionResult> UpdateDraft(long schemeId, [FromBody] CreateFasSchemeRequest request, CancellationToken cancellationToken)
         => Map(await commands.Send(new SaveFasSchemeDraftCommand(schemeId, request), cancellationToken));

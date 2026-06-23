@@ -34,6 +34,36 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Draft_can_be_loaded_and_edited_through_canonical_endpoint()
+    {
+        string suffix = NewSuffix();
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes/draft", PercentageRequest(suffix));
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+
+        using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: $"Edited FAS {suffix}"));
+        await AssertStatus(HttpStatusCode.OK, updated);
+        using HttpResponseMessage detail = await _client.GetAsync($"/api/admin/v1/fas/schemes/{id}");
+        await AssertStatus(HttpStatusCode.OK, detail);
+        string body = await detail.Content.ReadAsStringAsync();
+        Assert.Contains($"Edited FAS {suffix}", body);
+        Assert.Contains("\"status\":\"DRAFT\"", body);
+    }
+
+    [Fact]
+    public async Task Active_scheme_cannot_be_edited_as_draft()
+    {
+        string suffix = NewSuffix();
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", PercentageRequest(suffix));
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+
+        using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: "Should not save"));
+        await AssertStatus(HttpStatusCode.UnprocessableEntity, updated);
+        Assert.Contains("FAS.SCHEME_NOT_FOUND", await updated.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Parent_nationality_and_account_type_round_trip_without_numeric_bounds()
     {
         string suffix = NewSuffix();
@@ -194,11 +224,11 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         return await ReadLong(response, "courseId");
     }
 
-    private static object PercentageRequest(string suffix, string? grantCode = null) => new
+    private static object PercentageRequest(string suffix, string? grantCode = null, string? name = null) => new
     {
         schemeCode = $"FAS-{suffix}",
         grantCode = grantCode ?? $"GRANT-{suffix}",
-        name = $"FAS {suffix}",
+        name = name ?? $"FAS {suffix}",
         description = "Integration scheme",
         startDate = new DateOnly(2026, 1, 1),
         endDate = new DateOnly(2026, 12, 31),
