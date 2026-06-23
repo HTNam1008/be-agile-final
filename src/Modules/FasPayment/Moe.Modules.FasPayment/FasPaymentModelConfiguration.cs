@@ -22,5 +22,7 @@ public sealed class FasPaymentModelConfiguration : IModelConfigurationContributo
         modelBuilder.ApplyConfiguration(new PaymentCheckoutSessionConfiguration());
         modelBuilder.ApplyConfiguration(new ProcessedPaymentWebhookEventConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentRefundConfiguration());
+        modelBuilder.ApplyConfiguration(new EnrollmentRefundConfiguration());
+        modelBuilder.ApplyConfiguration(new EnrollmentRefundPartConfiguration());
     }
 }
