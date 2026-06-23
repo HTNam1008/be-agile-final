@@ -43,6 +43,15 @@ internal interface IPaymentCheckoutRepository
     Task<IReadOnlyCollection<Payment>> ListPaymentsForPersonAsync(
         long personId,
         CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<PaymentPart>> ListPaymentPartsForPaymentsAsync(
+        IReadOnlyCollection<long> paymentIds,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<PaymentRefund>> ListPaymentRefundsForPaymentsAsync(
+        IReadOnlyCollection<long> paymentIds,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EnrollmentRefundPart>> ListEnrollmentRefundPartsForPaymentsAsync(
+        IReadOnlyCollection<long> paymentIds,
+        CancellationToken cancellationToken);
     Task<decimal> GetSucceededRefundAmountAsync(long paymentId, CancellationToken cancellationToken);
     Task AddRefundAsync(PaymentRefund refund, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentRefund>> ListRefundsAsync(long paymentId, CancellationToken cancellationToken);

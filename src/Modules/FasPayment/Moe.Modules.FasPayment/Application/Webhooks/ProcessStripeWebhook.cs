@@ -159,8 +159,8 @@ internal sealed class ProcessStripeWebhookHandler(
         PaymentPart? educationPart = parts.SingleOrDefault(x => x.PaymentMethodCode == PaymentMethodCodes.EducationAccount);
         if (educationPart?.AccountHoldId is long holdId)
         {
-            await accounts.CaptureAsync(holdId, null, cancellationToken);
-            educationPart.MarkCompleted(PaymentPartStatusCodes.Captured, webhook.CreatedAtUtc);
+            long accountTransactionId = await accounts.CaptureAsync(holdId, null, cancellationToken);
+            educationPart.MarkCompleted(PaymentPartStatusCodes.Captured, webhook.CreatedAtUtc, accountTransactionId);
         }
         PaymentPart onlinePart = parts.Single(x => x.PaymentMethodCode == PaymentMethodCodes.OnlinePayment);
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Successful, webhook.CreatedAtUtc);
@@ -290,7 +290,26 @@ internal sealed class ProcessStripeWebhookHandler(
             remaining -= refund.Amount;
         }
         if (payment.PaymentStatusCode == PaymentStatusCodes.Refunded)
-            await courses.ApplyFullRefundAsync(payment.BillId, webhook.CreatedAtUtc, cancellationToken);
+        {
+            IReadOnlyCollection<PaymentAllocation> allocations =
+                await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken);
+            long[] allocatedBillIds = allocations
+                .Select(allocation => allocation.BillId)
+                .Distinct()
+                .ToArray();
+
+            if (allocatedBillIds.Length > 0)
+            {
+                await courses.ApplyFullRefundForBillsAsync(
+                    allocatedBillIds,
+                    webhook.CreatedAtUtc,
+                    cancellationToken);
+            }
+            else
+            {
+                await courses.ApplyFullRefundAsync(payment.BillId, webhook.CreatedAtUtc, cancellationToken);
+            }
+        }
     }
 
     private async Task AttachCheckoutReferencesAsync(

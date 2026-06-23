@@ -80,7 +80,10 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         return dbContext.Set<CourseEnrollment>()
             .AnyAsync(
                 x => x.PersonId == personId
-                    && x.CourseId == courseId,
+                    && x.CourseId == courseId
+                    && x.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled
+                    && x.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Refunded
+                    && x.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Exited,
                 cancellationToken);
     }
 

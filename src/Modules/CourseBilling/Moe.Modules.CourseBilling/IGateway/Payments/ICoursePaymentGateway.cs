@@ -31,7 +31,8 @@ public sealed record PayableStatementBill(
     long BillId,
     decimal OutstandingAmount,
     DateOnly CurrentDueDate,
-    DateOnly OriginalDueDate);
+    DateOnly OriginalDueDate,
+    bool IsInstallment);
 
 public sealed record BillPaymentAllocation(long BillId, decimal Amount);
 
@@ -60,6 +61,10 @@ public interface ICoursePaymentGateway
 
     Task ApplyPaymentFailureAsync(long billId, CancellationToken cancellationToken);
     Task ApplyFullRefundAsync(long billId, DateTime refundedAtUtc, CancellationToken cancellationToken);
+    Task ApplyFullRefundForBillsAsync(
+        IReadOnlyCollection<long> billIds,
+        DateTime refundedAtUtc,
+        CancellationToken cancellationToken);
 
     Task<PayableStatement?> FindPayableStatementAsync(
         long statementId,
@@ -76,6 +81,7 @@ public interface ICoursePaymentGateway
         long statementId,
         long personId,
         long failedPaymentId,
+        IReadOnlyCollection<long> billIds,
         long actorLoginAccountId,
         DateTime utcNow,
         CancellationToken cancellationToken);
