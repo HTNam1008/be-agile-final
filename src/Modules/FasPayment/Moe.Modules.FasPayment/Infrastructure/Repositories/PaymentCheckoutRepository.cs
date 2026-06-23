@@ -165,6 +165,55 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
             .Take(100)
             .ToArrayAsync(cancellationToken);
 
+    public async Task<IReadOnlyCollection<PaymentPart>> ListPaymentPartsForPaymentsAsync(
+        IReadOnlyCollection<long> paymentIds,
+        CancellationToken cancellationToken)
+    {
+        if (paymentIds.Count == 0)
+        {
+            return Array.Empty<PaymentPart>();
+        }
+
+        return await dbContext.Set<PaymentPart>()
+            .AsNoTracking()
+            .Where(part => paymentIds.Contains(part.PaymentId))
+            .OrderBy(part => part.PaymentId)
+            .ThenBy(part => part.SequenceNumber)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<PaymentRefund>> ListPaymentRefundsForPaymentsAsync(
+        IReadOnlyCollection<long> paymentIds,
+        CancellationToken cancellationToken)
+    {
+        if (paymentIds.Count == 0)
+        {
+            return Array.Empty<PaymentRefund>();
+        }
+
+        return await dbContext.Set<PaymentRefund>()
+            .AsNoTracking()
+            .Where(refund => paymentIds.Contains(refund.PaymentId))
+            .OrderByDescending(refund => refund.RequestedAtUtc)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<EnrollmentRefundPart>> ListEnrollmentRefundPartsForPaymentsAsync(
+        IReadOnlyCollection<long> paymentIds,
+        CancellationToken cancellationToken)
+    {
+        if (paymentIds.Count == 0)
+        {
+            return Array.Empty<EnrollmentRefundPart>();
+        }
+
+        return await dbContext.Set<EnrollmentRefundPart>()
+            .AsNoTracking()
+            .Where(part => part.PaymentId != null && paymentIds.Contains(part.PaymentId.Value))
+            .OrderByDescending(part => part.CreatedAtUtc)
+            .ToArrayAsync(cancellationToken);
+    }
+
     public Task<decimal> GetSucceededRefundAmountAsync(long paymentId, CancellationToken cancellationToken)
         => dbContext.Set<PaymentRefund>()
             .Where(refund => refund.PaymentId == paymentId && refund.RefundStatusCode != RefundStatusCodes.Failed)
