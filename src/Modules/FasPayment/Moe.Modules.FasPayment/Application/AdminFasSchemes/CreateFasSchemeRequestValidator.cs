@@ -39,7 +39,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         for (int i = 0; i < template.Length; i++)
         {
             FasCriteriaTemplateItem item = template[i];
-            if (item.CriteriaType is not ("AGE" or "GDP" or "PCI" or "NATIONALITY")) context.AddFailure("CriteriaTemplate", $"Unsupported criteria type '{item.CriteriaType}'.");
+            if (item.CriteriaType is not ("AGE" or "GDP" or "GHI" or "PCI" or "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE")) context.AddFailure("CriteriaTemplate", $"Unsupported criteria type '{item.CriteriaType}'.");
             bool last = i == template.Length - 1;
             if (last ? item.ConnectorToNext is not null : item.ConnectorToNext is not ("AND" or "OR")) context.AddFailure("CriteriaTemplate", "Only the final connector may be null; earlier connectors must be AND or OR.");
         }
@@ -73,9 +73,13 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
                     continue;
                 }
                 FasTierCriteriaValue value = matches[0];
-                if (item.CriteriaType == "NATIONALITY")
+                if (item.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY")
                 {
                     if (value.NumberFrom.HasValue || value.NumberTo.HasValue || value.Nationalities is null || value.Nationalities.Count == 0 || value.Nationalities.Any(x => !Moe.Modules.FasPayment.Domain.Fas.FasNationalities.All.Contains(x))) context.AddFailure("Tiers", "Nationality criteria require at least one supported nationality and no numeric bounds.");
+                }
+                else if (item.CriteriaType == "ACCOUNT_TYPE")
+                {
+                    if (value.NumberFrom.HasValue || value.NumberTo.HasValue || value.Nationalities is null || value.Nationalities.Count == 0 || value.Nationalities.Any(x => x is not ("EDUCATION_ACCOUNT" or "PERSONAL_ACCOUNT"))) context.AddFailure("Tiers", "Account type requires Education Account and/or Personal Account and no numeric bounds.");
                 }
                 else if (!value.NumberFrom.HasValue || !value.NumberTo.HasValue || value.NumberFrom > value.NumberTo || value.Nationalities?.Count > 0) context.AddFailure("Tiers", "Numeric criteria require a valid range and no nationalities.");
             }

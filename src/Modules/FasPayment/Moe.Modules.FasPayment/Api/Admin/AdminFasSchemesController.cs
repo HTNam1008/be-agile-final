@@ -54,6 +54,18 @@ public sealed class AdminFasSchemesController(ICommandDispatcher commands, IQuer
     public async Task<IActionResult> DeleteDraft(long schemeId, CancellationToken cancellationToken)
         => Map(await commands.Send(new DeleteFasSchemeDraftCommand(schemeId), cancellationToken));
 
+    [HttpPost("{schemeId:long}/publish")]
+    public async Task<IActionResult> Publish(long schemeId, CancellationToken cancellationToken)
+        => Map(await commands.Send(new PublishFasSchemeCommand(schemeId), cancellationToken));
+
+    [HttpPost("{schemeId:long}/disable")]
+    public async Task<IActionResult> Disable(long schemeId, CancellationToken cancellationToken)
+        => Map(await commands.Send(new DisableFasSchemeCommand(schemeId), cancellationToken));
+
+    [HttpDelete("{schemeId:long}")]
+    public async Task<IActionResult> Delete(long schemeId, CancellationToken cancellationToken)
+        => Map(await commands.Send(new DeleteFasSchemeCommand(schemeId), cancellationToken));
+
     private IActionResult Map<T>(Result<T> result)
         => result.IsSuccess ? ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier) : Failure(result.Error);
 

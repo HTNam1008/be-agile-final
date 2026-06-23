@@ -4,6 +4,7 @@
     <PackageReference Include="Asp.Versioning.Mvc" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Azure.Storage.Blobs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\Moe.Application.Abstractions\Moe.Application.Abstractions.csproj" />
@@ -11,6 +12,7 @@
     <ProjectReference Include="..\..\..\Shared\Moe.SharedKernel\Moe.SharedKernel.csproj" />
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
+    <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.FasPayment.UnitTests" />
