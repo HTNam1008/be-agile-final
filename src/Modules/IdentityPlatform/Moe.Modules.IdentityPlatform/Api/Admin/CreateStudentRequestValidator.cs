@@ -7,6 +7,9 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
     public CreateStudentRequestValidator()
     {
         RuleFor(x => x.SchoolName).MaximumLength(200);
+        RuleFor(x => x.OrganizationId)
+            .GreaterThan(0)
+            .When(x => x.OrganizationId.HasValue);
 
         RuleFor(x => x.IdentityNumber)
             .Cascade(CascadeMode.Stop)

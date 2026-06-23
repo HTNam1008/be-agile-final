@@ -265,9 +265,14 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
                 new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
-                new Claim(ClaimNames.OrganizationUnitId, "1"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             ];
+        if (!Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase))
+        {
+            claims = claims
+                .Concat(GetOrganizationUnitClaims())
+                .ToArray();
+        }
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, "Test");
@@ -282,5 +287,19 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         return Request.Headers.TryGetValue(name, out var values) && !string.IsNullOrWhiteSpace(values.ToString())
             ? values.ToString()
             : fallback;
+    }
+
+    private IEnumerable<Claim> GetOrganizationUnitClaims()
+    {
+        string raw = GetHeaderValue("X-Test-OrganizationUnitIds", "1");
+        if (string.Equals(raw, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        foreach (string value in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            yield return new Claim(ClaimNames.OrganizationUnitId, value);
+        }
     }
 }

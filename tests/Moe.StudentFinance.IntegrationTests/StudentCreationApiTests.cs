@@ -117,7 +117,134 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task HqAdmin_Should_Be_Asked_For_SchoolName()
+    public async Task HqAdmin_Should_Create_Student_When_OrganizationId_Is_Provided()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            organizationId: 2,
+            identityNumber: $"O{suffix[..7]}B",
+            studentNumber: $"IT-ORG-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        long personId = await ReadPersonIdAsync(response);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
+        SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
+        Assert.Equal(2, enrollment.OrganizationId);
+        Assert.Equal(request.StudentNumber, enrollment.StudentNumber);
+    }
+
+    [Fact]
+    public async Task SchoolAdmin_Should_Create_Student_When_OrganizationId_Is_In_Scope()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            organizationId: 1,
+            identityNumber: $"P{suffix[..7]}B",
+            studentNumber: $"IT-IN-SCOPE-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1,2");
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        long personId = await ReadPersonIdAsync(response);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
+        SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
+        Assert.Equal(1, enrollment.OrganizationId);
+    }
+
+    [Fact]
+    public async Task SchoolAdmin_Should_Be_Denied_When_OrganizationId_Is_Out_Of_Scope()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            organizationId: 2,
+            identityNumber: $"Q{suffix[..7]}B",
+            studentNumber: $"IT-OUT-SCOPE-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("IDENTITY.SCHOOL_OUTSIDE_SCOPE", body);
+    }
+
+    [Fact]
+    public async Task CreateStudent_Should_Return_NotFound_When_OrganizationId_Does_Not_Exist()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            organizationId: 999999,
+            identityNumber: $"R{suffix[..7]}B",
+            studentNumber: $"IT-MISSING-ORG-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("IDENTITY.ORGANIZATION_UNIT_NOT_FOUND", body);
+    }
+
+    [Fact]
+    public async Task CreateStudent_Should_Create_When_OrganizationId_And_SchoolName_Match()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: "Demo Secondary School",
+            organizationId: 1,
+            identityNumber: $"U{suffix[..7]}B",
+            studentNumber: $"IT-MATCH-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateStudent_Should_Reject_When_OrganizationId_And_SchoolName_Conflict()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: "Other Secondary School",
+            organizationId: 1,
+            identityNumber: $"V{suffix[..7]}B",
+            studentNumber: $"IT-CONFLICT-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("IDENTITY.SCHOOL_IDENTIFIERS_CONFLICT", body);
+    }
+
+    [Fact]
+    public async Task SchoolName_Legacy_Path_Should_Still_Check_SchoolAdmin_Scope()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: "Other Secondary School",
+            identityNumber: $"W{suffix[..7]}B",
+            studentNumber: $"IT-NAME-SCOPE-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("IDENTITY.SCHOOL_OUTSIDE_SCOPE", body);
+    }
+
+    [Fact]
+    public async Task HqAdmin_Should_Be_Asked_For_School()
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
@@ -125,15 +252,43 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             identityNumber: $"F{suffix[..7]}C",
             studentNumber: $"IT-SYS-MISSING-{suffix}");
 
-        using HttpRequestMessage message = new(HttpMethod.Post, "/api/admin/v1/students");
-        message.Headers.Add("X-Test-Role", "HQ_ADMIN");
-        message.Content = JsonContent.Create(request);
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
 
-        using HttpResponseMessage response = await _client.SendAsync(message);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("IDENTITY.SCHOOL_REQUIRED", body);
+    }
+
+    [Fact]
+    public async Task SchoolAdmin_With_No_Scope_Should_Fail_Closed_When_School_Is_Not_Provided()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            identityNumber: $"X{suffix[..7]}C",
+            studentNumber: $"IT-NO-SCOPE-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "none");
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         string body = await response.Content.ReadAsStringAsync();
         Assert.Contains("IDENTITY.SCHOOL_NAME_REQUIRED", body);
+    }
+
+    [Fact]
+    public async Task SchoolAdmin_With_Multiple_Scopes_Should_Be_Asked_For_School_When_School_Is_Not_Provided()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            identityNumber: $"Y{suffix[..7]}C",
+            studentNumber: $"IT-MULTI-SCOPE-{suffix}");
+
+        using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1,2");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("IDENTITY.SCHOOL_SCOPE_AMBIGUOUS", body);
     }
 
     [Fact]
@@ -207,6 +362,32 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
     {
         return new CreateStudentRequestBody(
             schoolName,
+            null,
+            identityNumber,
+            "Manual Student",
+            new DateOnly(2008, 5, 12),
+            "SG",
+            "CITIZEN",
+            studentNumber,
+            "2026",
+            "SEC_4",
+            "4A",
+            new DateOnly(2026, 1, 2),
+            "manual.student@example.com",
+            "+6591234567",
+            "Integration test address",
+            true);
+    }
+
+    private static CreateStudentRequestBody CreateRequest(
+        string? schoolName,
+        long? organizationId,
+        string identityNumber,
+        string studentNumber)
+    {
+        return new CreateStudentRequestBody(
+            schoolName,
+            organizationId,
             identityNumber,
             "Manual Student",
             new DateOnly(2008, 5, 12),
@@ -231,6 +412,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
     {
         return new CreateStudentRequestBody(
             schoolName,
+            null,
             identityNumber,
             "Manual Student",
             new DateOnly(2008, 5, 12),
@@ -245,6 +427,23 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             "+6591234567",
             "Integration test address",
             isAccountHolder);
+    }
+
+    private async Task<HttpResponseMessage> SendCreateStudentAsync(
+        CreateStudentRequestBody request,
+        string role = "SCHOOL_ADMIN",
+        string? organizationUnitIds = null)
+    {
+        using HttpRequestMessage message = new(HttpMethod.Post, "/api/admin/v1/students");
+        message.Headers.Add("X-Test-Role", role);
+
+        if (organizationUnitIds is not null)
+        {
+            message.Headers.Add("X-Test-OrganizationUnitIds", organizationUnitIds);
+        }
+
+        message.Content = JsonContent.Create(request);
+        return await _client.SendAsync(message);
     }
 
     private static async Task<long> ReadPersonIdAsync(HttpResponseMessage response)
@@ -321,6 +520,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
 
     private sealed record CreateStudentRequestBody(
         string? SchoolName,
+        long? OrganizationId,
         string IdentityNumber,
         string FullName,
         DateOnly DateOfBirth,

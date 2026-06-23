@@ -23,7 +23,8 @@ internal sealed class CreateStudentHandler(
     IStudentOnboardingRepository students,
     IEducationAccountProvisioningGateway educationAccounts,
     IAuditService auditService,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    ITransactionalExecutor transactions)
     : ICommandHandler<CreateStudentCommand, CreateStudentResponse>
 {
     public async Task<Result<CreateStudentResponse>> Handle(
@@ -35,7 +36,10 @@ internal sealed class CreateStudentHandler(
             return Result<CreateStudentResponse>.Failure(IdentityErrors.AuthenticatedAdminRequired);
         }
 
-        Result<OrganizationUnitSummary> schoolResult = await ResolveSchoolAsync(command.SchoolName, cancellationToken);
+        Result<OrganizationUnitSummary> schoolResult = await ResolveSchoolAsync(
+            command.OrganizationId,
+            command.SchoolName,
+            cancellationToken);
 
         if (schoolResult.IsFailure)
         {
@@ -56,6 +60,19 @@ internal sealed class CreateStudentHandler(
             return Result<CreateStudentResponse>.Failure(IdentityErrors.StudentNumberAlreadyExists);
         }
 
+        return await transactions.ExecuteAsync(
+            ct => CreateStudentAsync(command, school, actorUserAccountId, identityNumberHash, normalizedStudentNumber, ct),
+            cancellationToken);
+    }
+
+    private async Task<Result<CreateStudentResponse>> CreateStudentAsync(
+        CreateStudentCommand command,
+        OrganizationUnitSummary school,
+        long actorUserAccountId,
+        byte[] identityNumberHash,
+        string normalizedStudentNumber,
+        CancellationToken cancellationToken)
+    {
         DateTime utcNow = clock.UtcNow.UtcDateTime;
         DateOnly startDate = command.StartDate ?? DateOnly.FromDateTime(utcNow);
         string normalizedIdentityNumber = command.IdentityNumber.Trim().ToUpperInvariant();
@@ -72,7 +89,7 @@ internal sealed class CreateStudentHandler(
             command.Address,
             utcNow);
 
-        long personId = await students.AddPersonAsync(person, cancellationToken, saveChanges: false);
+        long personId = await students.AddPersonAsync(person, cancellationToken);
 
         PersonIdentifier identityNumber = PersonIdentifier.CreateIdentityNumber(
             personId,
@@ -129,29 +146,64 @@ internal sealed class CreateStudentHandler(
     }
 
     private async Task<Result<OrganizationUnitSummary>> ResolveSchoolAsync(
+        long? organizationId,
         string? schoolName,
         CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(schoolName))
+        if (organizationId is long requestedOrganizationId
+            && !string.IsNullOrWhiteSpace(schoolName))
         {
-            OrganizationUnitSummary? school = await organizations.FindActiveSchoolByNameAsync(
+            Result<OrganizationUnitSummary> schoolById = await ResolveSchoolByIdAsync(
+                requestedOrganizationId,
+                cancellationToken);
+
+            if (schoolById.IsFailure)
+            {
+                return schoolById;
+            }
+
+            Result<OrganizationUnitSummary> schoolByName = await ResolveSchoolByNameAsync(
                 schoolName,
                 cancellationToken);
 
-            if (school is null)
+            if (schoolByName.IsFailure)
             {
-                return Result<OrganizationUnitSummary>.Failure(IdentityErrors.OrganizationUnitNotFound);
+                return schoolByName;
             }
 
-            Result access = adminAccess.EnsureCanAccessOrganization(school.OrganizationUnitId);
-            return access.IsFailure
-                ? Result<OrganizationUnitSummary>.Failure(IdentityErrors.SchoolOutsideScope)
-                : Result<OrganizationUnitSummary>.Success(school);
+            if (schoolById.Value.OrganizationUnitId != schoolByName.Value.OrganizationUnitId)
+            {
+                return Result<OrganizationUnitSummary>.Failure(IdentityErrors.SchoolIdentifiersConflict);
+            }
+
+            return EnsureCanAccess(schoolById.Value);
+        }
+
+        if (organizationId is long organizationIdOnly)
+        {
+            Result<OrganizationUnitSummary> school = await ResolveSchoolByIdAsync(
+                organizationIdOnly,
+                cancellationToken);
+
+            return school.IsFailure
+                ? school
+                : EnsureCanAccess(school.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(schoolName))
+        {
+            Result<OrganizationUnitSummary> school = await ResolveSchoolByNameAsync(
+                schoolName,
+                cancellationToken);
+
+            return school.IsFailure
+                ? school
+                : EnsureCanAccess(school.Value);
         }
 
         if (adminAccess.IsHqAdmin)
         {
-            return Result<OrganizationUnitSummary>.Failure(IdentityErrors.SchoolNameRequired);
+            return Result<OrganizationUnitSummary>.Failure(IdentityErrors.SchoolRequired);
         }
 
         long[] scopedSchools = adminAccess.ScopedOrganizationIds
@@ -173,7 +225,41 @@ internal sealed class CreateStudentHandler(
 
         return scopedSchool is null
             ? Result<OrganizationUnitSummary>.Failure(IdentityErrors.OrganizationUnitNotFound)
-            : Result<OrganizationUnitSummary>.Success(scopedSchool);
+            : EnsureCanAccess(scopedSchool);
+    }
+
+    private async Task<Result<OrganizationUnitSummary>> ResolveSchoolByIdAsync(
+        long organizationId,
+        CancellationToken cancellationToken)
+    {
+        OrganizationUnitSummary? school = await organizations.FindActiveSchoolByIdAsync(
+            organizationId,
+            cancellationToken);
+
+        return school is null
+            ? Result<OrganizationUnitSummary>.Failure(IdentityErrors.OrganizationUnitNotFound)
+            : Result<OrganizationUnitSummary>.Success(school);
+    }
+
+    private async Task<Result<OrganizationUnitSummary>> ResolveSchoolByNameAsync(
+        string schoolName,
+        CancellationToken cancellationToken)
+    {
+        OrganizationUnitSummary? school = await organizations.FindActiveSchoolByNameAsync(
+            schoolName,
+            cancellationToken);
+
+        return school is null
+            ? Result<OrganizationUnitSummary>.Failure(IdentityErrors.OrganizationUnitNotFound)
+            : Result<OrganizationUnitSummary>.Success(school);
+    }
+
+    private Result<OrganizationUnitSummary> EnsureCanAccess(OrganizationUnitSummary school)
+    {
+        Result access = adminAccess.EnsureCanAccessOrganization(school.OrganizationUnitId);
+        return access.IsFailure
+            ? Result<OrganizationUnitSummary>.Failure(IdentityErrors.SchoolOutsideScope)
+            : Result<OrganizationUnitSummary>.Success(school);
     }
 
     private async Task<Result<EducationAccountProvisioningResult>> CreateEducationAccountAsync(

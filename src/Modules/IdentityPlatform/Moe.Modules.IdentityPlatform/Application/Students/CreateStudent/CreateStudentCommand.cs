@@ -4,6 +4,7 @@ namespace Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 
 public sealed record CreateStudentCommand(
     string? SchoolName,
+    long? OrganizationId,
     string IdentityNumber,
     string FullName,
     DateOnly DateOfBirth,

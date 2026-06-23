@@ -2,6 +2,7 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
 public sealed record CreateStudentRequest(
     string? SchoolName,
+    long? OrganizationId,
     string IdentityNumber,
     string FullName,
     DateOnly DateOfBirth,
