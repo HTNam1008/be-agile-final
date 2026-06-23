@@ -179,6 +179,38 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
     public async Task<IReadOnlyCollection<PaymentRefund>> ListRefundsAsync(long paymentId, CancellationToken cancellationToken)
         => await dbContext.Set<PaymentRefund>().Where(refund => refund.PaymentId == paymentId).ToArrayAsync(cancellationToken);
 
+    public Task<EnrollmentRefund?> FindEnrollmentRefundByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+        => dbContext.Set<EnrollmentRefund>()
+            .SingleOrDefaultAsync(
+                refund => refund.IdempotencyKey == idempotencyKey,
+                cancellationToken);
+
+    public async Task AddEnrollmentRefundAsync(
+        EnrollmentRefund refund,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Set<EnrollmentRefund>().AddAsync(refund, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AddEnrollmentRefundPartAsync(
+        EnrollmentRefundPart refundPart,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Set<EnrollmentRefundPart>().AddAsync(refundPart, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<EnrollmentRefundPart>> ListEnrollmentRefundPartsAsync(
+        long enrollmentRefundId,
+        CancellationToken cancellationToken)
+        => await dbContext.Set<EnrollmentRefundPart>()
+            .Where(part => part.EnrollmentRefundId == enrollmentRefundId)
+            .OrderBy(part => part.Id)
+            .ToArrayAsync(cancellationToken);
+
     public async Task<IReadOnlyCollection<ProcessedPaymentWebhookEvent>> ListWebhookEventsAsync(CancellationToken cancellationToken)
         => await dbContext.Set<ProcessedPaymentWebhookEvent>().AsNoTracking().OrderByDescending(item => item.ReceivedAtUtc).Take(200).ToArrayAsync(cancellationToken);
 
