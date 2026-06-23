@@ -39,6 +39,9 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
             from allocation in dbContext.Set<PaymentAllocation>().AsNoTracking()
             join payment in dbContext.Set<Payment>().AsNoTracking()
                 on allocation.PaymentId equals payment.Id
+            join checkout in dbContext.Set<PaymentCheckoutSession>().AsNoTracking()
+                on payment.Id equals checkout.PaymentId into checkoutRows
+            from checkout in checkoutRows.DefaultIfEmpty()
             where billIds.Contains(allocation.BillId)
                 && allocation.AllocationStatusCode == "APPLIED"
                 && (payment.PaymentStatusCode == PaymentStatusCodes.Successful
@@ -51,7 +54,8 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
                 payment.PaymentAmount,
                 payment.EducationAccountAmount,
                 payment.OnlinePaymentAmount,
-                payment.ProviderChargeId
+                payment.ProviderChargeId,
+                ProviderPaymentIntentId = payment.ProviderPaymentIntentId ?? checkout.ProviderPaymentIntentId
             }).ToArrayAsync(cancellationToken);
 
         decimal paid = 0m;
@@ -82,7 +86,7 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
                 row.Id,
                 educationPart?.Id,
                 educationPart?.AccountTransactionId,
-                row.ProviderChargeId,
+                row.ProviderChargeId ?? row.ProviderPaymentIntentId,
                 Money(row.AllocatedAmount),
                 educationAllocated,
                 onlineAllocated));
