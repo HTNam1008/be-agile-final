@@ -114,6 +114,7 @@ public sealed class StudentsController(
     {
         CreateStudentCommand command = new(
             request.SchoolName,
+            request.OrganizationId,
             request.IdentityNumber,
             request.FullName,
             request.DateOfBirth,
@@ -152,6 +153,8 @@ public sealed class StudentsController(
             "IDENTITY.SCHOOL_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "IDENTITY.ORGANIZATION_UNIT_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "IDENTITY.SCHOOL_REQUIRED" => ApiResponseCodes.Conflict,
+            "IDENTITY.SCHOOL_IDENTIFIERS_CONFLICT" => ApiResponseCodes.Conflict,
             "IDENTITY.PERSON_NOT_FOUND" => ApiResponseCodes.NotFound,
             "IDENTITY.EDUCATION_ACCOUNT_NOT_FOUND" => ApiResponseCodes.NotFound,
             "IDENTITY.PROFILE_UPDATE_CONFLICT" => ApiResponseCodes.Conflict,

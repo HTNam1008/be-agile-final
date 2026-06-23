@@ -17,6 +17,7 @@ public static class DependencyInjection
             sql.MigrationsAssembly("Moe.StudentFinance.Migrations");
         }));
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<MoeDbContext>());
+        services.AddScoped<ITransactionalExecutor>(sp => sp.GetRequiredService<MoeDbContext>());
         return services;
     }
 }

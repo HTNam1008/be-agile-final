@@ -6,7 +6,7 @@ namespace Moe.StudentFinance.Persistence;
 
 public sealed class MoeDbContext(
     DbContextOptions<MoeDbContext> options,
-    IEnumerable<IModelConfigurationContributor> contributors) : DbContext(options), IUnitOfWork
+    IEnumerable<IModelConfigurationContributor> contributors) : DbContext(options), IUnitOfWork, ITransactionalExecutor
 {
     internal string ModelConfigurationCacheKey { get; } = string.Join(
         "|",
@@ -33,6 +33,25 @@ public sealed class MoeDbContext(
         foreach (var contributor in contributors.OrderBy(x => x.GetType().FullName))
             contributor.Configure(modelBuilder);
         base.OnModelCreating(modelBuilder);
+    }
+
+    public Task<T> ExecuteAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return operation(cancellationToken);
+        }
+
+        var strategy = Database.CreateExecutionStrategy();
+        return strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+            T result = await operation(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        });
     }
 }
 
