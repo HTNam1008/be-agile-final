@@ -22,8 +22,7 @@ public sealed class CreateFasSchemeValidationTests
     {
         CreateFasSchemeRequest request = FasSchemeTestData.ValidRequest() with
         {
-            SubsidyType = type,
-            Tiers = [FasSchemeTestData.ValidRequest().Tiers[0] with { SubsidyValue = (decimal)value }]
+            Tiers = [FasSchemeTestData.ValidRequest().Tiers[0] with { SubsidyType = type, SubsidyValue = (decimal)value }]
         };
         _validator.Validate(request).IsValid.Should().Be(valid);
     }
@@ -44,10 +43,10 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
-    public void Tier_and_template_orders_must_be_contiguous()
+    public void Tier_and_criteria_orders_must_be_contiguous()
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
-        _validator.Validate(source with { CriteriaTemplate = [new("AGE", null, 2)] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [source.Tiers[0] with { Criteria = [source.Tiers[0].Criteria[0] with { DisplayOrder = 2 }] }] }).IsValid.Should().BeFalse();
         _validator.Validate(source with { Tiers = [source.Tiers[0] with { DisplayOrder = 2 }] }).IsValid.Should().BeFalse();
     }
 
@@ -55,8 +54,8 @@ public sealed class CreateFasSchemeValidationTests
     public void Connector_shape_is_enforced()
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
-        _validator.Validate(source with { CriteriaTemplate = [new("AGE", null, 1), new("NATIONALITY", null, 2)] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { CriteriaTemplate = [new("AGE", "AND", 1)] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [source.Tiers[0] with { Criteria = [source.Tiers[0].Criteria[0] with { ConnectorToNext = null }, source.Tiers[0].Criteria[1]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [source.Tiers[0] with { Criteria = [source.Tiers[0].Criteria[0] with { ConnectorToNext = "AND" }] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -64,8 +63,8 @@ public sealed class CreateFasSchemeValidationTests
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         CreateFasTierRequest tier = source.Tiers[0];
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, null, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 19, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [tier.Criteria[0] with { NumberFrom = null, NumberTo = 18 }, tier.Criteria[1]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [tier.Criteria[0] with { NumberFrom = 19, NumberTo = 18 }, tier.Criteria[1]] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -73,9 +72,9 @@ public sealed class CreateFasSchemeValidationTests
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         CreateFasTierRequest tier = source.Tiers[0];
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], new(2, 1, null, ["Singapore Citizen"])] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], new(2, null, null, [])] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], new(2, null, null, ["Unknown"])] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [tier.Criteria[0], tier.Criteria[1] with { NumberFrom = 1 }] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [tier.Criteria[0], tier.Criteria[1] with { Nationalities = [] }] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [tier.Criteria[0], tier.Criteria[1] with { Nationalities = ["Unknown"] }] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -83,8 +82,8 @@ public sealed class CreateFasSchemeValidationTests
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         CreateFasTierRequest tier = source.Tiers[0];
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], tier.CriteriaValues[0]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { Criteria = [tier.Criteria[0], tier.Criteria[0]] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -93,14 +92,7 @@ public sealed class CreateFasSchemeValidationTests
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         _validator.Invoking(x => x.Validate(source with { Tiers = null! })).Should().NotThrow();
         _validator.Validate(source with { Tiers = null! }).IsValid.Should().BeFalse();
-        _validator.Invoking(x => x.Validate(source with { Tiers = [source.Tiers[0] with { CriteriaValues = null! }] })).Should().NotThrow();
-    }
-
-    [Fact]
-    public void Per_tier_scheme_fields_are_forbidden()
-    {
-        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
-        _validator.Validate(source with { Tiers = [source.Tiers[0] with { GrantCode = "OLD", SubsidyType = "FIXED" }] }).IsValid.Should().BeFalse();
+        _validator.Invoking(x => x.Validate(source with { Tiers = [source.Tiers[0] with { Criteria = null! }] })).Should().NotThrow();
     }
 
     [Theory]

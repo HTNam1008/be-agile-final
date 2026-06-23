@@ -23,7 +23,13 @@ public class AdminFasApplicationsControllerTests
     {
         _commandsMock = new Mock<ICommandDispatcher>();
         _queriesMock = new Mock<IQueryDispatcher>();
-        _controller = new AdminFasApplicationsController(_commandsMock.Object, _queriesMock.Object);
+        _controller = new AdminFasApplicationsController(_commandsMock.Object, _queriesMock.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext()
+            }
+        };
     }
 
     [Fact]
@@ -38,7 +44,7 @@ public class AdminFasApplicationsControllerTests
         var result = await _controller.ApproveApplication(1, new ApproveApplicationRequest(), CancellationToken.None);
 
         // Assert
-        var objectResult = result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(422);
     }
 
@@ -54,7 +60,7 @@ public class AdminFasApplicationsControllerTests
         var result = await _controller.RejectApplication(1, new RejectApplicationRequest { RejectionReasonCode = null! }, CancellationToken.None);
 
         // Assert
-        var objectResult = result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(422);
     }
 
@@ -70,7 +76,7 @@ public class AdminFasApplicationsControllerTests
         var result = await _controller.RejectApplication(1, new RejectApplicationRequest { RejectionReasonCode = "  " }, CancellationToken.None);
 
         // Assert
-        var objectResult = result.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(422);
     }
 }
