@@ -5,7 +5,9 @@ internal sealed record SingpassLoginSession(
     string Nonce,
     string CodeVerifier,
     string RedirectUri,
-    string DpopPrivateKey,
+    string DpopPrivateD,
     string DpopPublicX,
     string DpopPublicY,
-    string DpopJkt);
+    string DpopJkt,
+    DateTimeOffset ExpiresAtUtc,
+    string? PortalRedirectUri);

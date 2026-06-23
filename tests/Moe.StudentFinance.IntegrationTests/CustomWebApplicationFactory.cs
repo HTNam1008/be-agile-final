@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -7,13 +8,14 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
+using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -40,6 +42,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseInternalServiceProvider(inMemoryServiceProvider);
             });
             services.AddHostedService<IntegrationTestDbSeeder>();
+            services.RemoveAll<IStripePaymentGateway>();
+            services.AddSingleton<IStripePaymentGateway, IntegrationTestStripeGateway>();
 
             // Mock Authentication
             services.AddAuthentication(options =>
@@ -67,14 +71,6 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE");
                 });
 
-                options.AddPolicy(AuthorizationPolicies.ManageFasSchemes, policy =>
-                {
-                    policy.AuthenticationSchemes.Clear();
-                    policy.AddAuthenticationSchemes("Test");
-                    policy.RequireAuthenticatedUser();
-                    policy.RequireClaim(ClaimNames.Permission, "FAS_SCHEME_MANAGE");
-                });
-
                 options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -94,6 +90,81 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             });
         });
     }
+}
+
+internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
+{
+    public Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
+        StripeCheckoutGatewayRequest request,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new StripeCheckoutGatewayResult(
+            $"cs_test_{request.CheckoutId}",
+            request.ProviderPriceId ?? $"price_test_{request.CheckoutId}",
+            $"https://stripe.test/checkout/{request.CheckoutId}",
+            request.ExpiresAtUtc));
+
+    public Task ExpireCheckoutAsync(
+        string providerSessionId,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<StripeScheduleGatewayResult> AttachFiniteScheduleAsync(
+        string providerSubscriptionId,
+        string providerPriceId,
+        int installmentCount,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new StripeScheduleGatewayResult(
+            $"schedule_test_{providerSubscriptionId}"));
+
+    public ParsedPaymentWebhook ParseWebhook(string payload, string signatureHeader)
+    {
+        using JsonDocument document = JsonDocument.Parse(payload);
+        JsonElement root = document.RootElement;
+        string kind = root.GetProperty("kind").GetString()!;
+        PaymentWebhookKind webhookKind = kind switch
+        {
+            "success" => PaymentWebhookKind.PaymentSucceeded,
+            "failure" => PaymentWebhookKind.PaymentFailed,
+            "expired" => PaymentWebhookKind.CheckoutExpired,
+            _ => PaymentWebhookKind.Ignored
+        };
+        long checkoutId = root.GetProperty("checkoutId").GetInt64();
+        long amountMinor = root.TryGetProperty("amountMinor", out JsonElement amount)
+            ? amount.GetInt64()
+            : 0;
+        DateTime createdAtUtc = root.TryGetProperty("createdAtUtc", out JsonElement created)
+            ? created.GetDateTime()
+            : DateTime.UtcNow;
+        string eventId = root.TryGetProperty("eventId", out JsonElement eventElement)
+            ? eventElement.GetString()!
+            : $"evt_test_{Guid.NewGuid():N}";
+
+        return new ParsedPaymentWebhook(
+            eventId,
+            webhookKind == PaymentWebhookKind.PaymentSucceeded
+                ? "payment_intent.succeeded"
+                : webhookKind == PaymentWebhookKind.PaymentFailed
+                    ? "payment_intent.payment_failed"
+                    : "test.ignored",
+            webhookKind,
+            createdAtUtc,
+            checkoutId,
+            $"cs_test_{checkoutId}",
+            $"pi_test_{checkoutId}",
+            null,
+            $"ch_test_{checkoutId}",
+            null,
+            amountMinor,
+            "sgd");
+    }
+
+    public Task<StripeRefundGatewayResult> CreateRefundAsync(
+        string idempotencyKey,
+        string providerChargeId,
+        long amountMinor,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new StripeRefundGatewayResult(
+            $"re_test_{Guid.NewGuid():N}"));
+
 }
 
 internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) : IHostedService
@@ -238,16 +309,11 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (Request.Headers.ContainsKey("X-Test-Anonymous"))
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
-
         string requestedRole = Request.Headers.TryGetValue("X-Test-Role", out var values)
             ? values.ToString()
             : "SCHOOL_ADMIN";
 
-        Claim[] baseClaims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
+        Claim[] claims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
             ? [
                 new Claim(ClaimTypes.Name, "Test Student"),
                 new Claim(ClaimTypes.NameIdentifier, "test-student-id"),
@@ -262,15 +328,9 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.Portal, PortalCodes.Admin),
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
-                new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"),
                 new Claim(ClaimNames.OrganizationUnitId, "1"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             ];
-        List<Claim> claims = baseClaims.ToList();
-        if (Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
-        {
-            claims.RemoveAll(claim => claim.Type == ClaimNames.Permission && claim.Value == "FAS_SCHEME_MANAGE");
-        }
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, "Test");

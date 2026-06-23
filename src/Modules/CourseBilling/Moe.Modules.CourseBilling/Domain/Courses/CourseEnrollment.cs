@@ -10,12 +10,14 @@ internal sealed class CourseEnrollment : Entity<long>
     private CourseEnrollment(
         long personId,
         long courseId,
+        long coursePaymentPlanId,
         string enrollmentSourceCode,
         long enrolledByLoginAccountId,
         DateTime enrolledAtUtc) : base(0)
     {
         PersonId = personId;
         CourseId = courseId;
+        CoursePaymentPlanId = coursePaymentPlanId;
         EnrollmentSourceCode = enrollmentSourceCode;
         EnrolledByLoginAccountId = enrolledByLoginAccountId;
         EnrolledAtUtc = enrolledAtUtc;
@@ -24,20 +26,23 @@ internal sealed class CourseEnrollment : Entity<long>
 
     public long PersonId { get; private set; }
     public long CourseId { get; private set; }
+    public long CoursePaymentPlanId { get; private set; }
     public string EnrollmentSourceCode { get; private set; } = string.Empty;
     public long EnrolledByLoginAccountId { get; private set; }
     public DateTime EnrolledAtUtc { get; private set; }
     public string EnrollmentStatusCode { get; private set; } = string.Empty;
     public DateTime? ExitAtUtc { get; private set; }
     public string? ExitReasonCode { get; private set; }
+    public byte[] RowVersion { get; private set; } = [];
 
     public static Result<CourseEnrollment> EnrollByAdmin(
         long personId,
         long courseId,
+        long coursePaymentPlanId,
         long adminLoginAccountId,
         DateTime enrolledAtUtc)
     {
-        Result validation = ValidateEnrollment(personId, courseId, adminLoginAccountId);
+        Result validation = ValidateEnrollment(personId, courseId, coursePaymentPlanId, adminLoginAccountId);
         if (validation.IsFailure)
         {
             return Result<CourseEnrollment>.Failure(validation.Error);
@@ -46,6 +51,7 @@ internal sealed class CourseEnrollment : Entity<long>
         CourseEnrollment enrollment = new(
             personId,
             courseId,
+            coursePaymentPlanId,
             CourseEnrollmentSourceCodes.AdminAdd,
             adminLoginAccountId,
             enrolledAtUtc);
@@ -56,10 +62,11 @@ internal sealed class CourseEnrollment : Entity<long>
     public static Result<CourseEnrollment> JoinSelf(
         long personId,
         long courseId,
+        long coursePaymentPlanId,
         long loginAccountId,
         DateTime enrolledAtUtc)
     {
-        Result validation = ValidateEnrollment(personId, courseId, loginAccountId);
+        Result validation = ValidateEnrollment(personId, courseId, coursePaymentPlanId, loginAccountId);
         if (validation.IsFailure)
         {
             return Result<CourseEnrollment>.Failure(validation.Error);
@@ -68,6 +75,7 @@ internal sealed class CourseEnrollment : Entity<long>
         CourseEnrollment enrollment = new(
             personId,
             courseId,
+            coursePaymentPlanId,
             CourseEnrollmentSourceCodes.SelfJoin,
             loginAccountId,
             enrolledAtUtc);
@@ -82,7 +90,53 @@ internal sealed class CourseEnrollment : Entity<long>
         ExitReasonCode = "ADMIN_REMOVED";
     }
 
-    private static Result ValidateEnrollment(long personId, long courseId, long enrolledByLoginAccountId)
+    public void ActivateInstallmentEnrollment()
+    {
+        EnrollmentStatusCode = CourseEnrollmentStatusCodes.Active;
+        ExitAtUtc = null;
+        ExitReasonCode = null;
+    }
+
+
+    public void ChangePaymentPlan(long coursePaymentPlanId, bool installment)
+    {
+        if (coursePaymentPlanId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(coursePaymentPlanId));
+        CoursePaymentPlanId = coursePaymentPlanId;
+        EnrollmentStatusCode = installment
+            ? CourseEnrollmentStatusCodes.Active
+            : CourseEnrollmentStatusCodes.PendingPayment;
+        ExitAtUtc = null;
+        ExitReasonCode = null;
+    }
+
+    public void GrantPaidAccess(bool paidInFull)
+    {
+        EnrollmentStatusCode = paidInFull
+            ? CourseEnrollmentStatusCodes.PaidInFull
+            : CourseEnrollmentStatusCodes.Active;
+        ExitAtUtc = null;
+        ExitReasonCode = null;
+    }
+
+    public void LockForPaymentFailure()
+    {
+        if (EnrollmentStatusCode != CourseEnrollmentStatusCodes.PaidInFull)
+            EnrollmentStatusCode = CourseEnrollmentStatusCodes.PaymentPastDue;
+    }
+
+    public void MarkRefunded(DateTime utcNow)
+    {
+        EnrollmentStatusCode = CourseEnrollmentStatusCodes.Refunded;
+        ExitAtUtc = utcNow;
+        ExitReasonCode = "PAYMENT_REFUNDED";
+    }
+
+    private static Result ValidateEnrollment(
+        long personId,
+        long courseId,
+        long coursePaymentPlanId,
+        long enrolledByLoginAccountId)
     {
         if (personId <= 0)
         {
@@ -92,6 +146,11 @@ internal sealed class CourseEnrollment : Entity<long>
         if (courseId <= 0)
         {
             return Result.Failure(CourseBillingErrors.InvalidCourse);
+        }
+
+        if (coursePaymentPlanId <= 0)
+        {
+            return Result.Failure(CourseBillingErrors.InvalidPaymentPlan);
         }
 
         if (enrolledByLoginAccountId <= 0)
@@ -115,6 +174,10 @@ public static class CourseBillingErrors
 {
     public static readonly Error InvalidPerson = new("COURSE.INVALID_PERSON", "A valid person is required.");
     public static readonly Error InvalidCourse = new("COURSE.INVALID_COURSE", "A valid course is required.");
+    public static readonly Error InvalidPaymentPlan = new("COURSE.INVALID_PAYMENT_PLAN", "A valid course payment plan is required.");
+    public static readonly Error PaymentPlanNotFound = new("COURSE.PAYMENT_PLAN_NOT_FOUND", "The selected course payment plan was not found.");
+    public static readonly Error PaymentPlanChangeNotAllowed = new("COURSE.PAYMENT_PLAN_CHANGE_NOT_ALLOWED", "The payment plan cannot be changed after a payment has been applied.");
+    public static readonly Error InvalidStatementPeriod = new("BILL.INVALID_STATEMENT_PERIOD", "The billing statement period is invalid.");
     public static readonly Error PersonNotFound = new("COURSE.PERSON_NOT_FOUND", "The person was not found.");
     public static readonly Error CourseNotFound = new("COURSE.NOT_FOUND", "The course was not found.");
     public static readonly Error DuplicateEnrollment = new("COURSE.ENROLLMENT_DUPLICATE", "The person is already enrolled in this course.");

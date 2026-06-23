@@ -10,5 +10,5 @@ internal interface IAdminFeeComponentRepository
     Task<FeeComponent?> FindAsync(long feeComponentId, CancellationToken cancellationToken);
     Task<bool> ComponentCodeExistsAsync(string componentCode, long? excludeFeeComponentId, CancellationToken cancellationToken);
     Task AddAsync(FeeComponent feeComponent, CancellationToken cancellationToken);
-    Task SaveChangesAsync(CancellationToken cancellationToken);
+    Task SaveAsync(FeeComponent feeComponent, CancellationToken cancellationToken);
 }

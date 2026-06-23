@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.EducationAccountTopUp.UnitTests" />
+    <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
   </ItemGroup>
 </Project>

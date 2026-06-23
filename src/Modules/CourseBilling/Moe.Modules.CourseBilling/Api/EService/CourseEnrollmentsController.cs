@@ -22,7 +22,22 @@ public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : C
         [FromBody] SelfJoinCourseRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await commands.Send(new SelfJoinCourseCommand(request.CourseId), cancellationToken);
+        var result = await commands.Send(
+            new SelfJoinCourseCommand(
+                request.CourseId,
+                request.CoursePaymentPlanId),
+            cancellationToken);
         return this.ToCourseBillingResponse(result, created: true);
     }
+
+    [HttpPut("{enrollmentId:long}/payment-plan")]
+    public async Task<IActionResult> ChangePaymentPlan(
+        long enrollmentId,
+        [FromBody] ChangePaymentPlanRequest request,
+        CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await commands.Send(
+            new ChangeEnrollmentPaymentPlanCommand(
+                enrollmentId,
+                request.CoursePaymentPlanId),
+            cancellationToken));
 }

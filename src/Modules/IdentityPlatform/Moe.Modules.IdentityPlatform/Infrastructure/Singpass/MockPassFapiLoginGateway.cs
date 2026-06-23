@@ -7,28 +7,36 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Clock;
 using Moe.Infrastructure.Shared.Configuration;
+using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 
 namespace Moe.Modules.IdentityPlatform.Infrastructure.Singpass;
 
 internal sealed class MockPassFapiLoginGateway(
     HttpClient httpClient,
-    IMemoryCache cache,
+    IDataProtectionProvider dataProtectionProvider,
+    IHttpContextAccessor httpContextAccessor,
     IOptions<AuthenticationOptions> options,
     IHostEnvironment environment,
-    IClock clock) : ISingpassLoginGateway
+    IClock clock,
+    ILogger<MockPassFapiLoginGateway> logger) : ISingpassLoginGateway
 {
-    private const string SessionPrefix = "singpass-fapi:";
     private const string ClientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+    private const string LoginSessionProtectionPurpose = "Moe.StudentFinance.SingpassLoginSession.v1";
+    private const int LoginSessionLifetimeMinutes = 5;
+    private static readonly JsonSerializerOptions SessionJsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly IDataProtector loginSessionProtector = dataProtectionProvider.CreateProtector(LoginSessionProtectionPurpose);
 
-    public async Task<SingpassLoginStartResult> StartLoginAsync(CancellationToken cancellationToken)
+    public async Task<SingpassLoginStartResult> StartLoginAsync(string? portalRedirectUri, CancellationToken cancellationToken)
     {
         SingpassSchemeOptions singpass = Options;
         string authority = Authority;
@@ -44,7 +52,7 @@ internal sealed class MockPassFapiLoginGateway(
         ECParameters dpopParameters = dpopKey.ExportParameters(true);
         string dpopX = Base64UrlEncoder.Encode(dpopParameters.Q.X!);
         string dpopY = Base64UrlEncoder.Encode(dpopParameters.Q.Y!);
-        string dpopPrivateKey = Convert.ToBase64String(dpopKey.ExportPkcs8PrivateKey());
+        string dpopD = Base64UrlEncoder.Encode(dpopParameters.D!);
         string dpopJkt = CreateDpopJkt(dpopX, dpopY);
         string dpopToken = CreateDpopToken(parEndpoint, dpopKey, dpopX, dpopY);
         string clientAssertion = CreateClientAssertion(authority);
@@ -76,10 +84,18 @@ internal sealed class MockPassFapiLoginGateway(
             throw new InvalidOperationException($"MockPass PAR failed with HTTP {(int)response.StatusCode}: {par?.Error ?? response.ReasonPhrase}");
         }
 
-        cache.Set(
-            $"{SessionPrefix}{state}",
-            new SingpassLoginSession(state, nonce, codeVerifier, redirectUri, dpopPrivateKey, dpopX, dpopY, dpopJkt),
-            TimeSpan.FromMinutes(5));
+        SingpassLoginSession session = new(
+            state,
+            nonce,
+            codeVerifier,
+            redirectUri,
+            dpopD,
+            dpopX,
+            dpopY,
+            dpopJkt,
+            clock.UtcNow.AddMinutes(LoginSessionLifetimeMinutes),
+            portalRedirectUri);
+        WriteLoginSessionCookie(session);
 
         string authorizationUrl = $"{authEndpoint}?client_id={Uri.EscapeDataString(singpass.ClientId)}&request_uri={Uri.EscapeDataString(par.RequestUri)}";
         return new SingpassLoginStartResult(authorizationUrl, state);
@@ -87,16 +103,29 @@ internal sealed class MockPassFapiLoginGateway(
 
     public async Task<SingpassLoginResult> CompleteLoginAsync(string code, string state, CancellationToken cancellationToken)
     {
-        if (!cache.TryGetValue($"{SessionPrefix}{state}", out SingpassLoginSession? session) || session is null)
+        SingpassLoginSession? session = ReadLoginSessionCookie();
+        DeleteLoginSessionCookie();
+
+        if (session is null)
         {
+            logger.LogWarning("Singpass login callback did not contain a readable protected login session cookie.");
             throw new InvalidOperationException("The Singpass login session expired or the returned state is invalid.");
         }
 
-        cache.Remove($"{SessionPrefix}{state}");
+        if (!string.Equals(session.State, state, StringComparison.Ordinal))
+        {
+            logger.LogWarning("Singpass login callback state mismatch. ExpectedState={ExpectedState} ReturnedState={ReturnedState}", session.State, state);
+            throw new InvalidOperationException("The Singpass login session expired or the returned state is invalid.");
+        }
+
+        if (session.ExpiresAtUtc <= clock.UtcNow)
+        {
+            logger.LogWarning("Singpass login callback session expired. ExpiresAtUtc={ExpiresAtUtc} NowUtc={NowUtc}", session.ExpiresAtUtc, clock.UtcNow);
+            throw new InvalidOperationException("The Singpass login session expired or the returned state is invalid.");
+        }
 
         string tokenEndpoint = $"{Authority}/token";
-        using ECDsa dpopKey = ECDsa.Create();
-        dpopKey.ImportPkcs8PrivateKey(Convert.FromBase64String(session.DpopPrivateKey), out _);
+        using ECDsa dpopKey = CreateDpopKey(session);
         string dpopToken = CreateDpopToken(tokenEndpoint, dpopKey, session.DpopPublicX, session.DpopPublicY);
         string clientAssertion = CreateClientAssertion(Authority);
 
@@ -120,7 +149,22 @@ internal sealed class MockPassFapiLoginGateway(
             throw new InvalidOperationException($"MockPass token exchange failed with HTTP {(int)response.StatusCode}: {token?.Error ?? response.ReasonPhrase}");
         }
 
-        return await ValidateIdTokenAsync(token.IdToken, session.Nonce, cancellationToken);
+        SingpassLoginResult login = await ValidateIdTokenAsync(token.IdToken, session.Nonce, cancellationToken);
+        return login with { PortalRedirectUri = session.PortalRedirectUri };
+    }
+
+    private static ECDsa CreateDpopKey(SingpassLoginSession session)
+    {
+        return ECDsa.Create(new ECParameters
+        {
+            Curve = ECCurve.NamedCurves.nistP256,
+            Q = new ECPoint
+            {
+                X = Base64UrlEncoder.DecodeBytes(session.DpopPublicX),
+                Y = Base64UrlEncoder.DecodeBytes(session.DpopPublicY)
+            },
+            D = Base64UrlEncoder.DecodeBytes(session.DpopPrivateD)
+        });
     }
 
     public string IssueLocalApiToken(SingpassLoginResult login)
@@ -197,6 +241,63 @@ internal sealed class MockPassFapiLoginGateway(
         string amr = result.ClaimsIdentity.FindFirst("amr")?.Value ?? "pwd";
 
         return new SingpassLoginResult(Authority, subject, identityNumber, displayName, acr, amr);
+    }
+
+    private void WriteLoginSessionCookie(SingpassLoginSession session)
+    {
+        HttpContext httpContext = httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("An active HTTP context is required to start a Singpass login.");
+        string payload = JsonSerializer.Serialize(session, SessionJsonOptions);
+
+        httpContext.Response.Cookies.Append(AuthenticationCookies.EServiceSingpassLoginSession, loginSessionProtector.Protect(payload), new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = httpContext.Request.IsHttps,
+            Path = "/",
+            MaxAge = TimeSpan.FromMinutes(LoginSessionLifetimeMinutes)
+        });
+    }
+
+    private SingpassLoginSession? ReadLoginSessionCookie()
+    {
+        HttpContext httpContext = httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("An active HTTP context is required to complete a Singpass login.");
+
+        if (!httpContext.Request.Cookies.TryGetValue(AuthenticationCookies.EServiceSingpassLoginSession, out string? protectedPayload)
+            || string.IsNullOrWhiteSpace(protectedPayload))
+        {
+            return null;
+        }
+
+        try
+        {
+            string payload = loginSessionProtector.Unprotect(protectedPayload);
+            return JsonSerializer.Deserialize<SingpassLoginSession>(payload, SessionJsonOptions);
+        }
+        catch (Exception ex) when (ex is CryptographicException or JsonException)
+        {
+            logger.LogWarning(ex, "Could not unprotect or deserialize the Singpass login session cookie.");
+            return null;
+        }
+    }
+
+    private void DeleteLoginSessionCookie()
+    {
+        HttpContext? httpContext = httpContextAccessor.HttpContext;
+
+        if (httpContext is null)
+        {
+            return;
+        }
+
+        httpContext.Response.Cookies.Delete(AuthenticationCookies.EServiceSingpassLoginSession, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = httpContext.Request.IsHttps,
+            Path = "/"
+        });
     }
 
     private async Task<JsonWebKeySet> LoadAspSigningKeysAsync(CancellationToken cancellationToken)

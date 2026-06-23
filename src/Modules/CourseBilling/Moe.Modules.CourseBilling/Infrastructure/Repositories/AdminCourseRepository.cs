@@ -178,6 +178,9 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public Task SaveCourseAsync(Course course, CancellationToken cancellationToken)
+        => dbContext.SaveChangesAsync(cancellationToken);
+
     public async Task RemoveDraftCourseAsync(long courseId, CancellationToken cancellationToken)
     {
         var strategy = dbContext.Database.CreateExecutionStrategy();
@@ -205,9 +208,6 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         });
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken)
-        => dbContext.SaveChangesAsync(cancellationToken);
-
     public async Task<IReadOnlyList<CourseMaterial>> ListMaterialsAsync(long courseId, CancellationToken cancellationToken)
         => await dbContext.Set<CourseMaterial>().AsNoTracking()
             .Where(x => x.CourseId == courseId && x.IsActive)
@@ -224,6 +224,9 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         await dbContext.Set<CourseMaterial>().AddAsync(material, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task SaveMaterialAsync(CourseMaterial material, CancellationToken cancellationToken)
+        => dbContext.SaveChangesAsync(cancellationToken);
 
     public async Task<IReadOnlyList<CourseFeeDetail>> ListFeesAsync(long courseId, CancellationToken cancellationToken)
         => await ListFeesQuery(courseId).ToListAsync(cancellationToken);
@@ -245,6 +248,9 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         await dbContext.Set<CourseFee>().AddAsync(fee, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task SaveFeeAsync(CourseFee fee, CancellationToken cancellationToken)
+        => dbContext.SaveChangesAsync(cancellationToken);
 
     public Task<bool> HasActiveEnrollmentAsync(long courseId, long personId, CancellationToken cancellationToken)
         => dbContext.Set<CourseEnrollment>().AnyAsync(x =>

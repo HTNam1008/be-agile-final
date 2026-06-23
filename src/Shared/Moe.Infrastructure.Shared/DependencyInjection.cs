@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -22,6 +23,9 @@ public static class DependencyInjection
     public static IServiceCollection AddSharedInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddHttpContextAccessor();
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(ResolveDataProtectionKeysDirectory())
+            .SetApplicationName("Moe.StudentFinance");
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
         services.AddScoped<IAdminAccessControl, AdminAccessControl>();
@@ -84,6 +88,40 @@ public static class DependencyInjection
                 .AllowCredentials());
         });
         return services;
+    }
+
+    public static DirectoryInfo ResolveDataProtectionKeysDirectory()
+    {
+        string?[] candidateBasePaths =
+        [
+            Environment.GetEnvironmentVariable("HOME"),
+            Environment.GetEnvironmentVariable("LOCALAPPDATA"),
+            Path.GetTempPath(),
+            AppContext.BaseDirectory
+        ];
+
+        foreach (string? candidateBasePath in candidateBasePaths)
+        {
+            if (string.IsNullOrWhiteSpace(candidateBasePath))
+            {
+                continue;
+            }
+
+            string keysPath = Path.Combine(candidateBasePath, "ASP.NET", "DataProtection-Keys");
+
+            try
+            {
+                return Directory.CreateDirectory(keysPath);
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        throw new InvalidOperationException("A writable Data Protection keys directory could not be resolved.");
     }
 
     public static WebApplication UseSharedInfrastructure(this WebApplication app)
