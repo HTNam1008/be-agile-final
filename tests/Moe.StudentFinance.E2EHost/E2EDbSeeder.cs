@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
+using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.E2EHost;
@@ -22,6 +23,7 @@ public class E2EDbSeeder : IHostedService
         var db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
 
         SeedIdentityRows(db);
+        SeedFasData(db);
 
         // We use Reflection or direct EF Core insertions to bypass domain rules if necessary, 
         // but OpenManual is better. However, EducationAccount uses long Id. 
@@ -58,6 +60,28 @@ public class E2EDbSeeder : IHostedService
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static void SeedFasData(MoeDbContext db)
+    {
+        var fasAssembly = typeof(Moe.Modules.FasPayment.Api.Admin.AdminFasSchemesController).Assembly;
+        var schemeType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasScheme");
+        var appType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasApplication");
+        if (schemeType != null && appType != null)
+        {
+            var scheme = schemeType.GetMethod("CreateDraft")!.Invoke(null, new object[] { "FAS-E2E", "GRANT-E2E", "E2E Seeded Scheme", "Test", new DateOnly(2026,1,1), new DateOnly(2026,12,31), 1001L, DateTime.UtcNow });
+            SetId(scheme!, 100);
+            schemeType.GetMethod("Activate")!.Invoke(scheme, new object[] { 1001L, DateTime.UtcNow });
+            db.Add(scheme!);
+
+            var app1 = appType.GetMethod("Submit")!.Invoke(null, new object[] { "APP-001", 100L, "MOCKPASS-STUDENT-2001", "Tan Mei Ling", new DateOnly(2026, 6, 1) });
+            SetId(app1!, 2001);
+            db.Add(app1!);
+
+            var app2 = appType.GetMethod("Submit")!.Invoke(null, new object[] { "APP-002", 100L, "MOCKPASS-STUDENT-2002", "Nur Aisyah", new DateOnly(2026, 6, 2) });
+            SetId(app2!, 2002);
+            db.Add(app2!);
+        }
+    }
 
     private static void SeedIdentityRows(MoeDbContext db)
     {
