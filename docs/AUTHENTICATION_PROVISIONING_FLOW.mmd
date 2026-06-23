@@ -1,0 +1,24 @@
+flowchart TD
+    A[Admin signs in with workforce Entra] --> B[AdminEntra validates token]
+    B --> C[Resolve local UserAccount]
+    C --> D[Load scopes and permissions]
+    D --> E{Provision foreign e-Service user?}
+    E -->|Yes| F[Validate existing Person and Student]
+    F --> G[Create IdentityProvisioningRequest]
+    G --> H[Call Entra External ID through Graph adapter]
+    H --> I{Provider result}
+    I -->|Success| J[Create local UserAccount mapping]
+    I -->|Uncertain timeout| K[Search provider before retry]
+    I -->|Failure| L[Mark failed and expose safe support status]
+    J --> M[User signs in with Entra External ID]
+    M --> N[Validate external token]
+    N --> O[Resolve local UserAccount and Person]
+    O --> P[Activate first login]
+    P --> Q[e-Service access]
+
+    R[Singapore citizen selects Singpass] --> S[MockPass locally or Singpass externally]
+    S --> T[Validate callback/token]
+    T --> U[Match PersonIdentifier]
+    U --> V[Resolve or create local Singpass mapping]
+    V --> W[Check Student or Account Holder eligibility]
+    W --> Q

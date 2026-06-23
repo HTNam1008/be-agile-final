@@ -1,0 +1,21 @@
+{
+  "schemeCode": "SPECIAL-NEEDS-2026",
+  "grantCode": "SNG-2026",
+  "name": "Special Needs Grant",
+  "description": null,
+  "startDate": "2026-03-01",
+  "endDate": "2026-11-30",
+  "courseIds": [101, 102],
+  "tiers": [
+    {
+      "label": "Fixed Support",
+      "subsidyType": "FIXED",
+      "subsidyValue": 750,
+      "displayOrder": 1,
+      "criteria": [
+        { "criteriaType": "AGE", "numberFrom": 7, "numberTo": 25, "nationalities": null, "connectorToNext": "OR", "displayOrder": 1 },
+        { "criteriaType": "NATIONALITY", "numberFrom": null, "numberTo": null, "nationalities": ["Singapore Citizen"], "connectorToNext": null, "displayOrder": 2 }
+      ]
+    }
+  ]
+}

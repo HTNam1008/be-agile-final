@@ -1,0 +1,273 @@
+using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Security;
+using Moe.Infrastructure.Shared.Clock;
+using Moe.Infrastructure.Shared.Configuration;
+using Moe.Infrastructure.Shared.Messaging;
+using Moe.Infrastructure.Shared.Middleware;
+using Moe.Infrastructure.Shared.Security;
+
+namespace Moe.Infrastructure.Shared;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddSharedInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddHttpContextAccessor();
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(ResolveDataProtectionKeysDirectory())
+            .SetApplicationName("Moe.StudentFinance");
+        services.AddSingleton<IClock, SystemClock>();
+        services.AddScoped<ICurrentUser, HttpCurrentUser>();
+        services.AddScoped<IAdminAccessControl, AdminAccessControl>();
+        services.AddScoped<ICommandDispatcher, CommandDispatcher>();
+        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
+        services.AddProblemDetails();
+        services.AddHealthChecks();
+
+        services.AddOptions<PortalOptions>().BindConfiguration(PortalOptions.SectionName).ValidateOnStart();
+        services.AddOptions<AuthenticationOptions>().BindConfiguration(AuthenticationOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<Configuration.AuthorizationOptions>().BindConfiguration(Configuration.AuthorizationOptions.SectionName).ValidateOnStart();
+        services.AddOptions<UatOptions>().BindConfiguration(UatOptions.SectionName).ValidateOnStart();
+
+        var auth = configuration.GetSection(AuthenticationOptions.SectionName).Get<AuthenticationOptions>() ?? new();
+        var authorization = configuration.GetSection(Configuration.AuthorizationOptions.SectionName).Get<Configuration.AuthorizationOptions>() ?? new();
+        services.AddAuthentication()
+            .AddJwtBearer(AuthenticationSchemes.AdminEntra, options => Bind(options, auth.AdminEntra, AuthenticationSchemes.AdminEntra, AuthenticationCookies.AdminSession))
+            .AddJwtBearer(AuthenticationSchemes.EServiceSingpass, options => Bind(options, auth.EServiceSingpass, AuthenticationSchemes.EServiceSingpass));
+
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(AuthorizationPolicies.AdminPortal, policy =>
+            {
+                policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
+                policy.RequireAuthenticatedUser();
+                policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+                policy.RequireClaim(ClaimNames.Role, "HQ_ADMIN", "SCHOOL_ADMIN");
+            });
+            options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
+            {
+                policy.AddAuthenticationSchemes(AuthenticationSchemes.EServiceSingpass);
+                policy.RequireAuthenticatedUser();
+                policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
+                policy.RequireClaim(ClaimNames.Role, "STUDENT");
+            });
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountLifecycle, "ACCOUNT_LIFECYCLE_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(
+                options,
+                AuthorizationPolicies.ViewTopUps,
+                ["TOPUPS_MANAGE", "TOPUP_VIEW_ALL"],
+                authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageFasSchemes, "FAS_SCHEME_MANAGE", authorization.UseStrictPermissionPolicies);
+        });
+
+        services.AddCors(options =>
+        {
+            var portals = configuration.GetSection(PortalOptions.SectionName).Get<PortalOptions>() ?? new();
+            options.AddPolicy("AdminCors", p => p.WithOrigins(portals.AdminAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+            options.AddPolicy("EServiceCors", p => p.WithOrigins(portals.EServiceAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+            options.AddPolicy("PortalCors", p => p
+                .WithOrigins(portals.AdminAllowedOrigins.Concat(portals.EServiceAllowedOrigins).Distinct().ToArray())
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials());
+        });
+        return services;
+    }
+
+    public static DirectoryInfo ResolveDataProtectionKeysDirectory()
+    {
+        string?[] candidateBasePaths =
+        [
+            Environment.GetEnvironmentVariable("HOME"),
+            Environment.GetEnvironmentVariable("LOCALAPPDATA"),
+            Path.GetTempPath(),
+            AppContext.BaseDirectory
+        ];
+
+        foreach (string? candidateBasePath in candidateBasePaths)
+        {
+            if (string.IsNullOrWhiteSpace(candidateBasePath))
+            {
+                continue;
+            }
+
+            string keysPath = Path.Combine(candidateBasePath, "ASP.NET", "DataProtection-Keys");
+
+            try
+            {
+                return Directory.CreateDirectory(keysPath);
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        throw new InvalidOperationException("A writable Data Protection keys directory could not be resolved.");
+    }
+
+    public static WebApplication UseSharedInfrastructure(this WebApplication app)
+    {
+        app.UseMiddleware<CorrelationIdMiddleware>();
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
+        app.UseMiddleware<ApiVersionHeaderMiddleware>();
+        app.UseMiddleware<SecurityHeadersMiddleware>();
+        app.UseMiddleware<RequestLoggingMiddleware>();
+        app.UseMiddleware<PerformanceTrackingMiddleware>();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        return app;
+    }
+
+    private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
+    {
+        if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
+        {
+            target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+            target.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = source.Authority.TrimEnd('/'),
+                ValidateAudience = true,
+                ValidAudience = source.Audience,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(source.LocalTokenSigningKey)),
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+            target.Events = CreateSchemeEvents(authenticationScheme, bearerCookieName);
+            return;
+        }
+
+        target.Authority = source.Authority;
+        target.Audience = source.Audience;
+        target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+        target.Events = CreateSchemeEvents(authenticationScheme, bearerCookieName);
+        ConfigureTenantIssuers(target, source);
+    }
+
+    private static void Bind(JwtBearerOptions target, SingpassSchemeOptions source, string authenticationScheme)
+    {
+        if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
+        {
+            target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+            target.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = source.Authority.TrimEnd('/'),
+                ValidateAudience = true,
+                ValidAudience = source.Audience,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(source.LocalTokenSigningKey)),
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+            target.Events = CreateSchemeEvents(authenticationScheme, AuthenticationCookies.EServiceSession);
+            return;
+        }
+
+        target.Authority = source.Authority;
+        target.Audience = source.Audience;
+        target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+        target.Events = CreateSchemeEvents(authenticationScheme, AuthenticationCookies.EServiceSession);
+
+        if (!string.IsNullOrWhiteSpace(source.DiscoveryEndpoint))
+        {
+            target.MetadataAddress = source.DiscoveryEndpoint;
+        }
+    }
+
+    private static void ConfigureTenantIssuers(JwtBearerOptions target, JwtSchemeOptions source)
+    {
+        if (string.IsNullOrWhiteSpace(source.AllowedTenantId))
+        {
+            return;
+        }
+
+        string tenantId = source.AllowedTenantId.Trim();
+        string authority = source.Authority.TrimEnd('/');
+        string authorityV2Issuer = authority.EndsWith("/v2.0", StringComparison.OrdinalIgnoreCase)
+            ? authority
+            : $"{authority}/v2.0";
+
+        target.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuers =
+            [
+                authorityV2Issuer,
+                $"https://login.microsoftonline.com/{tenantId}/v2.0",
+                $"https://sts.windows.net/{tenantId}/"
+            ]
+        };
+    }
+
+    private static JwtBearerEvents CreateSchemeEvents(string authenticationScheme, string? bearerCookieName = null)
+    {
+        return new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (string.IsNullOrWhiteSpace(context.Token)
+                    && !string.IsNullOrWhiteSpace(bearerCookieName)
+                    && context.Request.Cookies.TryGetValue(bearerCookieName, out string? cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
+
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                if (context.Principal?.Identity is ClaimsIdentity identity)
+                {
+                    identity.AddClaim(new Claim(LocalIdentityClaimNames.ExternalAuthenticationScheme, authenticationScheme));
+                }
+
+                return Task.CompletedTask;
+            }
+        };
+    }
+
+    private static void AddAdminFeaturePolicy(
+        Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
+        string policyName,
+        string permission,
+        bool useStrictPermissionPolicies)
+        => AddAdminFeaturePolicy(options, policyName, [permission], useStrictPermissionPolicies);
+
+    private static void AddAdminFeaturePolicy(
+        Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
+        string policyName,
+        IReadOnlyCollection<string> permissions,
+        bool useStrictPermissionPolicies)
+        => options.AddPolicy(policyName, policy =>
+        {
+            policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
+            policy.RequireAuthenticatedUser();
+            policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+            policy.RequireClaim(ClaimNames.Role, "HQ_ADMIN", "SCHOOL_ADMIN");
+
+            if (useStrictPermissionPolicies)
+            {
+                policy.RequireClaim(ClaimNames.Permission, permissions);
+            }
+        });
+}

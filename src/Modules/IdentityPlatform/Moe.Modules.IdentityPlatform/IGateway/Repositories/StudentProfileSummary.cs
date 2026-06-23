@@ -1,0 +1,28 @@
+namespace Moe.Modules.IdentityPlatform.IGateway.Repositories;
+
+internal sealed record StudentProfileSummary(
+    long PersonId,
+    string ExternalPersonReference,
+    string? IdentityNumberMasked,
+    string OfficialFullName,
+    DateOnly DateOfBirth,
+    string NationalityCode,
+    string CitizenshipStatusCode,
+    string? OfficialEmail,
+    string? PreferredEmail,
+    string? OfficialMobile,
+    string? PreferredMobile,
+    string? OfficialAddress,
+    string? PreferredAddress,
+    DateTime UpdatedAtUtc,
+    long? SchoolEnrollmentId,
+    long? SchoolOrganizationId,
+    string? SchoolOrganizationCode,
+    string? SchoolOrganizationName,
+    string? StudentNumber,
+    string? AcademicYear,
+    string? LevelCode,
+    string? ClassCode,
+    string? SchoolingStatusCode,
+    DateOnly? EnrollmentStartDate,
+    DateOnly? EnrollmentEndDate);

@@ -1,0 +1,17 @@
+name: backend-ci
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore MOE.StudentFinance.sln
+      - run: dotnet build MOE.StudentFinance.sln --configuration Release --no-restore
+      - run: dotnet test MOE.StudentFinance.sln --configuration Release --no-build --collect:"XPlat Code Coverage"

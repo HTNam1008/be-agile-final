@@ -1,0 +1,95 @@
+erDiagram
+    OrganizationUnit {
+        bigint OrganizationUnitId PK
+        bigint ParentOrganizationUnitId FK
+        string UnitCode
+        string UnitName
+        string UnitTypeCode
+        string StatusCode
+    }
+
+    Person {
+        bigint PersonId PK
+        string OfficialFullName
+        string NationalityCode
+        string CitizenshipStatusCode
+        string PersonStatusCode
+    }
+
+    PersonIdentifier {
+        bigint PersonIdentifierId PK
+        bigint PersonId FK
+        string IdentifierTypeCode
+        binary IdentifierValueHash
+        string IdentifierMasked
+        string IdentifierStatusCode
+        boolean IsPrimary
+    }
+
+    UserAccount {
+        bigint UserAccountId PK
+        bigint PersonId FK
+        string IdentityProviderCode
+        string ExternalTenantId
+        string ExternalIssuer
+        string ExternalSubjectId
+        string ExternalObjectId
+        string LoginEmailNormalized
+        string UserTypeCode
+        string PortalAccessCode
+        string AccountStatusCode
+        datetime FirstLoginAtUtc
+        datetime LastLoginAtUtc
+    }
+
+    UserAccessScope {
+        bigint UserAccessScopeId PK
+        bigint UserAccountId FK
+        bigint OrganizationUnitId FK
+        string RoleCode
+        string StatusCode
+        datetime EffectiveFromUtc
+        datetime EffectiveToUtc
+    }
+
+    Permission {
+        string PermissionCode PK
+        string PermissionName
+        string ModuleCode
+        string ActionCode
+        string ResourceCode
+        string StatusCode
+    }
+
+    RolePermission {
+        bigint RolePermissionId PK
+        string RoleCode
+        string PermissionCode FK
+        string StatusCode
+        datetime EffectiveFromUtc
+        datetime EffectiveToUtc
+    }
+
+    IdentityProvisioningRequest {
+        bigint IdentityProvisioningRequestId PK
+        bigint PersonId FK
+        bigint RequestedByUserAccountId FK
+        string IdentityProviderCode
+        string RequestedEmailNormalized
+        string ProvisioningStatusCode
+        string IdempotencyKey
+        string ExternalTenantId
+        string ExternalObjectId
+        datetime RequestedAtUtc
+        datetime CompletedAtUtc
+        string FailureCode
+    }
+
+    OrganizationUnit o|--o{ OrganizationUnit : parent_of
+    Person ||--o{ PersonIdentifier : has
+    Person ||--o{ UserAccount : authenticates_as
+    UserAccount ||--o{ UserAccessScope : receives
+    OrganizationUnit ||--o{ UserAccessScope : scopes
+    Permission ||--o{ RolePermission : assigned_to_role
+    Person ||--o{ IdentityProvisioningRequest : target
+    UserAccount ||--o{ IdentityProvisioningRequest : requested_by
