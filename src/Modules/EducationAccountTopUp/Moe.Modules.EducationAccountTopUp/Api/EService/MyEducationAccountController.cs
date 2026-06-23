@@ -3,13 +3,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
-using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
-using Moe.StudentFinance.Persistence;
+using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.EService;
 
@@ -19,61 +19,71 @@ namespace Moe.Modules.EducationAccountTopUp.Api.EService;
 [Authorize(Policy = AuthorizationPolicies.EServicePortal)]
 [EnableCors("EServiceCors")]
 public sealed class MyEducationAccountController(
-    MoeDbContext dbContext,
     ICurrentUser currentUser,
-    IEducationAccountPaymentGateway paymentGateway) : ControllerBase
+    IQueryDispatcher queries) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
-        if (!currentUser.IsAuthenticated || currentUser.PersonId is null)
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
         {
             return ApiResponseFactory.Failure(
-                new("ACCOUNT.AUTHENTICATED_STUDENT_REQUIRED", "An authenticated student is required."),
+                EducationAccountErrors.AuthenticatedStudentRequired,
                 ApiResponseCodes.Unauthorized,
                 HttpContext.TraceIdentifier);
         }
 
-        EducationAccount? account = await dbContext.Set<EducationAccount>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.PersonId == currentUser.PersonId.Value, cancellationToken);
+        Result<MyEducationAccountDto> result = await queries.Send(
+            new GetMyEducationAccountQuery(personId.Value),
+            cancellationToken);
 
-        if (account is null)
+        return ToAccountResponse(result);
+    }
+
+    [HttpGet("transactions")]
+    [ProducesResponseType(typeof(ApiResponse<MyEducationAccountTransactionsPage>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTransactions(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? category = null,
+        CancellationToken cancellationToken = default)
+    {
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
         {
             return ApiResponseFactory.Failure(
-                new("ACCOUNT.NOT_FOUND", "No education account was found for the current student."),
-                ApiResponseCodes.NotFound,
+                EducationAccountErrors.AuthenticatedStudentRequired,
+                ApiResponseCodes.Unauthorized,
                 HttpContext.TraceIdentifier);
         }
-        EducationAccountPaymentBalance? balance = await paymentGateway.GetAvailableBalanceAsync(
-            currentUser.PersonId.Value,
-            cancellationToken);
-        decimal currentBalance = balance?.CurrentBalance ?? account.CachedBalance;
-        decimal reservedAmount = balance?.HeldBalance ?? 0m;
-        decimal availableBalance = balance?.AvailableBalance ?? currentBalance;
 
-        return ApiResponseFactory.Ok(new
+        Result<MyEducationAccountTransactionsPage> result = await queries.Send(
+            new GetMyEducationAccountTransactionsQuery(personId.Value, page, pageSize, category),
+            cancellationToken);
+
+        return ToAccountResponse(result);
+    }
+
+    private IActionResult ToAccountResponse<T>(Result<T> result)
+    {
+        if (result.IsSuccess)
         {
-            educationAccountId = account.Id,
-            account.PersonId,
-            account.AccountNumber,
-            currencyCode = CurrencyCodes.SingaporeDollar,
-            accountStatusCode = account.StatusCode,
-            currentBalance,
-            reservedAmount,
-            availableBalance,
-            account.OpenedAtUtc,
-            openingTypeCode = account.OpeningModeCode,
-            openingReason = account.OpeningRemarks,
-            account.PendingClosureAtUtc,
-            account.ClosedAtUtc,
-            transactions = new
-            {
-                items = Array.Empty<object>(),
-                page = 1,
-                pageSize = 10,
-                totalCount = 0
-            }
-        }, HttpContext.TraceIdentifier);
+            return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+        }
+
+        int statusCode = result.Error == EducationAccountErrors.NotFound
+            ? ApiResponseCodes.NotFound
+            : result.Error == EducationAccountErrors.AuthenticatedStudentRequired
+                ? ApiResponseCodes.Unauthorized
+                : ApiResponseCodes.BadRequest;
+
+        return ApiResponseFactory.Failure(
+            result.Error,
+            statusCode,
+            HttpContext.TraceIdentifier);
     }
 }
