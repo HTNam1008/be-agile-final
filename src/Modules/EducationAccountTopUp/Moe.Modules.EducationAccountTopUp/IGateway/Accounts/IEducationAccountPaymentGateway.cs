@@ -33,4 +33,13 @@ public interface IEducationAccountPaymentGateway
         decimal amount,
         long? actorLoginAccountId,
         CancellationToken cancellationToken);
+
+    Task<long> CreditRefundAsync(
+        long personId,
+        long refundReferenceId,
+        decimal amount,
+        long? reversalOfTransactionId,
+        string idempotencyKey,
+        long? actorLoginAccountId,
+        CancellationToken cancellationToken);
 }

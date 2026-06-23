@@ -213,6 +213,15 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal(150m, preview.GetProperty("educationAccountCurrentBalance").GetDecimal());
         Assert.Equal(100m, preview.GetProperty("educationAccountAmount").GetDecimal());
         Assert.Equal(0m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal("EDUCATION_ACCOUNT_ONLY", preview.GetProperty("recommendedFundingOptionCode").GetString());
+        JsonElement educationOnly = preview.GetProperty("fundingOptions").EnumerateArray()
+            .Single(x => x.GetProperty("fundingOptionCode").GetString() == "EDUCATION_ACCOUNT_ONLY");
+        Assert.True(educationOnly.GetProperty("isAvailable").GetBoolean());
+        Assert.Equal(100m, educationOnly.GetProperty("educationAccountAmount").GetDecimal());
+        JsonElement onlineOnly = preview.GetProperty("fundingOptions").EnumerateArray()
+            .Single(x => x.GetProperty("fundingOptionCode").GetString() == "ONLINE_ONLY");
+        Assert.True(onlineOnly.GetProperty("isAvailable").GetBoolean());
+        Assert.Equal(100m, onlineOnly.GetProperty("onlinePaymentAmount").GetDecimal());
 
         using HttpResponseMessage pay = await PayStatementAsync(student, statement.StatementId);
         await AssertStatusAsync(HttpStatusCode.Created, pay);
@@ -238,6 +247,103 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task CancelPaidEnrollment_RefundsEducationAccountPaymentToOriginalSource()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 150m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage pay = await PayStatementAsync(
+            student,
+            statement.StatementId,
+            "EDUCATION_ACCOUNT_ONLY");
+        await AssertStatusAsync(HttpStatusCode.Created, pay);
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{statement.EnrollmentId}/cancel",
+            new { idempotencyKey = $"cancel-ea-{Guid.NewGuid():N}" });
+
+        await AssertStatusAsync(HttpStatusCode.OK, cancel);
+        JsonElement cancellation = await ReadDataAsync(cancel);
+        Assert.Equal("REFUNDED", cancellation.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(100m, cancellation.GetProperty("refundAmount").GetDecimal());
+        Assert.Equal(100m, cancellation.GetProperty("educationAccountRefundAmount").GetDecimal());
+        Assert.Equal(0m, cancellation.GetProperty("onlineRefundAmount").GetDecimal());
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        EducationAccount account = await db.Set<EducationAccount>()
+            .SingleAsync(x => x.PersonId == student.PersonId);
+        AccountTransaction[] transactions = await db.Set<AccountTransaction>()
+            .Where(x => x.EducationAccountId == account.Id)
+            .OrderBy(x => x.Id)
+            .ToArrayAsync();
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>()
+            .SingleAsync(x => x.Id == statement.EnrollmentId);
+
+        Assert.Equal(150m, account.CachedBalance);
+        Assert.Equal([-100m, 100m], transactions.Select(x => x.Amount).ToArray());
+        Assert.Equal([50m, 150m], transactions.Select(x => x.BalanceAfter).ToArray());
+        Assert.Equal("REFUNDED", enrollment.EnrollmentStatusCode);
+    }
+
+    [Fact]
+    public async Task OnlineOnlyPayment_DoesNotReserveEducationAccount()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 150m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage pay = await PayStatementAsync(
+            student,
+            statement.StatementId,
+            "ONLINE_ONLY");
+        await AssertStatusAsync(HttpStatusCode.Created, pay);
+        JsonElement payment = await ReadDataAsync(pay);
+
+        Assert.Equal(0m, payment.GetProperty("educationAccountAmount").GetDecimal());
+        Assert.Equal(100m, payment.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal(JsonValueKind.String, payment.GetProperty("checkoutUrl").ValueKind);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        long educationAccountId = await db.Set<EducationAccount>()
+            .Where(x => x.PersonId == student.PersonId)
+            .Select(x => x.Id)
+            .SingleAsync();
+        Assert.Empty(await db.Set<AccountHold>()
+            .Where(x => x.EducationAccountId == educationAccountId)
+            .ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task EducationAccountOnlyPayment_RejectsInsufficientBalance()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage pay = await PayStatementAsync(
+            student,
+            statement.StatementId,
+            "EDUCATION_ACCOUNT_ONLY");
+
+        await AssertStatusAsync(HttpStatusCode.Conflict, pay);
+        Assert.Contains("PAYMENT.INSUFFICIENT_BALANCE", await pay.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task SplitPayment_ResumesExistingCheckout_AndSuccessCapturesEaExactlyOnce()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
@@ -250,6 +356,12 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         JsonElement preview = await PreviewPaymentAsync(student, statement.StatementId);
         Assert.Equal(40m, preview.GetProperty("educationAccountAmount").GetDecimal());
         Assert.Equal(60m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal("EDUCATION_ACCOUNT_THEN_ONLINE", preview.GetProperty("recommendedFundingOptionCode").GetString());
+        JsonElement splitOption = preview.GetProperty("fundingOptions").EnumerateArray()
+            .Single(x => x.GetProperty("fundingOptionCode").GetString() == "EDUCATION_ACCOUNT_THEN_ONLINE");
+        Assert.True(splitOption.GetProperty("isAvailable").GetBoolean());
+        Assert.Equal(40m, splitOption.GetProperty("educationAccountAmount").GetDecimal());
+        Assert.Equal(60m, splitOption.GetProperty("onlinePaymentAmount").GetDecimal());
 
         using HttpResponseMessage firstPay = await PayStatementAsync(student, statement.StatementId);
         await AssertStatusAsync(HttpStatusCode.Created, firstPay);
@@ -610,11 +722,24 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     private Task<HttpResponseMessage> PayStatementAsync(TestStudent student, long statementId)
+        => PayStatementAsync(
+            student,
+            statementId,
+            "EDUCATION_ACCOUNT_THEN_ONLINE");
+
+    private Task<HttpResponseMessage> PayStatementAsync(
+        TestStudent student,
+        long statementId,
+        string fundingOptionCode)
         => SendStudentAsync(
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statementId}/payments",
-            new { idempotencyKey = $"test-statement-{statementId}-{Guid.NewGuid():N}" });
+            new
+            {
+                idempotencyKey = $"test-statement-{statementId}-{Guid.NewGuid():N}",
+                fundingOptionCode
+            });
 
     private async Task PostWebhookAsync(
         string kind,

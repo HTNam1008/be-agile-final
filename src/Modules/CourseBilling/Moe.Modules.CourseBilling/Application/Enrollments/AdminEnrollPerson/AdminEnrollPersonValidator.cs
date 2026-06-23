@@ -12,6 +12,8 @@ public sealed class AdminEnrollPersonRequestValidator : AbstractValidator<AdminE
             .NotEmpty()
             .MaximumLength(50);
 
-        RuleFor(x => x.CoursePaymentPlanId).GreaterThan(0);
+        RuleFor(x => x.CoursePaymentPlanId)
+            .GreaterThan(0)
+            .When(x => x.CoursePaymentPlanId is not null);
     }
 }

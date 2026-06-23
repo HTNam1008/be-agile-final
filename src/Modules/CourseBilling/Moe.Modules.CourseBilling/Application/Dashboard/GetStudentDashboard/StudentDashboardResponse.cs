@@ -7,6 +7,16 @@ public sealed record StudentDashboardResponse(
     IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses,
     IReadOnlyCollection<StudentDashboardCourseResponse> PublishedCourses);
 
+public sealed record StudentDashboardSummaryResponse(
+    StudentDashboardProfileResponse Student,
+    StudentDashboardEducationAccountResponse EducationAccount,
+    int CurrentCourseCount);
+
+public sealed record StudentCoursesResponse(
+    StudentDashboardCourseFilterResponse Filters,
+    IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses,
+    IReadOnlyCollection<StudentDashboardCourseResponse> PublishedCourses);
+
 public sealed record StudentDashboardProfileResponse(
     long PersonId,
     string DisplayName,
