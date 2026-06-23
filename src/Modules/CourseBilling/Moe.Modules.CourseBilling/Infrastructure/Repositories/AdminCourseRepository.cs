@@ -317,6 +317,8 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
 
         List<CourseEnrollment> enrollments = await dbContext.Set<CourseEnrollment>()
             .Where(enrollment => enrollment.CourseId == courseId
+                && enrollment.CoursePaymentPlanId != null
+                && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.PendingPlanSelection
                 && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled
                 && !dbContext.Set<Bill>().Any(bill => bill.CourseEnrollmentId == enrollment.Id))
             .OrderBy(enrollment => enrollment.Id)
