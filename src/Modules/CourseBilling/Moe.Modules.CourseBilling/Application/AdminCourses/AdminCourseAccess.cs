@@ -170,7 +170,7 @@ internal sealed class AdminCourseAccess(
             return Result.Failure(CourseErrors.InvalidDateRange);
         }
 
-        if (enrollmentOpenAt < currentMinute || enrollmentCloseAt < currentMinute)
+        if (enrollmentCloseAt < currentMinute)
         {
             return Result.Failure(CourseErrors.EnrollmentDateInPast);
         }
