@@ -20,7 +20,13 @@ internal sealed record DeferBillingStatementCommand(long StatementId, DeferBilli
 internal sealed class PayBillingStatementRequestValidator : AbstractValidator<PayBillingStatementRequest>
 {
     public PayBillingStatementRequestValidator()
-        => RuleFor(x => x.IdempotencyKey).NotEmpty().MaximumLength(120);
+    {
+        RuleFor(x => x.IdempotencyKey).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.FundingOptionCode).Must(code =>
+            code is PaymentFundingOptionCodes.EducationAccountOnly
+                or PaymentFundingOptionCodes.OnlineOnly
+                or PaymentFundingOptionCodes.EducationAccountThenOnline);
+    }
 }
 
 internal sealed class PreviewStatementPaymentHandler(
@@ -39,10 +45,46 @@ internal sealed class PreviewStatementPaymentHandler(
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
         decimal available = balance?.AvailableBalance ?? 0m;
         decimal education = Math.Min(available, statement.OutstandingAmount);
+        decimal online = statement.OutstandingAmount - education;
+        string recommended = available >= statement.OutstandingAmount
+            ? PaymentFundingOptionCodes.EducationAccountOnly
+            : available > 0m
+                ? PaymentFundingOptionCodes.EducationAccountThenOnline
+                : PaymentFundingOptionCodes.OnlineOnly;
+        StatementFundingOptionResponse[] options =
+        [
+            new(
+                PaymentFundingOptionCodes.EducationAccountOnly,
+                "Education Account",
+                available >= statement.OutstandingAmount,
+                statement.OutstandingAmount,
+                0m,
+                available >= statement.OutstandingAmount
+                    ? null
+                    : "Education Account balance is not enough for this statement."),
+            new(
+                PaymentFundingOptionCodes.OnlineOnly,
+                "Online payment",
+                true,
+                0m,
+                statement.OutstandingAmount,
+                null),
+            new(
+                PaymentFundingOptionCodes.EducationAccountThenOnline,
+                "Education Account + online",
+                available > 0m && available < statement.OutstandingAmount,
+                education,
+                online,
+                available <= 0m
+                    ? "No Education Account balance is available."
+                    : available >= statement.OutstandingAmount
+                        ? "Education Account can cover the full statement."
+                        : null)
+        ];
         return Result<StatementPaymentPreviewResponse>.Success(new(
             statement.BillingStatementId, statement.OutstandingAmount,
             balance?.CurrentBalance ?? 0m, balance?.HeldBalance ?? 0m, available, education,
-            statement.OutstandingAmount - education, statement.CurrencyCode));
+            online, statement.CurrencyCode, recommended, options));
     }
 }
 
@@ -70,8 +112,15 @@ internal sealed class PayBillingStatementHandler(
             return Result<PayBillingStatementResponse>.Success(existingAttempt.Value);
 
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
-        decimal educationAmount = Math.Min(balance?.AvailableBalance ?? 0m, statement.OutstandingAmount);
-        decimal onlineAmount = statement.OutstandingAmount - educationAmount;
+        Result<StatementFundingAllocation> allocationResult = ResolveFundingAllocation(
+            command.Request.FundingOptionCode,
+            statement.OutstandingAmount,
+            balance?.AvailableBalance ?? 0m);
+        if (allocationResult.IsFailure)
+            return Result<PayBillingStatementResponse>.Failure(allocationResult.Error);
+
+        decimal educationAmount = allocationResult.Value.EducationAccountAmount;
+        decimal onlineAmount = allocationResult.Value.OnlinePaymentAmount;
         DateTime now = clock.UtcNow.UtcDateTime;
         Payment payment = Payment.StartStatementPayment(statement.BillingStatementId, personId,
             statement.OutstandingAmount, educationAmount, onlineAmount, command.Request.IdempotencyKey, now);
@@ -216,6 +265,44 @@ internal sealed class PayBillingStatementHandler(
         await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, cancellationToken);
         return Result<PayBillingStatementResponse?>.Success(null);
     }
+
+    private static Result<StatementFundingAllocation> ResolveFundingAllocation(
+        string fundingOptionCode,
+        decimal statementOutstandingAmount,
+        decimal educationAccountAvailableBalance)
+    {
+        return fundingOptionCode switch
+        {
+            PaymentFundingOptionCodes.EducationAccountOnly
+                when educationAccountAvailableBalance >= statementOutstandingAmount
+                => Result<StatementFundingAllocation>.Success(
+                    new(statementOutstandingAmount, 0m)),
+            PaymentFundingOptionCodes.EducationAccountOnly
+                => Result<StatementFundingAllocation>.Failure(PaymentDomainErrors.InsufficientBalance),
+            PaymentFundingOptionCodes.OnlineOnly
+                => Result<StatementFundingAllocation>.Success(
+                    new(0m, statementOutstandingAmount)),
+            PaymentFundingOptionCodes.EducationAccountThenOnline
+                when educationAccountAvailableBalance > 0m
+                    && educationAccountAvailableBalance < statementOutstandingAmount
+                => Result<StatementFundingAllocation>.Success(
+                    new(
+                        educationAccountAvailableBalance,
+                        statementOutstandingAmount - educationAccountAvailableBalance)),
+            PaymentFundingOptionCodes.EducationAccountThenOnline
+                when educationAccountAvailableBalance >= statementOutstandingAmount
+                => Result<StatementFundingAllocation>.Success(
+                    new(statementOutstandingAmount, 0m)),
+            PaymentFundingOptionCodes.EducationAccountThenOnline
+                => Result<StatementFundingAllocation>.Success(
+                    new(0m, statementOutstandingAmount)),
+            _ => Result<StatementFundingAllocation>.Failure(PaymentDomainErrors.InvalidPaymentMethod)
+        };
+    }
+
+    private sealed record StatementFundingAllocation(
+        decimal EducationAccountAmount,
+        decimal OnlinePaymentAmount);
 }
 
 internal sealed class CancelBillingStatementPaymentHandler(

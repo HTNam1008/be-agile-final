@@ -77,25 +77,39 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.DuplicateEnrollment);
         }
 
-        CourseBillingPlan? plan = await paymentPlans.FindPlanAsync(
-            command.CoursePaymentPlanId,
-            cancellationToken);
-        if (plan is null || !plan.IsActive || plan.CourseId != command.CourseId)
-            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PaymentPlanNotFound);
+        CourseBillingPlan? plan = null;
+        if (command.CoursePaymentPlanId is long coursePaymentPlanId)
+        {
+            plan = await paymentPlans.FindPlanAsync(
+                coursePaymentPlanId,
+                cancellationToken);
+            if (plan is null || !plan.IsActive || plan.CourseId != command.CourseId)
+                return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PaymentPlanNotFound);
+        }
 
-        Result<CourseEnrollment> enrollmentResult = CourseEnrollment.EnrollByAdmin(
-            personId.Value,
-            command.CourseId,
-            plan.CoursePaymentPlanId,
-            actorId.Value,
-            utcNow);
+        Result<CourseEnrollment> enrollmentResult = plan is null
+            ? CourseEnrollment.EnrollByAdminPendingPlanSelection(
+                personId.Value,
+                command.CourseId,
+                actorId.Value,
+                utcNow,
+                course.BeforeStartRefundPercentage,
+                course.AfterStartRefundPercentage)
+            : CourseEnrollment.EnrollByAdmin(
+                personId.Value,
+                command.CourseId,
+                plan.CoursePaymentPlanId,
+                actorId.Value,
+                utcNow,
+                course.BeforeStartRefundPercentage,
+                course.AfterStartRefundPercentage);
 
         if (enrollmentResult.IsFailure)
         {
             return Result<CourseEnrollmentResponse>.Failure(enrollmentResult.Error);
         }
 
-        if (course.IsDraft)
+        if (course.IsDraft || plan is null)
         {
             await enrollments.AddEnrollmentAsync(enrollmentResult.Value, cancellationToken);
             return Result<CourseEnrollmentResponse>.Success(ToPendingResponse(enrollmentResult.Value));
