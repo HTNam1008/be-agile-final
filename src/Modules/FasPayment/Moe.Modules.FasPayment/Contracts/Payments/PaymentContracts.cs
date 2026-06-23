@@ -62,4 +62,34 @@ public sealed record UserPaymentHistoryResponse(
     string? ReceiptNumber,
     DateTime InitiatedAtUtc,
     DateTime? CompletedAtUtc,
-    DateTime? FailedAtUtc);
+    DateTime? FailedAtUtc,
+    IReadOnlyCollection<UserPaymentHistoryPartResponse> Parts,
+    IReadOnlyCollection<UserPaymentHistoryRefundResponse> Refunds);
+
+public sealed record UserPaymentHistoryPartResponse(
+    long PaymentPartId,
+    int SequenceNumber,
+    string PaymentMethodCode,
+    string FundingSourceCode,
+    long? EducationAccountId,
+    long? AccountTransactionId,
+    decimal Amount,
+    string? ProviderCode,
+    string? ProviderReference,
+    string PartStatusCode,
+    DateTime CreatedAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime? SettledAtUtc,
+    string? FailureReason);
+
+public sealed record UserPaymentHistoryRefundResponse(
+    long RefundId,
+    long? PaymentPartId,
+    string RefundMethodCode,
+    decimal Amount,
+    string RefundStatusCode,
+    string? ProviderRefundId,
+    long? AccountTransactionId,
+    DateTime CreatedAtUtc,
+    DateTime? CompletedAtUtc,
+    string? FailureReason);
