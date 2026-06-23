@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using FluentAssertions;
 using Moe.Modules.FasPayment.Application;
 using Moe.Modules.FasPayment.Domain.Fas;
@@ -10,6 +12,14 @@ namespace Moe.FasPayment.UnitTests;
 public class FasCriteriaEvaluatorTests
 {
     private readonly FasCriteriaEvaluator _evaluator = new FasCriteriaEvaluator();
+
+    private static FasTierCriteria CreateCriteria(long id, string type, decimal? from, decimal? to, string? connector, int displayOrder)
+    {
+        var criteria = FasTierCriteria.Create(1, type, from, to, connector, displayOrder, DateTime.UtcNow);
+        var property = typeof(FasTierCriteria).BaseType?.GetProperty("Id");
+        property?.SetValue(criteria, id);
+        return criteria;
+    }
 
     [Fact]
     public void Evaluate_AgeInRange_ShouldReturnTrue()

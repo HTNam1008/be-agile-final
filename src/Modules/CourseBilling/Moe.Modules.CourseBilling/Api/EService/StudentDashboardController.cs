@@ -25,4 +25,21 @@ public sealed class StudentDashboardController(IQueryDispatcher queries) : Contr
         var result = await queries.Send(new GetStudentDashboardQuery(search, status), cancellationToken);
         return result.ToApiResponse(this, ApiResponseCodes.NotFound);
     }
+
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetSummary(CancellationToken cancellationToken)
+    {
+        var result = await queries.Send(new GetStudentDashboardSummaryQuery(), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.NotFound);
+    }
+
+    [HttpGet("courses")]
+    public async Task<IActionResult> GetCourses(
+        [FromQuery] string? search,
+        [FromQuery] string? status,
+        CancellationToken cancellationToken)
+    {
+        var result = await queries.Send(new GetStudentCoursesQuery(search, status), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.NotFound);
+    }
 }

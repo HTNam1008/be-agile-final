@@ -18,4 +18,6 @@ public interface ICourseMaterialStorageService
         string contentType,
         Stream content,
         CancellationToken cancellationToken);
+
+    Task<Stream> OpenReadAsync(string storagePath, CancellationToken cancellationToken);
 }

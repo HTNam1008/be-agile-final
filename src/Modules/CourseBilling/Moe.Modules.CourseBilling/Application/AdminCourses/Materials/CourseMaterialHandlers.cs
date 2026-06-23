@@ -51,7 +51,7 @@ internal sealed class AddCourseMaterialCommandHandler(
             return Result<CourseMaterialDto>.Failure(CourseErrors.InvalidFile);
         }
 
-        StoredCourseMaterialFile stored = await StoreFileAsync(storage, command.CourseId, request.File, cancellationToken);
+        StoredCourseMaterialFile stored = await CourseMaterialFileHelper.StoreFileAsync(storage, command.CourseId, request.File, cancellationToken);
         CourseMaterial material = new(
             command.CourseId,
             request.MaterialTitle,
@@ -75,16 +75,6 @@ internal sealed class AddCourseMaterialCommandHandler(
 
     private static bool IsValidMaterialType(string materialTypeCode)
         => CourseMaterialTypeCodes.All.Contains(materialTypeCode, StringComparer.OrdinalIgnoreCase);
-
-    private static async Task<StoredCourseMaterialFile> StoreFileAsync(
-        ICourseMaterialStorageService storage,
-        long courseId,
-        IFormFile file,
-        CancellationToken cancellationToken)
-    {
-        await using Stream stream = file.OpenReadStream();
-        return await storage.SaveAsync(courseId, file.FileName, file.ContentType, stream, cancellationToken);
-    }
 }
 
 internal sealed class UpdateCourseMaterialCommandHandler(AdminCourseAccess access)
@@ -121,7 +111,7 @@ internal sealed class UpdateCourseMaterialCommandHandler(AdminCourseAccess acces
             request.DisplayOrder,
             request.IsRequired,
             access.UtcNow());
-        await access.Courses.SaveChangesAsync(cancellationToken);
+        await access.Courses.SaveMaterialAsync(material, cancellationToken);
 
         return Result<CourseMaterialDto>.Success(CourseMaterialMapper.ToMaterialDto(material));
     }
@@ -158,7 +148,7 @@ internal sealed class ReplaceCourseMaterialFileCommandHandler(
             return Result<CourseMaterialDto>.Failure(CourseErrors.MaterialNotFound);
         }
 
-        StoredCourseMaterialFile stored = await StoreFileAsync(storage, command.CourseId, request.File, cancellationToken);
+        StoredCourseMaterialFile stored = await CourseMaterialFileHelper.StoreFileAsync(storage, command.CourseId, request.File, cancellationToken);
         material.ReplaceFile(
             stored.FileName,
             stored.OriginalFileName,
@@ -170,18 +160,8 @@ internal sealed class ReplaceCourseMaterialFileCommandHandler(
             stored.PublicUrl,
             access.UtcNow());
 
-        await access.Courses.SaveChangesAsync(cancellationToken);
+        await access.Courses.SaveMaterialAsync(material, cancellationToken);
         return Result<CourseMaterialDto>.Success(CourseMaterialMapper.ToMaterialDto(material));
-    }
-
-    private static async Task<StoredCourseMaterialFile> StoreFileAsync(
-        ICourseMaterialStorageService storage,
-        long courseId,
-        IFormFile file,
-        CancellationToken cancellationToken)
-    {
-        await using Stream stream = file.OpenReadStream();
-        return await storage.SaveAsync(courseId, file.FileName, file.ContentType, stream, cancellationToken);
     }
 }
 
@@ -206,7 +186,7 @@ internal sealed class DeleteCourseMaterialCommandHandler(AdminCourseAccess acces
         }
 
         material.SoftDelete(access.UtcNow());
-        await access.Courses.SaveChangesAsync(cancellationToken);
+        await access.Courses.SaveMaterialAsync(material, cancellationToken);
         return Result<CourseMaterialDto>.Success(CourseMaterialMapper.ToMaterialDto(material));
     }
 }

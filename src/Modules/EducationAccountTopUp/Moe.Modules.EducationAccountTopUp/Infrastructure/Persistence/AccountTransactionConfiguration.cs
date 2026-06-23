@@ -19,6 +19,7 @@ internal sealed class AccountTransactionConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.ReferenceTypeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.IdempotencyKey).HasMaxLength(120).IsRequired();
         builder.Property(x => x.BalanceAfter).HasPrecision(19, 2);
+        builder.HasIndex(x => x.ReversalOfTransactionId);
         builder.Property(x => x.Description).HasMaxLength(1000);
     }
 }

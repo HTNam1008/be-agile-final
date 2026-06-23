@@ -22,10 +22,10 @@ internal sealed class CreateFeeComponentCommandHandler(
         }
 
         CreateFeeComponentRequest request = command.Request;
-        string componentTypeCode = NormalizeCode(request.ComponentTypeCode);
-        string calculationTypeCode = NormalizeCode(request.CalculationTypeCode);
+        string componentTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.ComponentTypeCode);
+        string calculationTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.CalculationTypeCode);
 
-        Result validation = await ValidateAsync(
+        Result validation = await FeeComponentValidatorHelper.ValidateAsync(
             feeComponents,
             request.ComponentCode,
             componentTypeCode,
@@ -48,35 +48,6 @@ internal sealed class CreateFeeComponentCommandHandler(
         await feeComponents.AddAsync(feeComponent, cancellationToken);
         return Result<FeeComponentDto>.Success(FeeComponentMapper.ToDto(feeComponent));
     }
-
-    private static async Task<Result> ValidateAsync(
-        IAdminFeeComponentRepository feeComponents,
-        string componentCode,
-        string componentTypeCode,
-        string calculationTypeCode,
-        long? excludeFeeComponentId,
-        CancellationToken cancellationToken)
-    {
-        if (!FeeComponentTypeCodes.All.Contains(componentTypeCode, StringComparer.OrdinalIgnoreCase))
-        {
-            return Result.Failure(CourseErrors.InvalidFeeComponentType);
-        }
-
-        if (!FeeComponentCalculationTypes.All.Contains(calculationTypeCode.Trim(), StringComparer.OrdinalIgnoreCase))
-        {
-            return Result.Failure(CourseErrors.InvalidCalculationType);
-        }
-
-        if (await feeComponents.ComponentCodeExistsAsync(componentCode, excludeFeeComponentId, cancellationToken))
-        {
-            return Result.Failure(CourseErrors.DuplicateFeeComponentCode);
-        }
-
-        return Result.Success();
-    }
-
-    private static string NormalizeCode(string code)
-        => code.Trim().ToUpperInvariant();
 }
 
 internal sealed class UpdateFeeComponentCommandHandler(
@@ -100,10 +71,10 @@ internal sealed class UpdateFeeComponentCommandHandler(
         }
 
         UpdateFeeComponentRequest request = command.Request;
-        string componentTypeCode = NormalizeCode(request.ComponentTypeCode);
-        string calculationTypeCode = NormalizeCode(request.CalculationTypeCode);
+        string componentTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.ComponentTypeCode);
+        string calculationTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.CalculationTypeCode);
 
-        Result validation = await ValidateAsync(
+        Result validation = await FeeComponentValidatorHelper.ValidateAsync(
             feeComponents,
             request.ComponentCode,
             componentTypeCode,
@@ -123,38 +94,9 @@ internal sealed class UpdateFeeComponentCommandHandler(
             componentTypeCode == FeeComponentTypeCodes.Tax,
             request.IsActive);
 
-        await feeComponents.SaveChangesAsync(cancellationToken);
+        await feeComponents.SaveAsync(feeComponent, cancellationToken);
         return Result<FeeComponentDto>.Success(FeeComponentMapper.ToDto(feeComponent));
     }
-
-    private static async Task<Result> ValidateAsync(
-        IAdminFeeComponentRepository feeComponents,
-        string componentCode,
-        string componentTypeCode,
-        string calculationTypeCode,
-        long? excludeFeeComponentId,
-        CancellationToken cancellationToken)
-    {
-        if (!FeeComponentTypeCodes.All.Contains(componentTypeCode, StringComparer.OrdinalIgnoreCase))
-        {
-            return Result.Failure(CourseErrors.InvalidFeeComponentType);
-        }
-
-        if (!FeeComponentCalculationTypes.All.Contains(calculationTypeCode.Trim(), StringComparer.OrdinalIgnoreCase))
-        {
-            return Result.Failure(CourseErrors.InvalidCalculationType);
-        }
-
-        if (await feeComponents.ComponentCodeExistsAsync(componentCode, excludeFeeComponentId, cancellationToken))
-        {
-            return Result.Failure(CourseErrors.DuplicateFeeComponentCode);
-        }
-
-        return Result.Success();
-    }
-
-    private static string NormalizeCode(string code)
-        => code.Trim().ToUpperInvariant();
 }
 
 internal sealed class ActivateFeeComponentCommandHandler(
@@ -178,7 +120,7 @@ internal sealed class ActivateFeeComponentCommandHandler(
         }
 
         feeComponent.Activate();
-        await feeComponents.SaveChangesAsync(cancellationToken);
+        await feeComponents.SaveAsync(feeComponent, cancellationToken);
         return Result<FeeComponentDto>.Success(FeeComponentMapper.ToDto(feeComponent));
     }
 }
@@ -204,12 +146,7 @@ internal sealed class DeactivateFeeComponentCommandHandler(
         }
 
         feeComponent.Deactivate();
-        await feeComponents.SaveChangesAsync(cancellationToken);
+        await feeComponents.SaveAsync(feeComponent, cancellationToken);
         return Result<FeeComponentDto>.Success(FeeComponentMapper.ToDto(feeComponent));
     }
-}
-
-internal static class FeeComponentCalculationTypes
-{
-    public static readonly string[] All = ["FIXED", "PERCENTAGE"];
 }

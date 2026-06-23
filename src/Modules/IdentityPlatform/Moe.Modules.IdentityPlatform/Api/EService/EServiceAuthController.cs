@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
@@ -21,7 +22,9 @@ public sealed class EServiceAuthController(
     IQueryDispatcher queries,
     ISingpassLoginGateway singpassLogin,
     IEServiceLoginResolver loginResolver,
-    IOptions<AuthenticationOptions> options) : ControllerBase
+    IOptions<AuthenticationOptions> options,
+    IOptions<PortalOptions> portalOptions,
+    ILogger<EServiceAuthController> logger) : ControllerBase
 {
     [HttpGet("flow")]
     [AllowAnonymous]
@@ -33,9 +36,10 @@ public sealed class EServiceAuthController(
 
     [HttpGet("login")]
     [AllowAnonymous]
-    public async Task<IActionResult> Login(CancellationToken cancellationToken)
+    public async Task<IActionResult> Login([FromQuery] string? returnUrl, CancellationToken cancellationToken)
     {
-        SingpassLoginStartResult result = await singpassLogin.StartLoginAsync(cancellationToken);
+        string? portalReturnUrl = ResolveAllowedReturnUrl(returnUrl, portalOptions.Value);
+        SingpassLoginStartResult result = await singpassLogin.StartLoginAsync(portalReturnUrl, cancellationToken);
         return Redirect(result.AuthorizationUrl);
     }
 
@@ -63,6 +67,7 @@ public sealed class EServiceAuthController(
         try
         {
             SingpassLoginResult login = await singpassLogin.CompleteLoginAsync(code, state, cancellationToken);
+            portalRedirectUri = login.PortalRedirectUri ?? portalRedirectUri;
             await loginResolver.ResolveAsync(login, cancellationToken);
             string token = singpassLogin.IssueLocalApiToken(login);
             WriteSessionCookie(token, options.Value.EServiceSingpass);
@@ -70,10 +75,18 @@ public sealed class EServiceAuthController(
         }
         catch (UnauthorizedAccessException ex)
         {
+            logger.LogWarning(
+                ex,
+                "Singpass login was rejected during callback. TraceId={TraceId}",
+                HttpContext.TraceIdentifier);
             return RedirectWithError(portalRedirectUri, ex.Message);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(
+                ex,
+                "Singpass login callback failed. TraceId={TraceId}",
+                HttpContext.TraceIdentifier);
             return RedirectWithError(portalRedirectUri, "Singpass login could not be completed.");
         }
     }
@@ -85,7 +98,7 @@ public sealed class EServiceAuthController(
         Response.Cookies.Delete(AuthenticationCookies.EServiceSession, new CookieOptions
         {
             HttpOnly = true,
-            SameSite = SameSiteMode.Lax,
+            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
             Secure = Request.IsHttps,
             Path = "/"
         });
@@ -97,6 +110,24 @@ public sealed class EServiceAuthController(
         => string.IsNullOrWhiteSpace(options.PortalRedirectUri)
             ? "http://localhost:5173/?portal=eservice"
             : options.PortalRedirectUri;
+
+    private static string? ResolveAllowedReturnUrl(string? returnUrl, PortalOptions portals)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl)
+            || !Uri.TryCreate(returnUrl, UriKind.Absolute, out Uri? uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return null;
+        }
+
+        string origin = uri.IsDefaultPort
+            ? $"{uri.Scheme}://{uri.Host}"
+            : $"{uri.Scheme}://{uri.Host}:{uri.Port}";
+
+        return portals.EServiceAllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)
+            ? uri.ToString()
+            : null;
+    }
 
     private static RedirectResult RedirectWithError(string portalRedirectUri, string error)
     {
@@ -119,7 +150,7 @@ public sealed class EServiceAuthController(
         Response.Cookies.Append(AuthenticationCookies.EServiceSession, token, new CookieOptions
         {
             HttpOnly = true,
-            SameSite = SameSiteMode.Lax,
+            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
             Secure = Request.IsHttps,
             Path = "/",
             MaxAge = TimeSpan.FromMinutes(singpass.LocalTokenLifetimeMinutes)

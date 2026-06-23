@@ -13,4 +13,14 @@ public sealed record CourseEnrollmentResponse(
     int BillLineCount,
     decimal GrossAmount,
     decimal NetPayableAmount,
-    decimal OutstandingAmount);
+    decimal OutstandingAmount,
+    IReadOnlyCollection<GeneratedEnrollmentBillResponse> GeneratedBills);
+
+public sealed record GeneratedEnrollmentBillResponse(
+    long BillId,
+    string BillNumber,
+    int SequenceNumber,
+    DateOnly CurrentDueDate,
+    decimal NetPayableAmount,
+    decimal OutstandingAmount,
+    string BillStatusCode);

@@ -31,11 +31,30 @@ internal interface ICourseEnrollmentRepository
 
     Task AddEnrollmentAsync(CourseEnrollment enrollment, CancellationToken cancellationToken);
 
-    Task<CourseEnrollmentBillingResult> AddEnrollmentAndIssueBillAsync(
+    Task<CourseEnrollmentBillingResult> AddEnrollmentAndIssueBillsAsync(
         CourseEnrollment enrollment,
-        string billNumber,
+        string billNumberPrefix,
         DateTime issuedAtUtc,
-        DateOnly dueDate,
+        DateOnly firstDueDate,
+        int installmentCount,
+        int intervalMonths,
+        IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        CancellationToken cancellationToken);
+
+    Task<CourseEnrollment?> FindEnrollmentAsync(
+        long enrollmentId,
+        long personId,
+        CancellationToken cancellationToken);
+
+    Task<CourseEnrollmentBillingResult?> ChangePaymentPlanAndReissueBillsAsync(
+        CourseEnrollment enrollment,
+        long coursePaymentPlanId,
+        bool installment,
+        string billNumberPrefix,
+        DateTime issuedAtUtc,
+        DateOnly firstDueDate,
+        int installmentCount,
+        int intervalMonths,
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
         CancellationToken cancellationToken);
 }
@@ -48,5 +67,8 @@ internal sealed record CourseFeeBillingLine(
 
 internal sealed record CourseEnrollmentBillingResult(
     CourseEnrollment Enrollment,
+    IReadOnlyCollection<GeneratedBillResult> Bills);
+
+internal sealed record GeneratedBillResult(
     Bill Bill,
     int BillLineCount);
