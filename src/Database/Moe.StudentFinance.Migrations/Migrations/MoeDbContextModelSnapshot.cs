@@ -466,7 +466,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasIndex("PersonId", "CourseId")
                         .IsUnique()
-                        .HasFilter("[EnrollmentStatusCode] NOT IN ('CANCELLED', 'REFUNDED', 'EXITED')");
+                        .HasFilter("[EnrollmentStatusCode] <> 'CANCELLED' AND [EnrollmentStatusCode] <> 'REFUNDED' AND [EnrollmentStatusCode] <> 'EXITED'");
 
                     b.ToTable("CourseEnrollment", "course");
                 });

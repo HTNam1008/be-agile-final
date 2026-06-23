@@ -20,7 +20,7 @@ public partial class AllowRejoinCancelledCourseEnrollments : Migration
             table: "CourseEnrollment",
             columns: ["PersonId", "CourseId"],
             unique: true,
-            filter: "[EnrollmentStatusCode] NOT IN ('CANCELLED', 'REFUNDED', 'EXITED')");
+            filter: "[EnrollmentStatusCode] <> 'CANCELLED' AND [EnrollmentStatusCode] <> 'REFUNDED' AND [EnrollmentStatusCode] <> 'EXITED'");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
