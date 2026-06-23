@@ -67,6 +67,22 @@ public class E2EHostingStartup : IHostingStartup
                     policy.RequireClaim(ClaimNames.Role, "STUDENT");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.ManageFasSchemes, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "FAS_SCHEME_MANAGE");
+                });
+
+                options.AddPolicy(AuthorizationPolicies.ReviewFas, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "FAS_REVIEW");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ViewTopUps, policy =>
                 {
                     policy.AddAuthenticationSchemes("Test");

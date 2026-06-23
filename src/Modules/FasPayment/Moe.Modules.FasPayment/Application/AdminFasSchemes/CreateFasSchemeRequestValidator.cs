@@ -19,30 +19,14 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         RuleFor(x => x.EndDate).NotEqual(default(DateOnly));
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate);
         RuleFor(x => x.CourseIds).NotNull().Must(x => x is not null && x.All(id => id > 0) && x.Distinct().Count() == x.Count).WithMessage("Course IDs must be positive and unique.");
-        RuleFor(x => x.SubsidyType).Must(x => x is "FIXED" or "PERCENTAGE");
-        RuleFor(x => x.CriteriaTemplate).NotNull().NotEmpty();
         RuleFor(x => x.Tiers).NotNull().NotEmpty();
         RuleFor(x => x).Custom(ValidateStructure);
     }
 
     private static void ValidateStructure(CreateFasSchemeRequest request, ValidationContext<CreateFasSchemeRequest> context)
     {
-        if (request.CriteriaTemplate is null || request.Tiers is null) return;
-        if (request.CriteriaTemplate.Any(item => item is null))
-        {
-            context.AddFailure("CriteriaTemplate", "Criteria template entries cannot be null.");
-            return;
-        }
-        ValidateOrders(request.CriteriaTemplate.Select(x => x.DisplayOrder), "criteriaTemplate", context);
+        if (request.Tiers is null) return;
         ValidateOrders(request.Tiers.Where(x => x is not null).Select(x => x.DisplayOrder), "tiers", context);
-        var template = request.CriteriaTemplate.OrderBy(x => x.DisplayOrder).ToArray();
-        for (int i = 0; i < template.Length; i++)
-        {
-            FasCriteriaTemplateItem item = template[i];
-            if (item.CriteriaType is not ("AGE" or "GDP" or "PCI" or "NATIONALITY")) context.AddFailure("CriteriaTemplate", $"Unsupported criteria type '{item.CriteriaType}'.");
-            bool last = i == template.Length - 1;
-            if (last ? item.ConnectorToNext is not null : item.ConnectorToNext is not ("AND" or "OR")) context.AddFailure("CriteriaTemplate", "Only the final connector may be null; earlier connectors must be AND or OR.");
-        }
         foreach (CreateFasTierRequest? tier in request.Tiers)
         {
             if (tier is null)
@@ -51,33 +35,34 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
                 continue;
             }
             if (string.IsNullOrWhiteSpace(tier.Label) || tier.Label.Length > 255) context.AddFailure("Tiers", "Each tier requires a label of at most 255 characters.");
-            if (tier.SubsidyValue < 0 || request.SubsidyType == "PERCENTAGE" && tier.SubsidyValue > 100) context.AddFailure("Tiers", "Tier subsidy value is outside the allowed range.");
-            if (tier.GrantCode is not null || tier.SubsidyType is not null) context.AddFailure("Tiers", "grantCode and subsidyType are scheme-level fields.");
-            if (tier.CriteriaValues is null)
+            if (tier.SubsidyType is not ("FIXED" or "PERCENTAGE")) context.AddFailure("Tiers", "Tier subsidy type must be FIXED or PERCENTAGE.");
+            if (tier.SubsidyValue < 0 || tier.SubsidyType == "PERCENTAGE" && tier.SubsidyValue > 100) context.AddFailure("Tiers", "Tier subsidy value is outside the allowed range.");
+            
+            if (tier.Criteria is null || tier.Criteria.Count == 0)
             {
-                context.AddFailure("Tiers", "Each tier must provide criteria values.");
+                context.AddFailure("Tiers", "Each tier must provide at least one criteria rule.");
                 continue;
             }
-            if (tier.CriteriaValues.Any(value => value is null))
+            if (tier.Criteria.Any(value => value is null))
             {
-                context.AddFailure("Tiers", "Criteria values cannot contain null entries.");
+                context.AddFailure("Tiers", "Criteria cannot contain null entries.");
                 continue;
             }
-            if (tier.CriteriaValues.Count != template.Length || tier.CriteriaValues.Select(x => x.DisplayOrder).Distinct().Count() != template.Length) context.AddFailure("Tiers", "Each tier must provide every template criterion exactly once.");
-            foreach (FasCriteriaTemplateItem item in template)
+            
+            ValidateOrders(tier.Criteria.Select(x => x.DisplayOrder), "criteria", context);
+            var criteriaList = tier.Criteria.OrderBy(x => x.DisplayOrder).ToArray();
+            for (int i = 0; i < criteriaList.Length; i++)
             {
-                FasTierCriteriaValue[] matches = tier.CriteriaValues.Where(x => x.DisplayOrder == item.DisplayOrder).ToArray();
-                if (matches.Length != 1)
-                {
-                    context.AddFailure("Tiers", $"Tier must provide criteria display order {item.DisplayOrder} exactly once.");
-                    continue;
-                }
-                FasTierCriteriaValue value = matches[0];
+                FasTierCriteriaRequest item = criteriaList[i];
+                if (item.CriteriaType is not ("AGE" or "GDP" or "PCI" or "NATIONALITY")) context.AddFailure("Tiers", $"Unsupported criteria type '{item.CriteriaType}'.");
+                bool last = i == criteriaList.Length - 1;
+                if (last ? item.ConnectorToNext is not null : item.ConnectorToNext is not ("AND" or "OR")) context.AddFailure("Tiers", "Only the final connector may be null; earlier connectors must be AND or OR.");
+                
                 if (item.CriteriaType == "NATIONALITY")
                 {
-                    if (value.NumberFrom.HasValue || value.NumberTo.HasValue || value.Nationalities is null || value.Nationalities.Count == 0 || value.Nationalities.Any(x => !Moe.Modules.FasPayment.Domain.Fas.FasNationalities.All.Contains(x))) context.AddFailure("Tiers", "Nationality criteria require at least one supported nationality and no numeric bounds.");
+                    if (item.NumberFrom.HasValue || item.NumberTo.HasValue || item.Nationalities is null || item.Nationalities.Count == 0 || item.Nationalities.Any(x => !Moe.Modules.FasPayment.Domain.Fas.FasNationalities.All.Contains(x))) context.AddFailure("Tiers", "Nationality criteria require at least one supported nationality and no numeric bounds.");
                 }
-                else if (!value.NumberFrom.HasValue || !value.NumberTo.HasValue || value.NumberFrom > value.NumberTo || value.Nationalities?.Count > 0) context.AddFailure("Tiers", "Numeric criteria require a valid range and no nationalities.");
+                else if (!item.NumberFrom.HasValue || !item.NumberTo.HasValue || item.NumberFrom > item.NumberTo || item.Nationalities?.Count > 0) context.AddFailure("Tiers", "Numeric criteria require a valid range and no nationalities.");
             }
         }
     }
