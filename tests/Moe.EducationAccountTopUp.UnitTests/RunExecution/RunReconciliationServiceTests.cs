@@ -266,7 +266,10 @@ public sealed class RunReconciliationServiceTests
             => Task.FromResult(_runs.Values.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
 
         public Task<bool> ExistsForScheduledOccurrenceAsync(long campaignId, DateTime scheduledFor, CancellationToken cancellationToken = default)
-            => Task.FromResult(false);
+            => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && x.ScheduledForUtc == scheduledFor));
+
+        public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
 
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
         {

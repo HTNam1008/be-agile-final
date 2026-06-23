@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.6.11828.311 oobstable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.StudentFinance.Migrations", "src\Database\Moe.StudentFinance.Migrations\Moe.StudentFinance.Migrations.csproj", "{0F8ED09A-2C72-4D59-9F9C-9DDDE2064A31}"
 EndProject
@@ -27,11 +27,21 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.SharedKernel", "src\Sha
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.EducationAccountTopUp.UnitTests", "tests\Moe.EducationAccountTopUp.UnitTests\Moe.EducationAccountTopUp.UnitTests.csproj", "{92AAE463-4481-4ED6-97F8-6056C5DA660E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.FasPayment.UnitTests", "tests\Moe.FasPayment.UnitTests\Moe.FasPayment.UnitTests.csproj", "{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.FasPayment.SqlTests", "tests\Moe.FasPayment.SqlTests\Moe.FasPayment.SqlTests.csproj", "{2E2A899B-78B8-4B88-9274-D904986C18EC}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.StudentFinance.IntegrationTests", "tests\Moe.StudentFinance.IntegrationTests\Moe.StudentFinance.IntegrationTests.csproj", "{6C5EBCEB-6827-4D76-94EC-A99FA499BC2E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moe.StudentFinance.E2EHost", "tests\Moe.StudentFinance.E2EHost\Moe.StudentFinance.E2EHost.csproj", "{4A88BF2D-A67A-4A6C-B329-7724CFCC7425}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Modules", "Modules", "{EC447DCF-ABFA-6E24-52A5-D7FD48A5C558}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "FasPayment", "FasPayment", "{48705FC1-C514-8D81-66B6-BB36C4F955FB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -187,6 +197,30 @@ Global
 		{92AAE463-4481-4ED6-97F8-6056C5DA660E}.Release|x64.Build.0 = Release|Any CPU
 		{92AAE463-4481-4ED6-97F8-6056C5DA660E}.Release|x86.ActiveCfg = Release|Any CPU
 		{92AAE463-4481-4ED6-97F8-6056C5DA660E}.Release|x86.Build.0 = Release|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Debug|x64.Build.0 = Debug|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Debug|x86.Build.0 = Debug|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Release|x64.ActiveCfg = Release|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Release|x64.Build.0 = Release|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Release|x86.ActiveCfg = Release|Any CPU
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441}.Release|x86.Build.0 = Release|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Debug|x64.Build.0 = Debug|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Debug|x86.Build.0 = Debug|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Release|x64.ActiveCfg = Release|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Release|x64.Build.0 = Release|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Release|x86.ActiveCfg = Release|Any CPU
+		{2E2A899B-78B8-4B88-9274-D904986C18EC}.Release|x86.Build.0 = Release|Any CPU
 		{6C5EBCEB-6827-4D76-94EC-A99FA499BC2E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6C5EBCEB-6827-4D76-94EC-A99FA499BC2E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C5EBCEB-6827-4D76-94EC-A99FA499BC2E}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -216,7 +250,11 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{E41CCB21-C814-4BF2-8BE6-BB8EB903F441} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{2E2A899B-78B8-4B88-9274-D904986C18EC} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{6C5EBCEB-6827-4D76-94EC-A99FA499BC2E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{4A88BF2D-A67A-4A6C-B329-7724CFCC7425} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{EC447DCF-ABFA-6E24-52A5-D7FD48A5C558} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{48705FC1-C514-8D81-66B6-BB36C4F955FB} = {EC447DCF-ABFA-6E24-52A5-D7FD48A5C558}
 	EndGlobalSection
 EndGlobal

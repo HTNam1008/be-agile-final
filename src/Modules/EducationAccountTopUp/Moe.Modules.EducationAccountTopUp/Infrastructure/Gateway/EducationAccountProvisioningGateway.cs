@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -5,7 +6,9 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 
-internal sealed class EducationAccountProvisioningGateway(IEducationAccountRepository educationAccounts) : IEducationAccountProvisioningGateway
+internal sealed class EducationAccountProvisioningGateway(
+    IEducationAccountRepository educationAccounts,
+    IUnitOfWork unitOfWork) : IEducationAccountProvisioningGateway
 {
     public async Task<EducationAccountProvisioningResult> EnsureAccountForStudentAsync(
         long personId,
@@ -38,6 +41,7 @@ internal sealed class EducationAccountProvisioningGateway(IEducationAccountRepos
         }
 
         await educationAccounts.AddAsync(result.Value, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new EducationAccountProvisioningResult(
             result.Value.Id,

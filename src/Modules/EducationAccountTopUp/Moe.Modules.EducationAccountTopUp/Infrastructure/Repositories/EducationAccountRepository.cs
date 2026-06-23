@@ -22,6 +22,5 @@ internal sealed class EducationAccountRepository(MoeDbContext dbContext) : IEduc
     public async Task AddAsync(EducationAccount account, CancellationToken cancellationToken)
     {
         await dbContext.Set<EducationAccount>().AddAsync(account, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

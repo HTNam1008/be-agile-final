@@ -49,6 +49,5 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
     public async Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpTransaction>().AddAsync(transaction, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

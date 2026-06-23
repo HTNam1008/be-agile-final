@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
@@ -5,10 +7,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using System;
-using System.IO;
-using System.Security.Claims;
-using System.Text;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
@@ -75,6 +73,7 @@ public static class DependencyInjection
                 authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageFasSchemes, "FAS_SCHEME_MANAGE", authorization.UseStrictPermissionPolicies);
         });
 
         services.AddCors(options =>
@@ -140,6 +139,24 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
+        if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
+        {
+            target.RequireHttpsMetadata = source.RequireHttpsMetadata;
+            target.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = source.Authority.TrimEnd('/'),
+                ValidateAudience = true,
+                ValidAudience = source.Audience,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(source.LocalTokenSigningKey)),
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1)
+            };
+            target.Events = CreateSchemeEvents(authenticationScheme, bearerCookieName);
+            return;
+        }
+
         target.Authority = source.Authority;
         target.Audience = source.Audience;
         target.RequireHttpsMetadata = source.RequireHttpsMetadata;

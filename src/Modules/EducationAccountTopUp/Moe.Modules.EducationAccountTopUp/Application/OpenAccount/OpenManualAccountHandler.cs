@@ -1,5 +1,6 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
@@ -12,7 +13,8 @@ internal sealed class OpenManualAccountHandler(
     IEducationAccountRepository educationAccounts,
     IPersonDirectory people,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
+    IClock clock,
+    IUnitOfWork unitOfWork) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
 {
     public async Task<Result<OpenManualAccountResponse>> Handle(
         OpenManualAccountCommand command,
@@ -31,7 +33,7 @@ internal sealed class OpenManualAccountHandler(
         if (currentUser.UserAccountId is not long actorId)
         {
             return Result<OpenManualAccountResponse>.Failure(
-                new Error("AUTH.ACTOR_REQUIRED", "An authenticated admin is required."));
+                Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpErrors.ActorRequired);
         }
 
         string accountNumber = $"EA-{clock.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..25].ToUpperInvariant();
@@ -49,6 +51,7 @@ internal sealed class OpenManualAccountHandler(
         }
 
         await educationAccounts.AddAsync(accountResult.Value, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         OpenManualAccountResponse response = new(
             accountResult.Value.Id,

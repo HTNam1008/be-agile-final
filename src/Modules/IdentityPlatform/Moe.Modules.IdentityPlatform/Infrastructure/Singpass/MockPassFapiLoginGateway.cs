@@ -1,5 +1,5 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Buffers.Binary;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;

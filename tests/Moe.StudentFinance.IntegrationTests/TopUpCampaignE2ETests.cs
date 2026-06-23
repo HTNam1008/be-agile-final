@@ -121,7 +121,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             recipientModeCode = "DynamicRules",
             defaultTopUpAmount = 75.00m,
             reason = "E2E Testing Dynamic",
-            scheduleTypeCode = "OneTimeScheduled"
+            scheduleTypeCode = "Immediate"
         };
         var createResponse = await _client.PostAsJsonAsync("/api/admin/v1/top-up-campaigns", createPayload);
         createResponse.EnsureSuccessStatusCode();
@@ -179,7 +179,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         };
 
         var response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/campaigns/{campaignId}/runs",
+            $"/api/admin/v1/top-up-campaigns/{campaignId}/runs",
             request);
 
         if (!response.IsSuccessStatusCode)

@@ -1,19 +1,21 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using Asp.Versioning;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.EducationAccountTopUp;
-using Moe.Modules.CourseBilling;
-using Moe.Modules.IdentityPlatform;
-using Moe.Modules.FasPayment;
-using Moe.StudentFinance.Persistence;
 using Moe.Infrastructure.Shared.Validation;
+using Moe.Modules.CourseBilling;
+using Moe.Modules.EducationAccountTopUp;
+using Moe.Modules.FasPayment;
+using Moe.Modules.IdentityPlatform;
+using Moe.StudentFinance.Persistence;
 using NSwag;
 using NSwag.Generation.Processors.Security;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +44,32 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
     .AddApplicationPart(typeof(FasPaymentModule).Assembly);
+
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    var defaultFactory = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        if (!context.ActionDescriptor.EndpointMetadata.OfType<UnprocessableEntityOnModelValidationAttribute>().Any())
+        {
+            return defaultFactory(context);
+        }
+
+        string[] errors = context.ModelState.Values
+            .SelectMany(entry => entry.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "Invalid request value." : error.ErrorMessage)
+            .Distinct()
+            .ToArray();
+        return new Microsoft.AspNetCore.Mvc.ObjectResult(ApiResponse<object>.Fail(
+            "Validation failed.",
+            ["FAS.INVALID_REQUEST", .. errors],
+            ApiResponseCodes.UnprocessableEntity,
+            context.HttpContext.TraceIdentifier))
+        {
+            StatusCode = ApiResponseCodes.UnprocessableEntity
+        };
+    };
+});
 
 builder.Services.AddApiVersioning(options =>
 {
@@ -91,17 +119,30 @@ app.Logger.LogInformation(
     "Data Protection keys are persisted to {DataProtectionKeysPath}",
     Moe.Infrastructure.Shared.DependencyInjection.ResolveDataProtectionKeysDirectory().FullName);
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<Moe.StudentFinance.Persistence.MoeDbContext>();
+    if (db.Database.IsSqlite())
+    {
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+    }
+}
+
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
 {
     app.UseOpenApi();
     app.UseSwaggerUi(settings => settings.Path = "/swagger");
 }
 
-app.MapGet("/", () => Results.Ok(new
-{
-    service = "MOE Student Finance API",
-    status = "running"
-})).AllowAnonymous();
+//app.MapGet("/", () => Results.Ok(new
+//{
+//    service = "MOE Student Finance API",
+//    status = "running"
+//})).AllowAnonymous();
+
+app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
+
 app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 {
     string issuer = configuration["Authentication:AdminEntra:Authority"]?.TrimEnd('/')

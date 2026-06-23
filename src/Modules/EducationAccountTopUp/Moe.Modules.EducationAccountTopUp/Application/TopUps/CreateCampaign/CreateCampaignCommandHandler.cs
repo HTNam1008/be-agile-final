@@ -1,6 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -11,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
 
 internal sealed class CreateCampaignCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<CreateCampaignCommand, long>
@@ -21,9 +22,7 @@ internal sealed class CreateCampaignCommandHandler(
 
         Result access = adminAccess.EnsureCanAccessOrganization(request.OrganizationId);
         if (access.IsFailure)
-        {
             return Result<long>.Failure(TopUpErrors.OrganizationOutsideScope);
-        }
 
         if (await campaigns.CampaignCodeExistsAsync(request.OrganizationId, request.CampaignCode, cancellationToken))
         {
@@ -61,26 +60,8 @@ internal sealed class CreateCampaignCommandHandler(
             currentUserId: currentUser.UserAccountId ?? 0,
             nowUtc: clock.UtcNow.UtcDateTime);
 
-        try
-        {
-            await campaigns.AddAsync(campaign, cancellationToken);
-        }
-        catch (DbUpdateException ex)
-        {
-            string message = ex.InnerException?.Message ?? string.Empty;
-
-            if (message.Contains("CK_TopUpCampaign", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("CHECK constraint", StringComparison.OrdinalIgnoreCase))
-            {
-                return Result<long>.Failure(new Error(
-                    "TopUpCampaign.ConstraintViolation",
-                    "The campaign data violated a database rule. Verify all required fields are set correctly."));
-            }
-
-            return Result<long>.Failure(new Error(
-                "TopUpCampaign.DuplicateCampaignCode",
-                $"A campaign with code '{request.CampaignCode}' already exists for this organisation."));
-        }
+        await campaigns.AddAsync(campaign, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<long>.Success(campaign.Id);
     }

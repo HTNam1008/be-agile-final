@@ -1,5 +1,5 @@
 using FluentValidation;
-using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
+using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 
@@ -10,6 +10,7 @@ public sealed class ChangeCampaignStatusCommandValidator : AbstractValidator<Cha
         RuleFor(x => x.TopUpCampaignId).GreaterThan(0);
         RuleFor(x => x.NewStatusCode)
             .NotEmpty()
-            .IsEnumName(typeof(TopUpCampaignStatusCode), caseSensitive: false);
+            .Must(TopUpCampaignStatusCodes.IsValid)
+            .WithMessage("NewStatusCode must be a valid campaign status.");
     }
 }

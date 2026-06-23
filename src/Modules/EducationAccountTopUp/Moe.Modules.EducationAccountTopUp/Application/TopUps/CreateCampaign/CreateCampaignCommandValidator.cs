@@ -15,7 +15,7 @@ public sealed class CreateCampaignCommandValidator : AbstractValidator<CreateCam
             .IsEnumName(typeof(RecipientModeCode), caseSensitive: false);
         RuleFor(x => x.Request.DefaultTopUpAmount).GreaterThan(0);
         RuleFor(x => x.Request.Reason).NotEmpty().MaximumLength(1000);
-        
+
         RuleFor(x => x.Request.ScheduleTypeCode)
             .IsEnumName(typeof(ScheduleTypeCode), caseSensitive: false);
 

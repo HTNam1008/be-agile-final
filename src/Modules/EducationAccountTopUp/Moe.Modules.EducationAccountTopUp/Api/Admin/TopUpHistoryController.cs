@@ -88,10 +88,7 @@ public sealed class TopUpHistoryController(IQueryDispatcher queries) : Controlle
     {
         if (result.IsFailure)
         {
-            return ApiResponseFactory.Failure(
-                result.Error,
-                ApiResponseCodes.Forbidden,
-                HttpContext.TraceIdentifier);
+            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         }
 
         return ApiResponseFactory.Ok(

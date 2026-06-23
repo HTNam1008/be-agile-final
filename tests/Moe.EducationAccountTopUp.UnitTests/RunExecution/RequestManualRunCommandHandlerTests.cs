@@ -16,6 +16,7 @@ public sealed class RequestManualRunCommandHandlerTests
     private readonly FakeTopUpCampaignRepository _campaigns = new();
     private readonly FakeTopUpRunRepository _runs = new();
     private readonly FakeTopUpRunDispatcher _dispatcher = new();
+    private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 17, 4, 0, 0, TimeSpan.Zero));
 
@@ -155,10 +156,19 @@ public sealed class RequestManualRunCommandHandlerTests
         return new RequestManualRunCommandHandler(
             _campaigns,
             _runs,
+            _unitOfWork,
             _dispatcher,
             _currentUser,
             adminAccess ?? new AllowAllAdminAccess(),
             _clock);
+    }
+
+    private sealed class FakeUnitOfWork : Moe.Application.Abstractions.Persistence.IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(1);
+        }
     }
 
     private sealed class AllowAllAdminAccess : IAdminAccessControl
@@ -207,11 +217,13 @@ public sealed class RequestManualRunCommandHandlerTests
                 && x.CampaignCode == campaignCode));
         }
 
-        public Task<IReadOnlyList<Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns.CampaignListItem>> ListAsync(
-            IReadOnlyCollection<long>? accessibleOrgIds,
-            CancellationToken cancellationToken = default)
+
+
+        public Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            return Task.FromResult<IReadOnlyList<TopUpCampaign>>(_campaigns.Values
+                .Where(c => c.CampaignStatusCode == TopUpCampaignStatusCodes.Active && c.NextRunAtUtc != null && c.NextRunAtUtc <= utcNow)
+                .ToList());
         }
 
         public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(
@@ -229,6 +241,12 @@ public sealed class RequestManualRunCommandHandlerTests
             IReadOnlyList<TopUpCampaignRecipient> recipients = [];
             return Task.FromResult(recipients);
         }
+
+        public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
+        public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRecipientAsync(TopUpCampaignRecipient recipient, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
         {
@@ -282,6 +300,11 @@ public sealed class RequestManualRunCommandHandlerTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_runs.Any(x => x.TopUpCampaignId == campaignId && x.ScheduledForUtc == scheduledFor));
+        }
+
+        public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_runs.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
         }
 
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
