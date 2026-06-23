@@ -34,6 +34,42 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Parent_nationality_and_account_type_round_trip_without_numeric_bounds()
+    {
+        string suffix = NewSuffix();
+        var request = new
+        {
+            schemeCode = $"CATEGORICAL-{suffix}", grantCode = $"CATEGORICAL-GRANT-{suffix}", name = $"Categorical {suffix}",
+            startDate = new DateOnly(2026, 1, 1), endDate = new DateOnly(2026, 12, 31), courseIds = Array.Empty<long>(),
+            subsidyType = "PERCENTAGE",
+            criteriaTemplate = new object[]
+            {
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 1 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 2 }
+            },
+            tiers = new object[]
+            {
+                new { label = "Eligible", subsidyValue = 75m, displayOrder = 1, criteriaValues = new object[]
+                {
+                    new { displayOrder = 1, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Vietnamese", "Singapore Citizen" } },
+                    new { displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                }}
+            }
+        };
+
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", request);
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+        using HttpResponseMessage detail = await _client.GetAsync($"/api/admin/v1/fas/schemes/{id}");
+        await AssertStatus(HttpStatusCode.OK, detail);
+        string body = await detail.Content.ReadAsStringAsync();
+        Assert.Contains("PARENT_NATIONALITY", body);
+        Assert.Contains("Vietnamese", body);
+        Assert.Contains("ACCOUNT_TYPE", body);
+        Assert.Contains("EDUCATION_ACCOUNT", body);
+    }
+
+    [Fact]
     public async Task Course_restricted_fixed_scheme_returns_numeric_course_ids()
     {
         long courseId = await CreateCourse();
@@ -148,9 +184,10 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             courseCode = $"FAS-{suffix}",
             courseName = $"FAS Course {suffix}",
             description = "FAS integration course",
-            startDate = new DateOnly(2026, 1, 1),
-            endDate = new DateOnly(2026, 12, 31),
-            enrollmentCloseAt = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            enrollmentOpenAt = DateTime.UtcNow.AddMinutes(1),
+            enrollmentCloseAt = DateTime.UtcNow.AddDays(14)
         });
         using HttpResponseMessage response = await _client.SendAsync(request);
         await AssertStatus(HttpStatusCode.Created, response);
