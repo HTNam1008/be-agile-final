@@ -17,6 +17,9 @@ public sealed record PayBillingStatementResponse(
     string PaymentStatusCode,
     decimal EducationAccountAmount,
     decimal OnlinePaymentAmount,
-    string? CheckoutUrl);
+    string? CheckoutUrl,
+    long? PaymentCheckoutSessionId,
+    DateTime? CheckoutExpiresAtUtc,
+    bool Resumed);
 
 public sealed record DeferBillingStatementRequest(long FailedPaymentId);

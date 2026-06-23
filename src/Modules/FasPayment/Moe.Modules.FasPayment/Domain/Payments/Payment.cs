@@ -111,6 +111,14 @@ internal sealed class Payment : Entity<long>
         UpdatedAtUtc = cancelledAtUtc;
     }
 
+    public void MarkExpired(DateTime expiredAtUtc)
+    {
+        if (PaymentStatusCode == PaymentStatusCodes.Successful) return;
+        PaymentStatusCode = PaymentStatusCodes.Expired;
+        ExpiredAtUtc = expiredAtUtc;
+        UpdatedAtUtc = expiredAtUtc;
+    }
+
     public static Payment RecordProviderSuccess(
         long billId,
         long payerPersonId,

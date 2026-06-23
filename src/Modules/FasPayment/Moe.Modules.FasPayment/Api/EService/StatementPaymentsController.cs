@@ -24,6 +24,12 @@ public sealed class StatementPaymentsController(ICommandDispatcher commands, IQu
     public async Task<IActionResult> Pay(long statementId, [FromBody] PayBillingStatementRequest request, CancellationToken ct)
         => this.ToPaymentResponse(await commands.Send(new PayBillingStatementCommand(statementId, request), ct), created: true);
 
+    [HttpPost("payments/{paymentId:long}/cancel")]
+    public async Task<IActionResult> Cancel(long statementId, long paymentId, CancellationToken ct)
+        => this.ToPaymentResponse(await commands.Send(
+            new CancelBillingStatementPaymentCommand(statementId, paymentId),
+            ct));
+
     [HttpPost("defer")]
     public async Task<IActionResult> Defer(long statementId, [FromBody] DeferBillingStatementRequest request, CancellationToken ct)
         => this.ToPaymentResponse(await commands.Send(new DeferBillingStatementCommand(statementId, request), ct));

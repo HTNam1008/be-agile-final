@@ -68,6 +68,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<CreatePaymentRefundCommand, PaymentRefundResponse>, CreatePaymentRefundHandler>();
         services.AddScoped<IQueryHandler<PreviewStatementPaymentQuery, StatementPaymentPreviewResponse>, PreviewStatementPaymentHandler>();
         services.AddScoped<ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>, PayBillingStatementHandler>();
+        services.AddScoped<ICommandHandler<CancelBillingStatementPaymentCommand>, CancelBillingStatementPaymentHandler>();
         services.AddScoped<ICommandHandler<DeferBillingStatementCommand>, DeferBillingStatementHandler>();
         services.AddScoped<IQueryHandler<ListUserPaymentHistoryQuery, IReadOnlyCollection<UserPaymentHistoryResponse>>, ListUserPaymentHistoryHandler>();
         services.AddScoped<IValidator<CreateCoursePaymentPlanRequest>, CreateCoursePaymentPlanRequestValidator>();

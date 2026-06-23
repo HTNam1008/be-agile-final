@@ -44,6 +44,8 @@ internal sealed class PaymentCheckoutSessionConfiguration : IEntityTypeConfigura
         builder.Property(checkout => checkout.ProviderSubscriptionId).HasMaxLength(100);
         builder.Property(checkout => checkout.ProviderSubscriptionScheduleId).HasMaxLength(100);
         builder.Property(checkout => checkout.ProviderPriceId).HasMaxLength(100);
+        builder.Property(checkout => checkout.CheckoutUrl).HasMaxLength(2048);
+        builder.Property(checkout => checkout.ExpiresAtUtc).HasColumnName("ExpiresAt");
         builder.Property(checkout => checkout.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(checkout => checkout.UpdatedAtUtc).HasColumnName("UpdatedAt");
         builder.Property(checkout => checkout.LastPaymentEventAtUtc).HasColumnName("LastPaymentEventAt");
