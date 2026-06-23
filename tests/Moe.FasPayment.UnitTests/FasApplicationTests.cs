@@ -104,14 +104,14 @@ public class FasApplicationTests
     [Fact]
     public void CreateRejection_NullReason_ShouldThrow()
     {
-        Action act = () => FasApplicationReviewDecision.CreateRejection(1, "admin", null!, null);
+        Action act = () => FasApplicationReviewDecision.CreateRejection(1, 1111, null!, null, DateTime.UtcNow);
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void CreateRejection_EmptyReason_ShouldThrow()
     {
-        Action act = () => FasApplicationReviewDecision.CreateRejection(1, "admin", "", null);
+        Action act = () => FasApplicationReviewDecision.CreateRejection(1, 1111, "", null, DateTime.UtcNow);
         act.Should().Throw<ArgumentException>();
     }
 }
