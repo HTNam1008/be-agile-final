@@ -58,6 +58,9 @@ internal interface IPaymentCheckoutRepository
     Task<IReadOnlyCollection<EnrollmentRefundPart>> ListEnrollmentRefundPartsAsync(
         long enrollmentRefundId,
         CancellationToken cancellationToken);
+    Task<EnrollmentRefundPart?> FindEnrollmentRefundPartByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken);
     Task<IReadOnlyCollection<ProcessedPaymentWebhookEvent>> ListWebhookEventsAsync(CancellationToken cancellationToken);
     Task<bool> WebhookEventExistsAsync(string providerEventId, CancellationToken cancellationToken);
     Task AddWebhookEventAsync(ProcessedPaymentWebhookEvent webhookEvent, CancellationToken cancellationToken);

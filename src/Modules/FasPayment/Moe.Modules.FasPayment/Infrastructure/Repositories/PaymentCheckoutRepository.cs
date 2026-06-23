@@ -211,6 +211,14 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
             .OrderBy(part => part.Id)
             .ToArrayAsync(cancellationToken);
 
+    public Task<EnrollmentRefundPart?> FindEnrollmentRefundPartByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+        => dbContext.Set<EnrollmentRefundPart>()
+            .SingleOrDefaultAsync(
+                part => part.IdempotencyKey == idempotencyKey,
+                cancellationToken);
+
     public async Task<IReadOnlyCollection<ProcessedPaymentWebhookEvent>> ListWebhookEventsAsync(CancellationToken cancellationToken)
         => await dbContext.Set<ProcessedPaymentWebhookEvent>().AsNoTracking().OrderByDescending(item => item.ReceivedAtUtc).Take(200).ToArrayAsync(cancellationToken);
 

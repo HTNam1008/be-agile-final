@@ -7,7 +7,17 @@ internal sealed record EnrollmentCancellationSnapshot(
     Course Course,
     decimal PaidAmount,
     decimal EducationAccountPaidAmount,
-    decimal OnlinePaidAmount);
+    decimal OnlinePaidAmount,
+    IReadOnlyCollection<EnrollmentPaymentRefundSource> RefundSources);
+
+internal sealed record EnrollmentPaymentRefundSource(
+    long PaymentId,
+    long? EducationAccountPaymentPartId,
+    long? EducationAccountTransactionId,
+    string? ProviderChargeId,
+    decimal AllocatedAmount,
+    decimal EducationAccountAllocatedAmount,
+    decimal OnlineAllocatedAmount);
 
 internal interface IEnrollmentRefundPreviewRepository
 {

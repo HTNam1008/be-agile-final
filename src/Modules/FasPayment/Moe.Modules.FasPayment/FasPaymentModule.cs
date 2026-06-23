@@ -53,6 +53,7 @@ public sealed class FasPaymentModule : IModule
         services.AddOptions<StripePaymentOptions>().BindConfiguration(StripePaymentOptions.SectionName);
         services.AddScoped<IPaymentCheckoutRepository, PaymentCheckoutRepository>();
         services.AddScoped<IEnrollmentRefundPreviewRepository, EnrollmentRefundPreviewRepository>();
+        services.AddScoped<IEnrollmentRefundProcessor, EnrollmentRefundProcessor>();
         services.AddScoped<IPaymentPersistenceTracker, PaymentPersistenceTracker>();
         services.AddScoped<IStripePaymentGateway, StripePaymentGateway>();
         services.AddScoped<ILegacyCoursePaymentGateway, LegacyCoursePaymentGateway>();
