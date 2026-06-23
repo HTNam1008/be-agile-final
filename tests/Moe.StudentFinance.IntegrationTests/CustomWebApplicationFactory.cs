@@ -83,6 +83,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.ManageAccounts, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -265,6 +273,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
                 new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
+                new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             ];
         if (!Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase))

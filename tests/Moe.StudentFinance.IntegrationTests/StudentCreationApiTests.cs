@@ -42,7 +42,6 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
 
         Person person = await db.Set<Person>().SingleAsync(x => x.Id == personId);
         SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
-        EducationAccount account = await db.Set<EducationAccount>().SingleAsync(x => x.PersonId == personId);
         object identifier = SingleEntity(
             db,
             "Moe.Modules.IdentityPlatform.Domain.People.PersonIdentifier",
@@ -53,12 +52,11 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         Assert.Equal(request.StudentNumber, enrollment.StudentNumber);
         Assert.Equal("IDENTITY_NUMBER", GetProperty(identifier, "IdentifierTypeCode"));
         Assert.Equal(request.IdentityNumber, GetProperty(identifier, "IdentifierMasked"));
-        Assert.Equal($"PSEA-{personId:D8}", account.AccountNumber);
-        Assert.Equal(0m, account.CachedBalance);
+        Assert.False(await db.Set<EducationAccount>().AnyAsync(x => x.PersonId == personId));
     }
 
     [Fact]
-    public async Task CreateStudent_Should_Always_Create_EducationAccount_Even_When_IsAccountHolder_Is_False()
+    public async Task CreateStudent_Should_Leave_Student_Without_EducationAccount_Even_When_IsAccountHolder_Is_False()
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
@@ -77,8 +75,40 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         using IServiceScope scope = factory.Services.CreateScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
 
+        Assert.False(await db.Set<EducationAccount>().AnyAsync(x => x.PersonId == personId));
+        Assert.False(AnyEntity(
+            db,
+            "Moe.Modules.IdentityPlatform.Domain.Audit.AuditLog",
+            x => (string)GetProperty(x, "ActionCode")! == AuditActionCodes.EducationAccountCreatedManually
+                && (string)GetProperty(x, "ChangedFieldsJson")! != null
+                && ((string)GetProperty(x, "ChangedFieldsJson")!).Contains($"\"personId\":{personId}")));
+    }
+
+    [Fact]
+    public async Task TwoStepCreation_Should_Create_Student_Then_Open_EducationAccount()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            identityNumber: $"Z{suffix[..7]}A",
+            studentNumber: $"IT-TWO-STEP-{suffix}");
+
+        using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
+            "/api/admin/v1/students",
+            request);
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        long personId = await ReadPersonIdAsync(createResponse);
+
+        using HttpResponseMessage openResponse = await OpenEducationAccountAsync(personId);
+
+        Assert.Equal(HttpStatusCode.Created, openResponse.StatusCode);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
         EducationAccount account = await db.Set<EducationAccount>().SingleAsync(x => x.PersonId == personId);
-        Assert.Equal($"PSEA-{personId:D8}", account.AccountNumber);
+        Assert.Equal("ACTIVE", account.StatusCode);
 
         object auditLog = SingleEntity(
             db,
@@ -88,6 +118,34 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
                 && (long?)GetProperty(x, "EntityId") == account.Id);
 
         Assert.Contains($"\"personId\":{personId}", (string)GetProperty(auditLog, "ChangedFieldsJson")!);
+    }
+
+    [Fact]
+    public async Task CreatedStudent_Should_Appear_In_NoAccount_Filter_When_Second_Step_Is_Not_Called()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        string studentNumber = $"IT-NO-ACCOUNT-{suffix}";
+        var request = CreateRequest(
+            schoolName: null,
+            identityNumber: $"K{suffix[..7]}A",
+            studentNumber: studentNumber);
+
+        using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
+            "/api/admin/v1/students",
+            request);
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        long personId = await ReadPersonIdAsync(createResponse);
+
+        string identitySearch = request.IdentityNumber[^4..];
+
+        using HttpResponseMessage listResponse = await _client.GetAsync(
+            $"/api/admin/v1/students?accountStatus=NoAccount&search={identitySearch}&page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        string body = await listResponse.Content.ReadAsStringAsync();
+        Assert.Contains($"\"personId\":{personId}", body);
+        Assert.Contains("NO_ACCOUNT", body);
     }
 
     [Fact]
@@ -307,6 +365,9 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         long personId = await ReadPersonIdAsync(createResponse);
 
+        using HttpResponseMessage openResponse = await OpenEducationAccountAsync(personId);
+        Assert.Equal(HttpStatusCode.Created, openResponse.StatusCode);
+
         EServiceLoginResolution login = await ResolveMockPassLoginAsync(
             request.IdentityNumber,
             request.FullName);
@@ -340,7 +401,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         await AssertStatusAsync(HttpStatusCode.OK, accountResponse);
         string accountBody = await accountResponse.Content.ReadAsStringAsync();
         Assert.Contains($"\"personId\":{personId}", accountBody);
-        Assert.Contains($"PSEA-{personId:D8}", accountBody);
+        Assert.Contains("\"accountNumber\"", accountBody);
         Assert.Contains("\"currentBalance\":0", accountBody);
 
         using HttpResponseMessage dashboardResponse = await SendEServiceGetAsync(
@@ -351,7 +412,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string dashboardBody = await dashboardResponse.Content.ReadAsStringAsync();
         Assert.Contains("Manual Student", dashboardBody);
         Assert.Contains("Demo Secondary School", dashboardBody);
-        Assert.Contains($"PSEA-{personId:D8}", dashboardBody);
+        Assert.Contains("\"educationAccount\"", dashboardBody);
         Assert.Contains("\"currentBalance\":0", dashboardBody);
     }
 
@@ -446,6 +507,18 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         return await _client.SendAsync(message);
     }
 
+    private async Task<HttpResponseMessage> OpenEducationAccountAsync(long personId)
+    {
+        return await _client.PostAsJsonAsync(
+            "/api/admin/v1/education-accounts",
+            new
+            {
+                personId,
+                reasonCode = "EXCEPTION",
+                remarks = "Manual integration test open account"
+            });
+    }
+
     private static async Task<long> ReadPersonIdAsync(HttpResponseMessage response)
     {
         using Stream stream = await response.Content.ReadAsStreamAsync();
@@ -500,6 +573,16 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         Type entityType = typeof(Person).Assembly.GetType(typeName, throwOnError: true)!;
         IQueryable query = CreateQueryable(db, entityType);
         return query.Cast<object>().Single(predicate);
+    }
+
+    private static bool AnyEntity(
+        MoeDbContext db,
+        string typeName,
+        Func<object, bool> predicate)
+    {
+        Type entityType = typeof(Person).Assembly.GetType(typeName, throwOnError: true)!;
+        IQueryable query = CreateQueryable(db, entityType);
+        return query.Cast<object>().Any(predicate);
     }
 
     private static IQueryable CreateQueryable(MoeDbContext db, Type entityType)

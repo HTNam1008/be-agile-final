@@ -3,7 +3,7 @@ using Moe.Application.Abstractions.Messaging;
 namespace Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 
 public sealed record CloseManualAccountCommand(
-    long PersonId,
+    long EducationAccountId,
     string ReasonCode,
     string? Remarks) : ICommand<CloseManualAccountResponse>;
 
