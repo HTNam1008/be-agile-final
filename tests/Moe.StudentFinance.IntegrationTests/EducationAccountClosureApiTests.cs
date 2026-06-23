@@ -22,7 +22,7 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
         (long personId, long accountId) = await SeedAccountAsync(organizationId: 1);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/students/{personId}/disable",
+            $"/api/admin/v1/education-accounts/{accountId}/close",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.OK, response);
@@ -34,16 +34,16 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
         Assert.Equal(AccountStatuses.Closed, account.StatusCode);
         Assert.Equal(EducationAccountClosingReasonCodes.StudentIneligible, account.ClosingReasonCode);
         Assert.Equal(1001, account.ClosedByLoginAccountId);
-        Assert.Equal("DISABLED", person.PersonStatusCode);
+        Assert.Equal("ACTIVE", person.PersonStatusCode);
     }
 
     [Fact]
     public async Task SchoolAdmin_Cannot_Close_OutOfScope_Education_Account()
     {
-        (long personId, _) = await SeedAccountAsync(organizationId: 2);
+        (_, long accountId) = await SeedAccountAsync(organizationId: 2);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/students/{personId}/disable",
+            $"/api/admin/v1/education-accounts/{accountId}/close",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.Forbidden, response);
@@ -54,10 +54,10 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
     [Fact]
     public async Task Close_Unknown_Education_Account_Returns_NotFound()
     {
-        long missingPersonId = Random.Shared.NextInt64(9_000_000, 9_999_999);
+        long missingAccountId = Random.Shared.NextInt64(9_000_000, 9_999_999);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/students/{missingPersonId}/disable",
+            $"/api/admin/v1/education-accounts/{missingAccountId}/close",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.NotFound, response);
@@ -68,10 +68,10 @@ public sealed class EducationAccountClosureApiTests(CustomWebApplicationFactory 
     [Fact]
     public async Task Close_AlreadyClosed_Education_Account_Returns_Conflict()
     {
-        (long personId, _) = await SeedAccountAsync(organizationId: 1, closed: true);
+        (_, long accountId) = await SeedAccountAsync(organizationId: 1, closed: true);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/students/{personId}/disable",
+            $"/api/admin/v1/education-accounts/{accountId}/close",
             CloseBody());
 
         await AssertStatusAsync(HttpStatusCode.Conflict, response);

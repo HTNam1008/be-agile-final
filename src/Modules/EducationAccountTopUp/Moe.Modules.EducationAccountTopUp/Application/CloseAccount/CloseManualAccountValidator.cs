@@ -7,7 +7,7 @@ public sealed class CloseManualAccountValidator : AbstractValidator<CloseManualA
 {
     public CloseManualAccountValidator()
     {
-        RuleFor(x => x.PersonId).GreaterThan(0);
+        RuleFor(x => x.EducationAccountId).GreaterThan(0);
         RuleFor(x => x.ReasonCode)
             .NotEmpty()
             .MaximumLength(50)
