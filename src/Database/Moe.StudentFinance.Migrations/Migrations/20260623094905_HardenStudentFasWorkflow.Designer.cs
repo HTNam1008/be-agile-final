@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Moe.StudentFinance.Persistence;
 
@@ -11,9 +12,11 @@ using Moe.StudentFinance.Persistence;
 namespace Moe.StudentFinance.Migrations.Migrations
 {
     [DbContext(typeof(MoeDbContext))]
-    partial class MoeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623094905_HardenStudentFasWorkflow")]
+    partial class HardenStudentFasWorkflow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1809,13 +1812,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("AccountHolderPersonId");
 
-                    b.Property<string>("AccountTypeCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("AccountTypeCode");
-
                     b.Property<string>("Address")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -1880,11 +1876,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<decimal?>("OtherMonthlyIncome")
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
-
-                    b.Property<string>("ParentNationalitiesJson")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)")
-                        .HasColumnName("ParentNationalitiesJson");
 
                     b.Property<decimal?>("PerCapitaIncome")
                         .HasPrecision(19, 2)
@@ -2468,9 +2459,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             t.HasCheckConstraint("CK_FASTierCriteria_Connector", "[ConnectorToNext] IS NULL OR [ConnectorToNext] IN ('AND','OR')");
 
-                            t.HasCheckConstraint("CK_FASTierCriteria_Range", "([CriteriaType] IN ('NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE') AND [NumberFrom] IS NULL AND [NumberTo] IS NULL) OR ([CriteriaType] NOT IN ('NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE') AND [NumberFrom] IS NOT NULL AND [NumberTo] IS NOT NULL AND [NumberFrom] <= [NumberTo])");
+                            t.HasCheckConstraint("CK_FASTierCriteria_Range", "([CriteriaType] = 'NATIONALITY' AND [NumberFrom] IS NULL AND [NumberTo] IS NULL) OR ([CriteriaType] <> 'NATIONALITY' AND [NumberFrom] IS NOT NULL AND [NumberTo] IS NOT NULL AND [NumberFrom] <= [NumberTo])");
 
-                            t.HasCheckConstraint("CK_FASTierCriteria_Type", "[CriteriaType] IN ('AGE','GDP','GHI','PCI','NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE')");
+                            t.HasCheckConstraint("CK_FASTierCriteria_Type", "[CriteriaType] IN ('AGE','GDP','PCI','NATIONALITY')");
                         });
                 });
 

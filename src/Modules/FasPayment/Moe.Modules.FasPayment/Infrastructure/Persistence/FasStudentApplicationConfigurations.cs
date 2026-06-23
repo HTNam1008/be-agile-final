@@ -1,0 +1,25 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Moe.Modules.FasPayment.Domain.Fas;
+
+namespace Moe.Modules.FasPayment.Infrastructure.Persistence;
+
+internal sealed class FasApplicationSchemeConfiguration : IEntityTypeConfiguration<FasApplicationScheme>
+{
+    public void Configure(EntityTypeBuilder<FasApplicationScheme> b)
+    {
+        b.ToTable("FASApplicationScheme","fas",t=>{t.HasCheckConstraint("CK_FASApplicationScheme_Status","[StatusCode] IN ('DRAFT','PENDING','APPROVED','REJECTED','CANCELLED','EXPIRED')");t.HasCheckConstraint("CK_FASApplicationScheme_RejectionNotes","[StatusCode] <> 'REJECTED' OR LEN(LTRIM(RTRIM([RejectionNotes]))) > 0");t.HasCheckConstraint("CK_FASApplicationScheme_Validity","[ValidFrom] IS NULL OR [ValidTo] IS NULL OR [ValidTo] >= [ValidFrom]");});
+        b.HasKey(x=>x.Id);b.Property(x=>x.Id).HasColumnName("FASApplicationSchemeId").UseIdentityColumn();b.HasIndex(x=>new{x.FasApplicationId,x.FasSchemeId}).IsUnique();b.Property(x=>x.StatusCode).HasMaxLength(30).IsUnicode(false);b.Property(x=>x.RejectionNotes).HasMaxLength(2000);b.Property(x=>x.ApprovedAmount).HasPrecision(18,2);b.HasOne<FasApplication>().WithMany().HasForeignKey(x=>x.FasApplicationId).OnDelete(DeleteBehavior.Cascade);b.HasOne<FasScheme>().WithMany().HasForeignKey(x=>x.FasSchemeId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+internal sealed class FasDocumentConfiguration : IEntityTypeConfiguration<FasDocument>
+{
+    public void Configure(EntityTypeBuilder<FasDocument>b)
+    {
+        b.ToTable("FASDocument","fas",t=>{t.HasCheckConstraint("CK_FASDocument_Type","[DocumentTypeCode] IN ('PAYSLIP','CPF_STATEMENT','NOA','WELFARE_LETTER','OTHER','INCOME_PROOF')");t.HasCheckConstraint("CK_FASDocument_Status","[UploadStatusCode] IN ('UPLOADED','REMOVED','SCAN_PENDING','SCAN_PASSED','SCAN_FAILED')");t.HasCheckConstraint("CK_FASDocument_Size","[FileSizeBytes] > 0 AND [FileSizeBytes] <= 10485760");});
+        b.HasKey(x=>x.Id);b.Property(x=>x.Id).HasColumnName("FASDocumentId").UseIdentityColumn();b.Property(x=>x.DocumentTypeCode).HasMaxLength(50).IsUnicode(false);b.Property(x=>x.ChecklistItemCode).HasMaxLength(100).IsUnicode(false);b.Property(x=>x.FileName).HasMaxLength(255);b.Property(x=>x.BlobKey).HasMaxLength(1000);b.Property(x=>x.MimeType).HasMaxLength(100).IsUnicode(false);b.Property(x=>x.UploadStatusCode).HasMaxLength(30).IsUnicode(false);b.HasIndex(x=>x.FasApplicationId);b.HasOne<FasApplication>().WithMany().HasForeignKey(x=>x.FasApplicationId).OnDelete(DeleteBehavior.Cascade);b.HasOne<FasDocument>().WithMany().HasForeignKey(x=>x.ReplacedByDocumentId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+internal sealed class FasDeclarationConfiguration:IEntityTypeConfiguration<FasDeclaration>{public void Configure(EntityTypeBuilder<FasDeclaration>b){b.ToTable("FASDeclaration","fas",t=>t.HasCheckConstraint("CK_FASDeclaration_Type","[DeclarationTypeCode] IN ('TRUE_AND_ACCURATE','ACCEPT_TERMS')"));b.HasKey(x=>x.Id);b.Property(x=>x.Id).HasColumnName("FASDeclarationId").UseIdentityColumn();b.Property(x=>x.DeclarationTypeCode).HasMaxLength(50).IsUnicode(false);b.HasIndex(x=>new{x.FasApplicationId,x.DeclarationTypeCode}).IsUnique();b.HasOne<FasApplication>().WithMany().HasForeignKey(x=>x.FasApplicationId).OnDelete(DeleteBehavior.Cascade);}}
+internal sealed class FasStatusHistoryConfiguration:IEntityTypeConfiguration<FasStatusHistory>{public void Configure(EntityTypeBuilder<FasStatusHistory>b){b.ToTable("FASStatusHistory","fas");b.HasKey(x=>x.Id);b.Property(x=>x.Id).HasColumnName("FASStatusHistoryId").UseIdentityColumn();b.Property(x=>x.NewStatusCode).HasMaxLength(30).IsUnicode(false);b.Property(x=>x.OldStatusCode).HasMaxLength(30).IsUnicode(false);b.Property(x=>x.ChangedByRole).HasMaxLength(30).IsUnicode(false);b.HasIndex(x=>x.FasApplicationId);b.HasIndex(x=>x.FasApplicationSchemeId);}}
+internal sealed class FasActiveSchemeConfiguration:IEntityTypeConfiguration<FasActiveScheme>{public void Configure(EntityTypeBuilder<FasActiveScheme>b){b.ToTable("FASActiveScheme","fas",t=>{t.HasCheckConstraint("CK_FASActiveScheme_Status","[StatusCode] IN ('ACTIVE','EXPIRED','DEACTIVATED')");t.HasCheckConstraint("CK_FASActiveScheme_Validity","[ActiveTo] >= [ActiveFrom]");});b.HasKey(x=>x.Id);b.Property(x=>x.Id).HasColumnName("FASActiveSchemeId").UseIdentityColumn();b.Property(x=>x.StatusCode).HasMaxLength(30).IsUnicode(false);b.Property(x=>x.DeactivatedReason).HasMaxLength(500);b.HasIndex(x=>x.StudentPersonId).IsUnique().HasFilter("[StatusCode] = 'ACTIVE'");b.HasIndex(x=>x.FasApplicationSchemeId).IsUnique();b.HasOne<FasApplicationScheme>().WithMany().HasForeignKey(x=>x.FasApplicationSchemeId).OnDelete(DeleteBehavior.Restrict);b.HasOne<FasScheme>().WithMany().HasForeignKey(x=>x.FasSchemeId).OnDelete(DeleteBehavior.Restrict);}}
