@@ -12,7 +12,9 @@ internal sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("BillId").UseIdentityColumn();
         builder.HasIndex(x => x.BillNumber).IsUnique();
-        builder.HasIndex(x => x.CourseEnrollmentId);
+        builder.HasIndex(x => new { x.CourseEnrollmentId, x.SequenceNumber })
+            .IsUnique()
+            .HasFilter("[BillStatusCode] <> 'CANCELLED'");
         builder.Property(x => x.BillNumber).HasMaxLength(50).IsRequired();
         builder.Property(x => x.IssuedAtUtc).HasColumnName("IssuedAt");
         builder.Property(x => x.GrossAmount).HasPrecision(19, 2);
@@ -20,6 +22,10 @@ internal sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
         builder.Property(x => x.NetPayableAmount).HasPrecision(19, 2);
         builder.Property(x => x.PaidAmount).HasPrecision(19, 2);
         builder.Property(x => x.OutstandingAmount).HasPrecision(19, 2);
+        builder.Property(x => x.DeferredAmount).HasPrecision(19, 2);
         builder.Property(x => x.BillStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
+        builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
+        builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }
