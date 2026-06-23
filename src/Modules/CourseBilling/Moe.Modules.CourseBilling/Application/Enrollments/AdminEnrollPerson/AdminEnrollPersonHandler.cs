@@ -88,7 +88,9 @@ internal sealed class AdminEnrollPersonHandler(
             command.CourseId,
             plan.CoursePaymentPlanId,
             actorId.Value,
-            utcNow);
+            utcNow,
+            course.BeforeStartRefundPercentage,
+            course.AfterStartRefundPercentage);
 
         if (enrollmentResult.IsFailure)
         {

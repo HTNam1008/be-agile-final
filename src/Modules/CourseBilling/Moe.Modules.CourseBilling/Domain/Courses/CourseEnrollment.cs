@@ -13,7 +13,9 @@ internal sealed class CourseEnrollment : Entity<long>
         long coursePaymentPlanId,
         string enrollmentSourceCode,
         long enrolledByLoginAccountId,
-        DateTime enrolledAtUtc) : base(0)
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage) : base(0)
     {
         PersonId = personId;
         CourseId = courseId;
@@ -21,6 +23,8 @@ internal sealed class CourseEnrollment : Entity<long>
         EnrollmentSourceCode = enrollmentSourceCode;
         EnrolledByLoginAccountId = enrolledByLoginAccountId;
         EnrolledAtUtc = enrolledAtUtc;
+        BeforeStartRefundPercentage = beforeStartRefundPercentage;
+        AfterStartRefundPercentage = afterStartRefundPercentage;
         EnrollmentStatusCode = CourseEnrollmentStatusCodes.PendingPayment;
     }
 
@@ -31,6 +35,8 @@ internal sealed class CourseEnrollment : Entity<long>
     public long EnrolledByLoginAccountId { get; private set; }
     public DateTime EnrolledAtUtc { get; private set; }
     public string EnrollmentStatusCode { get; private set; } = string.Empty;
+    public decimal BeforeStartRefundPercentage { get; private set; }
+    public decimal AfterStartRefundPercentage { get; private set; }
     public DateTime? ExitAtUtc { get; private set; }
     public string? ExitReasonCode { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
@@ -40,9 +46,17 @@ internal sealed class CourseEnrollment : Entity<long>
         long courseId,
         long coursePaymentPlanId,
         long adminLoginAccountId,
-        DateTime enrolledAtUtc)
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
     {
-        Result validation = ValidateEnrollment(personId, courseId, coursePaymentPlanId, adminLoginAccountId);
+        Result validation = ValidateEnrollment(
+            personId,
+            courseId,
+            coursePaymentPlanId,
+            adminLoginAccountId,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
         if (validation.IsFailure)
         {
             return Result<CourseEnrollment>.Failure(validation.Error);
@@ -54,7 +68,9 @@ internal sealed class CourseEnrollment : Entity<long>
             coursePaymentPlanId,
             CourseEnrollmentSourceCodes.AdminAdd,
             adminLoginAccountId,
-            enrolledAtUtc);
+            enrolledAtUtc,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
 
         return Result<CourseEnrollment>.Success(enrollment);
     }
@@ -64,9 +80,17 @@ internal sealed class CourseEnrollment : Entity<long>
         long courseId,
         long coursePaymentPlanId,
         long loginAccountId,
-        DateTime enrolledAtUtc)
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
     {
-        Result validation = ValidateEnrollment(personId, courseId, coursePaymentPlanId, loginAccountId);
+        Result validation = ValidateEnrollment(
+            personId,
+            courseId,
+            coursePaymentPlanId,
+            loginAccountId,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
         if (validation.IsFailure)
         {
             return Result<CourseEnrollment>.Failure(validation.Error);
@@ -78,7 +102,9 @@ internal sealed class CourseEnrollment : Entity<long>
             coursePaymentPlanId,
             CourseEnrollmentSourceCodes.SelfJoin,
             loginAccountId,
-            enrolledAtUtc);
+            enrolledAtUtc,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
 
         return Result<CourseEnrollment>.Success(enrollment);
     }
@@ -136,7 +162,9 @@ internal sealed class CourseEnrollment : Entity<long>
         long personId,
         long courseId,
         long coursePaymentPlanId,
-        long enrolledByLoginAccountId)
+        long enrolledByLoginAccountId,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
     {
         if (personId <= 0)
         {
@@ -156,6 +184,12 @@ internal sealed class CourseEnrollment : Entity<long>
         if (enrolledByLoginAccountId <= 0)
         {
             return Result.Failure(CourseBillingErrors.ActorRequired);
+        }
+
+        if (beforeStartRefundPercentage is < 0m or > 100m ||
+            afterStartRefundPercentage is < 0m or > 100m)
+        {
+            return Result.Failure(CourseErrors.InvalidRefundPercentage);
         }
 
         return Result.Success();

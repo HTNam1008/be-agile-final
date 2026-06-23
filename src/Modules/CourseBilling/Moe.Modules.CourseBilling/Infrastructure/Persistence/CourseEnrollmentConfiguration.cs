@@ -16,6 +16,8 @@ internal sealed class CourseEnrollmentConfiguration : IEntityTypeConfiguration<C
         builder.Property(x => x.EnrollmentSourceCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.EnrolledAtUtc).HasColumnName("EnrolledAt");
         builder.Property(x => x.EnrollmentStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.BeforeStartRefundPercentage).HasPrecision(5, 2).IsRequired();
+        builder.Property(x => x.AfterStartRefundPercentage).HasPrecision(5, 2).IsRequired();
         builder.Property(x => x.ExitAtUtc).HasColumnName("ExitAt");
         builder.Property(x => x.ExitReasonCode).HasMaxLength(50).IsUnicode(false);
         builder.Property(x => x.RowVersion).IsRowVersion();
