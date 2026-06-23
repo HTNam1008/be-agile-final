@@ -336,6 +336,34 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         Assert.Single(choosePlanData.GetProperty("generatedBills").EnumerateArray());
     }
 
+    [Fact]
+    public async Task Publishing_Course_Does_Not_Issue_Bill_For_Admin_Added_Student_Waiting_For_Plan()
+    {
+        StudentLogin login = await CreateStudentAndLoginAsync();
+        long courseId = await CreateDraftCourseWithFeeAsync(1, $"PUBLISH-NOPLAN-{NewSuffix()}");
+
+        using HttpRequestMessage adminAdd = HqAdminMessage(
+            HttpMethod.Post,
+            $"/api/admin/v1/courses/{courseId}/enrollments");
+        adminAdd.Content = JsonContent.Create(new { studentNumber = login.StudentNumber });
+        using HttpResponseMessage adminAddResponse = await _client.SendAsync(adminAdd);
+        await AssertStatusAsync(HttpStatusCode.Created, adminAddResponse);
+        long enrollmentId = (await ReadDataElementAsync(adminAddResponse))
+            .GetProperty("courseEnrollmentId")
+            .GetInt64();
+
+        using HttpRequestMessage publish = HqAdminMessage(HttpMethod.Post, $"/api/admin/v1/courses/{courseId}/publish");
+        using HttpResponseMessage publishResponse = await _client.SendAsync(publish);
+        await AssertStatusAsync(HttpStatusCode.OK, publishResponse);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == enrollmentId);
+        Assert.Equal(CourseEnrollmentStatusCodes.PendingPlanSelection, enrollment.EnrollmentStatusCode);
+        Assert.Null(enrollment.CoursePaymentPlanId);
+        Assert.Empty(await db.Set<Bill>().Where(x => x.CourseEnrollmentId == enrollmentId).ToArrayAsync());
+    }
+
     private async Task<long> CreatePublishedCourseAsync(long organizationId, string courseCode)
     {
         long courseId = await CreateDraftCourseWithFeeAsync(organizationId, courseCode);

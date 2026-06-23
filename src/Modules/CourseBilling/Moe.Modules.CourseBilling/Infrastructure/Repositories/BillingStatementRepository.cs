@@ -38,6 +38,7 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
             join course in dbContext.Set<Course>()
                 on enrollment.CourseId equals course.Id
             where enrollment.PersonId == personId
+                && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.PendingPlanSelection
                 && bill.CurrentDueDate >= monthStart
                 && bill.CurrentDueDate < monthEnd
                 && bill.OutstandingAmount > 0m

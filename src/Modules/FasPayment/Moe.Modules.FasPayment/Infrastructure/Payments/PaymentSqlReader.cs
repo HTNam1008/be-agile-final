@@ -46,8 +46,9 @@ internal static class PaymentSqlReader
                     ON enrollment.[CourseEnrollmentId] = bill.[CourseEnrollmentId]
                 INNER JOIN [course].[Course] course
                     ON course.[CourseId] = enrollment.[CourseId]
-                WHERE enrollment.[PersonId] = {personId}
-                  AND bill.[OutstandingAmount] > 0
+                  WHERE enrollment.[PersonId] = {personId}
+                   AND enrollment.[EnrollmentStatusCode] <> 'PENDING_PLAN_SELECTION'
+                   AND bill.[OutstandingAmount] > 0
                   AND bill.[BillStatusCode] NOT IN ('PAID', 'CANCELLED')
                 ORDER BY bill.[DueDate], bill.[IssuedAt]
                 """)
@@ -71,8 +72,9 @@ internal static class PaymentSqlReader
                         ON bill.[BillId] = line.[BillId]
                     INNER JOIN [course].[CourseEnrollment] enrollment
                         ON enrollment.[CourseEnrollmentId] = bill.[CourseEnrollmentId]
-                    WHERE enrollment.[PersonId] = {personId}
-                      AND bill.[OutstandingAmount] > 0
+                      WHERE enrollment.[PersonId] = {personId}
+                       AND enrollment.[EnrollmentStatusCode] <> 'PENDING_PLAN_SELECTION'
+                       AND bill.[OutstandingAmount] > 0
                       AND bill.[BillStatusCode] NOT IN ('PAID', 'CANCELLED')
                     ORDER BY line.[BillId], line.[BillLineId]
                     """)
