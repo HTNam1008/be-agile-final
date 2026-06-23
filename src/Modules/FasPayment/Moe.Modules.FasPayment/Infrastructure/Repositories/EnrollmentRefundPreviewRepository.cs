@@ -47,22 +47,45 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
             select new
             {
                 allocation.AllocatedAmount,
+                payment.Id,
                 payment.PaymentAmount,
                 payment.EducationAccountAmount,
-                payment.OnlinePaymentAmount
+                payment.OnlinePaymentAmount,
+                payment.ProviderChargeId
             }).ToArrayAsync(cancellationToken);
 
         decimal paid = 0m;
         decimal educationPaid = 0m;
         decimal onlinePaid = 0m;
+        List<EnrollmentPaymentRefundSource> sources = [];
         foreach (var row in rows)
         {
             if (row.PaymentAmount <= 0m)
                 continue;
 
+            decimal educationAllocated = Money(
+                row.AllocatedAmount * row.EducationAccountAmount / row.PaymentAmount);
+            decimal onlineAllocated = Money(
+                row.AllocatedAmount * row.OnlinePaymentAmount / row.PaymentAmount);
+            PaymentPart? educationPart = row.EducationAccountAmount > 0m
+                ? await dbContext.Set<PaymentPart>().AsNoTracking()
+                    .SingleOrDefaultAsync(
+                        x => x.PaymentId == row.Id
+                            && x.PaymentMethodCode == PaymentMethodCodes.EducationAccount,
+                        cancellationToken)
+                : null;
+
             paid += row.AllocatedAmount;
-            educationPaid += row.AllocatedAmount * row.EducationAccountAmount / row.PaymentAmount;
-            onlinePaid += row.AllocatedAmount * row.OnlinePaymentAmount / row.PaymentAmount;
+            educationPaid += educationAllocated;
+            onlinePaid += onlineAllocated;
+            sources.Add(new(
+                row.Id,
+                educationPart?.Id,
+                educationPart?.AccountTransactionId,
+                row.ProviderChargeId,
+                Money(row.AllocatedAmount),
+                educationAllocated,
+                onlineAllocated));
         }
 
         return new(
@@ -70,7 +93,8 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
             course,
             Money(paid),
             Money(educationPaid),
-            Money(onlinePaid));
+            Money(onlinePaid),
+            sources);
     }
 
     private static decimal Money(decimal amount)
