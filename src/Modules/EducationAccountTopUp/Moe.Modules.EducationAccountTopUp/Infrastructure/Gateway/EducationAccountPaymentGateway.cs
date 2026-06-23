@@ -97,6 +97,46 @@ internal sealed class EducationAccountPaymentGateway(MoeDbContext dbContext)
         return transaction.Id;
     }
 
+    public async Task<long> CreditRefundAsync(
+        long personId,
+        long refundReferenceId,
+        decimal amount,
+        long? reversalOfTransactionId,
+        string idempotencyKey,
+        long? actorLoginAccountId,
+        CancellationToken cancellationToken)
+    {
+        if (refundReferenceId <= 0 || amount <= 0m || string.IsNullOrWhiteSpace(idempotencyKey))
+            throw new ArgumentOutOfRangeException(nameof(amount));
+
+        AccountTransaction? existing = await dbContext.Set<AccountTransaction>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.IdempotencyKey == idempotencyKey,
+                cancellationToken);
+        if (existing is not null)
+            return existing.Id;
+
+        EducationAccount account = await ActiveAccount(personId, cancellationToken);
+        DateTime now = DateTime.UtcNow;
+        AccountTransaction transaction = AccountTransaction.Create(
+            account.Id,
+            "REFUND",
+            amount,
+            "ENROLLMENT_REFUND",
+            refundReferenceId,
+            idempotencyKey,
+            account.CachedBalance,
+            "Course enrollment refund",
+            actorLoginAccountId,
+            now,
+            reversalOfTransactionId);
+        account.UpdateBalance(amount);
+        await dbContext.Set<AccountTransaction>().AddAsync(transaction, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return transaction.Id;
+    }
+
     private Task<EducationAccount> ActiveAccount(long personId, CancellationToken cancellationToken)
         => dbContext.Set<EducationAccount>().SingleAsync(
             x => x.PersonId == personId && x.StatusCode == AccountStatuses.Active,
