@@ -78,6 +78,8 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
                 x.EndDate,
                 x.EnrollmentOpenAtUtc,
                 x.EnrollmentCloseAtUtc,
+                x.BeforeStartRefundPercentage,
+                x.AfterStartRefundPercentage,
                 x.CourseStatusCode,
                 dbContext.Set<CourseFee>()
                     .Where(fee => fee.CourseId == x.Id && fee.IsActive)
