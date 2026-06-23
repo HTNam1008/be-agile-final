@@ -1,7 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Asp.Versioning;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
@@ -20,6 +22,7 @@ using NSwag.Generation.Processors.Security;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
@@ -34,6 +37,16 @@ IModule[] modules =
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddSingleton<IReadOnlyCollection<IModule>>(modules);
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("PaymentCheckout", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+});
 
 builder.Services.AddControllers(options =>
     {
@@ -114,6 +127,9 @@ builder.Services.AddOpenApiDocument(settings =>
 });
 
 var app = builder.Build();
+app.Logger.LogInformation(
+    "Data Protection keys are persisted to {DataProtectionKeysPath}",
+    Moe.Infrastructure.Shared.DependencyInjection.ResolveDataProtectionKeysDirectory().FullName);
 
 using (var scope = app.Services.CreateScope())
 {
@@ -130,6 +146,12 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
     app.UseOpenApi();
     app.UseSwaggerUi(settings => settings.Path = "/swagger");
 }
+
+//app.MapGet("/", () => Results.Ok(new
+//{
+//    service = "MOE Student Finance API",
+//    status = "running"
+//})).AllowAnonymous();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
 
@@ -190,6 +212,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseRouting();
 app.UseCors();
+app.UseRateLimiter();
 app.UseSharedInfrastructure();
 app.MapControllers();
 app.MapHealthChecks("/health/ready");

@@ -17,5 +17,10 @@ public sealed class FasPaymentModelConfiguration : IModelConfigurationContributo
         modelBuilder.ApplyConfiguration(new FasTierCriteriaNationalityConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentPartConfiguration());
+        modelBuilder.ApplyConfiguration(new PaymentAllocationConfiguration());
+        modelBuilder.ApplyConfiguration(new CoursePaymentPlanConfiguration());
+        modelBuilder.ApplyConfiguration(new PaymentCheckoutSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new ProcessedPaymentWebhookEventConfiguration());
+        modelBuilder.ApplyConfiguration(new PaymentRefundConfiguration());
     }
 }

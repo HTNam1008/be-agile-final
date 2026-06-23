@@ -1,5 +1,7 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.Application.AdminCourses.Courses;
+using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.Infrastructure.Security;
@@ -84,6 +86,57 @@ internal sealed class AdminCourseAccess(
         return course.Value.IsDisabled
             ? Result<Course>.Failure(CourseErrors.CourseDisabled)
             : course;
+    }
+
+    public async Task<Result<CourseDetailDto>> LoadCourseDetailAsync(
+        long courseId,
+        CancellationToken cancellationToken)
+    {
+        CourseAggregate? aggregate = await courses.GetCourseAggregateAsync(courseId, cancellationToken);
+        return aggregate is null
+            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
+            : Result<CourseDetailDto>.Success(CourseMapper.ToDetail(aggregate));
+    }
+
+    public async Task<Result<CourseDetailDto>> SetCourseEnabledStateAsync(
+        long courseId,
+        bool enabled,
+        CancellationToken cancellationToken)
+    {
+        Result admin = RequireAdmin();
+        if (admin.IsFailure)
+        {
+            return Result<CourseDetailDto>.Failure(admin.Error);
+        }
+
+        Course? course = await courses.FindCourseAsync(courseId, cancellationToken);
+        if (course is null)
+        {
+            return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
+        }
+
+        if (!CanAccessOrganization(course.OrganizationId))
+        {
+            return Result<CourseDetailDto>.Failure(OrganizationForbidden());
+        }
+
+        if (currentUser.UserAccountId is not long actorId)
+        {
+            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
+        }
+
+        if (enabled)
+        {
+            course.Enable(actorId, UtcNow());
+        }
+        else
+        {
+            course.Disable(actorId, UtcNow());
+        }
+
+        await courses.SaveCourseAsync(course, cancellationToken);
+
+        return await LoadCourseDetailAsync(courseId, cancellationToken);
     }
 
     public async Task<Result> ValidateCourseInputAsync(
