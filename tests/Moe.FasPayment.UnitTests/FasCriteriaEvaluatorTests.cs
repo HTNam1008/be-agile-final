@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using FluentAssertions;
 using Moe.Modules.FasPayment.Application;
 using Moe.Modules.FasPayment.Domain.Fas;
@@ -11,12 +13,20 @@ public class FasCriteriaEvaluatorTests
 {
     private readonly FasCriteriaEvaluator _evaluator = new FasCriteriaEvaluator();
 
+    private static FasTierCriteria CreateCriteria(long id, string type, decimal? from, decimal? to, string? connector, int displayOrder)
+    {
+        var criteria = FasTierCriteria.Create(1, type, from, to, connector, displayOrder, DateTime.UtcNow);
+        var property = typeof(FasTierCriteria).BaseType?.GetProperty("Id");
+        property?.SetValue(criteria, id);
+        return criteria;
+    }
+
     [Fact]
     public void Evaluate_AgeInRange_ShouldReturnTrue()
     {
         var criteria = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "AGE", NumberFrom = 13, NumberTo = 18 }
+            CreateCriteria(1, "AGE", 13, 18, null, 1)
         };
         var lookup = Enumerable.Empty<string>().ToLookup(x => 1L);
 
@@ -34,7 +44,7 @@ public class FasCriteriaEvaluatorTests
     {
         var criteria = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "AGE", NumberFrom = 13, NumberTo = 18 }
+            CreateCriteria(1, "AGE", 13, 18, null, 1)
         };
         var lookup = Enumerable.Empty<string>().ToLookup(x => 1L);
 
@@ -48,7 +58,7 @@ public class FasCriteriaEvaluatorTests
     {
         var criteria = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "GDP", NumberFrom = 0, NumberTo = 3000 }
+            CreateCriteria(1, "GDP", 0, 3000, null, 1)
         };
         var lookup = Enumerable.Empty<string>().ToLookup(x => 1L);
 
@@ -66,7 +76,7 @@ public class FasCriteriaEvaluatorTests
     {
         var criteria = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "NATIONALITY" }
+            CreateCriteria(1, "NATIONALITY", null, null, null, 1)
         };
         var lookup = new[] { new { Id = 1L, Nat = "Singapore Citizen" }, new { Id = 1L, Nat = "PR" } }
             .ToLookup(x => x.Id, x => x.Nat);
@@ -84,8 +94,8 @@ public class FasCriteriaEvaluatorTests
         // [AGE AND NATIONALITY]
         var criteriaAnd = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "AGE", NumberFrom = 13, NumberTo = 18, ConnectorToNext = "AND" },
-            new FasTierCriteria(2) { CriteriaType = "NATIONALITY" }
+            CreateCriteria(1, "AGE", 13, 18, "AND", 1),
+            CreateCriteria(2, "NATIONALITY", null, null, null, 2)
         };
         var lookupAnd = new[] { new { Id = 2L, Nat = "Singapore Citizen" } }.ToLookup(x => x.Id, x => x.Nat);
 
@@ -95,8 +105,8 @@ public class FasCriteriaEvaluatorTests
         // [AGE OR NATIONALITY]
         var criteriaOr = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "AGE", NumberFrom = 13, NumberTo = 18, ConnectorToNext = "OR" },
-            new FasTierCriteria(2) { CriteriaType = "NATIONALITY" }
+            CreateCriteria(1, "AGE", 13, 18, "OR", 1),
+            CreateCriteria(2, "NATIONALITY", null, null, null, 2)
         };
         var lookupOr = new[] { new { Id = 2L, Nat = "Singapore Citizen" } }.ToLookup(x => x.Id, x => x.Nat);
 
@@ -106,9 +116,9 @@ public class FasCriteriaEvaluatorTests
         // [A OR B AND C] left to right = ((A OR B) AND C)
         var criteriaComplex = new List<FasTierCriteria>
         {
-            new FasTierCriteria(1) { CriteriaType = "AGE", NumberFrom = 13, NumberTo = 18, ConnectorToNext = "OR" },
-            new FasTierCriteria(2) { CriteriaType = "GDP", NumberFrom = 0, NumberTo = 3000, ConnectorToNext = "AND" },
-            new FasTierCriteria(3) { CriteriaType = "NATIONALITY" }
+            CreateCriteria(1, "AGE", 13, 18, "OR", 1),
+            CreateCriteria(2, "GDP", 0, 3000, "AND", 2),
+            CreateCriteria(3, "NATIONALITY", null, null, null, 3)
         };
         var lookupComplex = new[] { new { Id = 3L, Nat = "Singapore Citizen" } }.ToLookup(x => x.Id, x => x.Nat);
 

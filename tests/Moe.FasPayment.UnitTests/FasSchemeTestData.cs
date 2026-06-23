@@ -12,7 +12,17 @@ internal static class FasSchemeTestData
         new DateOnly(2026, 1, 1),
         new DateOnly(2026, 12, 31),
         [],
-        "PERCENTAGE",
-        [new("AGE", "AND", 1), new("NATIONALITY", null, 2)],
-        [new("Full", 100, 1, [new(1, 13, 18, null), new(2, null, null, ["Singapore Citizen"])])]);
+        [
+            new CreateFasTierRequest(
+                "Full", 
+                "PERCENTAGE", 
+                100, 
+                1, 
+                [
+                    new FasTierCriteriaRequest("AGE", 13, 18, null, "AND", 1),
+                    new FasTierCriteriaRequest("NATIONALITY", null, null, ["Singapore Citizen"], null, 2)
+                ]
+            )
+        ]
+    );
 }
