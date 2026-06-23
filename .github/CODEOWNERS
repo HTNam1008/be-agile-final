@@ -1,0 +1,8 @@
+*                                                   @moe-team/tech-leads
+/src/Modules/IdentityStudent/                       @moe-team/identity-student
+/src/Modules/AccountFunding/                        @moe-team/account-funding
+/src/Modules/AcademicFinance/                       @moe-team/academic-finance
+/src/Modules/PaymentsDigital/                       @moe-team/payments-digital
+/src/Shared/                                        @moe-team/tech-leads
+/src/Database/Moe.StudentFinance.Migrations/        @moe-team/database-reviewers
+/src/Hosts/                                         @moe-team/tech-leads

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Asp.Versioning.Mvc" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Moe.Application.Abstractions\Moe.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Moe.Infrastructure.Shared\Moe.Infrastructure.Shared.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Moe.SharedKernel\Moe.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
+    <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
+    <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
+    <InternalsVisibleTo Include="Moe.Modules.FasPayment" />
+  </ItemGroup>
+</Project>

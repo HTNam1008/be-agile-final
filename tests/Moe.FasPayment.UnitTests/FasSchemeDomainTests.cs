@@ -1,0 +1,60 @@
+using FluentAssertions;
+using Moe.Modules.FasPayment.Domain.Fas;
+using Xunit;
+
+namespace Moe.FasPayment.UnitTests;
+
+public sealed class FasSchemeDomainTests
+{
+    private static readonly DateTime Now = new(2026, 6, 22, 10, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void CreateDraft_requires_codes_name_and_valid_dates()
+    {
+        Action emptyGrant = () => FasScheme.CreateDraft("S", " ", "Name", null, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), 1, Now);
+        Action reversed = () => FasScheme.CreateDraft("S", "G", "Name", null, new DateOnly(2026, 12, 31), new DateOnly(2026, 1, 1), 1, Now);
+        emptyGrant.Should().Throw<ArgumentException>();
+        reversed.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Scheme_follows_draft_active_retired_lifecycle()
+    {
+        FasScheme scheme = FasScheme.CreateDraft("S", "G", "Name", null, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), 1, Now);
+        scheme.Activate(2, Now.AddMinutes(1));
+        scheme.StatusCode.Should().Be("ACTIVE");
+        Action activateTwice = () => scheme.Activate(2, Now);
+        activateTwice.Should().Throw<InvalidOperationException>();
+        scheme.Retire(3, Now.AddMinutes(2));
+        scheme.StatusCode.Should().Be("RETIRED");
+    }
+
+    [Theory]
+    [InlineData("PERCENTAGE", 100)]
+    [InlineData("FIXED", 0)]
+    public void Tier_accepts_valid_subsidies(string type, decimal value)
+        => FasTier.Create(1, "Tier", type, value, 1, Now).SubsidyValue.Should().Be(value);
+
+    [Fact]
+    public void Tier_rejects_percentage_over_100_and_negative_fixed()
+    {
+        ((Action)(() => FasTier.Create(1, "Tier", "PERCENTAGE", 101, 1, Now))).Should().Throw<ArgumentOutOfRangeException>();
+        ((Action)(() => FasTier.Create(1, "Tier", "FIXED", -1, 1, Now))).Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void Criteria_enforces_numeric_and_nationality_shapes()
+    {
+        FasTierCriteria.Create(1, "AGE", 13, 18, null, 1, Now).CriteriaType.Should().Be("AGE");
+        FasTierCriteria.Create(1, "NATIONALITY", null, null, null, 1, Now).CriteriaType.Should().Be("NATIONALITY");
+        ((Action)(() => FasTierCriteria.Create(1, "AGE", null, 18, null, 1, Now))).Should().Throw<ArgumentException>();
+        ((Action)(() => FasTierCriteria.Create(1, "NATIONALITY", 1, null, null, 1, Now))).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Rejection_requires_a_reason()
+    {
+        ((Action)(() => FasApplicationReviewDecision.CreateRejection(1, 2, " ", null, Now))).Should().Throw<ArgumentException>();
+        FasApplicationReviewDecision.CreateApproval(1, 2, null, Now).Decision.Should().Be("APPROVED");
+    }
+}

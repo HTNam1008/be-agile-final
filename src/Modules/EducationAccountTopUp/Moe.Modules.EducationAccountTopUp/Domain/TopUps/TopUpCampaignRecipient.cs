@@ -1,0 +1,38 @@
+using Moe.SharedKernel.Domain;
+
+namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+
+public sealed class TopUpCampaignRecipient : Entity<long>
+{
+    private TopUpCampaignRecipient() : base(0) { }
+
+    public long TopUpCampaignId { get; private set; }
+    public long EducationAccountId { get; private set; }
+    public decimal? AmountOverride { get; private set; }
+    public bool IsActive { get; private set; }
+    public long AddedByLoginAccountId { get; private set; }
+    public DateTime AddedAtUtc { get; private set; }
+
+    public static TopUpCampaignRecipient Create(
+        long topUpCampaignId,
+        long educationAccountId,
+        decimal? amountOverride,
+        long currentUserId,
+        DateTime nowUtc)
+    {
+        return new TopUpCampaignRecipient
+        {
+            TopUpCampaignId = topUpCampaignId,
+            EducationAccountId = educationAccountId,
+            AmountOverride = amountOverride,
+            IsActive = true,
+            AddedByLoginAccountId = currentUserId,
+            AddedAtUtc = nowUtc
+        };
+    }
+
+    public void UpdateAmountOverride(decimal? amountOverride)
+    {
+        AmountOverride = amountOverride;
+    }
+}
