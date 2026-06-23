@@ -164,6 +164,11 @@ internal sealed class ProcessStripeWebhookHandler(
         }
         PaymentPart onlinePart = parts.Single(x => x.PaymentMethodCode == PaymentMethodCodes.OnlinePayment);
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Successful, webhook.CreatedAtUtc);
+        payment.AttachProviderReferences(
+            webhook.ProviderPaymentIntentId,
+            webhook.ProviderInvoiceId,
+            webhook.ProviderChargeId,
+            webhook.CreatedAtUtc);
         IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken);
         foreach (PaymentAllocation allocation in allocations) allocation.MarkApplied();
         await courses.ApplyStatementPaymentAsync(

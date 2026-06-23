@@ -28,11 +28,20 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
         CourseEnrollment? enrollment = await enrollments.FindEnrollmentAsync(command.EnrollmentId, personId, ct);
         if (enrollment is null)
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseNotFound);
+        if (enrollment.EnrollmentStatusCode is not (
+            CourseEnrollmentStatusCodes.PendingPlanSelection or
+            CourseEnrollmentStatusCodes.PendingPayment or
+            CourseEnrollmentStatusCodes.PaymentPastDue))
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PaymentPlanChangeNotAllowed);
+        }
         CourseBillingPlan? plan = await plans.FindPlanAsync(command.PaymentPlanId, ct);
         if (plan is null || !plan.IsActive || plan.CourseId != enrollment.CourseId)
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PaymentPlanNotFound);
         IReadOnlyCollection<CourseFeeBillingLine> fees =
             await enrollments.ListActiveCourseFeesAsync(enrollment.CourseId, ct);
+        if (fees.Count == 0)
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
         DateTime now = clock.UtcNow.UtcDateTime;
         bool installment = plan.PlanTypeCode == "INSTALLMENT";
         DateOnly dueDate = installment

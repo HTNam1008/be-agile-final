@@ -54,7 +54,9 @@ internal sealed class CreateCourseCommandHandler(AdminCourseAccess access)
             request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             actorId,
-            utcNow);
+            utcNow,
+            request.BeforeStartRefundPercentage,
+            request.AfterStartRefundPercentage);
 
         await access.Courses.AddCourseAsync(course, cancellationToken);
         return await access.LoadCourseDetailAsync(course.Id, cancellationToken);
@@ -111,6 +113,7 @@ internal sealed class UpdateCourseCommandHandler(AdminCourseAccess access)
             return Result<CourseDetailDto>.Failure(validation.Error);
         }
 
+        DateTime utcNow = access.UtcNow();
         course.Update(
             request.CourseCode,
             request.CourseName,
@@ -120,7 +123,17 @@ internal sealed class UpdateCourseCommandHandler(AdminCourseAccess access)
             request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             actorId,
-            access.UtcNow());
+            utcNow);
+
+        Result refundPolicy = course.UpdateRefundPolicy(
+            request.BeforeStartRefundPercentage,
+            request.AfterStartRefundPercentage,
+            actorId,
+            utcNow);
+        if (refundPolicy.IsFailure)
+        {
+            return Result<CourseDetailDto>.Failure(refundPolicy.Error);
+        }
 
         await access.Courses.SaveCourseAsync(course, cancellationToken);
         return await access.LoadCourseDetailAsync(command.CourseId, cancellationToken);
