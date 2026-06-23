@@ -98,6 +98,8 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>, DownloadStudentCourseMaterialHandler>();
         services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentDashboardQuery, StudentDashboardResponse>, GetStudentDashboardHandler>();
+        services.AddScoped<IQueryHandler<GetStudentDashboardSummaryQuery, StudentDashboardSummaryResponse>, GetStudentDashboardSummaryHandler>();
+        services.AddScoped<IQueryHandler<GetStudentCoursesQuery, StudentCoursesResponse>, GetStudentCoursesHandler>();
         services.AddScoped<IQueryHandler<GetBillingStatementQuery, BillingStatementResponse>, GetBillingStatementHandler>();
 
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();

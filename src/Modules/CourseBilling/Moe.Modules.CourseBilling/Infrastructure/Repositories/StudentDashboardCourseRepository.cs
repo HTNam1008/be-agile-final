@@ -8,6 +8,15 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
 internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) : IStudentDashboardCourseRepository
 {
+    public async Task<int> CountCurrentCoursesAsync(
+        long personId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Set<CourseEnrollment>()
+            .AsNoTracking()
+            .CountAsync(x => x.PersonId == personId && x.ExitAtUtc == null, cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<StudentDashboardCourseSummary>> ListCurrentCoursesAsync(
         long personId,
         string? search,
