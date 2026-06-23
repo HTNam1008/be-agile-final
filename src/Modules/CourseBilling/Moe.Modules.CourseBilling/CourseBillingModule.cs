@@ -18,6 +18,7 @@ using Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetStudentDashboard;
 using Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
+using Moe.Modules.CourseBilling.Application.Enrollments.CourseContent;
 using Moe.Modules.CourseBilling.Application.BillingStatements;
 using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
@@ -52,6 +53,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
         services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
         services.AddScoped<IStudentDashboardCourseRepository, StudentDashboardCourseRepository>();
+        services.AddScoped<IStudentCourseContentRepository, StudentCourseContentRepository>();
         services.AddScoped<ICourseReferenceDirectory, CourseReferenceDirectory>();
         services.AddScoped<IBillingStatementRepository, BillingStatementRepository>();
         services.AddScoped<AdminCourseAccess>();
@@ -92,6 +94,8 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>, AdminEnrollPersonHandler>();
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
         services.AddScoped<ICommandHandler<ChangeEnrollmentPaymentPlanCommand, CourseEnrollmentResponse>, ChangeEnrollmentPaymentPlanHandler>();
+        services.AddScoped<IQueryHandler<GetStudentCourseContentQuery, StudentCourseContentResponse>, GetStudentCourseContentHandler>();
+        services.AddScoped<IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>, DownloadStudentCourseMaterialHandler>();
         services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentDashboardQuery, StudentDashboardResponse>, GetStudentDashboardHandler>();
         services.AddScoped<IQueryHandler<GetBillingStatementQuery, BillingStatementResponse>, GetBillingStatementHandler>();

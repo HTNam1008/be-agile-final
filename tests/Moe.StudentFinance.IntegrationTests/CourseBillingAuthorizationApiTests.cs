@@ -208,6 +208,26 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         Assert.Contains("COURSE.NOT_PUBLISHED", await response.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Student_Cannot_View_Course_Content_Before_Start_Date()
+    {
+        StudentLogin login = await CreateStudentAndLoginAsync();
+        long courseId = await CreatePublishedCourseAsync(1, $"CONTENT-{NewSuffix()}");
+        using HttpResponseMessage joinResponse = await SendEServiceJoinAsync(courseId, login);
+        await AssertStatusAsync(HttpStatusCode.Created, joinResponse);
+        long enrollmentId = await ReadLongAsync(joinResponse, "courseEnrollmentId");
+
+        using HttpRequestMessage request = new(
+            HttpMethod.Get,
+            $"/api/eservice/v1/course-enrollments/{enrollmentId}/content");
+        request.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        request.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        using HttpResponseMessage response = await _client.SendAsync(request);
+
+        await AssertStatusAsync(HttpStatusCode.Conflict, response);
+        Assert.Contains("COURSE.CONTENT_NOT_OPEN", await response.Content.ReadAsStringAsync());
+    }
+
     private async Task<long> CreatePublishedCourseAsync(long organizationId, string courseCode)
     {
         long courseId = await CreateDraftCourseWithFeeAsync(organizationId, courseCode);

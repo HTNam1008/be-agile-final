@@ -1,4 +1,5 @@
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.Application.Enrollments.CourseContent;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -48,6 +49,42 @@ public sealed class CourseRefundPolicyDomainTests
         Assert.Equal(CourseErrors.InvalidRefundPercentage, result.Error);
     }
 
+    [Fact]
+    public void Course_Content_Remains_Locked_Until_Start_Date()
+    {
+        Course course = CreateCourse();
+        CourseEnrollment enrollment = CreateActiveEnrollment(course);
+
+        var result = CourseContentAccessPolicy.Check(enrollment, course, new DateOnly(2026, 7, 31));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(CourseBillingErrors.CourseContentNotOpen, result.Error);
+    }
+
+    [Fact]
+    public void Course_Content_Opens_On_Start_Date_For_Active_Enrollment()
+    {
+        Course course = CreateCourse();
+        CourseEnrollment enrollment = CreateActiveEnrollment(course);
+
+        var result = CourseContentAccessPolicy.Check(enrollment, course, course.StartDate);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public void Course_Content_Stays_Locked_For_Pending_Payment()
+    {
+        Course course = CreateCourse();
+        CourseEnrollment enrollment = CourseEnrollment.JoinSelf(
+            1, 2, 3, 4, DateTime.UtcNow, 100m, 50m).Value;
+
+        var result = CourseContentAccessPolicy.Check(enrollment, course, course.StartDate);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(CourseBillingErrors.CourseContentLocked, result.Error);
+    }
+
     private static Course CreateCourse()
         => new(
             1,
@@ -60,4 +97,12 @@ public sealed class CourseRefundPolicyDomainTests
             new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc),
             10,
             new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+    private static CourseEnrollment CreateActiveEnrollment(Course course)
+    {
+        CourseEnrollment enrollment = CourseEnrollment.JoinSelf(
+            1, course.Id == 0 ? 2 : course.Id, 3, 4, DateTime.UtcNow, 100m, 50m).Value;
+        enrollment.ActivateInstallmentEnrollment();
+        return enrollment;
+    }
 }

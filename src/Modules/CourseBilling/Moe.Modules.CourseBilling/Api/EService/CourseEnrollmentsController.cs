@@ -6,6 +6,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Api;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
+using Moe.Modules.CourseBilling.Application.Enrollments.CourseContent;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 
 namespace Moe.Modules.CourseBilling.Api.EService;
@@ -15,7 +16,9 @@ namespace Moe.Modules.CourseBilling.Api.EService;
 [Route("api/eservice/v{version:apiVersion}/course-enrollments")]
 [Authorize(Policy = AuthorizationPolicies.EServicePortal)]
 [EnableCors("EServiceCors")]
-public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : ControllerBase
+public sealed class CourseEnrollmentsController(
+    ICommandDispatcher commands,
+    IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> JoinCourse(
@@ -40,4 +43,26 @@ public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : C
                 enrollmentId,
                 request.CoursePaymentPlanId),
             cancellationToken));
+
+    [HttpGet("{enrollmentId:long}/content")]
+    public async Task<IActionResult> GetContent(
+        long enrollmentId,
+        CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await queries.Send(
+            new GetStudentCourseContentQuery(enrollmentId),
+            cancellationToken));
+
+    [HttpGet("{enrollmentId:long}/materials/{courseMaterialId:long}")]
+    public async Task<IActionResult> DownloadMaterial(
+        long enrollmentId,
+        long courseMaterialId,
+        CancellationToken cancellationToken)
+    {
+        var result = await queries.Send(
+            new DownloadStudentCourseMaterialQuery(enrollmentId, courseMaterialId),
+            cancellationToken);
+        return result.IsFailure
+            ? this.ToCourseBillingResponse(result)
+            : File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+    }
 }
