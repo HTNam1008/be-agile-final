@@ -1,8 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Moe.Modules.IdentityPlatform.Infrastructure.Persistence;
 
@@ -18,8 +18,8 @@ internal sealed class PersonIdentifierConfiguration : IEntityTypeConfiguration<P
             .IsUnique()
             .HasFilter("[IdentifierStatusCode] = 'ACTIVE' AND [IsPrimary] = 1");
         builder.Property(x => x.IdentifierTypeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
-        builder.Property(x => x.IdentifierValueEncrypted).HasColumnType("varbinary(max)");
-        builder.Property(x => x.IdentifierValueHash).HasColumnType("binary(32)").IsRequired();
+        builder.Property(x => x.IdentifierValueEncrypted);
+        builder.Property(x => x.IdentifierValueHash).IsRequired();
         builder.Property(x => x.IdentifierMasked).HasMaxLength(100);
         builder.Property(x => x.IssuingCountryCode).HasMaxLength(2).IsFixedLength();
         builder.Property(x => x.IssuedByAuthority).HasMaxLength(150);

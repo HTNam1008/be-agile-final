@@ -1,6 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -11,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 
 internal sealed class UpdateCampaignCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<UpdateCampaignCommand>
@@ -38,7 +39,7 @@ internal sealed class UpdateCampaignCommandHandler(
 
         if (campaign.CampaignVersion != command.Request.CampaignVersion)
         {
-            return Result.Failure(new Error("ConcurrencyException", "The campaign has been modified by another process."));
+            return Result.Failure(TopUpErrors.ConcurrencyException);
         }
 
         var request = command.Request;
@@ -68,22 +69,9 @@ internal sealed class UpdateCampaignCommandHandler(
             currentUserId: currentUser.UserAccountId ?? 0,
             nowUtc: clock.UtcNow.UtcDateTime);
 
-        try
-        {
-            await campaigns.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Result.Failure(new Error(
-                "ConcurrencyException",
-                "The campaign was modified by another request. Please reload and try again."));
-        }
-        catch (DbUpdateException)
-        {
-            return Result.Failure(new Error(
-                "PersistenceException",
-                "The campaign update could not be saved due to a data conflict. Please try again."));
-        }
+
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }

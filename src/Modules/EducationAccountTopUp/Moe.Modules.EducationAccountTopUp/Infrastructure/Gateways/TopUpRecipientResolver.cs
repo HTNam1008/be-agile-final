@@ -1,17 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
-using Moe.Modules.EducationAccountTopUp.Application.TopUps;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
+using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 
 internal sealed class TopUpRecipientResolver(
     MoeDbContext dbContext,
+    IDynamicRuleFilter dynamicRuleFilter,
     ILogger<TopUpRecipientResolver> logger) : IRecipientResolver
 {
     public async Task<IReadOnlyList<RecipientInfo>> GetRecipientsChunkAsync(
@@ -59,12 +60,13 @@ internal sealed class TopUpRecipientResolver(
 
         List<TopUpCampaignRule> rules = await GetActiveRulesAsync(campaign.Id, cancellationToken);
         if (rules.Count == 0)
-        {
             return 0;
-        }
 
-        IQueryable<EducationAccount> dynamicQuery = BuildDynamicAccountQuery(rules);
-        return await dynamicQuery.CountAsync(cancellationToken);
+        var projections = rules
+            .Select(r => new CampaignRuleProjection(r.Id, r.CriterionCode, r.OperatorCode, r.NumericValueFrom, r.NumericValueTo, r.TextValue))
+            .ToList();
+
+        return await dynamicRuleFilter.CountMatchingAccountsAsync(projections, DateTime.UtcNow, cancellationToken);
     }
 
     private Task<TopUpCampaign?> GetCampaignAsync(long campaignId, CancellationToken cancellationToken)
@@ -120,23 +122,25 @@ internal sealed class TopUpRecipientResolver(
     {
         List<TopUpCampaignRule> rules = await GetActiveRulesAsync(campaign.Id, cancellationToken);
         if (rules.Count == 0)
-        {
             return [];
-        }
 
-        IQueryable<EducationAccount> dynamicQuery = BuildDynamicAccountQuery(rules);
-        return await dynamicQuery
-            .OrderBy(x => x.Id)
-            .Skip(offset)
-            .Take(chunkSize)
-            .Select(account => new RecipientInfo
+        // Map domain rules to CampaignRuleProjection for IDynamicRuleFilter
+        var projections = rules
+            .Select(r => new CampaignRuleProjection(r.Id, r.CriterionCode, r.OperatorCode, r.NumericValueFrom, r.NumericValueTo, r.TextValue))
+            .ToList();
+
+        IReadOnlyList<long> accountIds = await dynamicRuleFilter.FilterAccountIdsAsync(
+            projections, offset, chunkSize, DateTime.UtcNow, cancellationToken);
+
+        return accountIds
+            .Select(id => new RecipientInfo
             {
-                EducationAccountId = account.Id,
+                EducationAccountId = id,
                 Amount = campaign.DefaultTopUpAmount,
                 OrganizationUnitId = campaign.OrganizationId,
                 CampaignReason = campaign.Reason
             })
-            .ToListAsync(cancellationToken);
+            .ToList();
     }
 
     private Task<List<TopUpCampaignRule>> GetActiveRulesAsync(
@@ -147,15 +151,6 @@ internal sealed class TopUpRecipientResolver(
             .AsNoTracking()
             .Where(x => x.TopUpCampaignId == campaignId && x.IsActive)
             .ToListAsync(cancellationToken);
-    }
-
-    private IQueryable<EducationAccount> BuildDynamicAccountQuery(List<TopUpCampaignRule> rules)
-    {
-        IQueryable<EducationAccount> query = dbContext.Set<EducationAccount>()
-            .AsNoTracking()
-            .Where(x => x.StatusCode == AccountStatuses.Active);
-
-        return DynamicRuleEvaluator.ApplyRules(dbContext, query, rules, DateTime.UtcNow);
     }
 
     private static bool IsFixedSelection(TopUpCampaign campaign)

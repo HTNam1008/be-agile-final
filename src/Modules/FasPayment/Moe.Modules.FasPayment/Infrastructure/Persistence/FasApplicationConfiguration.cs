@@ -11,17 +11,21 @@ internal sealed class FasApplicationConfiguration : IEntityTypeConfiguration<Fas
         builder.ToTable("FASApplication", "fas");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("FASApplicationId").UseIdentityColumn();
-        builder.Property(x => x.FasSchemeId).HasColumnName("FASSchemeId");
-        builder.HasIndex(x => x.ApplicationNumber).IsUnique();
-        builder.HasIndex(x => new { x.PersonId, x.FasSchemeId, x.CourseId });
-        builder.Property(x => x.ApplicationNumber).HasMaxLength(50).IsRequired();
-        builder.Property(x => x.ApplicationStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
-        builder.Property(x => x.NationalitySnapshot).HasMaxLength(50);
-        builder.Property(x => x.HouseholdIncomeSnapshot).HasPrecision(19, 2);
-        builder.Property(x => x.PerCapitaIncomeSnapshot).HasPrecision(19, 2);
-        builder.Property(x => x.EvaluationResultCode).HasMaxLength(50).IsUnicode(false);
-        builder.Property(x => x.EvaluatedAtUtc).HasColumnName("EvaluatedAt");
-        builder.Property(x => x.ApplicantConfirmedAtUtc).HasColumnName("ApplicantConfirmedAt");
-        builder.Property(x => x.SubmittedAtUtc).HasColumnName("SubmittedAt");
+
+        builder.Property(x => x.ApplicationNo).HasColumnName("application_no").HasMaxLength(50).IsRequired();
+        builder.HasIndex(x => x.ApplicationNo).IsUnique();
+
+        builder.Property(x => x.FasSchemeId).HasColumnName("scheme_id");
+
+        builder.Property(x => x.StudentId).HasColumnName("student_id").HasMaxLength(50).IsRequired();
+        builder.Property(x => x.StudentName).HasColumnName("student_name").HasMaxLength(255).IsRequired();
+
+        builder.Property(x => x.SubmittedDate).HasColumnName("submitted_date").HasColumnType("DATE").IsRequired();
+
+        builder.Property(x => x.StatusCode).HasColumnName("status").HasMaxLength(30).IsRequired();
+        builder.ToTable(t => t.HasCheckConstraint("chk_fas_application_status", "status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED')"));
+
+        builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasColumnType("TIMESTAMP").IsRequired();
+        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").HasColumnType("TIMESTAMP");
     }
 }

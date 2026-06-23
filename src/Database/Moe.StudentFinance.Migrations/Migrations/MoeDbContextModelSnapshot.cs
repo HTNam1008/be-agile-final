@@ -1731,36 +1731,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.ToTable("TopUpTransaction", "topup");
                 });
 
-            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.CourseFasScheme", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("CourseFASSchemeId");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("CourseId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("FasSchemeId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("FASSchemeId");
-
-                    b.Property<string>("StatusCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CourseId", "FasSchemeId")
-                        .IsUnique();
-
-                    b.ToTable("CourseFASScheme", "fas");
-                });
-
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasApplication", b =>
                 {
                     b.Property<long>("Id")
@@ -1836,57 +1806,51 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.ToTable("FASApplication", "fas");
                 });
 
-            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasRule", b =>
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasApplicationReviewDecision", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
-                        .HasColumnName("FASRuleId");
+                        .HasColumnName("FASApplicationReviewDecisionId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("CriterionCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<long>("FasTierId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("FASTierId");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<decimal?>("NumericValueFrom")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
-
-                    b.Property<decimal?>("NumericValueTo")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
-
-                    b.Property<string>("OperatorCode")
+                    b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
 
-                    b.Property<int>("RuleGroupNumber")
-                        .HasColumnType("int");
+                    b.Property<long>("FasApplicationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASApplicationId");
 
-                    b.Property<int>("SequenceNumber")
-                        .HasColumnType("int");
+                    b.Property<string>("RejectionReasonCode")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
 
-                    b.Property<string>("TextValue")
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)");
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("ReviewedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ReviewedAt");
+
+                    b.Property<long>("ReviewerLoginAccountId")
+                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FasTierId");
+                    b.HasIndex("FasApplicationId");
 
-                    b.ToTable("FASRule", "fas");
+                    b.ToTable("FASApplicationReviewDecision", "fas", t =>
+                        {
+                            t.HasCheckConstraint("CK_FASReviewDecision_Decision", "[Decision] IN ('APPROVED','REJECTED')");
+
+                            t.HasCheckConstraint("CK_FASReviewDecision_RejectionReason", "[Decision] <> 'REJECTED' OR [RejectionReasonCode] IS NOT NULL");
+                        });
                 });
 
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasScheme", b =>
@@ -1898,100 +1862,95 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<DateOnly?>("ApplicationOpenFrom")
-                        .HasColumnType("date");
+                    b.Property<DateTime?>("ActivatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ActivatedAt");
 
-                    b.Property<DateOnly?>("ApplicationOpenTo")
-                        .HasColumnType("date");
+                    b.Property<long?>("ActivatedByLoginAccountId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<long>("CreatedByLoginAccountId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
-                    b.Property<DateOnly>("EffectiveFrom")
+                    b.Property<DateOnly>("EndDate")
                         .HasColumnType("date");
 
-                    b.Property<DateOnly?>("EffectiveTo")
-                        .HasColumnType("date");
-
-                    b.Property<string>("ProviderName")
+                    b.Property<string>("GrantCode")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<string>("SchemeCode")
                         .IsRequired()
                         .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
 
-                    b.Property<string>("SchemeName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
 
-                    b.Property<string>("SchemeStatusCode")
+                    b.Property<string>("StatusCode")
                         .IsRequired()
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
 
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<long?>("UpdatedByLoginAccountId")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("GrantCode")
+                        .IsUnique();
 
                     b.HasIndex("SchemeCode")
                         .IsUnique();
 
-                    b.ToTable("FASScheme", "fas");
+                    b.ToTable("FASScheme", "fas", t =>
+                        {
+                            t.HasCheckConstraint("CK_FASScheme_Dates", "[EndDate] >= [StartDate]");
+
+                            t.HasCheckConstraint("CK_FASScheme_Status", "[StatusCode] IN ('DRAFT','ACTIVE','RETIRED')");
+                        });
                 });
 
-            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasSubsidy", b =>
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasSchemeCourse", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<long>("FasSchemeId")
                         .HasColumnType("bigint")
-                        .HasColumnName("FASSubsidyId");
+                        .HasColumnName("FASSchemeId");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    b.Property<long>("CourseId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("CourseId");
 
-                    b.Property<decimal>("AppliedAmount")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
-
-                    b.Property<DateTime>("AppliedAtUtc")
+                    b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2")
-                        .HasColumnName("AppliedAt");
+                        .HasColumnName("CreatedAt");
 
-                    b.Property<long>("BillLineId")
-                        .HasColumnType("bigint");
+                    b.HasKey("FasSchemeId", "CourseId");
 
-                    b.Property<decimal>("CalculatedAmount")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
+                    b.HasIndex("CourseId");
 
-                    b.Property<long>("FasApplicationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("FASApplicationId");
-
-                    b.Property<long>("FasTierBenefitId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("FASTierBenefitId");
-
-                    b.Property<decimal>("GrossAmountSnapshot")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
-
-                    b.Property<string>("SubsidyStatusCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BillLineId");
-
-                    b.HasIndex("FasApplicationId");
-
-                    b.ToTable("FASSubsidy", "fas");
+                    b.ToTable("FASSchemeCourse", "fas");
                 });
 
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTier", b =>
@@ -2003,75 +1962,120 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
                     b.Property<long>("FasSchemeId")
                         .HasColumnType("bigint")
                         .HasColumnName("FASSchemeId");
 
-                    b.Property<int>("PriorityNumber")
-                        .HasColumnType("int");
-
-                    b.Property<string>("StatusCode")
+                    b.Property<string>("Label")
                         .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
-                    b.Property<string>("TierCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("TierName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FasSchemeId", "TierCode")
-                        .IsUnique();
-
-                    b.ToTable("FASTier", "fas");
-                });
-
-            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierBenefit", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("FASTierBenefitId");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("FasTierId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("FASTierId");
-
-                    b.Property<long>("FeeComponentId")
-                        .HasColumnType("bigint");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<decimal?>("MaximumSubsidyAmount")
-                        .HasPrecision(19, 2)
-                        .HasColumnType("decimal(19,2)");
-
-                    b.Property<string>("SubsidyTypeCode")
+                    b.Property<string>("SubsidyType")
                         .IsRequired()
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
 
                     b.Property<decimal>("SubsidyValue")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FasTierId", "FeeComponentId");
+                    b.HasIndex("FasSchemeId", "DisplayOrder")
+                        .IsUnique();
 
-                    b.ToTable("FASTierBenefit", "fas");
+                    b.ToTable("FASTier", "fas", t =>
+                        {
+                            t.HasCheckConstraint("CK_FASTier_SubsidyType", "[SubsidyType] IN ('FIXED','PERCENTAGE')");
+
+                            t.HasCheckConstraint("CK_FASTier_SubsidyValue", "[SubsidyValue] >= 0 AND ([SubsidyType] <> 'PERCENTAGE' OR [SubsidyValue] <= 100)");
+                        });
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteria", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASTierCriteriaId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ConnectorToNext")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CriteriaType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<long>("FasTierId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASTierId");
+
+                    b.Property<decimal?>("NumberFrom")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("NumberTo")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FasTierId", "DisplayOrder")
+                        .IsUnique();
+
+                    b.ToTable("FASTierCriteria", "fas", t =>
+                        {
+                            t.HasCheckConstraint("CK_FASTierCriteria_Connector", "[ConnectorToNext] IS NULL OR [ConnectorToNext] IN ('AND','OR')");
+
+                            t.HasCheckConstraint("CK_FASTierCriteria_Range", "([CriteriaType] = 'NATIONALITY' AND [NumberFrom] IS NULL AND [NumberTo] IS NULL) OR ([CriteriaType] <> 'NATIONALITY' AND [NumberFrom] IS NOT NULL AND [NumberTo] IS NOT NULL AND [NumberFrom] <= [NumberTo])");
+
+                            t.HasCheckConstraint("CK_FASTierCriteria_Type", "[CriteriaType] IN ('AGE','GDP','PCI','NATIONALITY')");
+                        });
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaNationality", b =>
+                {
+                    b.Property<long>("FasTierCriteriaId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASTierCriteriaId");
+
+                    b.Property<string>("Nationality")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("FasTierCriteriaId", "Nationality");
+
+                    b.ToTable("FASTierCriteriaNationality", "fas");
                 });
 
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.Payment", b =>
@@ -8616,6 +8620,57 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .WithMany()
                         .HasForeignKey("TopUpRunId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasApplicationReviewDecision", b =>
+                {
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasApplication", null)
+                        .WithMany()
+                        .HasForeignKey("FasApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasSchemeCourse", b =>
+                {
+                    b.HasOne("Moe.Modules.CourseBilling.Domain.Courses.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasScheme", null)
+                        .WithMany()
+                        .HasForeignKey("FasSchemeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTier", b =>
+                {
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasScheme", null)
+                        .WithMany()
+                        .HasForeignKey("FasSchemeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteria", b =>
+                {
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasTier", null)
+                        .WithMany()
+                        .HasForeignKey("FasTierId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaNationality", b =>
+                {
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteria", null)
+                        .WithMany()
+                        .HasForeignKey("FasTierCriteriaId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618

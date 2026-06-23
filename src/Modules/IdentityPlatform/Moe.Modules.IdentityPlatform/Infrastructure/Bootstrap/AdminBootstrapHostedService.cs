@@ -101,22 +101,99 @@ internal sealed class AdminBootstrapHostedService(
                 && (x.EffectiveToUtc == null || x.EffectiveToUtc > utcNow),
                 cancellationToken);
 
-        if (activeAdminScopeExists)
+        if (!activeAdminScopeExists)
         {
-            return;
+            UserAccessScope adminAccessScope = new(
+                account.Id,
+                bootstrap.OrganizationUnitId,
+                RoleCodes.HqAdmin,
+                account.Id,
+                utcNow,
+                utcNow);
+
+            dbContext.Add(adminAccessScope);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Bootstrapped ADMIN access scope for {Email}.", bootstrap.Email);
         }
 
-        UserAccessScope adminAccessScope = new(
-            account.Id,
-            bootstrap.OrganizationUnitId,
-            RoleCodes.HqAdmin,
-            account.Id,
-            utcNow,
-            utcNow);
+        await BootstrapSchoolAdminsAsync(dbContext, account, bootstrap.SchoolAdmins, entraOptions.Value, cancellationToken);
+    }
 
-        dbContext.Add(adminAccessScope);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Bootstrapped ADMIN access scope for {Email}.", bootstrap.Email);
+    private async Task BootstrapSchoolAdminsAsync(
+        MoeDbContext dbContext,
+        UserAccount hqAdmin,
+        IEnumerable<SchoolAdminBootstrapOptions> schoolAdmins,
+        EntraWorkforceDirectoryOptions entra,
+        CancellationToken cancellationToken)
+    {
+        foreach (SchoolAdminBootstrapOptions schoolAdmin in schoolAdmins.Where(x => x.Enabled))
+        {
+            if (string.IsNullOrWhiteSpace(schoolAdmin.EntraObjectId)
+                || string.IsNullOrWhiteSpace(schoolAdmin.Email)
+                || schoolAdmin.OrganizationUnitId <= 0)
+            {
+                logger.LogWarning("School admin bootstrap entry is enabled but EntraObjectId, Email, or OrganizationUnitId is missing.");
+                continue;
+            }
+
+            DateTime utcNow = DateTime.UtcNow;
+            bool schoolExists = await dbContext.Set<OrganizationUnit>()
+                .AnyAsync(x => x.Id == schoolAdmin.OrganizationUnitId
+                    && x.UnitTypeCode == "SCHOOL"
+                    && x.StatusCode == IamStatusCodes.Active
+                    && x.EffectiveFromUtc <= utcNow
+                    && (x.EffectiveToUtc == null || x.EffectiveToUtc > utcNow),
+                    cancellationToken);
+
+            if (!schoolExists)
+            {
+                logger.LogWarning("School admin bootstrap skipped for {Email}: organization unit {OrganizationUnitId} is not an active school.", schoolAdmin.Email, schoolAdmin.OrganizationUnitId);
+                continue;
+            }
+
+            string objectId = schoolAdmin.EntraObjectId.Trim();
+            UserAccount? account = await dbContext.Set<UserAccount>()
+                .SingleOrDefaultAsync(x => x.IdentityProviderCode == IdentityProviderCodes.EntraWorkforce
+                    && x.ExternalObjectId == objectId,
+                    cancellationToken);
+
+            if (account is null)
+            {
+                account = UserAccount.CreateAdmin(
+                    entra.EffectiveIssuer,
+                    objectId,
+                    entra.TenantId,
+                    objectId,
+                    schoolAdmin.Email.Trim().ToUpperInvariant(),
+                    string.IsNullOrWhiteSpace(schoolAdmin.DisplayName) ? schoolAdmin.Email.Trim() : schoolAdmin.DisplayName.Trim(),
+                    RoleCodes.SchoolAdmin,
+                    schoolAdmin.OrganizationUnitId,
+                    hqAdmin.Id,
+                    utcNow);
+
+                dbContext.Add(account);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                logger.LogInformation("Bootstrapped local school admin account for {Email}.", schoolAdmin.Email);
+            }
+
+            bool activeScopeExists = await dbContext.Set<UserAccessScope>()
+                .AnyAsync(x => x.UserAccountId == account.Id
+                    && x.OrganizationUnitId == schoolAdmin.OrganizationUnitId
+                    && x.RoleCode == RoleCodes.SchoolAdmin
+                    && x.StatusCode == IamStatusCodes.Active
+                    && x.EffectiveFromUtc <= utcNow
+                    && (x.EffectiveToUtc == null || x.EffectiveToUtc > utcNow),
+                    cancellationToken);
+
+            if (activeScopeExists)
+            {
+                continue;
+            }
+
+            dbContext.Add(new UserAccessScope(account.Id, schoolAdmin.OrganizationUnitId, RoleCodes.SchoolAdmin, hqAdmin.Id, utcNow, utcNow));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Bootstrapped SCHOOL_ADMIN access scope for {Email} at organization unit {OrganizationUnitId}.", schoolAdmin.Email, schoolAdmin.OrganizationUnitId);
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

@@ -6,11 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Messaging;
-using Moe.Infrastructure.Shared.Configuration;
 using Moe.Infrastructure.Shared.Api;
+using Moe.Infrastructure.Shared.Configuration;
+using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetEServiceAuthFlow;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
-using Moe.Infrastructure.Shared.Security;
 
 namespace Moe.Modules.IdentityPlatform.Api.EService;
 

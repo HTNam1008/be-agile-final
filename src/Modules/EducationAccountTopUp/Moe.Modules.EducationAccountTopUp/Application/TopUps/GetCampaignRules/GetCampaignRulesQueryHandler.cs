@@ -2,13 +2,15 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
 
 internal sealed class GetCampaignRulesQueryHandler(
     ITopUpCampaignRepository campaigns,
-    IAdminAccessControl adminAccess)
+    ITopUpCampaignReader reader,
+    ICurrentUser currentUser)
     : IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>
 {
     public async Task<Result<IReadOnlyList<CampaignRuleDto>>> Handle(
@@ -22,13 +24,13 @@ internal sealed class GetCampaignRulesQueryHandler(
             return Result<IReadOnlyList<CampaignRuleDto>>.Failure(TopUpErrors.CampaignNotFound);
         }
 
-        Result access = adminAccess.EnsureCanAccessOrganization(campaign.OrganizationId);
-        if (access.IsFailure)
+        if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
+            && currentUser.OrganizationUnitId != campaign.OrganizationId)
         {
             return Result<IReadOnlyList<CampaignRuleDto>>.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        var rules = await campaigns.GetRulesAsync(query.TopUpCampaignId, cancellationToken);
+        var rules = await reader.GetRulesAsync(query.TopUpCampaignId, cancellationToken);
         var ruleDtos = rules
             .Select(x => new CampaignRuleDto(
                 x.Id.ToString(),

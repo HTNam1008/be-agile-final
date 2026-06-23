@@ -26,7 +26,7 @@ public class E2EDbSeeder : IHostedService
         // We use Reflection or direct EF Core insertions to bypass domain rules if necessary, 
         // but OpenManual is better. However, EducationAccount uses long Id. 
         // In EF Core InMemory, if we just Add, it assigns an Id. Let's explicitly set properties via reflection to bypass if needed, or just let EF Core do it.
-        
+
         var acc1Result = EducationAccount.OpenManual(100, "ACC-1001", DateTimeOffset.UtcNow, "E2E Seed", "Seed", 1);
         if (acc1Result.IsSuccess)
         {
