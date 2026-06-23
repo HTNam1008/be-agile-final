@@ -27,6 +27,8 @@ internal static class CourseMapper
             aggregate.Course.EndDate,
             aggregate.Course.EnrollmentOpenAtUtc,
             aggregate.Course.EnrollmentCloseAtUtc,
+            aggregate.Course.BeforeStartRefundPercentage,
+            aggregate.Course.AfterStartRefundPercentage,
             aggregate.Course.CourseStatusCode,
             aggregate.Course.UpdatedAtUtc,
             aggregate.Course.DisabledAtUtc,

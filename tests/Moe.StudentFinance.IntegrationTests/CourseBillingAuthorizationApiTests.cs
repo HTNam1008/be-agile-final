@@ -46,6 +46,91 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     }
 
     [Fact]
+    public async Task Admin_Can_Configure_Refund_Policy_When_Creating_Course()
+    {
+        DateTime enrollmentOpenAt = DateTime.UtcNow;
+        DateOnly startDate = DateOnly.FromDateTime(enrollmentOpenAt).AddDays(30);
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/courses",
+            new
+            {
+                organizationId = 1,
+                courseCode = $"REFUND-{NewSuffix()}",
+                courseName = "Refund policy course",
+                startDate,
+                endDate = startDate.AddDays(90),
+                enrollmentOpenAt,
+                enrollmentCloseAt = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(-1),
+                beforeStartRefundPercentage = 85m,
+                afterStartRefundPercentage = 35m
+            });
+
+        await AssertStatusAsync(HttpStatusCode.Created, response);
+        using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement data = document.RootElement.GetProperty("data");
+        Assert.Equal(85m, data.GetProperty("beforeStartRefundPercentage").GetDecimal());
+        Assert.Equal(35m, data.GetProperty("afterStartRefundPercentage").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Admin_Cannot_Create_Course_With_Invalid_Refund_Percentage()
+    {
+        DateTime enrollmentOpenAt = DateTime.UtcNow;
+        DateOnly startDate = DateOnly.FromDateTime(enrollmentOpenAt).AddDays(30);
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/courses",
+            new
+            {
+                organizationId = 1,
+                courseCode = $"BAD-REFUND-{NewSuffix()}",
+                courseName = "Invalid refund policy course",
+                startDate,
+                endDate = startDate.AddDays(90),
+                enrollmentOpenAt,
+                enrollmentCloseAt = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(-1),
+                beforeStartRefundPercentage = 101m,
+                afterStartRefundPercentage = 50m
+            });
+
+        await AssertStatusAsync(HttpStatusCode.BadRequest, response);
+    }
+
+    [Fact]
+    public async Task Admin_Can_Update_Course_Refund_Policy()
+    {
+        string courseCode = $"UPDATE-REFUND-{NewSuffix()}";
+        using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
+            "/api/admin/v1/courses",
+            CreateCourseBody(1, courseCode));
+        await AssertStatusAsync(HttpStatusCode.Created, createResponse);
+        long courseId = await ReadLongAsync(createResponse, "courseId");
+
+        DateTime enrollmentOpenAt = DateTime.UtcNow;
+        DateOnly startDate = DateOnly.FromDateTime(enrollmentOpenAt).AddDays(30);
+        using HttpResponseMessage updateResponse = await _client.PutAsJsonAsync(
+            $"/api/admin/v1/courses/{courseId}",
+            new
+            {
+                courseCode,
+                courseName = "Updated refund policy course",
+                startDate,
+                endDate = startDate.AddDays(90),
+                enrollmentOpenAt,
+                enrollmentCloseAt = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(-1),
+                beforeStartRefundPercentage = 75m,
+                afterStartRefundPercentage = 20m
+            });
+
+        await AssertStatusAsync(HttpStatusCode.OK, updateResponse);
+        using JsonDocument document = JsonDocument.Parse(await updateResponse.Content.ReadAsStringAsync());
+        JsonElement data = document.RootElement.GetProperty("data");
+        Assert.Equal(75m, data.GetProperty("beforeStartRefundPercentage").GetDecimal());
+        Assert.Equal(20m, data.GetProperty("afterStartRefundPercentage").GetDecimal());
+    }
+
+    [Fact]
     public async Task Admin_Cannot_Create_Course_With_Past_Course_Dates()
     {
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
