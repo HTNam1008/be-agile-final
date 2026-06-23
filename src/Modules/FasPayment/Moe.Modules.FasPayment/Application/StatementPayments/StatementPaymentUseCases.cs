@@ -39,10 +39,46 @@ internal sealed class PreviewStatementPaymentHandler(
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
         decimal available = balance?.AvailableBalance ?? 0m;
         decimal education = Math.Min(available, statement.OutstandingAmount);
+        decimal online = statement.OutstandingAmount - education;
+        string recommended = available >= statement.OutstandingAmount
+            ? PaymentFundingOptionCodes.EducationAccountOnly
+            : available > 0m
+                ? PaymentFundingOptionCodes.EducationAccountThenOnline
+                : PaymentFundingOptionCodes.OnlineOnly;
+        StatementFundingOptionResponse[] options =
+        [
+            new(
+                PaymentFundingOptionCodes.EducationAccountOnly,
+                "Education Account",
+                available >= statement.OutstandingAmount,
+                statement.OutstandingAmount,
+                0m,
+                available >= statement.OutstandingAmount
+                    ? null
+                    : "Education Account balance is not enough for this statement."),
+            new(
+                PaymentFundingOptionCodes.OnlineOnly,
+                "Online payment",
+                true,
+                0m,
+                statement.OutstandingAmount,
+                null),
+            new(
+                PaymentFundingOptionCodes.EducationAccountThenOnline,
+                "Education Account + online",
+                available > 0m && available < statement.OutstandingAmount,
+                education,
+                online,
+                available <= 0m
+                    ? "No Education Account balance is available."
+                    : available >= statement.OutstandingAmount
+                        ? "Education Account can cover the full statement."
+                        : null)
+        ];
         return Result<StatementPaymentPreviewResponse>.Success(new(
             statement.BillingStatementId, statement.OutstandingAmount,
             balance?.CurrentBalance ?? 0m, balance?.HeldBalance ?? 0m, available, education,
-            statement.OutstandingAmount - education, statement.CurrencyCode));
+            online, statement.CurrencyCode, recommended, options));
     }
 }
 

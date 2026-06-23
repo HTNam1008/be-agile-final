@@ -213,6 +213,15 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal(150m, preview.GetProperty("educationAccountCurrentBalance").GetDecimal());
         Assert.Equal(100m, preview.GetProperty("educationAccountAmount").GetDecimal());
         Assert.Equal(0m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal("EDUCATION_ACCOUNT_ONLY", preview.GetProperty("recommendedFundingOptionCode").GetString());
+        JsonElement educationOnly = preview.GetProperty("fundingOptions").EnumerateArray()
+            .Single(x => x.GetProperty("fundingOptionCode").GetString() == "EDUCATION_ACCOUNT_ONLY");
+        Assert.True(educationOnly.GetProperty("isAvailable").GetBoolean());
+        Assert.Equal(100m, educationOnly.GetProperty("educationAccountAmount").GetDecimal());
+        JsonElement onlineOnly = preview.GetProperty("fundingOptions").EnumerateArray()
+            .Single(x => x.GetProperty("fundingOptionCode").GetString() == "ONLINE_ONLY");
+        Assert.True(onlineOnly.GetProperty("isAvailable").GetBoolean());
+        Assert.Equal(100m, onlineOnly.GetProperty("onlinePaymentAmount").GetDecimal());
 
         using HttpResponseMessage pay = await PayStatementAsync(student, statement.StatementId);
         await AssertStatusAsync(HttpStatusCode.Created, pay);
@@ -250,6 +259,12 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         JsonElement preview = await PreviewPaymentAsync(student, statement.StatementId);
         Assert.Equal(40m, preview.GetProperty("educationAccountAmount").GetDecimal());
         Assert.Equal(60m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal("EDUCATION_ACCOUNT_THEN_ONLINE", preview.GetProperty("recommendedFundingOptionCode").GetString());
+        JsonElement splitOption = preview.GetProperty("fundingOptions").EnumerateArray()
+            .Single(x => x.GetProperty("fundingOptionCode").GetString() == "EDUCATION_ACCOUNT_THEN_ONLINE");
+        Assert.True(splitOption.GetProperty("isAvailable").GetBoolean());
+        Assert.Equal(40m, splitOption.GetProperty("educationAccountAmount").GetDecimal());
+        Assert.Equal(60m, splitOption.GetProperty("onlinePaymentAmount").GetDecimal());
 
         using HttpResponseMessage firstPay = await PayStatementAsync(student, statement.StatementId);
         await AssertStatusAsync(HttpStatusCode.Created, firstPay);
