@@ -51,7 +51,6 @@ public sealed class IdentityPlatformModule : IModule
         services.AddSingleton<IModelConfigurationContributor, IdentityPlatformModelConfiguration>();
         services.AddOptions<AdminBootstrapOptions>().BindConfiguration(AdminBootstrapOptions.SectionName);
         services.AddOptions<EntraWorkforceDirectoryOptions>().BindConfiguration(EntraWorkforceDirectoryOptions.SectionName);
-        services.AddMemoryCache();
         services.AddHostedService<AdminBootstrapHostedService>();
         services.AddScoped<IClaimsTransformation, LocalClaimsTransformation>();
         services.AddScoped<IStudentAccessControl, StudentAccessControl>();
