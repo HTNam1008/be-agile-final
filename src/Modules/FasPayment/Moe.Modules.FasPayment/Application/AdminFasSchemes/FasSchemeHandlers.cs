@@ -99,6 +99,53 @@ internal sealed class DeleteFasSchemeDraftHandler(IFasSchemeRepository repositor
     }
 }
 
+internal abstract class FasSchemeLifecycleHandlerBase(IFasSchemeRepository repository, ICurrentUser currentUser, IClock clock)
+{
+    protected IFasSchemeRepository Repository { get; } = repository;
+
+    protected async Task<Result<CreateFasSchemeResponse>> Execute(
+        long schemeId,
+        Func<long, long, DateTime, CancellationToken, Task<CreateFasSchemeResponse?>> operation,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserAccountId is not long actorId)
+            return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.Unauthenticated);
+
+        try
+        {
+            CreateFasSchemeResponse? result = await operation(schemeId, actorId, clock.UtcNow.UtcDateTime, cancellationToken);
+            return result is null
+                ? Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.NotFound)
+                : Result<CreateFasSchemeResponse>.Success(result);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Result<CreateFasSchemeResponse>.Failure(new Error("FAS.INVALID_STATUS_TRANSITION", exception.Message));
+        }
+    }
+}
+
+internal sealed class PublishFasSchemeHandler(IFasSchemeRepository repository, ICurrentUser currentUser, IClock clock)
+    : FasSchemeLifecycleHandlerBase(repository, currentUser, clock), ICommandHandler<PublishFasSchemeCommand, CreateFasSchemeResponse>
+{
+    public Task<Result<CreateFasSchemeResponse>> Handle(PublishFasSchemeCommand command, CancellationToken cancellationToken)
+        => Execute(command.SchemeId, Repository.PublishAsync, cancellationToken);
+}
+
+internal sealed class DisableFasSchemeHandler(IFasSchemeRepository repository, ICurrentUser currentUser, IClock clock)
+    : FasSchemeLifecycleHandlerBase(repository, currentUser, clock), ICommandHandler<DisableFasSchemeCommand, CreateFasSchemeResponse>
+{
+    public Task<Result<CreateFasSchemeResponse>> Handle(DisableFasSchemeCommand command, CancellationToken cancellationToken)
+        => Execute(command.SchemeId, Repository.DisableAsync, cancellationToken);
+}
+
+internal sealed class DeleteFasSchemeHandler(IFasSchemeRepository repository, ICurrentUser currentUser, IClock clock)
+    : FasSchemeLifecycleHandlerBase(repository, currentUser, clock), ICommandHandler<DeleteFasSchemeCommand, CreateFasSchemeResponse>
+{
+    public Task<Result<CreateFasSchemeResponse>> Handle(DeleteFasSchemeCommand command, CancellationToken cancellationToken)
+        => Execute(command.SchemeId, Repository.DeleteAsync, cancellationToken);
+}
+
 internal sealed class ListFasSchemesHandler(IFasSchemeRepository repository) : IQueryHandler<ListFasSchemesQuery, FasSchemeListResponse>
 {
     public async Task<Result<FasSchemeListResponse>> Handle(ListFasSchemesQuery query, CancellationToken cancellationToken)

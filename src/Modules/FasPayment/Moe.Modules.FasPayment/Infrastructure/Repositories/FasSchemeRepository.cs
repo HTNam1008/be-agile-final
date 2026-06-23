@@ -73,10 +73,10 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
                             template.ConnectorToNext, template.DisplayOrder, utcNow);
                         dbContext.Add(criteria);
                         await dbContext.SaveChangesAsync(cancellationToken);
-                        if (template.CriteriaType == "NATIONALITY")
+                        if (template.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE")
                         {
                             foreach (string nationality in value.Nationalities!.Distinct(StringComparer.Ordinal))
-                                dbContext.Add(FasTierCriteriaNationality.Create(criteria.Id, nationality));
+                                dbContext.Add(FasTierCriteriaNationality.Create(criteria.Id, template.CriteriaType, nationality));
                             await dbContext.SaveChangesAsync(cancellationToken);
                         }
                     }
@@ -130,6 +130,33 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         return true;
     }
 
+    public Task<CreateFasSchemeResponse?> PublishAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken)
+        => ChangeStatusAsync(schemeId, actorId, utcNow, "PUBLISH", cancellationToken);
+
+    public Task<CreateFasSchemeResponse?> DisableAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken)
+        => ChangeStatusAsync(schemeId, actorId, utcNow, "DISABLE", cancellationToken);
+
+    public Task<CreateFasSchemeResponse?> DeleteAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken)
+        => ChangeStatusAsync(schemeId, actorId, utcNow, "DELETE", cancellationToken);
+
+    private async Task<CreateFasSchemeResponse?> ChangeStatusAsync(
+        long schemeId,
+        long actorId,
+        DateTime utcNow,
+        string transition,
+        CancellationToken cancellationToken)
+    {
+        FasScheme? scheme = await dbContext.Set<FasScheme>().SingleOrDefaultAsync(x => x.Id == schemeId, cancellationToken);
+        if (scheme is null) return null;
+
+        if (transition == "PUBLISH") scheme.Activate(actorId, utcNow);
+        else if (transition == "DISABLE") scheme.Disable(actorId, utcNow);
+        else scheme.Delete(actorId, utcNow);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new CreateFasSchemeResponse(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.StatusCode);
+    }
+
     public async Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken)
     {
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
@@ -165,7 +192,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         var template = firstCriteria.Select(x => new FasCriteriaTemplateItem(x.CriteriaType, x.ConnectorToNext, x.DisplayOrder)).ToArray();
         var tierDetails = tiers.Select(t => new FasTierDetail(t.Id, t.Label, t.SubsidyValue, t.DisplayOrder,
             criteria.Where(c => c.FasTierId == t.Id).OrderBy(c => c.DisplayOrder).Select(c => new FasTierCriteriaValue(c.DisplayOrder, c.NumberFrom, c.NumberTo,
-                c.CriteriaType == "NATIONALITY" ? nationalities.Where(n => n.FasTierCriteriaId == c.Id).Select(n => n.Nationality).Order().ToArray() : null)).ToArray())).ToArray();
+                c.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE" ? nationalities.Where(n => n.FasTierCriteriaId == c.Id).Select(n => n.Nationality).Order().ToArray() : null)).ToArray())).ToArray();
         return new FasSchemeDetail(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.Name, scheme.Description,
             scheme.StartDate, scheme.EndDate, scheme.StatusCode, courseIds, subsidyType, template, tierDetails);
     }
