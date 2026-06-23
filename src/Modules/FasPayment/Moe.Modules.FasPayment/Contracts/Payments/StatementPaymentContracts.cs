@@ -27,7 +27,9 @@ public static class PaymentFundingOptionCodes
     public const string EducationAccountThenOnline = "EDUCATION_ACCOUNT_THEN_ONLINE";
 }
 
-public sealed record PayBillingStatementRequest(string IdempotencyKey);
+public sealed record PayBillingStatementRequest(
+    string IdempotencyKey,
+    string FundingOptionCode = PaymentFundingOptionCodes.EducationAccountThenOnline);
 
 public sealed record PayBillingStatementResponse(
     long PaymentId,
