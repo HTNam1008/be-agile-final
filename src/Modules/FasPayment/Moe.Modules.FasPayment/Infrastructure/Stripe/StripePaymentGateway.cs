@@ -130,8 +130,11 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
         try
         {
             StripeConfiguration.ApiKey = RequiredConfiguration().SecretKey;
+            RefundCreateOptions options = providerChargeId.StartsWith("pi_", StringComparison.Ordinal)
+                ? new RefundCreateOptions { PaymentIntent = providerChargeId, Amount = amountMinor }
+                : new RefundCreateOptions { Charge = providerChargeId, Amount = amountMinor };
             var refund = await new RefundService().CreateAsync(
-                new RefundCreateOptions { Charge = providerChargeId, Amount = amountMinor },
+                options,
                 new RequestOptions { IdempotencyKey = idempotencyKey },
                 cancellationToken);
             return new StripeRefundGatewayResult(refund.Id);

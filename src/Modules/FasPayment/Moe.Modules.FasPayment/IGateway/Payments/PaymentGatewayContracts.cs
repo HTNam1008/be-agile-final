@@ -46,6 +46,21 @@ internal interface IPaymentCheckoutRepository
     Task<decimal> GetSucceededRefundAmountAsync(long paymentId, CancellationToken cancellationToken);
     Task AddRefundAsync(PaymentRefund refund, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentRefund>> ListRefundsAsync(long paymentId, CancellationToken cancellationToken);
+    Task<EnrollmentRefund?> FindEnrollmentRefundByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken);
+    Task AddEnrollmentRefundAsync(
+        EnrollmentRefund refund,
+        CancellationToken cancellationToken);
+    Task AddEnrollmentRefundPartAsync(
+        EnrollmentRefundPart refundPart,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EnrollmentRefundPart>> ListEnrollmentRefundPartsAsync(
+        long enrollmentRefundId,
+        CancellationToken cancellationToken);
+    Task<EnrollmentRefundPart?> FindEnrollmentRefundPartByIdempotencyKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken);
     Task<IReadOnlyCollection<ProcessedPaymentWebhookEvent>> ListWebhookEventsAsync(CancellationToken cancellationToken);
     Task<bool> WebhookEventExistsAsync(string providerEventId, CancellationToken cancellationToken);
     Task AddWebhookEventAsync(ProcessedPaymentWebhookEvent webhookEvent, CancellationToken cancellationToken);

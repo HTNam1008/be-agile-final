@@ -10,10 +10,13 @@ internal sealed class CourseEnrollment : Entity<long>
     private CourseEnrollment(
         long personId,
         long courseId,
-        long coursePaymentPlanId,
+        long? coursePaymentPlanId,
         string enrollmentSourceCode,
         long enrolledByLoginAccountId,
-        DateTime enrolledAtUtc) : base(0)
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage,
+        string enrollmentStatusCode) : base(0)
     {
         PersonId = personId;
         CourseId = courseId;
@@ -21,16 +24,20 @@ internal sealed class CourseEnrollment : Entity<long>
         EnrollmentSourceCode = enrollmentSourceCode;
         EnrolledByLoginAccountId = enrolledByLoginAccountId;
         EnrolledAtUtc = enrolledAtUtc;
-        EnrollmentStatusCode = CourseEnrollmentStatusCodes.PendingPayment;
+        BeforeStartRefundPercentage = beforeStartRefundPercentage;
+        AfterStartRefundPercentage = afterStartRefundPercentage;
+        EnrollmentStatusCode = enrollmentStatusCode;
     }
 
     public long PersonId { get; private set; }
     public long CourseId { get; private set; }
-    public long CoursePaymentPlanId { get; private set; }
+    public long? CoursePaymentPlanId { get; private set; }
     public string EnrollmentSourceCode { get; private set; } = string.Empty;
     public long EnrolledByLoginAccountId { get; private set; }
     public DateTime EnrolledAtUtc { get; private set; }
     public string EnrollmentStatusCode { get; private set; } = string.Empty;
+    public decimal BeforeStartRefundPercentage { get; private set; }
+    public decimal AfterStartRefundPercentage { get; private set; }
     public DateTime? ExitAtUtc { get; private set; }
     public string? ExitReasonCode { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
@@ -40,9 +47,17 @@ internal sealed class CourseEnrollment : Entity<long>
         long courseId,
         long coursePaymentPlanId,
         long adminLoginAccountId,
-        DateTime enrolledAtUtc)
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
     {
-        Result validation = ValidateEnrollment(personId, courseId, coursePaymentPlanId, adminLoginAccountId);
+        Result validation = ValidateEnrollment(
+            personId,
+            courseId,
+            coursePaymentPlanId,
+            adminLoginAccountId,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
         if (validation.IsFailure)
         {
             return Result<CourseEnrollment>.Failure(validation.Error);
@@ -54,7 +69,43 @@ internal sealed class CourseEnrollment : Entity<long>
             coursePaymentPlanId,
             CourseEnrollmentSourceCodes.AdminAdd,
             adminLoginAccountId,
-            enrolledAtUtc);
+            enrolledAtUtc,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage,
+            CourseEnrollmentStatusCodes.PendingPayment);
+
+        return Result<CourseEnrollment>.Success(enrollment);
+    }
+
+    public static Result<CourseEnrollment> EnrollByAdminPendingPlanSelection(
+        long personId,
+        long courseId,
+        long adminLoginAccountId,
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
+    {
+        Result validation = ValidateEnrollmentWithoutPaymentPlan(
+            personId,
+            courseId,
+            adminLoginAccountId,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
+        if (validation.IsFailure)
+        {
+            return Result<CourseEnrollment>.Failure(validation.Error);
+        }
+
+        CourseEnrollment enrollment = new(
+            personId,
+            courseId,
+            null,
+            CourseEnrollmentSourceCodes.AdminAdd,
+            adminLoginAccountId,
+            enrolledAtUtc,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage,
+            CourseEnrollmentStatusCodes.PendingPlanSelection);
 
         return Result<CourseEnrollment>.Success(enrollment);
     }
@@ -64,9 +115,17 @@ internal sealed class CourseEnrollment : Entity<long>
         long courseId,
         long coursePaymentPlanId,
         long loginAccountId,
-        DateTime enrolledAtUtc)
+        DateTime enrolledAtUtc,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
     {
-        Result validation = ValidateEnrollment(personId, courseId, coursePaymentPlanId, loginAccountId);
+        Result validation = ValidateEnrollment(
+            personId,
+            courseId,
+            coursePaymentPlanId,
+            loginAccountId,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
         if (validation.IsFailure)
         {
             return Result<CourseEnrollment>.Failure(validation.Error);
@@ -78,7 +137,10 @@ internal sealed class CourseEnrollment : Entity<long>
             coursePaymentPlanId,
             CourseEnrollmentSourceCodes.SelfJoin,
             loginAccountId,
-            enrolledAtUtc);
+            enrolledAtUtc,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage,
+            CourseEnrollmentStatusCodes.PendingPayment);
 
         return Result<CourseEnrollment>.Success(enrollment);
     }
@@ -136,7 +198,35 @@ internal sealed class CourseEnrollment : Entity<long>
         long personId,
         long courseId,
         long coursePaymentPlanId,
-        long enrolledByLoginAccountId)
+        long enrolledByLoginAccountId,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
+    {
+        Result baseValidation = ValidateEnrollmentWithoutPaymentPlan(
+            personId,
+            courseId,
+            enrolledByLoginAccountId,
+            beforeStartRefundPercentage,
+            afterStartRefundPercentage);
+        if (baseValidation.IsFailure)
+        {
+            return baseValidation;
+        }
+
+        if (coursePaymentPlanId <= 0)
+        {
+            return Result.Failure(CourseBillingErrors.InvalidPaymentPlan);
+        }
+
+        return Result.Success();
+    }
+
+    private static Result ValidateEnrollmentWithoutPaymentPlan(
+        long personId,
+        long courseId,
+        long enrolledByLoginAccountId,
+        decimal beforeStartRefundPercentage,
+        decimal afterStartRefundPercentage)
     {
         if (personId <= 0)
         {
@@ -148,14 +238,15 @@ internal sealed class CourseEnrollment : Entity<long>
             return Result.Failure(CourseBillingErrors.InvalidCourse);
         }
 
-        if (coursePaymentPlanId <= 0)
-        {
-            return Result.Failure(CourseBillingErrors.InvalidPaymentPlan);
-        }
-
         if (enrolledByLoginAccountId <= 0)
         {
             return Result.Failure(CourseBillingErrors.ActorRequired);
+        }
+
+        if (beforeStartRefundPercentage is < 0m or > 100m ||
+            afterStartRefundPercentage is < 0m or > 100m)
+        {
+            return Result.Failure(CourseErrors.InvalidRefundPercentage);
         }
 
         return Result.Success();
@@ -186,4 +277,6 @@ public static class CourseBillingErrors
     public static readonly Error CourseFeesNotConfigured = new("COURSE.FEES_NOT_CONFIGURED", "The course has no active fee lines to bill.");
     public static readonly Error PersonNotInCourseOrganization = new("COURSE.PERSON_NOT_IN_ORGANIZATION", "The person is not actively enrolled in the course organization.");
     public static readonly Error CourseOrganizationForbidden = new("COURSE.ORGANIZATION_FORBIDDEN", "The administrator cannot manage courses in this organization.");
+    public static readonly Error CourseContentNotOpen = new("COURSE.CONTENT_NOT_OPEN", "Course content is available from the course start date.");
+    public static readonly Error CourseContentLocked = new("COURSE.CONTENT_LOCKED", "Course content is locked for this enrollment status.");
 }

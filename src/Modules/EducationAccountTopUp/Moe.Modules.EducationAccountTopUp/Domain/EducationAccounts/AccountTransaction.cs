@@ -28,7 +28,8 @@ internal sealed class AccountTransaction : Entity<long>
         decimal currentBalance,
         string description,
         long? createdByUserId,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        long? reversalOfTransactionId = null)
     {
         return new AccountTransaction
         {
@@ -40,6 +41,7 @@ internal sealed class AccountTransaction : Entity<long>
             ReferenceId = referenceId,
             IdempotencyKey = idempotencyKey,
             BalanceAfter = currentBalance + amount,
+            ReversalOfTransactionId = reversalOfTransactionId,
             Description = description,
             CreatedByLoginAccountId = createdByUserId
         };

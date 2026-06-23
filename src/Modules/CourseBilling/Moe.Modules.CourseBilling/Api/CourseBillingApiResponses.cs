@@ -37,6 +37,8 @@ internal static class CourseBillingApiResponses
             "COURSE.DISABLED" => ApiResponseCodes.Conflict,
             "COURSE.NOT_PUBLISHED" => ApiResponseCodes.Conflict,
             "COURSE.ENROLLMENT_WINDOW_CLOSED" => ApiResponseCodes.Conflict,
+            "COURSE.CONTENT_NOT_OPEN" => ApiResponseCodes.Conflict,
+            "COURSE.CONTENT_LOCKED" => ApiResponseCodes.Forbidden,
             "COURSE.PERSON_NOT_IN_ORGANIZATION" => ApiResponseCodes.Conflict,
             _ => ApiResponseCodes.BadRequest
         };
