@@ -62,8 +62,6 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             startDate = "",
             endDate = "",
             courseIds = Array.Empty<long>(),
-            subsidyType = "Percentage",
-            criteriaTemplate = Array.Empty<object>(),
             tiers = Array.Empty<object>()
         });
 
@@ -148,9 +146,10 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             courseCode = $"FAS-{suffix}",
             courseName = $"FAS Course {suffix}",
             description = "FAS integration course",
-            startDate = new DateOnly(2026, 1, 1),
-            endDate = new DateOnly(2026, 12, 31),
-            enrollmentCloseAt = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc)
+            startDate = new DateOnly(2027, 3, 1),
+            endDate = new DateOnly(2027, 12, 31),
+            enrollmentOpenAt = new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            enrollmentCloseAt = new DateTime(2027, 2, 1, 0, 0, 0, DateTimeKind.Utc)
         });
         using HttpResponseMessage response = await _client.SendAsync(request);
         await AssertStatus(HttpStatusCode.Created, response);
@@ -163,26 +162,21 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         grantCode = grantCode ?? $"GRANT-{suffix}",
         name = $"FAS {suffix}",
         description = "Integration scheme",
-        startDate = new DateOnly(2026, 1, 1),
-        endDate = new DateOnly(2026, 12, 31),
+        startDate = new DateOnly(2027, 1, 1),
+        endDate = new DateOnly(2027, 12, 31),
         courseIds = Array.Empty<long>(),
-        subsidyType = "PERCENTAGE",
-        criteriaTemplate = new object[]
-        {
-            new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
-            new { criteriaType = "NATIONALITY", connectorToNext = (string?)null, displayOrder = 2 }
-        },
         tiers = new object[]
         {
             new
             {
                 label = "Full",
+                subsidyType = "PERCENTAGE",
                 subsidyValue = 100m,
                 displayOrder = 1,
-                criteriaValues = new object[]
+                criteria = new object[]
                 {
-                    new { displayOrder = 1, numberFrom = 13m, numberTo = 18m, nationalities = (string[]?)null },
-                    new { displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } }
+                    new { criteriaType = "AGE", displayOrder = 1, numberFrom = 13m, numberTo = 18m, nationalities = (string[]?)null, connectorToNext = "AND" },
+                    new { criteriaType = "NATIONALITY", displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" }, connectorToNext = (string?)null }
                 }
             }
         }
@@ -193,19 +187,18 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         schemeCode = $"FIXED-{suffix}",
         grantCode = $"FIXED-GRANT-{suffix}",
         name = $"Fixed FAS {suffix}",
-        startDate = new DateOnly(2026, 1, 1),
-        endDate = new DateOnly(2026, 12, 31),
+        startDate = new DateOnly(2027, 1, 1),
+        endDate = new DateOnly(2027, 12, 31),
         courseIds,
-        subsidyType = "FIXED",
-        criteriaTemplate = new object[] { new { criteriaType = "AGE", connectorToNext = (string?)null, displayOrder = 1 } },
         tiers = new object[]
         {
             new
             {
                 label = "Fixed Support",
+                subsidyType = "FIXED",
                 subsidyValue = 750m,
                 displayOrder = 1,
-                criteriaValues = new object[] { new { displayOrder = 1, numberFrom = 7m, numberTo = 25m, nationalities = (string[]?)null } }
+                criteria = new object[] { new { criteriaType = "AGE", displayOrder = 1, numberFrom = 7m, numberTo = 25m, nationalities = (string[]?)null, connectorToNext = (string?)null } }
             }
         }
     };
