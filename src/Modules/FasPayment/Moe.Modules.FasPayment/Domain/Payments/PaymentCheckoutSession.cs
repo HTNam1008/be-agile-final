@@ -50,6 +50,8 @@ internal sealed class PaymentCheckoutSession : Entity<long>
     public string? ProviderSubscriptionId { get; private set; }
     public string? ProviderSubscriptionScheduleId { get; private set; }
     public string? ProviderPriceId { get; private set; }
+    public string? CheckoutUrl { get; private set; }
+    public DateTime? ExpiresAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
     public DateTime? LastPaymentEventAtUtc { get; private set; }
@@ -110,12 +112,25 @@ internal sealed class PaymentCheckoutSession : Entity<long>
             createdAtUtc));
     }
 
-    public void AssignProviderCheckout(string sessionId, string priceId, DateTime updatedAtUtc)
+    public void AssignProviderCheckout(
+        string sessionId,
+        string priceId,
+        string checkoutUrl,
+        DateTime expiresAtUtc,
+        DateTime updatedAtUtc)
     {
         ProviderCheckoutSessionId = Required(sessionId);
         ProviderPriceId = Required(priceId);
+        CheckoutUrl = Required(checkoutUrl);
+        ExpiresAtUtc = expiresAtUtc;
         UpdatedAtUtc = updatedAtUtc;
     }
+
+    public bool CanResume(DateTime utcNow) =>
+        CheckoutStatusCode == CheckoutStatusCodes.Pending &&
+        !string.IsNullOrWhiteSpace(CheckoutUrl) &&
+        ExpiresAtUtc is DateTime expiresAtUtc &&
+        expiresAtUtc > utcNow;
 
     public void AttachPaymentIntent(string paymentIntentId, DateTime updatedAtUtc)
     {
@@ -137,6 +152,17 @@ internal sealed class PaymentCheckoutSession : Entity<long>
             return false;
 
         CheckoutStatusCode = CheckoutStatusCodes.Cancelled;
+        UpdatedAtUtc = updatedAtUtc;
+        return true;
+    }
+
+    public bool ExpireBeforePayment(DateTime updatedAtUtc)
+    {
+        if (PaidInstallmentCount > 0 ||
+            CheckoutStatusCode is CheckoutStatusCodes.Active or CheckoutStatusCodes.PaidInFull)
+            return false;
+
+        CheckoutStatusCode = CheckoutStatusCodes.Expired;
         UpdatedAtUtc = updatedAtUtc;
         return true;
     }
@@ -175,4 +201,10 @@ public static class CheckoutStatusCodes
     public const string PaymentPastDue = "PAYMENT_PAST_DUE";
     public const string PaidInFull = "PAID_IN_FULL";
     public const string Cancelled = "CANCELLED";
+    public const string Expired = "EXPIRED";
+}
+
+public static class PaymentCheckoutPolicy
+{
+    public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(30);
 }

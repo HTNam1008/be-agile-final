@@ -126,6 +126,12 @@ internal sealed class ProcessStripeWebhookHandler(
                 else if (checkout.RecordPaymentFailure(webhook.CreatedAtUtc))
                     await courses.ApplyPaymentFailureAsync(checkout.BillId, cancellationToken);
                 break;
+            case PaymentWebhookKind.CheckoutExpired:
+                if (checkout.PaymentId is long)
+                    await RecordStatementExpirationAsync(checkout, webhook.CreatedAtUtc, cancellationToken);
+                else if (checkout.ExpireBeforePayment(webhook.CreatedAtUtc))
+                    await courses.ApplyPaymentFailureAsync(checkout.BillId, cancellationToken);
+                break;
             case PaymentWebhookKind.SubscriptionDeleted:
                 if (checkout.CheckoutStatusCode != CheckoutStatusCodes.PaidInFull)
                     checkout.RecordPaymentFailure(webhook.CreatedAtUtc);
@@ -237,6 +243,30 @@ internal sealed class ProcessStripeWebhookHandler(
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Failed, failedAtUtc);
         payment.MarkFailed(failedAtUtc);
         checkout.RecordPaymentFailure(failedAtUtc);
+    }
+
+    private async Task RecordStatementExpirationAsync(
+        PaymentCheckoutSession checkout,
+        DateTime expiredAtUtc,
+        CancellationToken cancellationToken)
+    {
+        Payment payment = await payments.FindPaymentAsync(checkout.PaymentId!.Value, cancellationToken)
+            ?? throw new InvalidOperationException("Statement payment was not found.");
+        if (payment.PaymentStatusCode != PaymentStatusCodes.PendingOnlinePayment)
+            return;
+
+        IReadOnlyCollection<PaymentPart> parts = await payments.ListPaymentPartsAsync(payment.Id, cancellationToken);
+        PaymentPart? educationPart = parts.SingleOrDefault(
+            part => part.PaymentMethodCode == PaymentMethodCodes.EducationAccount);
+        if (educationPart?.AccountHoldId is long holdId)
+        {
+            await accounts.ReleaseAsync(holdId, cancellationToken);
+            educationPart.MarkCompleted(PaymentPartStatusCodes.Released, expiredAtUtc);
+        }
+        parts.Single(part => part.PaymentMethodCode == PaymentMethodCodes.OnlinePayment)
+            .MarkCompleted(PaymentPartStatusCodes.Failed, expiredAtUtc);
+        payment.MarkExpired(expiredAtUtc);
+        checkout.ExpireBeforePayment(expiredAtUtc);
     }
 
     private async Task ApplyRefundAsync(ParsedPaymentWebhook webhook, CancellationToken cancellationToken)

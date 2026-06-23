@@ -100,7 +100,8 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
         => Task.FromResult(new StripeCheckoutGatewayResult(
             $"cs_test_{request.CheckoutId}",
             request.ProviderPriceId ?? $"price_test_{request.CheckoutId}",
-            $"https://stripe.test/checkout/{request.CheckoutId}"));
+            $"https://stripe.test/checkout/{request.CheckoutId}",
+            request.ExpiresAtUtc));
 
     public Task ExpireCheckoutAsync(
         string providerSessionId,
@@ -123,6 +124,7 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
         {
             "success" => PaymentWebhookKind.PaymentSucceeded,
             "failure" => PaymentWebhookKind.PaymentFailed,
+            "expired" => PaymentWebhookKind.CheckoutExpired,
             _ => PaymentWebhookKind.Ignored
         };
         long checkoutId = root.GetProperty("checkoutId").GetInt64();

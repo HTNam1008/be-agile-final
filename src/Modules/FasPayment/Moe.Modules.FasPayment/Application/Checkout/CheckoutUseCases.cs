@@ -94,6 +94,13 @@ internal sealed class CreateStripeCheckoutHandler(
             checkout = created.Value;
             await payments.AddCheckoutAsync(checkout, cancellationToken);
         }
+        else if (checkout.CanResume(clock.UtcNow.UtcDateTime))
+        {
+            return Result<StripeCheckoutResponse>.Success(new(
+                checkout.Id,
+                checkout.CheckoutUrl!,
+                checkout.CheckoutStatusCode));
+        }
 
         long amountMinor = decimal.ToInt64(checkout.Amount * 100m);
         StripeCheckoutGatewayResult provider;
@@ -109,14 +116,20 @@ internal sealed class CreateStripeCheckoutHandler(
                 checkout.CurrencyCode,
                 amountMinor / checkout.RequiredInstallmentCount,
                 checkout.RequiredInstallmentCount,
-                    checkout.ProviderPriceId),
+                    checkout.ProviderPriceId,
+                    clock.UtcNow.UtcDateTime.Add(PaymentCheckoutPolicy.Lifetime)),
                 cancellationToken);
         }
         catch (PaymentProviderUnavailableException)
         {
             return Result<StripeCheckoutResponse>.Failure(PaymentDomainErrors.ProviderUnavailable);
         }
-        checkout.AssignProviderCheckout(provider.ProviderSessionId, provider.ProviderPriceId, clock.UtcNow.UtcDateTime);
+        checkout.AssignProviderCheckout(
+            provider.ProviderSessionId,
+            provider.ProviderPriceId,
+            provider.CheckoutUrl,
+            provider.ExpiresAtUtc,
+            clock.UtcNow.UtcDateTime);
         await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, cancellationToken);
 
         return Result<StripeCheckoutResponse>.Success(new(

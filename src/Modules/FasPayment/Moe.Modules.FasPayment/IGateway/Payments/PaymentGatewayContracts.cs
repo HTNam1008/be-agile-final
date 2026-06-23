@@ -78,18 +78,21 @@ internal sealed record StripeCheckoutGatewayRequest(
     string CurrencyCode,
     long UnitAmountMinor,
     int InstallmentCount,
-    string? ProviderPriceId);
+    string? ProviderPriceId,
+    DateTime ExpiresAtUtc);
 
 internal sealed record StripeCheckoutGatewayResult(
     string ProviderSessionId,
     string ProviderPriceId,
-    string CheckoutUrl);
+    string CheckoutUrl,
+    DateTime ExpiresAtUtc);
 
 internal sealed record StripeScheduleGatewayResult(string ProviderScheduleId);
 
 internal enum PaymentWebhookKind
 {
     CheckoutCompleted,
+    CheckoutExpired,
     PaymentSucceeded,
     PaymentFailed,
     InvoicePaid,

@@ -43,6 +43,7 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
                 SuccessUrl = configuration.SuccessUrl.Replace("{CHECKOUT_ID}", request.CheckoutId.ToString(), StringComparison.Ordinal),
                 CancelUrl = configuration.CancelUrl.Replace("{CHECKOUT_ID}", request.CheckoutId.ToString(), StringComparison.Ordinal),
                 PaymentMethodTypes = ["card", "paynow", "alipay"],
+                ExpiresAt = request.ExpiresAtUtc,
                 LineItems = [new SessionLineItemOptions { Price = priceId, Quantity = 1 }],
                 Metadata = metadata,
                 PaymentIntentData = new SessionPaymentIntentDataOptions
@@ -55,7 +56,7 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
 
         if (string.IsNullOrWhiteSpace(session.Url))
             throw new InvalidOperationException("Stripe did not return a Checkout URL.");
-        return new(session.Id, priceId, session.Url);
+        return new(session.Id, priceId, session.Url, session.ExpiresAt);
     }
 
     public async Task<StripeScheduleGatewayResult> AttachFiniteScheduleAsync(
@@ -163,6 +164,7 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
         PaymentWebhookKind kind = eventType switch
         {
             "checkout.session.completed" => PaymentWebhookKind.CheckoutCompleted,
+            "checkout.session.expired" => PaymentWebhookKind.CheckoutExpired,
             "checkout.session.async_payment_succeeded" => PaymentWebhookKind.PaymentSucceeded,
             "checkout.session.async_payment_failed" => PaymentWebhookKind.PaymentFailed,
             "payment_intent.succeeded" => PaymentWebhookKind.PaymentSucceeded,

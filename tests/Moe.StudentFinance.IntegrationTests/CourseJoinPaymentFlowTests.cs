@@ -238,7 +238,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
-    public async Task SplitPayment_RejectsParallelAttempt_AndSuccessCapturesEaExactlyOnce()
+    public async Task SplitPayment_ResumesExistingCheckout_AndSuccessCapturesEaExactlyOnce()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
         TestCourse course = await CreateCourseAsync(
@@ -258,8 +258,12 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         long checkoutId = ReadCheckoutId(firstPayment.GetProperty("checkoutUrl").GetString()!);
 
         using HttpResponseMessage parallelPay = await PayStatementAsync(student, statement.StatementId);
-        await AssertStatusAsync(HttpStatusCode.Conflict, parallelPay);
-        Assert.Contains("PAYMENT.STATEMENT_PAYMENT_IN_PROGRESS", await parallelPay.Content.ReadAsStringAsync());
+        await AssertStatusAsync(HttpStatusCode.Created, parallelPay);
+        JsonElement resumedPayment = await ReadDataAsync(parallelPay);
+        Assert.Equal(paymentId, resumedPayment.GetProperty("paymentId").GetInt64());
+        Assert.Equal(firstPayment.GetProperty("checkoutUrl").GetString(),
+            resumedPayment.GetProperty("checkoutUrl").GetString());
+        Assert.True(resumedPayment.GetProperty("resumed").GetBoolean());
 
         await Task.WhenAll(
             PostWebhookAsync("success", checkoutId, 6000, "evt_split_success"),
@@ -291,6 +295,88 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal(60m, payment.OnlinePaymentAmount);
         Assert.Equal(["CAPTURED", "SUCCESSFUL"], parts.Select(x => x.PartStatusCode).ToArray());
         Assert.Equal("PAID", bill.BillStatusCode);
+    }
+
+    [Fact]
+    public async Task CancelPendingCheckout_ReleasesEducationAccountHold_AndAllowsNewPayment()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage firstResponse = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Created, firstResponse);
+        JsonElement firstPayment = await ReadDataAsync(firstResponse);
+        long firstPaymentId = firstPayment.GetProperty("paymentId").GetInt64();
+
+        using HttpResponseMessage cancelResponse = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statement.StatementId}/payments/{firstPaymentId}/cancel");
+        await AssertStatusAsync(HttpStatusCode.OK, cancelResponse);
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            Payment cancelled = await db.Set<Payment>().SingleAsync(x => x.Id == firstPaymentId);
+            long educationPartId = await db.Set<PaymentPart>()
+                .Where(part => part.PaymentId == firstPaymentId &&
+                    part.PaymentMethodCode == PaymentMethodCodes.EducationAccount)
+                .Select(part => part.Id)
+                .SingleAsync();
+            AccountHold hold = await db.Set<AccountHold>()
+                .SingleAsync(x => x.PaymentPartId == educationPartId);
+            Assert.Equal(PaymentStatusCodes.Cancelled, cancelled.PaymentStatusCode);
+            Assert.Equal("RELEASED", hold.HoldStatusCode);
+        }
+
+        using HttpResponseMessage retryResponse = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Created, retryResponse);
+        JsonElement retryPayment = await ReadDataAsync(retryResponse);
+        Assert.NotEqual(firstPaymentId, retryPayment.GetProperty("paymentId").GetInt64());
+        Assert.False(retryPayment.GetProperty("resumed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ExpiredStripeCheckout_ReleasesEducationAccountHold_AndAllowsRetry()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage firstResponse = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Created, firstResponse);
+        JsonElement firstPayment = await ReadDataAsync(firstResponse);
+        long firstPaymentId = firstPayment.GetProperty("paymentId").GetInt64();
+        long checkoutId = firstPayment.GetProperty("paymentCheckoutSessionId").GetInt64();
+
+        await PostWebhookAsync(
+            "expired",
+            checkoutId,
+            0,
+            $"evt_expired_{Guid.NewGuid():N}");
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            Payment expired = await db.Set<Payment>().SingleAsync(x => x.Id == firstPaymentId);
+            PaymentCheckoutSession checkout = await db.Set<PaymentCheckoutSession>()
+                .SingleAsync(x => x.Id == checkoutId);
+            Assert.Equal(PaymentStatusCodes.Expired, expired.PaymentStatusCode);
+            Assert.Equal(CheckoutStatusCodes.Expired, checkout.CheckoutStatusCode);
+        }
+
+        using HttpResponseMessage retryResponse = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Created, retryResponse);
+        Assert.NotEqual(
+            firstPaymentId,
+            (await ReadDataAsync(retryResponse)).GetProperty("paymentId").GetInt64());
     }
 
     [Fact]
