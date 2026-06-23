@@ -36,4 +36,24 @@ internal sealed class LocalCourseMaterialStorageService(IWebHostEnvironment envi
             relativePath.Replace('\\', '/'),
             null);
     }
+
+    public Task<Stream> OpenReadAsync(string storagePath, CancellationToken cancellationToken)
+    {
+        string root = string.IsNullOrWhiteSpace(environment.WebRootPath)
+            ? Path.Combine(environment.ContentRootPath, "wwwroot")
+            : environment.WebRootPath;
+        string absoluteRoot = Path.GetFullPath(root);
+        string absolutePath = Path.GetFullPath(Path.Combine(absoluteRoot, storagePath));
+        if (!absolutePath.StartsWith(absoluteRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Course material path is outside the configured storage root.");
+
+        Stream stream = new FileStream(
+            absolutePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 64 * 1024,
+            useAsync: true);
+        return Task.FromResult(stream);
+    }
 }
