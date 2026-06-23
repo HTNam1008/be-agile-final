@@ -124,6 +124,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         PayableStatementBill[] bills = await (
             from item in dbContext.Set<BillingStatementItem>().AsNoTracking()
             join bill in dbContext.Set<Bill>().AsNoTracking() on item.BillId equals bill.Id
+            join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking() on bill.CourseEnrollmentId equals enrollment.Id
             where item.BillingStatementId == statementId
                 && bill.OutstandingAmount > 0m
                 && bill.BillStatusCode != BillStatusCodes.Paid
@@ -134,7 +135,8 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
                 bill.Id,
                 bill.OutstandingAmount,
                 bill.CurrentDueDate,
-                bill.OriginalDueDate))
+                bill.OriginalDueDate,
+                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1))
             .ToArrayAsync(cancellationToken);
         decimal total = bills.Sum(x => x.OutstandingAmount);
         return total <= 0m ? null : new(statement.Id, personId, total, statement.CurrencyCode, bills);
@@ -186,16 +188,20 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         long statementId,
         long personId,
         long failedPaymentId,
+        IReadOnlyCollection<long> billIds,
         long actorLoginAccountId,
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
         BillingStatement statement = await dbContext.Set<BillingStatement>()
             .SingleAsync(x => x.Id == statementId && x.PersonId == personId, cancellationToken);
+        long[] requestedBillIds = billIds.Distinct().ToArray();
         List<Bill> bills = await (
             from item in dbContext.Set<BillingStatementItem>()
             join bill in dbContext.Set<Bill>() on item.BillId equals bill.Id
-            where item.BillingStatementId == statementId && bill.OutstandingAmount > 0m
+            where item.BillingStatementId == statementId
+                && requestedBillIds.Contains(bill.Id)
+                && bill.OutstandingAmount > 0m
             select bill).ToListAsync(cancellationToken);
         foreach (Bill bill in bills)
         {

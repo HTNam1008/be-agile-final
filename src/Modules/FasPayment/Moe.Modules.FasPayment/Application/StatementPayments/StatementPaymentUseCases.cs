@@ -360,6 +360,7 @@ internal sealed class CancelBillingStatementPaymentHandler(
 internal sealed class DeferBillingStatementHandler(
     IPaymentCheckoutRepository payments,
     ICoursePaymentGateway billing,
+    IEducationAccountPaymentGateway accounts,
     ICurrentUser currentUser,
     IClock clock) : ICommandHandler<DeferBillingStatementCommand>
 {
@@ -373,7 +374,39 @@ internal sealed class DeferBillingStatementHandler(
             payment.PayerPersonId != personId ||
             payment.PaymentStatusCode is not (PaymentStatusCodes.Failed or PaymentStatusCodes.Expired or PaymentStatusCodes.Cancelled))
             return Result.Failure(PaymentDomainErrors.InvalidDeferral);
-        await billing.DeferStatementAsync(command.StatementId, personId, payment.Id, actorId, clock.UtcNow.UtcDateTime, ct);
+
+        PayableStatement? statement = await billing.FindPayableStatementAsync(command.StatementId, personId, ct);
+        if (statement is null)
+            return Result.Failure(PaymentApplicationErrors.BillNotFound);
+
+        long[] requestedBillIds = command.Request.BillIds?
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray() ?? [];
+        PayableStatementBill[] selectedBills = requestedBillIds.Length == 0
+            ? statement.Bills.Where(bill => bill.IsInstallment).ToArray()
+            : statement.Bills.Where(bill => requestedBillIds.Contains(bill.BillId)).ToArray();
+
+        if (requestedBillIds.Length > 0 && selectedBills.Length != requestedBillIds.Length)
+            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
+        if (selectedBills.Any(bill => !bill.IsInstallment))
+            return Result.Failure(PaymentDomainErrors.FullPaymentCannotBeDeferred);
+        if (selectedBills.Length == 0)
+            return Result.Failure(PaymentDomainErrors.NoDeferrableBills);
+
+        EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
+        decimal selectedOutstandingAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
+        if (balance?.AvailableBalance >= selectedOutstandingAmount)
+            return Result.Failure(PaymentDomainErrors.EducationAccountCanCoverDeferral);
+
+        await billing.DeferStatementAsync(
+            command.StatementId,
+            personId,
+            payment.Id,
+            selectedBills.Select(bill => bill.BillId).ToArray(),
+            actorId,
+            clock.UtcNow.UtcDateTime,
+            ct);
         return Result.Success();
     }
 }
