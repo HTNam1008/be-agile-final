@@ -10,6 +10,7 @@ public static class AuthenticationCookies
 {
     public const string AdminSession = "moe_admin_session";
     public const string EServiceSession = "moe_eservice_session";
+    public const string EServiceSingpassLoginSession = "moe_eservice_singpass_login_session";
 }
 
 public static class AuthorizationPolicies

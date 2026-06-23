@@ -5,6 +5,7 @@
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Stripe.net" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\Moe.Application.Abstractions\Moe.Application.Abstractions.csproj" />
@@ -13,9 +14,11 @@
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
     <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
+    <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.FasPayment.UnitTests" />
+    <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 </Project>

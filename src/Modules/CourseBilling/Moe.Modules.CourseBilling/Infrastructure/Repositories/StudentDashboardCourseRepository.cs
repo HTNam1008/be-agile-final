@@ -8,6 +8,15 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
 internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) : IStudentDashboardCourseRepository
 {
+    public async Task<int> CountCurrentCoursesAsync(
+        long personId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Set<CourseEnrollment>()
+            .AsNoTracking()
+            .CountAsync(x => x.PersonId == personId && x.ExitAtUtc == null, cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<StudentDashboardCourseSummary>> ListCurrentCoursesAsync(
         long personId,
         string? search,
@@ -36,6 +45,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
             orderby course.StartDate descending, enrollment.EnrolledAtUtc descending
             select new StudentDashboardCourseSummary(
                 enrollment.Id,
+                enrollment.CoursePaymentPlanId,
                 course.Id,
                 course.CourseCode,
                 course.CourseName,
@@ -79,6 +89,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
             orderby course.StartDate descending, course.CourseName
             select new StudentDashboardCourseSummary(
                 null,
+                null,
                 course.Id,
                 course.CourseCode,
                 course.CourseName,
@@ -101,7 +112,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
         return Normalize(status)?.ToUpperInvariant() switch
         {
             null => null,
-            "ACTIVE" or "IN_PROGRESS" or "INPROGRESS" => CourseEnrollmentStatusCodes.PendingPayment,
+            "IN_PROGRESS" or "INPROGRESS" => CourseEnrollmentStatusCodes.Active,
             var normalized => normalized
         };
     }

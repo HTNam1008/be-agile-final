@@ -18,7 +18,9 @@ public sealed record CreateCourseRequest(
     DateOnly StartDate,
     DateOnly EndDate,
     DateTime EnrollmentOpenAt,
-    DateTime EnrollmentCloseAt);
+    DateTime EnrollmentCloseAt,
+    decimal BeforeStartRefundPercentage = 100m,
+    decimal AfterStartRefundPercentage = 50m);
 
 public sealed record UpdateCourseRequest(
     string CourseCode,
@@ -27,6 +29,8 @@ public sealed record UpdateCourseRequest(
     DateOnly StartDate,
     DateOnly EndDate,
     DateTime EnrollmentOpenAt,
-    DateTime EnrollmentCloseAt);
+    DateTime EnrollmentCloseAt,
+    decimal BeforeStartRefundPercentage = 100m,
+    decimal AfterStartRefundPercentage = 50m);
 
 public sealed record DisableCourseRequest;

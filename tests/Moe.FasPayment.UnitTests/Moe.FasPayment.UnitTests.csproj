@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
 	<PropertyGroup>
 		<IsPackable>false</IsPackable>
 	</PropertyGroup>
@@ -21,5 +20,4 @@
 	<ItemGroup>
 		<None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
-
 </Project>
