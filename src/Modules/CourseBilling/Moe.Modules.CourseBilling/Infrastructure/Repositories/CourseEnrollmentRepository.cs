@@ -66,22 +66,14 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         long organizationId,
         DateOnly onDate,
         CancellationToken cancellationToken)
-    {
-        int exists = await dbContext.Database.SqlQuery<int>($"""
-            SELECT CAST(CASE WHEN EXISTS (
-                SELECT 1
-                FROM [person].[SchoolEnrollment]
-                WHERE [PersonId] = {personId}
-                  AND [OrganizationId] = {organizationId}
-                  AND [SchoolingStatusCode] = 'ACTIVE'
-                  AND [StartDate] <= {onDate}
-                  AND ([EndDate] IS NULL OR [EndDate] >= {onDate})
-            ) THEN 1 ELSE 0 END AS int) AS [Value]
-            """)
-            .SingleAsync(cancellationToken);
-
-        return exists == 1;
-    }
+        => await dbContext.Set<SchoolEnrollment>()
+            .AsNoTracking()
+            .AnyAsync(x => x.PersonId == personId
+                && x.OrganizationId == organizationId
+                && x.SchoolingStatusCode == "ACTIVE"
+                && x.StartDate <= onDate
+                && (x.EndDate == null || x.EndDate >= onDate),
+                cancellationToken);
 
     public Task<bool> ExistsAsync(long personId, long courseId, CancellationToken cancellationToken)
     {
