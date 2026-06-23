@@ -1,7 +1,10 @@
+using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.IdentityPlatform.Application.Organizations;
 using Moe.Modules.IdentityPlatform.Domain.People;
@@ -18,7 +21,9 @@ internal sealed class CreateStudentHandler(
     IClock clock,
     IOrganizationUnitRepository organizations,
     IStudentOnboardingRepository students,
-    IEducationAccountProvisioningGateway educationAccounts)
+    IEducationAccountProvisioningGateway educationAccounts,
+    IAuditService auditService,
+    IUnitOfWork unitOfWork)
     : ICommandHandler<CreateStudentCommand, CreateStudentResponse>
 {
     public async Task<Result<CreateStudentResponse>> Handle(
@@ -67,7 +72,7 @@ internal sealed class CreateStudentHandler(
             command.Address,
             utcNow);
 
-        long personId = await students.AddPersonAsync(person, cancellationToken);
+        long personId = await students.AddPersonAsync(person, cancellationToken, saveChanges: false);
 
         PersonIdentifier identityNumber = PersonIdentifier.CreateIdentityNumber(
             personId,
@@ -85,11 +90,10 @@ internal sealed class CreateStudentHandler(
             startDate,
             utcNow);
 
-        await students.AddStudentIdentityAndEnrollmentAsync(identityNumber, enrollment, cancellationToken);
+        await students.AddStudentIdentityAndEnrollmentAsync(identityNumber, enrollment, cancellationToken, saveChanges: false);
 
-        Result<EducationAccountProvisioningResult> accountResult = command.IsAccountHolder
-            ? await CreateEducationAccountAsync(personId, actorUserAccountId, utcNow, cancellationToken)
-            : Result<EducationAccountProvisioningResult>.Success(new EducationAccountProvisioningResult(null, null, false));
+        Result<EducationAccountProvisioningResult> accountResult =
+            await CreateEducationAccountAsync(personId, actorUserAccountId, utcNow, cancellationToken);
 
         if (accountResult.IsFailure)
         {
@@ -97,6 +101,21 @@ internal sealed class CreateStudentHandler(
         }
 
         EducationAccountProvisioningResult account = accountResult.Value;
+        string detailsJson = JsonSerializer.Serialize(new
+        {
+            personId,
+            accountNumber = account.AccountNumber,
+            openedByUserId = actorUserAccountId
+        });
+
+        await auditService.RecordAsync(
+            AuditActionCodes.EducationAccountCreatedManually,
+            "EducationAccount",
+            account.EducationAccountId!.Value.ToString(),
+            detailsJson,
+            cancellationToken);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<CreateStudentResponse>.Success(new CreateStudentResponse(
             personId,
@@ -169,7 +188,8 @@ internal sealed class CreateStudentHandler(
                 personId,
                 actorUserAccountId,
                 new DateTimeOffset(utcNow, TimeSpan.Zero),
-                cancellationToken);
+                cancellationToken,
+                saveChanges: false);
 
             return Result<EducationAccountProvisioningResult>.Success(result);
         }

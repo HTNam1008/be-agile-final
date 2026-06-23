@@ -16,6 +16,7 @@ internal sealed class CloseManualAccountHandler(
     IPersonDirectory people,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
+    IPersonLifecycleGateway personLifecycle,
     IClock clock,
     IUnitOfWork unitOfWork,
     IAuditService auditService) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
@@ -24,7 +25,7 @@ internal sealed class CloseManualAccountHandler(
         CloseManualAccountCommand command,
         CancellationToken cancellationToken)
     {
-        EducationAccount? account = await educationAccounts.FindByIdAsync(command.EducationAccountId, cancellationToken);
+        EducationAccount? account = await educationAccounts.FindByPersonIdAsync(command.PersonId, cancellationToken);
         if (account is null)
         {
             return Result<CloseManualAccountResponse>.Failure(EducationAccountErrors.NotFound);
@@ -65,6 +66,15 @@ internal sealed class CloseManualAccountHandler(
             return Result<CloseManualAccountResponse>.Failure(closeResult.Error);
         }
 
+        Result disablePerson = await personLifecycle.DisableAsync(
+            account.PersonId,
+            clock.UtcNow.UtcDateTime,
+            cancellationToken);
+        if (disablePerson.IsFailure)
+        {
+            return Result<CloseManualAccountResponse>.Failure(disablePerson.Error);
+        }
+
         string detailsJson = JsonSerializer.Serialize(new
         {
             reasonCode = command.ReasonCode,
@@ -81,6 +91,7 @@ internal sealed class CloseManualAccountHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<CloseManualAccountResponse>.Success(new CloseManualAccountResponse(
+            account.PersonId,
             account.Id,
             account.StatusCode,
             account.ClosedAtUtc));

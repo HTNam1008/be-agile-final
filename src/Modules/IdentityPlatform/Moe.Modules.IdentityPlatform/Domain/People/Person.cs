@@ -81,6 +81,12 @@ public sealed class Person : AggregateRoot<long>
         UpdatedAtUtc = utcNow;
     }
 
+    public void Disable(DateTime utcNow)
+    {
+        PersonStatusCode = PersonStatusCodes.Disabled;
+        UpdatedAtUtc = utcNow;
+    }
+
     private static string? NormalizeNullable(string? value)
     {
         string? trimmed = value?.Trim();
@@ -91,4 +97,5 @@ public sealed class Person : AggregateRoot<long>
 internal static class PersonStatusCodes
 {
     public const string Active = "ACTIVE";
+    public const string Disabled = "DISABLED";
 }

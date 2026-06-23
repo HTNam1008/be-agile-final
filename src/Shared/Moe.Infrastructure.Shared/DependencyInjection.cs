@@ -59,6 +59,13 @@ public static class DependencyInjection
             });
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE", authorization.UseStrictPermissionPolicies);
+            options.AddPolicy(AuthorizationPolicies.InternalAccountProvisioning, policy =>
+            {
+                policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra);
+                policy.RequireAuthenticatedUser();
+                policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+                policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_INTERNAL_PROVISION");
+            });
             AddAdminFeaturePolicy(
                 options,
                 AuthorizationPolicies.ViewAccountDetails,

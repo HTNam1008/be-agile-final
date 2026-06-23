@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Application.Abstractions.Audit;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
@@ -54,6 +55,39 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         Assert.Equal(request.IdentityNumber, GetProperty(identifier, "IdentifierMasked"));
         Assert.Equal($"PSEA-{personId:D8}", account.AccountNumber);
         Assert.Equal(0m, account.CachedBalance);
+    }
+
+    [Fact]
+    public async Task CreateStudent_Should_Always_Create_EducationAccount_Even_When_IsAccountHolder_Is_False()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            identityNumber: $"N{suffix[..7]}A",
+            studentNumber: $"IT-NO-AH-{suffix}",
+            isAccountHolder: false);
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/students",
+            request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        long personId = await ReadPersonIdAsync(response);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
+        EducationAccount account = await db.Set<EducationAccount>().SingleAsync(x => x.PersonId == personId);
+        Assert.Equal($"PSEA-{personId:D8}", account.AccountNumber);
+
+        object auditLog = SingleEntity(
+            db,
+            "Moe.Modules.IdentityPlatform.Domain.Audit.AuditLog",
+            x => (string)GetProperty(x, "ActionCode")! == AuditActionCodes.EducationAccountCreatedManually
+                && (string)GetProperty(x, "EntityTypeCode")! == "EducationAccount"
+                && (long?)GetProperty(x, "EntityId") == account.Id);
+
+        Assert.Contains($"\"personId\":{personId}", (string)GetProperty(auditLog, "ChangedFieldsJson")!);
     }
 
     [Fact]
@@ -187,6 +221,30 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             "+6591234567",
             "Integration test address",
             true);
+    }
+
+    private static CreateStudentRequestBody CreateRequest(
+        string? schoolName,
+        string identityNumber,
+        string studentNumber,
+        bool isAccountHolder)
+    {
+        return new CreateStudentRequestBody(
+            schoolName,
+            identityNumber,
+            "Manual Student",
+            new DateOnly(2008, 5, 12),
+            "SG",
+            "CITIZEN",
+            studentNumber,
+            "2026",
+            "SEC_4",
+            "4A",
+            new DateOnly(2026, 1, 2),
+            "manual.student@example.com",
+            "+6591234567",
+            "Integration test address",
+            isAccountHolder);
     }
 
     private static async Task<long> ReadPersonIdAsync(HttpResponseMessage response)
