@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Moe.Modules.CourseBilling.Domain.Billing;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
+using Moe.StudentFinance.Persistence;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -251,6 +255,40 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         Assert.Equal("BEFORE_COURSE_START", data.GetProperty("policyPeriodCode").GetString());
         Assert.Equal(100m, data.GetProperty("refundPercentage").GetDecimal());
         Assert.Equal(0m, data.GetProperty("refundAmount").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Student_Can_Cancel_Unpaid_Enrollment_And_Outstanding_Bills()
+    {
+        StudentLogin login = await CreateStudentAndLoginAsync();
+        long courseId = await CreatePublishedCourseAsync(1, $"CANCEL-DO-{NewSuffix()}");
+        using HttpResponseMessage joinResponse = await SendEServiceJoinAsync(courseId, login);
+        await AssertStatusAsync(HttpStatusCode.Created, joinResponse);
+        long enrollmentId = await ReadLongAsync(joinResponse, "courseEnrollmentId");
+
+        using HttpRequestMessage request = new(
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{enrollmentId}/cancel");
+        request.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        request.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        request.Content = JsonContent.Create(new { idempotencyKey = $"cancel-{Guid.NewGuid():N}" });
+
+        using HttpResponseMessage response = await _client.SendAsync(request);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement data = document.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("cancelled").GetBoolean());
+        Assert.Equal(CourseEnrollmentStatusCodes.Cancelled, data.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(0m, data.GetProperty("refundAmount").GetDecimal());
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == enrollmentId);
+        Assert.Equal(CourseEnrollmentStatusCodes.Cancelled, enrollment.EnrollmentStatusCode);
+        Assert.All(
+            await db.Set<Bill>().Where(x => x.CourseEnrollmentId == enrollmentId).ToListAsync(),
+            bill => Assert.Equal(BillStatusCodes.Cancelled, bill.BillStatusCode));
     }
 
     private async Task<long> CreatePublishedCourseAsync(long organizationId, string courseCode)
