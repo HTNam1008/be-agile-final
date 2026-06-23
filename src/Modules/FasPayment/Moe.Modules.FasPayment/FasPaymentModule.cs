@@ -13,6 +13,7 @@ using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Application.Applications.Reject;
 using Moe.Modules.FasPayment.Application.AdminPayments;
 using Moe.Modules.FasPayment.Application.Checkout;
+using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
 using Moe.Modules.FasPayment.Application.LegacyPayments;
 using Moe.Modules.FasPayment.Application.PaymentPlans;
 using Moe.Modules.FasPayment.Application.StatementPayments;
@@ -51,6 +52,7 @@ public sealed class FasPaymentModule : IModule
 
         services.AddOptions<StripePaymentOptions>().BindConfiguration(StripePaymentOptions.SectionName);
         services.AddScoped<IPaymentCheckoutRepository, PaymentCheckoutRepository>();
+        services.AddScoped<IEnrollmentRefundPreviewRepository, EnrollmentRefundPreviewRepository>();
         services.AddScoped<IPaymentPersistenceTracker, PaymentPersistenceTracker>();
         services.AddScoped<IStripePaymentGateway, StripePaymentGateway>();
         services.AddScoped<ILegacyCoursePaymentGateway, LegacyCoursePaymentGateway>();
@@ -71,6 +73,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<CancelBillingStatementPaymentCommand>, CancelBillingStatementPaymentHandler>();
         services.AddScoped<ICommandHandler<DeferBillingStatementCommand>, DeferBillingStatementHandler>();
         services.AddScoped<IQueryHandler<ListUserPaymentHistoryQuery, IReadOnlyCollection<UserPaymentHistoryResponse>>, ListUserPaymentHistoryHandler>();
+        services.AddScoped<IQueryHandler<PreviewEnrollmentCancellationQuery, EnrollmentCancellationPreviewResponse>, PreviewEnrollmentCancellationHandler>();
         services.AddScoped<IValidator<CreateCoursePaymentPlanRequest>, CreateCoursePaymentPlanRequestValidator>();
         services.AddScoped<IValidator<CreateStripeCheckoutRequest>, CreateStripeCheckoutRequestValidator>();
         services.AddScoped<IValidator<PayBillRequest>, PayBillRequestValidator>();

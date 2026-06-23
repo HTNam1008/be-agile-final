@@ -228,6 +228,31 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         Assert.Contains("COURSE.CONTENT_NOT_OPEN", await response.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Student_Can_Preview_Cancellation_Before_Course_Start()
+    {
+        StudentLogin login = await CreateStudentAndLoginAsync();
+        long courseId = await CreatePublishedCourseAsync(1, $"CANCEL-{NewSuffix()}");
+        using HttpResponseMessage joinResponse = await SendEServiceJoinAsync(courseId, login);
+        await AssertStatusAsync(HttpStatusCode.Created, joinResponse);
+        long enrollmentId = await ReadLongAsync(joinResponse, "courseEnrollmentId");
+
+        using HttpRequestMessage request = new(
+            HttpMethod.Get,
+            $"/api/eservice/v1/course-enrollments/{enrollmentId}/cancellation-preview");
+        request.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        request.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        using HttpResponseMessage response = await _client.SendAsync(request);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement data = document.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("canCancel").GetBoolean());
+        Assert.Equal("BEFORE_COURSE_START", data.GetProperty("policyPeriodCode").GetString());
+        Assert.Equal(100m, data.GetProperty("refundPercentage").GetDecimal());
+        Assert.Equal(0m, data.GetProperty("refundAmount").GetDecimal());
+    }
+
     private async Task<long> CreatePublishedCourseAsync(long organizationId, string courseCode)
     {
         long courseId = await CreateDraftCourseWithFeeAsync(organizationId, courseCode);
