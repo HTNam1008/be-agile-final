@@ -247,6 +247,52 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task CancelPaidEnrollment_RefundsEducationAccountPaymentToOriginalSource()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 150m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage pay = await PayStatementAsync(
+            student,
+            statement.StatementId,
+            "EDUCATION_ACCOUNT_ONLY");
+        await AssertStatusAsync(HttpStatusCode.Created, pay);
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{statement.EnrollmentId}/cancel",
+            new { idempotencyKey = $"cancel-ea-{Guid.NewGuid():N}" });
+
+        await AssertStatusAsync(HttpStatusCode.OK, cancel);
+        JsonElement cancellation = await ReadDataAsync(cancel);
+        Assert.Equal("REFUNDED", cancellation.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(100m, cancellation.GetProperty("refundAmount").GetDecimal());
+        Assert.Equal(100m, cancellation.GetProperty("educationAccountRefundAmount").GetDecimal());
+        Assert.Equal(0m, cancellation.GetProperty("onlineRefundAmount").GetDecimal());
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        EducationAccount account = await db.Set<EducationAccount>()
+            .SingleAsync(x => x.PersonId == student.PersonId);
+        AccountTransaction[] transactions = await db.Set<AccountTransaction>()
+            .Where(x => x.EducationAccountId == account.Id)
+            .OrderBy(x => x.Id)
+            .ToArrayAsync();
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>()
+            .SingleAsync(x => x.Id == statement.EnrollmentId);
+
+        Assert.Equal(150m, account.CachedBalance);
+        Assert.Equal([-100m, 100m], transactions.Select(x => x.Amount).ToArray());
+        Assert.Equal([50m, 150m], transactions.Select(x => x.BalanceAfter).ToArray());
+        Assert.Equal("REFUNDED", enrollment.EnrollmentStatusCode);
+    }
+
+    [Fact]
     public async Task OnlineOnlyPayment_DoesNotReserveEducationAccount()
     {
         TestStudent student = await CreateStudentAsync(balance: 150m);
