@@ -1,3 +1,5 @@
 namespace Moe.Modules.CourseBilling.Contracts.Enrollments;
 
-public sealed record SelfJoinCourseRequest(long CourseId);
+public sealed record SelfJoinCourseRequest(
+    long CourseId,
+    long CoursePaymentPlanId);

@@ -36,6 +36,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
             orderby course.StartDate descending, enrollment.EnrolledAtUtc descending
             select new StudentDashboardCourseSummary(
                 enrollment.Id,
+                enrollment.CoursePaymentPlanId,
                 course.Id,
                 course.CourseCode,
                 course.CourseName,
@@ -79,6 +80,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
             orderby course.StartDate descending, course.CourseName
             select new StudentDashboardCourseSummary(
                 null,
+                null,
                 course.Id,
                 course.CourseCode,
                 course.CourseName,
@@ -101,7 +103,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
         return Normalize(status)?.ToUpperInvariant() switch
         {
             null => null,
-            "ACTIVE" or "IN_PROGRESS" or "INPROGRESS" => CourseEnrollmentStatusCodes.PendingPayment,
+            "IN_PROGRESS" or "INPROGRESS" => CourseEnrollmentStatusCodes.Active,
             var normalized => normalized
         };
     }

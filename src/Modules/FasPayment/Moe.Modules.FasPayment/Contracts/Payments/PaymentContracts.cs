@@ -49,3 +49,17 @@ public sealed record PayBillResponse(
     decimal BillOutstandingAmount,
     string BillStatusCode,
     decimal? EducationAccountBalanceAfter);
+
+public sealed record UserPaymentHistoryResponse(
+    long PaymentId,
+    string PaymentNumber,
+    long? BillingStatementId,
+    decimal PaymentAmount,
+    decimal SuccessfulAmount,
+    decimal EducationAccountAmount,
+    decimal OnlinePaymentAmount,
+    string PaymentStatusCode,
+    string? ReceiptNumber,
+    DateTime InitiatedAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime? FailedAtUtc);

@@ -64,6 +64,6 @@ internal sealed class AdminFeeComponentRepository(MoeDbContext dbContext) : IAdm
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken)
+    public Task SaveAsync(FeeComponent feeComponent, CancellationToken cancellationToken)
         => dbContext.SaveChangesAsync(cancellationToken);
 }

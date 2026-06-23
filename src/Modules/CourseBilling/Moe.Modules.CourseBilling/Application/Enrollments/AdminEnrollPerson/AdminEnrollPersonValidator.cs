@@ -11,5 +11,7 @@ public sealed class AdminEnrollPersonRequestValidator : AbstractValidator<AdminE
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
             .MaximumLength(50);
+
+        RuleFor(x => x.CoursePaymentPlanId).GreaterThan(0);
     }
 }
