@@ -96,6 +96,21 @@ internal sealed class Payment : Entity<long>
         ReceiptNumber ??= $"RCT-{completedAtUtc:yyyyMMdd}-{Guid.NewGuid():N}"[..30].ToUpperInvariant();
     }
 
+    public void AttachProviderReferences(
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        string? providerChargeId,
+        DateTime updatedAtUtc)
+    {
+        if (!string.IsNullOrWhiteSpace(providerPaymentIntentId))
+            ProviderPaymentIntentId = providerPaymentIntentId.Trim();
+        if (!string.IsNullOrWhiteSpace(providerInvoiceId))
+            ProviderInvoiceId = providerInvoiceId.Trim();
+        if (!string.IsNullOrWhiteSpace(providerChargeId))
+            ProviderChargeId = providerChargeId.Trim();
+        UpdatedAtUtc = updatedAtUtc;
+    }
+
     public void MarkFailed(DateTime failedAtUtc)
     {
         PaymentStatusCode = PaymentStatusCodes.Failed;
