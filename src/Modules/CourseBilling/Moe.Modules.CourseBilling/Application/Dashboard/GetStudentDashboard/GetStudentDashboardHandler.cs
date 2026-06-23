@@ -112,6 +112,7 @@ internal sealed class GetStudentDashboardHandler(
     {
         return statusCode.Trim().ToUpperInvariant() switch
         {
+            CourseEnrollmentStatusCodes.PendingPlanSelection => "Choose payment plan",
             CourseEnrollmentStatusCodes.PendingPayment => "Payment pending",
             CourseEnrollmentStatusCodes.Active => "Active",
             CourseEnrollmentStatusCodes.PaymentPastDue => "Payment past due",
@@ -179,6 +180,7 @@ internal sealed class GetStudentDashboardHandler(
     {
         return
         [
+            new StudentDashboardStatusOptionResponse(CourseEnrollmentStatusCodes.PendingPlanSelection, "Choose payment plan"),
             new StudentDashboardStatusOptionResponse(CourseEnrollmentStatusCodes.PendingPayment, "Payment pending"),
             new StudentDashboardStatusOptionResponse(CourseEnrollmentStatusCodes.Active, "Active"),
             new StudentDashboardStatusOptionResponse(CourseEnrollmentStatusCodes.PaymentPastDue, "Payment past due"),

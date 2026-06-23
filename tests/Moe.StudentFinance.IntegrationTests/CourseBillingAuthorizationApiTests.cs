@@ -291,6 +291,51 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
             bill => Assert.Equal(BillStatusCodes.Cancelled, bill.BillStatusCode));
     }
 
+    [Fact]
+    public async Task Admin_Can_Add_Student_Without_Plan_And_Student_Selects_Plan_Later()
+    {
+        StudentLogin login = await CreateStudentAndLoginAsync();
+        long courseId = await CreatePublishedCourseAsync(1, $"ADMIN-ADD-{NewSuffix()}");
+
+        using HttpRequestMessage adminAdd = HqAdminMessage(
+            HttpMethod.Post,
+            $"/api/admin/v1/courses/{courseId}/enrollments");
+        adminAdd.Content = JsonContent.Create(new { studentNumber = login.StudentNumber });
+        using HttpResponseMessage adminAddResponse = await _client.SendAsync(adminAdd);
+        await AssertStatusAsync(HttpStatusCode.Created, adminAddResponse);
+        JsonElement adminAddData = await ReadDataElementAsync(adminAddResponse);
+        long enrollmentId = adminAddData.GetProperty("courseEnrollmentId").GetInt64();
+        Assert.Equal(CourseEnrollmentStatusCodes.PendingPlanSelection, adminAddData.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(JsonValueKind.Null, adminAddData.GetProperty("billId").ValueKind);
+
+        using HttpRequestMessage dashboard = new(HttpMethod.Get, "/api/eservice/v1/dashboard");
+        dashboard.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        dashboard.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        using HttpResponseMessage dashboardResponse = await _client.SendAsync(dashboard);
+        await AssertStatusAsync(HttpStatusCode.OK, dashboardResponse);
+        JsonElement course = (await ReadDataElementAsync(dashboardResponse))
+            .GetProperty("currentCourses")
+            .EnumerateArray()
+            .Single(x => x.GetProperty("courseEnrollmentId").GetInt64() == enrollmentId);
+        Assert.Equal(CourseEnrollmentStatusCodes.PendingPlanSelection, course.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal("Choose payment plan", course.GetProperty("enrollmentStatusLabel").GetString());
+        Assert.Equal(JsonValueKind.Null, course.GetProperty("coursePaymentPlanId").ValueKind);
+
+        using HttpRequestMessage choosePlan = new(
+            HttpMethod.Put,
+            $"/api/eservice/v1/course-enrollments/{enrollmentId}/payment-plan");
+        choosePlan.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        choosePlan.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        choosePlan.Content = JsonContent.Create(new { coursePaymentPlanId = _fullPaymentPlans[courseId] });
+        using HttpResponseMessage choosePlanResponse = await _client.SendAsync(choosePlan);
+
+        await AssertStatusAsync(HttpStatusCode.OK, choosePlanResponse);
+        JsonElement choosePlanData = await ReadDataElementAsync(choosePlanResponse);
+        Assert.Equal(CourseEnrollmentStatusCodes.PendingPayment, choosePlanData.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(25m, choosePlanData.GetProperty("outstandingAmount").GetDecimal());
+        Assert.Single(choosePlanData.GetProperty("generatedBills").EnumerateArray());
+    }
+
     private async Task<long> CreatePublishedCourseAsync(long organizationId, string courseCode)
     {
         long courseId = await CreateDraftCourseWithFeeAsync(organizationId, courseCode);
@@ -396,7 +441,7 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
             CancellationToken.None);
 
         Assert.Equal(personId, resolution.PersonId);
-        return new StudentLogin(resolution.UserAccountId, resolution.PersonId);
+        return new StudentLogin(resolution.UserAccountId, resolution.PersonId, $"CB-{suffix}");
     }
 
     private async Task<HttpResponseMessage> SendEServiceJoinAsync(long courseId, StudentLogin login)
@@ -439,9 +484,14 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
 
     private static async Task<long> ReadLongAsync(HttpResponseMessage response, string propertyName)
     {
+        return (await ReadDataElementAsync(response)).GetProperty(propertyName).GetInt64();
+    }
+
+    private static async Task<JsonElement> ReadDataElementAsync(HttpResponseMessage response)
+    {
         using Stream stream = await response.Content.ReadAsStreamAsync();
         using JsonDocument document = await JsonDocument.ParseAsync(stream);
-        return document.RootElement.GetProperty("data").GetProperty(propertyName).GetInt64();
+        return document.RootElement.GetProperty("data").Clone();
     }
 
     private static async Task AssertStatusAsync(HttpStatusCode expected, HttpResponseMessage response)
@@ -458,5 +508,5 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     private static string NewSuffix()
         => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
 
-    private sealed record StudentLogin(long UserAccountId, long PersonId);
+    private sealed record StudentLogin(long UserAccountId, long PersonId, string StudentNumber);
 }
