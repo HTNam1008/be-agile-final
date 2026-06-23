@@ -51,4 +51,16 @@ public static class PaymentDomainErrors
     public static readonly Error InvalidDeferral = new(
         "PAYMENT.INVALID_DEFERRAL",
         "Only a failed, cancelled or expired statement payment can be deferred.");
+
+    public static readonly Error FullPaymentCannotBeDeferred = new(
+        "PAYMENT.FULL_PAYMENT_CANNOT_BE_DEFERRED",
+        "Full payment bills cannot be deferred. Retry payment, change payment plan, or cancel enrollment.");
+
+    public static readonly Error NoDeferrableBills = new(
+        "PAYMENT.NO_DEFERRABLE_BILLS",
+        "There are no monthly installment bills eligible for deferral.");
+
+    public static readonly Error EducationAccountCanCoverDeferral = new(
+        "PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT",
+        "Your available Education Account balance can cover the monthly installment. Pay with your Education Account instead of deferring it.");
 }

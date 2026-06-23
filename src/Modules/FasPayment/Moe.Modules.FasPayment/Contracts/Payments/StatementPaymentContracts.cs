@@ -41,4 +41,6 @@ public sealed record PayBillingStatementResponse(
     DateTime? CheckoutExpiresAtUtc,
     bool Resumed);
 
-public sealed record DeferBillingStatementRequest(long FailedPaymentId);
+public sealed record DeferBillingStatementRequest(
+    long FailedPaymentId,
+    IReadOnlyCollection<long>? BillIds = null);

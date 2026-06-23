@@ -102,7 +102,9 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
                     row.Bill.DeferralCount,
                     row.Bill.OutstandingAmount,
                     row.Bill.BillStatusCode,
-                    row.IsInstallment);
+                    row.IsInstallment,
+                    row.IsInstallment,
+                    row.IsInstallment ? null : "Full payment bills cannot be deferred.");
             }).ToArray());
     }
 }

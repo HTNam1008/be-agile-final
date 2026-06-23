@@ -24,4 +24,6 @@ public sealed record BillingStatementItemResponse(
     int DeferralCount,
     decimal OutstandingAmount,
     string BillStatusCode,
-    bool IsInstallment);
+    bool IsInstallment,
+    bool CanDefer,
+    string? DeferBlockedReason);

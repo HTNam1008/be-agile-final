@@ -20,7 +20,7 @@ public interface IEducationAccountPaymentGateway
         DateTime expiresAtUtc,
         CancellationToken cancellationToken);
 
-    Task CaptureAsync(
+    Task<long> CaptureAsync(
         long accountHoldId,
         long? actorLoginAccountId,
         CancellationToken cancellationToken);

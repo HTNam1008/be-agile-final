@@ -11,7 +11,9 @@ internal sealed class CourseEnrollmentConfiguration : IEntityTypeConfiguration<C
         builder.ToTable("CourseEnrollment", "course");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("CourseEnrollmentId").UseIdentityColumn();
-        builder.HasIndex(x => new { x.PersonId, x.CourseId }).IsUnique();
+        builder.HasIndex(x => new { x.PersonId, x.CourseId })
+            .IsUnique()
+            .HasFilter("[EnrollmentStatusCode] <> 'CANCELLED' AND [EnrollmentStatusCode] <> 'REFUNDED' AND [EnrollmentStatusCode] <> 'EXITED'");
         builder.HasIndex(x => x.CoursePaymentPlanId);
         builder.Property(x => x.EnrollmentSourceCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.EnrolledAtUtc).HasColumnName("EnrolledAt");
