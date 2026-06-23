@@ -79,13 +79,36 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
 
     public async Task ApplyFullRefundAsync(long billId, DateTime refundedAtUtc, CancellationToken cancellationToken)
     {
-        long enrollmentId = await dbContext.Set<Bill>()
+        long? enrollmentId = await dbContext.Set<Bill>()
             .Where(bill => bill.Id == billId)
+            .Select(bill => (long?)bill.CourseEnrollmentId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (enrollmentId is null)
+        {
+            return;
+        }
+
+        await MarkEnrollmentsRefundedAsync([enrollmentId.Value], refundedAtUtc, cancellationToken);
+    }
+
+    public async Task ApplyFullRefundForBillsAsync(
+        IReadOnlyCollection<long> billIds,
+        DateTime refundedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (billIds.Count == 0)
+        {
+            return;
+        }
+
+        long[] enrollmentIds = await dbContext.Set<Bill>()
+            .Where(bill => billIds.Contains(bill.Id))
             .Select(bill => bill.CourseEnrollmentId)
-            .SingleAsync(cancellationToken);
-        CourseEnrollment enrollment = await dbContext.Set<CourseEnrollment>()
-            .SingleAsync(candidate => candidate.Id == enrollmentId, cancellationToken);
-        enrollment.MarkRefunded(refundedAtUtc);
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        await MarkEnrollmentsRefundedAsync(enrollmentIds, refundedAtUtc, cancellationToken);
     }
 
     public async Task<PayableStatement?> FindPayableStatementAsync(
@@ -195,4 +218,28 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task MarkEnrollmentsRefundedAsync(
+        IReadOnlyCollection<long> enrollmentIds,
+        DateTime refundedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (enrollmentIds.Count == 0)
+        {
+            return;
+        }
+
+        List<CourseEnrollment> enrollments = await dbContext.Set<CourseEnrollment>()
+            .Where(candidate => enrollmentIds.Contains(candidate.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (CourseEnrollment enrollment in enrollments)
+        {
+            if (enrollment.EnrollmentStatusCode == CourseEnrollmentStatusCodes.Refunded)
+            {
+                continue;
+            }
+
+            enrollment.MarkRefunded(refundedAtUtc);
+        }
+    }
 }

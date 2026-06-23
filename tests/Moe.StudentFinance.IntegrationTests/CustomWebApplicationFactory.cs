@@ -125,9 +125,12 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
             "success" => PaymentWebhookKind.PaymentSucceeded,
             "failure" => PaymentWebhookKind.PaymentFailed,
             "expired" => PaymentWebhookKind.CheckoutExpired,
+            "refund" => PaymentWebhookKind.ChargeRefunded,
             _ => PaymentWebhookKind.Ignored
         };
-        long checkoutId = root.GetProperty("checkoutId").GetInt64();
+        long checkoutId = root.TryGetProperty("checkoutId", out JsonElement checkoutElement)
+            ? checkoutElement.GetInt64()
+            : 0;
         long amountMinor = root.TryGetProperty("amountMinor", out JsonElement amount)
             ? amount.GetInt64()
             : 0;
@@ -140,11 +143,14 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 
         return new ParsedPaymentWebhook(
             eventId,
-            webhookKind == PaymentWebhookKind.PaymentSucceeded
-                ? "payment_intent.succeeded"
-                : webhookKind == PaymentWebhookKind.PaymentFailed
-                    ? "payment_intent.payment_failed"
-                    : "test.ignored",
+            webhookKind switch
+            {
+                PaymentWebhookKind.PaymentSucceeded => "payment_intent.succeeded",
+                PaymentWebhookKind.PaymentFailed => "payment_intent.payment_failed",
+                PaymentWebhookKind.CheckoutExpired => "checkout.session.expired",
+                PaymentWebhookKind.ChargeRefunded => "charge.refunded",
+                _ => "test.ignored"
+            },
             webhookKind,
             createdAtUtc,
             checkoutId,

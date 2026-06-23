@@ -325,6 +325,47 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task RefundedStatementPaymentWebhook_UsesPaymentAllocationsInsteadOfZeroBillId()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage pay = await PayStatementAsync(
+            student,
+            statement.StatementId,
+            "ONLINE_ONLY");
+        await AssertStatusAsync(HttpStatusCode.Created, pay);
+        JsonElement payment = await ReadDataAsync(pay);
+        long checkoutId = ReadCheckoutId(payment.GetProperty("checkoutUrl").GetString()!);
+        long paymentId = payment.GetProperty("paymentId").GetInt64();
+
+        await PostWebhookAsync("success", checkoutId, 10000, $"evt_success_{Guid.NewGuid():N}");
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{statement.EnrollmentId}/cancel",
+            new { idempotencyKey = $"cancel-online-{Guid.NewGuid():N}" });
+        await AssertStatusAsync(HttpStatusCode.OK, cancel);
+
+        await PostWebhookAsync("refund", checkoutId, 10000, $"evt_refund_{Guid.NewGuid():N}");
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Payment refundedPayment = await db.Set<Payment>().SingleAsync(x => x.Id == paymentId);
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>()
+            .SingleAsync(x => x.Id == statement.EnrollmentId);
+
+        Assert.Equal(0, refundedPayment.BillId);
+        Assert.Equal(PaymentStatusCodes.Refunded, refundedPayment.PaymentStatusCode);
+        Assert.Equal(CourseEnrollmentStatusCodes.Refunded, enrollment.EnrollmentStatusCode);
+    }
+
+    [Fact]
     public async Task EducationAccountOnlyPayment_RejectsInsufficientBalance()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
