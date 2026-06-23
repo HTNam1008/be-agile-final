@@ -8,11 +8,14 @@ public sealed record SingpassLoginResult(
     string IdentityNumber,
     string DisplayName,
     string AuthenticationContext,
-    string AuthenticationMethod);
+    string AuthenticationMethod,
+    string? PortalRedirectUri = null);
 
 public interface ISingpassLoginGateway
 {
-    Task<SingpassLoginStartResult> StartLoginAsync(CancellationToken cancellationToken);
+    Task<SingpassLoginStartResult> StartLoginAsync(
+        string? portalRedirectUri,
+        CancellationToken cancellationToken);
 
     Task<SingpassLoginResult> CompleteLoginAsync(
         string authorizationCode,

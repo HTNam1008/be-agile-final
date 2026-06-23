@@ -20,5 +20,7 @@ internal sealed class PaymentPartConfiguration : IEntityTypeConfiguration<Paymen
         builder.Property(x => x.AuthorizedAtUtc).HasColumnName("AuthorizedAt");
         builder.Property(x => x.SettledAtUtc).HasColumnName("SettledAt");
         builder.Property(x => x.FailureReason).HasMaxLength(1000);
+        builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
+        builder.Property(x => x.CompletedAtUtc).HasColumnName("CompletedAt");
     }
 }

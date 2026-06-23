@@ -11,6 +11,7 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
+    private readonly Dictionary<long, long> _fullPaymentPlans = [];
 
     [Fact]
     public async Task SchoolAdmin_Can_Create_Own_School_Course_But_Not_Other_School_Course()
@@ -155,6 +156,19 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         await AssertStatusAsync(HttpStatusCode.Created, feeResponse);
         Assert.True(await ReadLongAsync(feeResponse, "courseFeeId") > 0);
 
+        using HttpRequestMessage addPlan = HqAdminMessage(
+            HttpMethod.Post,
+            $"/api/admin/v1/courses/{courseId}/payment-plans");
+        addPlan.Content = JsonContent.Create(new
+        {
+            displayName = "Full payment",
+            planTypeCode = "FULL_PAYMENT",
+            installmentCount = 1
+        });
+        using HttpResponseMessage planResponse = await _client.SendAsync(addPlan);
+        await AssertStatusAsync(HttpStatusCode.Created, planResponse);
+        _fullPaymentPlans[courseId] = await ReadLongAsync(planResponse, "coursePaymentPlanId");
+
         return courseId;
     }
 
@@ -222,7 +236,11 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         using HttpRequestMessage message = new(HttpMethod.Post, "/api/eservice/v1/course-enrollments");
         message.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
         message.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
-        message.Content = JsonContent.Create(new { courseId });
+        message.Content = JsonContent.Create(new
+        {
+            courseId,
+            coursePaymentPlanId = _fullPaymentPlans[courseId]
+        });
         return await _client.SendAsync(message);
     }
 

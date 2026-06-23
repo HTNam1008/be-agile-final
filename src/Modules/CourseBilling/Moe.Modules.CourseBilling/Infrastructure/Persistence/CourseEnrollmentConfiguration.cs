@@ -12,10 +12,12 @@ internal sealed class CourseEnrollmentConfiguration : IEntityTypeConfiguration<C
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("CourseEnrollmentId").UseIdentityColumn();
         builder.HasIndex(x => new { x.PersonId, x.CourseId }).IsUnique();
+        builder.HasIndex(x => x.CoursePaymentPlanId);
         builder.Property(x => x.EnrollmentSourceCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.EnrolledAtUtc).HasColumnName("EnrolledAt");
         builder.Property(x => x.EnrollmentStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.ExitAtUtc).HasColumnName("ExitAt");
         builder.Property(x => x.ExitReasonCode).HasMaxLength(50).IsUnicode(false);
+        builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }
