@@ -2,6 +2,10 @@ namespace Moe.Modules.CourseBilling.IGateway.Repositories;
 
 internal interface IStudentDashboardCourseRepository
 {
+    Task<int> CountCurrentCoursesAsync(
+        long personId,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyCollection<StudentDashboardCourseSummary>> ListCurrentCoursesAsync(
         long personId,
         string? search,

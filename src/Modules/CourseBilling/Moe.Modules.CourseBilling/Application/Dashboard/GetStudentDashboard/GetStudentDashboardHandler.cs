@@ -91,7 +91,7 @@ internal sealed class GetStudentDashboardHandler(
             && currentUser.Roles.Contains(StudentRole);
     }
 
-    private static StudentDashboardCourseResponse ToResponse(StudentDashboardCourseSummary course)
+    internal static StudentDashboardCourseResponse ToResponse(StudentDashboardCourseSummary course)
     {
         return new StudentDashboardCourseResponse(
             course.CourseEnrollmentId,
@@ -108,7 +108,7 @@ internal sealed class GetStudentDashboardHandler(
             ToEnrollmentStatusLabel(course.EnrollmentStatusCode));
     }
 
-    private static string ToEnrollmentStatusLabel(string statusCode)
+    internal static string ToEnrollmentStatusLabel(string statusCode)
     {
         return statusCode.Trim().ToUpperInvariant() switch
         {
@@ -126,7 +126,7 @@ internal sealed class GetStudentDashboardHandler(
         };
     }
 
-    private static string ToAccountStatusLabel(string statusCode)
+    internal static string ToAccountStatusLabel(string statusCode)
     {
         return statusCode.Trim().ToUpperInvariant() switch
         {
@@ -138,7 +138,7 @@ internal sealed class GetStudentDashboardHandler(
         };
     }
 
-    private static string ToCurrencyDisplay(string currencyCode, decimal amount)
+    internal static string ToCurrencyDisplay(string currencyCode, decimal amount)
     {
         return currencyCode.Trim().ToUpperInvariant() switch
         {
@@ -147,26 +147,26 @@ internal sealed class GetStudentDashboardHandler(
         };
     }
 
-    private static string ToDateRangeDisplay(DateOnly startDate, DateOnly? endDate)
+    internal static string ToDateRangeDisplay(DateOnly startDate, DateOnly? endDate)
     {
         return endDate is null
             ? startDate.ToString("dd MMM yyyy", SingaporeCulture)
             : string.Create(SingaporeCulture, $"{startDate:dd MMM yyyy} - {endDate.Value:dd MMM yyyy}");
     }
 
-    private static string ToGreetingName(string displayName)
+    internal static string ToGreetingName(string displayName)
     {
         string trimmed = displayName.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? "Student" : trimmed;
     }
 
-    private static string? Normalize(string? value)
+    internal static string? Normalize(string? value)
     {
         string? trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
 
-    private static string? NormalizeStatus(string? status)
+    internal static string? NormalizeStatus(string? status)
     {
         return Normalize(status)?.ToUpperInvariant() switch
         {
@@ -176,7 +176,7 @@ internal sealed class GetStudentDashboardHandler(
         };
     }
 
-    private static IReadOnlyCollection<StudentDashboardStatusOptionResponse> GetStatusOptions()
+    internal static IReadOnlyCollection<StudentDashboardStatusOptionResponse> GetStatusOptions()
     {
         return
         [

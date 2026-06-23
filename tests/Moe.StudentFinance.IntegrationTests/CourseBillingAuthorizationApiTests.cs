@@ -183,6 +183,63 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     }
 
     [Fact]
+    public async Task Admin_Can_Update_And_Publish_Course_When_Enrollment_Already_Open()
+    {
+        string courseCode = $"OPENED-{NewSuffix()}";
+        long courseId = await CreateDraftCourseWithFeeAsync(1, courseCode);
+        DateTime enrollmentOpenAt = DateTime.UtcNow.AddMinutes(-2);
+        DateOnly startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+
+        using HttpRequestMessage update = HqAdminMessage(HttpMethod.Put, $"/api/admin/v1/courses/{courseId}");
+        update.Content = JsonContent.Create(new
+        {
+            courseCode,
+            courseName = $"Course {courseCode}",
+            description = "Enrollment window already opened",
+            startDate,
+            endDate = startDate.AddDays(90),
+            enrollmentOpenAt,
+            enrollmentCloseAt = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(-1),
+            beforeStartRefundPercentage = 100m,
+            afterStartRefundPercentage = 50m
+        });
+        using HttpResponseMessage updateResponse = await _client.SendAsync(update);
+        await AssertStatusAsync(HttpStatusCode.OK, updateResponse);
+
+        using HttpRequestMessage publish = HqAdminMessage(HttpMethod.Post, $"/api/admin/v1/courses/{courseId}/publish");
+        using HttpResponseMessage publishResponse = await _client.SendAsync(publish);
+
+        await AssertStatusAsync(HttpStatusCode.OK, publishResponse);
+        Assert.Equal(CourseStatusCodes.Published, (await ReadDataElementAsync(publishResponse))
+            .GetProperty("courseStatusCode")
+            .GetString());
+    }
+
+    [Fact]
+    public async Task Admin_Cannot_Create_Course_When_Enrollment_Close_Is_In_Past()
+    {
+        DateOnly startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14);
+        DateTime enrollmentOpenAt = DateTime.UtcNow.AddHours(-2);
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/courses",
+            new
+            {
+                organizationId = 1,
+                courseCode = $"CLOSED-{NewSuffix()}",
+                courseName = "Closed enrollment window",
+                description = "Enrollment close already passed",
+                startDate,
+                endDate = startDate.AddDays(30),
+                enrollmentOpenAt,
+                enrollmentCloseAt = DateTime.UtcNow.AddMinutes(-1)
+            });
+
+        await AssertStatusAsync(HttpStatusCode.BadRequest, response);
+        Assert.Contains("COURSE.ENROLLMENT_DATE_IN_PAST", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Student_Can_Self_Join_Own_School_Published_Course_But_Not_Other_School_Course()
     {
         StudentLogin login = await CreateStudentAndLoginAsync();
@@ -362,6 +419,39 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         Assert.Equal(CourseEnrollmentStatusCodes.PendingPlanSelection, enrollment.EnrollmentStatusCode);
         Assert.Null(enrollment.CoursePaymentPlanId);
         Assert.Empty(await db.Set<Bill>().Where(x => x.CourseEnrollmentId == enrollmentId).ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task Student_Dashboard_Summary_And_Courses_Endpoints_Return_Purpose_Built_Payloads()
+    {
+        StudentLogin login = await CreateStudentAndLoginAsync();
+        long courseId = await CreatePublishedCourseAsync(1, $"DASH-SPLIT-{NewSuffix()}");
+        using HttpResponseMessage join = await SendEServiceJoinAsync(courseId, login);
+        await AssertStatusAsync(HttpStatusCode.Created, join);
+
+        using HttpRequestMessage summary = new(HttpMethod.Get, "/api/eservice/v1/dashboard/summary");
+        summary.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        summary.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        using HttpResponseMessage summaryResponse = await _client.SendAsync(summary);
+        await AssertStatusAsync(HttpStatusCode.OK, summaryResponse);
+        JsonElement summaryData = await ReadDataElementAsync(summaryResponse);
+        Assert.True(summaryData.TryGetProperty("student", out _));
+        Assert.True(summaryData.TryGetProperty("educationAccount", out _));
+        Assert.Equal(1, summaryData.GetProperty("currentCourseCount").GetInt32());
+        Assert.False(summaryData.TryGetProperty("currentCourses", out _));
+        Assert.False(summaryData.TryGetProperty("publishedCourses", out _));
+
+        using HttpRequestMessage courses = new(HttpMethod.Get, "/api/eservice/v1/dashboard/courses");
+        courses.Headers.Add("X-Test-PersonId", login.PersonId.ToString());
+        courses.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
+        using HttpResponseMessage coursesResponse = await _client.SendAsync(courses);
+        await AssertStatusAsync(HttpStatusCode.OK, coursesResponse);
+        JsonElement coursesData = await ReadDataElementAsync(coursesResponse);
+        Assert.True(coursesData.TryGetProperty("filters", out _));
+        Assert.Single(coursesData.GetProperty("currentCourses").EnumerateArray());
+        Assert.True(coursesData.TryGetProperty("publishedCourses", out _));
+        Assert.False(coursesData.TryGetProperty("student", out _));
+        Assert.False(coursesData.TryGetProperty("educationAccount", out _));
     }
 
     private async Task<long> CreatePublishedCourseAsync(long organizationId, string courseCode)
