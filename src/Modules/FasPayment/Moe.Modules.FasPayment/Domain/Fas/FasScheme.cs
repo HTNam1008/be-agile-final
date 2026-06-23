@@ -72,6 +72,22 @@ internal sealed class FasScheme : Entity<long>
         UpdatedByLoginAccountId = actorId;
         UpdatedAtUtc = utcNow;
     }
+
+    public void Disable(long actorId, DateTime utcNow)
+    {
+        if (StatusCode != FasSchemeStatusCodes.Active) throw new InvalidOperationException("Only an active scheme can be disabled.");
+        StatusCode = FasSchemeStatusCodes.Disabled;
+        UpdatedByLoginAccountId = actorId;
+        UpdatedAtUtc = utcNow;
+    }
+
+    public void Delete(long actorId, DateTime utcNow)
+    {
+        if (StatusCode == FasSchemeStatusCodes.Deleted) throw new InvalidOperationException("The scheme is already deleted.");
+        StatusCode = FasSchemeStatusCodes.Deleted;
+        UpdatedByLoginAccountId = actorId;
+        UpdatedAtUtc = utcNow;
+    }
 }
 
 internal static class FasSchemeStatusCodes
@@ -79,4 +95,6 @@ internal static class FasSchemeStatusCodes
     public const string Draft = "DRAFT";
     public const string Active = "ACTIVE";
     public const string Retired = "RETIRED";
+    public const string Disabled = "DISABLED";
+    public const string Deleted = "DELETED";
 }

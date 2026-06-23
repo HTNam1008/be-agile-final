@@ -10,9 +10,9 @@ internal sealed class FasTierCriteriaConfiguration : IEntityTypeConfiguration<Fa
     {
         builder.ToTable("FASTierCriteria", "fas", table =>
         {
-            table.HasCheckConstraint("CK_FASTierCriteria_Type", "[CriteriaType] IN ('AGE','GDP','PCI','NATIONALITY')");
+            table.HasCheckConstraint("CK_FASTierCriteria_Type", "[CriteriaType] IN ('AGE','GDP','GHI','PCI','NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE')");
             table.HasCheckConstraint("CK_FASTierCriteria_Connector", "[ConnectorToNext] IS NULL OR [ConnectorToNext] IN ('AND','OR')");
-            table.HasCheckConstraint("CK_FASTierCriteria_Range", "([CriteriaType] = 'NATIONALITY' AND [NumberFrom] IS NULL AND [NumberTo] IS NULL) OR ([CriteriaType] <> 'NATIONALITY' AND [NumberFrom] IS NOT NULL AND [NumberTo] IS NOT NULL AND [NumberFrom] <= [NumberTo])");
+            table.HasCheckConstraint("CK_FASTierCriteria_Range", "([CriteriaType] IN ('NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE') AND [NumberFrom] IS NULL AND [NumberTo] IS NULL) OR ([CriteriaType] NOT IN ('NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE') AND [NumberFrom] IS NOT NULL AND [NumberTo] IS NOT NULL AND [NumberFrom] <= [NumberTo])");
         });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("FASTierCriteriaId").UseIdentityColumn();
