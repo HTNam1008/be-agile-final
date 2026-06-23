@@ -51,7 +51,7 @@ internal sealed class EducationAccountPaymentGateway(MoeDbContext dbContext)
         return hold.Id;
     }
 
-    public async Task CaptureAsync(
+    public async Task<long> CaptureAsync(
         long accountHoldId,
         long? actorLoginAccountId,
         CancellationToken cancellationToken)
@@ -69,6 +69,7 @@ internal sealed class EducationAccountPaymentGateway(MoeDbContext dbContext)
         await dbContext.SaveChangesAsync(cancellationToken);
         hold.Capture(transaction.Id, now);
         await dbContext.SaveChangesAsync(cancellationToken);
+        return transaction.Id;
     }
 
     public async Task ReleaseAsync(long accountHoldId, CancellationToken cancellationToken)

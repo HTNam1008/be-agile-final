@@ -159,8 +159,8 @@ internal sealed class ProcessStripeWebhookHandler(
         PaymentPart? educationPart = parts.SingleOrDefault(x => x.PaymentMethodCode == PaymentMethodCodes.EducationAccount);
         if (educationPart?.AccountHoldId is long holdId)
         {
-            await accounts.CaptureAsync(holdId, null, cancellationToken);
-            educationPart.MarkCompleted(PaymentPartStatusCodes.Captured, webhook.CreatedAtUtc);
+            long accountTransactionId = await accounts.CaptureAsync(holdId, null, cancellationToken);
+            educationPart.MarkCompleted(PaymentPartStatusCodes.Captured, webhook.CreatedAtUtc, accountTransactionId);
         }
         PaymentPart onlinePart = parts.Single(x => x.PaymentMethodCode == PaymentMethodCodes.OnlinePayment);
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Successful, webhook.CreatedAtUtc);
