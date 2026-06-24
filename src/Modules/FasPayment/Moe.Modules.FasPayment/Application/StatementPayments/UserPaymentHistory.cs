@@ -119,6 +119,6 @@ internal sealed class ListUserPaymentHistoryHandler(
 
     private static string ToFundingSourceCode(string paymentMethodCode)
         => paymentMethodCode == PaymentMethodCodes.EducationAccount
-            ? "EDUCATION_ACCOUNT"
-            : "ONLINE_PAYMENT";
+            ? PaymentMethodCodes.EducationAccount
+            : PaymentMethodCodes.OnlinePayment;
 }
