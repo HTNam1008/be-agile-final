@@ -8,7 +8,7 @@ internal sealed class FasApplicationConfiguration : IEntityTypeConfiguration<Fas
 {
     public void Configure(EntityTypeBuilder<FasApplication> b)
     {
-        b.ToTable("FASApplication", "fas",t=>{t.HasCheckConstraint("CK_FASApplication_Status","[ApplicationStatusCode] IN ('DRAFT','SUBMITTED','WITHDRAWN','PENDING_REVIEW','APPROVED','REJECTED')");t.HasCheckConstraint("CK_FASApplication_HouseholdSize","[HouseholdSizeSnapshot] IS NULL OR [HouseholdSizeSnapshot] > 0");t.HasCheckConstraint("CK_FASApplication_Income","[HouseholdIncomeSnapshot] IS NULL OR [HouseholdIncomeSnapshot] >= 0");t.HasCheckConstraint("CK_FASApplication_PCI","[PerCapitaIncomeSnapshot] IS NULL OR [PerCapitaIncomeSnapshot] >= 0");}); b.HasKey(x => x.Id);
+        b.ToTable("FASApplication", "fas", t => { t.HasCheckConstraint("CK_FASApplication_Status", "[ApplicationStatusCode] IN ('DRAFT','SUBMITTED','WITHDRAWN','PENDING_REVIEW','APPROVED','REJECTED')"); t.HasCheckConstraint("CK_FASApplication_HouseholdSize", "[HouseholdSizeSnapshot] IS NULL OR [HouseholdSizeSnapshot] > 0"); t.HasCheckConstraint("CK_FASApplication_Income", "[HouseholdIncomeSnapshot] IS NULL OR [HouseholdIncomeSnapshot] >= 0"); t.HasCheckConstraint("CK_FASApplication_PCI", "[PerCapitaIncomeSnapshot] IS NULL OR [PerCapitaIncomeSnapshot] >= 0"); }); b.HasKey(x => x.Id);
         b.Property(x => x.Id).HasColumnName("FASApplicationId").UseIdentityColumn();
         b.Property(x => x.ApplicationNo).HasColumnName("ApplicationNumber").HasMaxLength(50).IsRequired(); b.HasIndex(x => x.ApplicationNo).IsUnique();
         b.Property(x => x.FasSchemeId).HasColumnName("FASSchemeId");

@@ -30,10 +30,15 @@ internal sealed class FasScheme : Entity<long>
 
         return new FasScheme
         {
-            SchemeCode = schemeCode.Trim(), GrantCode = grantCode.Trim(), Name = name.Trim(),
+            SchemeCode = schemeCode.Trim(),
+            GrantCode = grantCode.Trim(),
+            Name = name.Trim(),
             Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-            StartDate = startDate, EndDate = endDate, StatusCode = FasSchemeStatusCodes.Draft,
-            CreatedByLoginAccountId = actorId, CreatedAtUtc = utcNow
+            StartDate = startDate,
+            EndDate = endDate,
+            StatusCode = FasSchemeStatusCodes.Draft,
+            CreatedByLoginAccountId = actorId,
+            CreatedAtUtc = utcNow
         };
     }
 

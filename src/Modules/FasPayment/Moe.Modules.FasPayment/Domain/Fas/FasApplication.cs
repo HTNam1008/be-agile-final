@@ -43,35 +43,54 @@ internal sealed class FasApplication : Entity<long>
         string? mobile, string? address, string? email, long schoolId, string schoolName, string accountTypeCode,
         long actorId, DateTime now)
     {
-        if(personId<=0||actorId<=0||schemeId<=0||schoolId<=0)throw new DomainException("Student, actor, scheme and current school are required.");
-        if(string.IsNullOrWhiteSpace(applicationNo)||string.IsNullOrWhiteSpace(studentNumber)||string.IsNullOrWhiteSpace(name)||string.IsNullOrWhiteSpace(nric)||string.IsNullOrWhiteSpace(nationality)||string.IsNullOrWhiteSpace(mobile)||string.IsNullOrWhiteSpace(address)||string.IsNullOrWhiteSpace(schoolName))throw new DomainException("The student profile is incomplete.");
+        if (personId <= 0 || actorId <= 0 || schemeId <= 0 || schoolId <= 0) throw new DomainException("Student, actor, scheme and current school are required.");
+        if (string.IsNullOrWhiteSpace(applicationNo) || string.IsNullOrWhiteSpace(studentNumber) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(nric) || string.IsNullOrWhiteSpace(nationality) || string.IsNullOrWhiteSpace(mobile) || string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(schoolName)) throw new DomainException("The student profile is incomplete.");
         return new()
         {
-            ApplicationNo = applicationNo, AccountHolderPersonId = personId, StudentPersonId = personId,
-            FasSchemeId = schemeId, StudentId = studentNumber, StudentNumber = studentNumber,
-            StudentName = name, NricFinMasked = nric, DateOfBirth = dob, NationalityCode = nationality,
-            Mobile = mobile, Address = address, Email = email, SchoolOrganizationId = schoolId,
+            ApplicationNo = applicationNo,
+            AccountHolderPersonId = personId,
+            StudentPersonId = personId,
+            FasSchemeId = schemeId,
+            StudentId = studentNumber,
+            StudentNumber = studentNumber,
+            StudentName = name,
+            NricFinMasked = nric,
+            DateOfBirth = dob,
+            NationalityCode = nationality,
+            Mobile = mobile,
+            Address = address,
+            Email = email,
+            SchoolOrganizationId = schoolId,
             AccountTypeCode = accountTypeCode is "EDUCATION_ACCOUNT" ? accountTypeCode : "PERSONAL_ACCOUNT",
-            SchoolName = schoolName, StatusCode = "DRAFT", CreatedByLoginAccountId = actorId,
-            CreatedAt = now, SubmittedDate = DateOnly.FromDateTime(now)
+            SchoolName = schoolName,
+            StatusCode = "DRAFT",
+            CreatedByLoginAccountId = actorId,
+            CreatedAt = now,
+            SubmittedDate = DateOnly.FromDateTime(now)
         };
     }
 
     // Compatibility factory used by the existing scheme-scoped admin flow.
     public static FasApplication Submit(string applicationNo, long fasSchemeId, string studentId,
         string studentName, DateOnly submittedDate) => new()
-    {
-        ApplicationNo = applicationNo, FasSchemeId = fasSchemeId, StudentId = studentId,
-        StudentNumber = studentId, StudentName = studentName, SubmittedDate = submittedDate,
-        SubmittedAtUtc = submittedDate.ToDateTime(TimeOnly.MinValue), LockedAtUtc = DateTime.UtcNow,
-        StatusCode = FasApplicationStatuses.PendingReview, CreatedAt = DateTime.UtcNow
-    };
+        {
+            ApplicationNo = applicationNo,
+            FasSchemeId = fasSchemeId,
+            StudentId = studentId,
+            StudentNumber = studentId,
+            StudentName = studentName,
+            SubmittedDate = submittedDate,
+            SubmittedAtUtc = submittedDate.ToDateTime(TimeOnly.MinValue),
+            LockedAtUtc = DateTime.UtcNow,
+            StatusCode = FasApplicationStatuses.PendingReview,
+            CreatedAt = DateTime.UtcNow
+        };
 
     public void ReplacePrimaryScheme(long schemeId, long actorId, DateTime now)
     { EnsureDraft(); FasSchemeId = schemeId; Touch(actorId, now); }
 
     public void UpdateEmail(string email, long actorId, DateTime now)
-    { EnsureDraft(); if (string.IsNullOrWhiteSpace(email) || !System.Net.Mail.MailAddress.TryCreate(email,out _)) throw new DomainException("A valid email is required."); Email = email.Trim(); Touch(actorId, now); }
+    { EnsureDraft(); if (string.IsNullOrWhiteSpace(email) || !System.Net.Mail.MailAddress.TryCreate(email, out _)) throw new DomainException("A valid email is required."); Email = email.Trim(); Touch(actorId, now); }
 
     public void UpdateParentNationalities(IEnumerable<string> nationalities, long actorId, DateTime now)
     {
@@ -85,9 +104,9 @@ internal sealed class FasApplication : Entity<long>
         decimal otherIncome, long actorId, DateTime now)
     {
         EnsureDraft();
-        if(welfareHome){IsWelfareHomeResident=true;EmploymentStatusCode=null;MonthlyHouseholdIncome=null;HouseholdMemberCount=null;OtherMonthlyIncome=null;PerCapitaIncome=null;Touch(actorId,now);return;}
-        if (!ghi.HasValue||!members.HasValue||ghi < 0 || otherIncome < 0 || members <= 0) throw new DomainException("Income and household values are invalid.");
-        var status=employmentStatus?.Trim().ToUpperInvariant();if(status is not("EMPLOYED" or "SELF_EMPLOYED" or "UNEMPLOYED"))throw new DomainException("Employment status must be EMPLOYED, SELF_EMPLOYED or UNEMPLOYED.");
+        if (welfareHome) { IsWelfareHomeResident = true; EmploymentStatusCode = null; MonthlyHouseholdIncome = null; HouseholdMemberCount = null; OtherMonthlyIncome = null; PerCapitaIncome = null; Touch(actorId, now); return; }
+        if (!ghi.HasValue || !members.HasValue || ghi < 0 || otherIncome < 0 || members <= 0) throw new DomainException("Income and household values are invalid.");
+        var status = employmentStatus?.Trim().ToUpperInvariant(); if (status is not ("EMPLOYED" or "SELF_EMPLOYED" or "UNEMPLOYED")) throw new DomainException("Employment status must be EMPLOYED, SELF_EMPLOYED or UNEMPLOYED.");
         IsWelfareHomeResident = welfareHome; EmploymentStatusCode = status;
         MonthlyHouseholdIncome = ghi; HouseholdMemberCount = members; OtherMonthlyIncome = otherIncome;
         PerCapitaIncome = (ghi.Value + otherIncome) / members.Value; Touch(actorId, now);
