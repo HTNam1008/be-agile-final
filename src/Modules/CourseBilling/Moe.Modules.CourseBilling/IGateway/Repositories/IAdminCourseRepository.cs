@@ -37,6 +37,7 @@ internal interface IAdminCourseRepository
     Task SaveMaterialAsync(CourseMaterial material, CancellationToken cancellationToken);
     Task<IReadOnlyList<CourseFeeDetail>> ListFeesAsync(long courseId, CancellationToken cancellationToken);
     Task<FeeComponent?> FindActiveFeeComponentAsync(long feeComponentId, CancellationToken cancellationToken);
+    Task<FeeComponent?> FindActiveFeeComponentByCodeAsync(string componentCode, CancellationToken cancellationToken);
     Task<CourseFee?> FindCourseFeeAsync(long courseId, long courseFeeId, CancellationToken cancellationToken);
     Task<CourseFee?> FindCourseFeeByComponentAsync(long courseId, long feeComponentId, CancellationToken cancellationToken);
     Task AddFeeAsync(CourseFee fee, CancellationToken cancellationToken);

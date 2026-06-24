@@ -94,6 +94,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICommandHandler<UpdateFeeComponentCommand, FeeComponentDto>, UpdateFeeComponentCommandHandler>();
         services.AddScoped<ICommandHandler<ActivateFeeComponentCommand, FeeComponentDto>, ActivateFeeComponentCommandHandler>();
         services.AddScoped<ICommandHandler<DeactivateFeeComponentCommand, FeeComponentDto>, DeactivateFeeComponentCommandHandler>();
+        services.AddScoped<ICommandHandler<DeleteFeeComponentCommand, long>, DeleteFeeComponentCommandHandler>();
 
         services.AddScoped<ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>, AdminEnrollPersonHandler>();
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();

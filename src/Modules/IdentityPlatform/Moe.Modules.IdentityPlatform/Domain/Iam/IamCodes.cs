@@ -48,6 +48,7 @@ internal static class PermissionCodes
     public const string AccountsManualCreate = "ACCOUNT_MANUAL_CREATE";
     public const string AccountDetailsManage = "ACCOUNT_DETAILS_MANAGE";
     public const string AccountsLifecycleManage = "ACCOUNT_LIFECYCLE_MANAGE";
+    public const string LifecycleManualTrigger = "LIFECYCLE_MANUAL_TRIGGER";
     public const string AccountsSettlementView = "ACCOUNT_SETTLEMENT_VIEW";
     public const string ExternalAccountsProvision = "EXTERNAL_ACCOUNTS_PROVISION";
     public const string AccessScopeManage = "ACCESS_SCOPE_MANAGE";

@@ -335,7 +335,10 @@ internal sealed class CancelBillingStatementPaymentHandler(
             }
             catch (PaymentProviderUnavailableException)
             {
-                return Result.Failure(PaymentDomainErrors.ProviderUnavailable);
+                // Cancelling checkout is a local recovery action for the student. Stripe can reject
+                // expiry when the hosted session is already completed/expired/cancelled remotely, or
+                // can be temporarily unavailable. In those cases we still release local holds and mark
+                // the pending payment as cancelled so the student can retry instead of being stuck.
             }
         }
 

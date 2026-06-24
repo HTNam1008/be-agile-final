@@ -19,6 +19,13 @@ internal sealed class EducationAccountRepository(MoeDbContext dbContext) : IEduc
             .SingleOrDefaultAsync(x => x.PersonId == personId, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<EducationAccount>> ListActiveAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.Set<EducationAccount>()
+            .Where(x => x.StatusCode == AccountStatuses.Active)
+            .ToArrayAsync(cancellationToken);
+    }
+
     public Task<bool> ExistsForPersonAsync(long personId, CancellationToken cancellationToken)
     {
         return dbContext.Set<EducationAccount>()

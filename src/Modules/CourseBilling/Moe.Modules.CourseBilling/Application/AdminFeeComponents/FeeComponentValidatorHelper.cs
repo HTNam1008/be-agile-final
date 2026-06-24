@@ -14,6 +14,7 @@ internal static class FeeComponentValidatorHelper
         string componentCode,
         string componentTypeCode,
         string calculationTypeCode,
+        decimal defaultValue,
         long? excludeFeeComponentId,
         CancellationToken cancellationToken)
     {
@@ -25,6 +26,13 @@ internal static class FeeComponentValidatorHelper
         if (!FeeComponentCalculationTypes.All.Contains(calculationTypeCode.Trim(), StringComparer.OrdinalIgnoreCase))
         {
             return Result.Failure(CourseErrors.InvalidCalculationType);
+        }
+
+        if (defaultValue < 0m ||
+            string.Equals(calculationTypeCode, FeeComponentCalculationTypes.Percentage, StringComparison.OrdinalIgnoreCase) &&
+            defaultValue > 100m)
+        {
+            return Result.Failure(CourseErrors.InvalidFeeDefaultValue);
         }
 
         if (await feeComponents.ComponentCodeExistsAsync(componentCode, excludeFeeComponentId, cancellationToken))
