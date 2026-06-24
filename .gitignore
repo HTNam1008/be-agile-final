@@ -9,6 +9,11 @@ appsettings.Local.json
 TestResults/
 coverage/
 artifacts/
+.artifacts/
+.codegraph/
+.codex-runlogs/
+.manual-test-logs/
+api-swagger.*.log
 
 
 

@@ -80,6 +80,30 @@ public sealed class EducationAccount : AggregateRoot<long>
         return Result<EducationAccount>.Success(account);
     }
 
+    public static Result<EducationAccount> OpenAutomatically(
+        long personId,
+        string accountNumber,
+        DateTimeOffset now)
+    {
+        if (personId <= 0)
+        {
+            return Result<EducationAccount>.Failure(AccountErrors.InvalidPerson);
+        }
+
+        EducationAccount account = new(
+            0,
+            personId,
+            accountNumber.Trim(),
+            CurrencyCodes.SingaporeDollar,
+            now,
+            AccountOpeningModeCodes.Automatic,
+            EducationAccountOpeningReasonCodes.AutoEligibility,
+            null,
+            null);
+
+        return Result<EducationAccount>.Success(account);
+    }
+
     public Result CloseManual(DateTimeOffset now, string reasonCode, string? remarks, long closedByLoginAccountId)
     {
         if (StatusCode == AccountStatuses.Closed)
@@ -100,6 +124,21 @@ public sealed class EducationAccount : AggregateRoot<long>
         return Result.Success();
     }
 
+    public Result<bool> CloseAutomatically(DateTimeOffset now)
+    {
+        if (StatusCode == AccountStatuses.Closed)
+        {
+            return Result<bool>.Success(false);
+        }
+
+        StatusCode = AccountStatuses.Closed;
+        ClosedAtUtc = now;
+        ClosingReasonCode = EducationAccountClosingReasonCodes.AutoAgeLimit;
+        ClosingRemarks = null;
+        ClosedByLoginAccountId = null;
+        return Result<bool>.Success(true);
+    }
+
     public void UpdateBalance(decimal amount)
     {
         CachedBalance += amount;
@@ -114,6 +153,7 @@ public static class CurrencyCodes
 public static class AccountOpeningModeCodes
 {
     public const string Manual = "MANUAL";
+    public const string Automatic = "AUTOMATIC";
 }
 
 public static class AccountStatuses

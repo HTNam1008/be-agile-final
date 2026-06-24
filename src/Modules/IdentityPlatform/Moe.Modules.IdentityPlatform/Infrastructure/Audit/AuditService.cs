@@ -19,10 +19,10 @@ internal sealed class AuditService(
         CancellationToken cancellationToken = default)
     {
         long parsedEntityId = long.Parse(entityId);
-        string actorTypeCode = ResolveActorTypeCode(currentUser.Portal);
+        string actorTypeCode = ResolveActorTypeCode(currentUser);
 
         AuditLog auditLog = AuditLog.Record(
-            auditScopeCode: currentUser.Portal,
+            auditScopeCode: string.IsNullOrWhiteSpace(currentUser.Portal) ? "SYSTEM" : currentUser.Portal,
             organizationId: currentUser.OrganizationUnitId,
             actorTypeCode: actorTypeCode,
             actorLoginAccountId: currentUser.UserAccountId,
@@ -37,9 +37,14 @@ internal sealed class AuditService(
         return Task.CompletedTask;
     }
 
-    private static string ResolveActorTypeCode(string portal)
+    private static string ResolveActorTypeCode(ICurrentUser currentUser)
     {
-        return string.Equals(portal, "AdminPortal", StringComparison.OrdinalIgnoreCase)
+        if (!currentUser.IsAuthenticated && currentUser.UserAccountId is null)
+        {
+            return "SYSTEM";
+        }
+
+        return string.Equals(currentUser.Portal, "AdminPortal", StringComparison.OrdinalIgnoreCase)
             ? "ADMIN"
             : "USER";
     }

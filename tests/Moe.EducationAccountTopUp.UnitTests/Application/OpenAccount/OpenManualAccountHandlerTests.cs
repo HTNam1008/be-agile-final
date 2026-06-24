@@ -130,6 +130,10 @@ public sealed class OpenManualAccountHandlerTests
         public Task<EducationAccount?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
             => Task.FromResult<EducationAccount?>(AddedAccounts.SingleOrDefault(x => x.PersonId == personId));
 
+        public Task<IReadOnlyCollection<EducationAccount>> ListActiveAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<EducationAccount>>(
+                AddedAccounts.Where(x => x.StatusCode == AccountStatuses.Active).ToArray());
+
         public Task<bool> ExistsForPersonAsync(long personId, CancellationToken cancellationToken)
             => Task.FromResult(DuplicatePersonIds.Contains(personId));
 
