@@ -1,0 +1,40 @@
+Using launch settings from src\Hosts\Moe.StudentFinance.Api\Properties\launchSettings.json...
+2026-06-23 23:03:32,461 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (201ms) [Parameters=[@bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [org].[Organization] AS [o]
+        WHERE [o].[OrganizationId] = @bootstrap_OrganizationUnitId AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-23 23:03:32,620 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (42ms) [Parameters=[@utcNow='?' (DbType = DateTime2), @utcNow1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[RolePermission] AS [r]
+        WHERE [r].[RoleCode] = 'HQ_ADMIN' AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow1)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-23 23:03:32,776 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (46ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @entraObjectId
+2026-06-23 23:03:32,964 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (14ms) [Parameters=[@account_Id='?' (DbType = Int64), @bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @bootstrap_OrganizationUnitId AND [u].[RoleCode] = 'HQ_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-23 23:03:32,985 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpRunWorker - Top-up run worker started
+2026-06-23 23:03:32,988 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpSchedulerWorker - Top-up scheduler worker started
+2026-06-23 23:03:33,206 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: https://localhost:7000
+2026-06-23 23:03:33,207 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: http://localhost:7001
+2026-06-23 23:03:33,208 INFO  [(null)] Microsoft.Hosting.Lifetime - Application started. Press Ctrl+C to shut down.
+2026-06-23 23:03:33,209 INFO  [(null)] Microsoft.Hosting.Lifetime - Hosting environment: Development
+2026-06-23 23:03:33,210 INFO  [(null)] Microsoft.Hosting.Lifetime - Content root path: C:\Agile Final\agile-final-moe-backend\src\Hosts\Moe.StudentFinance.Api
+2026-06-23 23:03:33,218 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (52ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[NextRunAt], [t].[OrganizationId], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
