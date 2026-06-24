@@ -16,4 +16,8 @@
     <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
     <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
+    <InternalsVisibleTo Include="Moe.Modules.FasPayment" />
+  </ItemGroup>
 </Project>

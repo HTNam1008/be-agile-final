@@ -16,6 +16,7 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.DTOs;
+using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 
@@ -104,7 +105,8 @@ public sealed class TopUpCampaignsController(
         [FromBody] ChangeCampaignStatusCommand commandRequest,
         CancellationToken cancellationToken)
     {
-        if (id != commandRequest.TopUpCampaignId) return BadRequest();
+        if (id != commandRequest.TopUpCampaignId)
+            return ApiResponseFactory.Failure(new Error("Campaign.IdMismatch", "URL ID does not match Payload ID."), ApiResponseCodes.BadRequest, HttpContext.TraceIdentifier);
         var result = await commandDispatcher.Send(commandRequest, cancellationToken);
 
         if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
@@ -141,7 +143,8 @@ public sealed class TopUpCampaignsController(
         [FromBody] UpsertCampaignRulesCommand commandRequest,
         CancellationToken cancellationToken)
     {
-        if (id != commandRequest.TopUpCampaignId) return BadRequest();
+        if (id != commandRequest.TopUpCampaignId)
+            return ApiResponseFactory.Failure(new Error("Campaign.IdMismatch", "URL ID does not match Payload ID."), ApiResponseCodes.BadRequest, HttpContext.TraceIdentifier);
         var result = await commandDispatcher.Send(commandRequest, cancellationToken);
 
         if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);

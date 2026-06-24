@@ -78,6 +78,8 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
                 x.EndDate,
                 x.EnrollmentOpenAtUtc,
                 x.EnrollmentCloseAtUtc,
+                x.BeforeStartRefundPercentage,
+                x.AfterStartRefundPercentage,
                 x.CourseStatusCode,
                 dbContext.Set<CourseFee>()
                     .Where(fee => fee.CourseId == x.Id && fee.IsActive)
@@ -178,6 +180,9 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public Task SaveCourseAsync(Course course, CancellationToken cancellationToken)
+        => dbContext.SaveChangesAsync(cancellationToken);
+
     public async Task RemoveDraftCourseAsync(long courseId, CancellationToken cancellationToken)
     {
         var strategy = dbContext.Database.CreateExecutionStrategy();
@@ -205,9 +210,6 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         });
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken)
-        => dbContext.SaveChangesAsync(cancellationToken);
-
     public async Task<IReadOnlyList<CourseMaterial>> ListMaterialsAsync(long courseId, CancellationToken cancellationToken)
         => await dbContext.Set<CourseMaterial>().AsNoTracking()
             .Where(x => x.CourseId == courseId && x.IsActive)
@@ -224,6 +226,9 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         await dbContext.Set<CourseMaterial>().AddAsync(material, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task SaveMaterialAsync(CourseMaterial material, CancellationToken cancellationToken)
+        => dbContext.SaveChangesAsync(cancellationToken);
 
     public async Task<IReadOnlyList<CourseFeeDetail>> ListFeesAsync(long courseId, CancellationToken cancellationToken)
         => await ListFeesQuery(courseId).ToListAsync(cancellationToken);
@@ -245,6 +250,9 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         await dbContext.Set<CourseFee>().AddAsync(fee, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task SaveFeeAsync(CourseFee fee, CancellationToken cancellationToken)
+        => dbContext.SaveChangesAsync(cancellationToken);
 
     public Task<bool> HasActiveEnrollmentAsync(long courseId, long personId, CancellationToken cancellationToken)
         => dbContext.Set<CourseEnrollment>().AnyAsync(x =>
@@ -309,6 +317,8 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
 
         List<CourseEnrollment> enrollments = await dbContext.Set<CourseEnrollment>()
             .Where(enrollment => enrollment.CourseId == courseId
+                && enrollment.CoursePaymentPlanId != null
+                && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.PendingPlanSelection
                 && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled
                 && !dbContext.Set<Bill>().Any(bill => bill.CourseEnrollmentId == enrollment.Id))
             .OrderBy(enrollment => enrollment.Id)

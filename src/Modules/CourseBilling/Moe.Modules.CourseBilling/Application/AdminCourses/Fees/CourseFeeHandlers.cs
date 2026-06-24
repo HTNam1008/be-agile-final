@@ -83,7 +83,7 @@ internal sealed class UpdateCourseFeeCommandHandler(AdminCourseAccess access)
         }
 
         fee.Update(request.FeeValue, request.SequenceNumber);
-        await access.Courses.SaveChangesAsync(cancellationToken);
+        await access.Courses.SaveFeeAsync(fee, cancellationToken);
         return Result<CourseFeeDto>.Success(CourseFeeMapper.ToFeeDto(new CourseFeeDetail(fee, component)));
     }
 }
@@ -115,7 +115,7 @@ internal sealed class DeleteCourseFeeCommandHandler(AdminCourseAccess access)
         }
 
         fee.Deactivate();
-        await access.Courses.SaveChangesAsync(cancellationToken);
+        await access.Courses.SaveFeeAsync(fee, cancellationToken);
         return Result<CourseFeeDto>.Success(CourseFeeMapper.ToFeeDto(new CourseFeeDetail(fee, component)));
     }
 }

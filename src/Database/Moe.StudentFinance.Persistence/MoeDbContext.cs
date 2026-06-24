@@ -32,6 +32,20 @@ public sealed class MoeDbContext(
     {
         foreach (var contributor in contributors.OrderBy(x => x.GetType().FullName))
             contributor.Configure(modelBuilder);
+
+        if (Database.IsSqlite())
+        {
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                var properties = entityType.GetProperties()
+                    .Where(p => p.IsConcurrencyToken && p.ValueGenerated == Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate && p.ClrType == typeof(byte[]));
+                foreach (var property in properties)
+                {
+                    property.SetDefaultValue(Array.Empty<byte>());
+                }
+            }
+        }
+
         base.OnModelCreating(modelBuilder);
     }
 

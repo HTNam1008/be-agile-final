@@ -4,7 +4,18 @@ public sealed record StudentDashboardResponse(
     StudentDashboardProfileResponse Student,
     StudentDashboardEducationAccountResponse EducationAccount,
     StudentDashboardCourseFilterResponse Filters,
-    IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses);
+    IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses,
+    IReadOnlyCollection<StudentDashboardCourseResponse> PublishedCourses);
+
+public sealed record StudentDashboardSummaryResponse(
+    StudentDashboardProfileResponse Student,
+    StudentDashboardEducationAccountResponse EducationAccount,
+    int CurrentCourseCount);
+
+public sealed record StudentCoursesResponse(
+    StudentDashboardCourseFilterResponse Filters,
+    IReadOnlyCollection<StudentDashboardCourseResponse> CurrentCourses,
+    IReadOnlyCollection<StudentDashboardCourseResponse> PublishedCourses);
 
 public sealed record StudentDashboardProfileResponse(
     long PersonId,
@@ -19,7 +30,11 @@ public sealed record StudentDashboardEducationAccountResponse(
     string AccountStatusCode,
     string AccountStatusLabel,
     decimal CurrentBalance,
-    string CurrentBalanceDisplay);
+    string CurrentBalanceDisplay,
+    decimal ReservedAmount,
+    string ReservedAmountDisplay,
+    decimal AvailableBalance,
+    string AvailableBalanceDisplay);
 
 public sealed record StudentDashboardCourseFilterResponse(
     string? Search,
@@ -31,7 +46,8 @@ public sealed record StudentDashboardStatusOptionResponse(
     string Label);
 
 public sealed record StudentDashboardCourseResponse(
-    long CourseEnrollmentId,
+    long? CourseEnrollmentId,
+    long? CoursePaymentPlanId,
     long CourseId,
     string CourseCode,
     string CourseName,

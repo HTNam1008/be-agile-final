@@ -77,6 +77,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountLookupGateway, EducationAccountLookupGateway>();
         services.AddScoped<IEducationAccountBulkLookupGateway, EducationAccountBulkLookupGateway>();
         services.AddScoped<IEducationAccountReasonCodeGateway, EducationAccountReasonCodeGateway>();
+        services.AddScoped<IEducationAccountPaymentGateway, EducationAccountPaymentGateway>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
         // Services & Utilities
@@ -110,6 +111,7 @@ public sealed class EducationAccountTopUpModule : IModule
 
         // Queries
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
+        services.AddScoped<IQueryHandler<GetMyEducationAccountTransactionsQuery, MyEducationAccountTransactionsPage>, GetMyEducationAccountTransactionsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignsQuery, IReadOnlyList<CampaignListItem>>, GetCampaignsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();
         services.AddScoped<IQueryHandler<GetFixedRecipientsQuery, IReadOnlyList<FixedRecipientDto>>, GetFixedRecipientsQueryHandler>();

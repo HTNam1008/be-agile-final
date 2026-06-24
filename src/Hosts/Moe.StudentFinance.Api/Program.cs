@@ -1,10 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Asp.Versioning;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.CourseBilling;
@@ -18,6 +22,7 @@ using NSwag.Generation.Processors.Security;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
@@ -32,6 +37,16 @@ IModule[] modules =
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddSingleton<IReadOnlyCollection<IModule>>(modules);
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("PaymentCheckout", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+});
 
 builder.Services.AddControllers(options =>
     {
@@ -39,7 +54,34 @@ builder.Services.AddControllers(options =>
     })
     .AddApplicationPart(typeof(EducationAccountTopUpModule).Assembly)
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
-    .AddApplicationPart(typeof(IdentityPlatformModule).Assembly);
+    .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
+    .AddApplicationPart(typeof(FasPaymentModule).Assembly);
+
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    var defaultFactory = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        if (!context.ActionDescriptor.EndpointMetadata.OfType<UnprocessableEntityOnModelValidationAttribute>().Any())
+        {
+            return defaultFactory(context);
+        }
+
+        string[] errors = context.ModelState.Values
+            .SelectMany(entry => entry.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "Invalid request value." : error.ErrorMessage)
+            .Distinct()
+            .ToArray();
+        return new Microsoft.AspNetCore.Mvc.ObjectResult(ApiResponse<object>.Fail(
+            "Validation failed.",
+            ["FAS.INVALID_REQUEST", .. errors],
+            ApiResponseCodes.UnprocessableEntity,
+            context.HttpContext.TraceIdentifier))
+        {
+            StatusCode = ApiResponseCodes.UnprocessableEntity
+        };
+    };
+});
 
 builder.Services.AddApiVersioning(options =>
 {
@@ -85,12 +127,31 @@ builder.Services.AddOpenApiDocument(settings =>
 });
 
 var app = builder.Build();
+app.Logger.LogInformation(
+    "Data Protection keys are persisted to {DataProtectionKeysPath}",
+    Moe.Infrastructure.Shared.DependencyInjection.ResolveDataProtectionKeysDirectory().FullName);
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<Moe.StudentFinance.Persistence.MoeDbContext>();
+    if (db.Database.IsSqlite())
+    {
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+    }
+}
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("UAT"))
 {
     app.UseOpenApi();
     app.UseSwaggerUi(settings => settings.Path = "/swagger");
 }
+
+//app.MapGet("/", () => Results.Ok(new
+//{
+//    service = "MOE Student Finance API",
+//    status = "running"
+//})).AllowAnonymous();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
 
@@ -120,6 +181,8 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCESS_SCOPE_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "EXTERNAL_ACCOUNTS_PROVISION"),
+        new(LocalIdentityClaimNames.Permission, "FAS_SCHEME_MANAGE"),
+        new(LocalIdentityClaimNames.Permission, "FAS_REVIEW"),
         new(LocalIdentityClaimNames.Portal, PortalCodes.Admin),
         new(LocalIdentityClaimNames.IdentityProvider, "ENTRA_WORKFORCE")
     ];
@@ -151,6 +214,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseRouting();
 app.UseCors();
+app.UseRateLimiter();
 app.UseSharedInfrastructure();
 app.MapControllers();
 app.MapHealthChecks("/health/ready");

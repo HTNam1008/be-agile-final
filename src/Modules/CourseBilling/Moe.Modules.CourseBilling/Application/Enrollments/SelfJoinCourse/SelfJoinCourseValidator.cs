@@ -8,5 +8,6 @@ public sealed class SelfJoinCourseRequestValidator : AbstractValidator<SelfJoinC
     public SelfJoinCourseRequestValidator()
     {
         RuleFor(x => x.CourseId).GreaterThan(0);
+        RuleFor(x => x.CoursePaymentPlanId).GreaterThan(0);
     }
 }

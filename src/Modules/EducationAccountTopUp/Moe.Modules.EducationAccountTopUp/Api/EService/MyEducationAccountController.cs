@@ -7,8 +7,8 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.EService;
@@ -19,16 +19,14 @@ namespace Moe.Modules.EducationAccountTopUp.Api.EService;
 [Authorize(Policy = AuthorizationPolicies.EServicePortal)]
 [EnableCors("EServiceCors")]
 public sealed class MyEducationAccountController(
-    IQueryDispatcher dispatcher,
-    ICurrentUser currentUser) : ControllerBase
+    ICurrentUser currentUser,
+    IQueryDispatcher queries) : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<MyEducationAccountDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
-        if (!currentUser.IsAuthenticated || currentUser.PersonId is null)
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
         {
             return ApiResponseFactory.Failure(
                 EducationAccountErrors.AuthenticatedStudentRequired,
@@ -36,13 +34,56 @@ public sealed class MyEducationAccountController(
                 HttpContext.TraceIdentifier);
         }
 
-        Result<MyEducationAccountDto> result = await dispatcher.Send(new GetMyEducationAccountQuery(currentUser.PersonId.Value), cancellationToken);
+        Result<MyEducationAccountDto> result = await queries.Send(
+            new GetMyEducationAccountQuery(personId.Value),
+            cancellationToken);
 
-        if (result.IsFailure)
+        return ToAccountResponse(result);
+    }
+
+    [HttpGet("transactions")]
+    [ProducesResponseType(typeof(ApiResponse<MyEducationAccountTransactionsPage>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTransactions(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? category = null,
+        CancellationToken cancellationToken = default)
+    {
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
         {
-            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
+            return ApiResponseFactory.Failure(
+                EducationAccountErrors.AuthenticatedStudentRequired,
+                ApiResponseCodes.Unauthorized,
+                HttpContext.TraceIdentifier);
         }
 
-        return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+        Result<MyEducationAccountTransactionsPage> result = await queries.Send(
+            new GetMyEducationAccountTransactionsQuery(personId.Value, page, pageSize, category),
+            cancellationToken);
+
+        return ToAccountResponse(result);
+    }
+
+    private IActionResult ToAccountResponse<T>(Result<T> result)
+    {
+        if (result.IsSuccess)
+        {
+            return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+        }
+
+        int statusCode = result.Error == EducationAccountErrors.NotFound
+            ? ApiResponseCodes.NotFound
+            : result.Error == EducationAccountErrors.AuthenticatedStudentRequired
+                ? ApiResponseCodes.Unauthorized
+                : ApiResponseCodes.BadRequest;
+
+        return ApiResponseFactory.Failure(
+            result.Error,
+            statusCode,
+            HttpContext.TraceIdentifier);
     }
 }
