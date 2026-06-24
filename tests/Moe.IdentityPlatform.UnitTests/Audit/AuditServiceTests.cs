@@ -69,6 +69,20 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
+    public async Task RecordAsync_WhenUnauthenticatedWithoutActor_UsesSystemActor()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        AuditService service = new(dbContext, new FakeCurrentUser(), _clock);
+
+        await service.RecordAsync("EDUCATION_ACCOUNT_CREATED_AUTOMATICALLY", "EducationAccount", "12345");
+
+        AuditLog auditLog = dbContext.Set<AuditLog>().Local.Single();
+        auditLog.AuditScopeCode.Should().Be("SYSTEM");
+        auditLog.ActorTypeCode.Should().Be("SYSTEM");
+        auditLog.ActorLoginAccountId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task RecordAsync_WithNullDetailsJson_DoesNotThrow()
     {
         using MoeDbContext dbContext = CreateDbContext();

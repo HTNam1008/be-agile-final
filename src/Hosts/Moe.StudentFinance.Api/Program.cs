@@ -13,8 +13,10 @@ using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.EducationAccountTopUp;
+using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.StudentFinance.Persistence;
 using NSwag;
 using NSwag.Generation.Processors.Security;
@@ -36,6 +38,7 @@ IModule[] modules =
     new FasPaymentModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
+builder.Services.AddScoped<IEligiblePersonLookupGateway, EligiblePersonLookupGatewayAdapter>();
 builder.Services.AddSingleton<IReadOnlyCollection<IModule>>(modules);
 builder.Services.AddRateLimiter(options =>
 {
@@ -293,3 +296,14 @@ static string GetSwaggerTag(string path)
 }
 
 public partial class Program;
+
+internal sealed class EligiblePersonLookupGatewayAdapter(IEligiblePersonReader reader)
+    : IEligiblePersonLookupGateway
+{
+    public Task<IReadOnlyCollection<long>> FindEligibleForEducationAccountAsync(
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        return reader.FindEligibleForEducationAccountAsync(today, cancellationToken);
+    }
+}

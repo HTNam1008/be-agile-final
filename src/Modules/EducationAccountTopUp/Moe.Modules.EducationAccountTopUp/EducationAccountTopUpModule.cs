@@ -12,6 +12,7 @@ using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEduca
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
+using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
@@ -58,6 +59,8 @@ public sealed class EducationAccountTopUpModule : IModule
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IModelConfigurationContributor, EducationAccountTopUpModelConfiguration>();
+        services.AddOptions<EducationAccountLifecycleOptions>()
+            .BindConfiguration(EducationAccountLifecycleOptions.SectionName);
         // Gateways & Repositories
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
@@ -78,6 +81,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountBulkLookupGateway, EducationAccountBulkLookupGateway>();
         services.AddScoped<IEducationAccountReasonCodeGateway, EducationAccountReasonCodeGateway>();
         services.AddScoped<IEducationAccountPaymentGateway, EducationAccountPaymentGateway>();
+        services.AddScoped<IAutomaticEducationAccountCreator, AutomaticEducationAccountCreator>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
         // Services & Utilities
@@ -97,6 +101,7 @@ public sealed class EducationAccountTopUpModule : IModule
         // Workers
         services.AddHostedService<TopUpRunWorker>();
         services.AddHostedService<TopUpSchedulerWorker>();
+        services.AddHostedService<EducationAccountLifecycleWorker>();
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
 
         // Commands
