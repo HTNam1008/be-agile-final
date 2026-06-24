@@ -67,6 +67,7 @@ internal static class PermissionCodes
     public const string ReportExportAll = "REPORT_EXPORT_ALL";
     public const string AuditViewSchool = "AUDIT_VIEW_SCHOOL";
     public const string ReportExportSchool = "REPORT_EXPORT_SCHOOL";
+    public const string AiReviewManage = "AI_REVIEW_MANAGE";
 
     public const string AccountsView = AccountsViewAll;
     public const string AccountsManage = AccountsManualCreate;
