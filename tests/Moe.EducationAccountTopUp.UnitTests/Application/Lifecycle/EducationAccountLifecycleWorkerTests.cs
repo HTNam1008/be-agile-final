@@ -3,9 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
+using Moe.Modules.EducationAccountTopUp.Domain.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
+using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests.Application.Lifecycle;
@@ -115,17 +118,72 @@ public sealed class EducationAccountLifecycleWorkerTests
         creator.CreatedPersonIds.Should().Equal(1, 2, 3);
     }
 
+    [Fact]
+    public async Task ProcessAsync_Records_Completed_Run_With_Created_And_Closed_Items()
+    {
+        FakeEligiblePersonLookupGateway people = new([10, 11]);
+        FakeAutomaticEducationAccountCreator creator = new(createdPersonIds: [10]);
+        FakeAutomaticEducationAccountCloser closer = new(
+            activeAccountCount: 2,
+            closedResults:
+            [
+                new AutomaticEducationAccountClosureResult(
+                    EducationAccountId: 7001,
+                    PersonId: 30,
+                    Closed: true),
+                new AutomaticEducationAccountClosureResult(
+                    EducationAccountId: 7002,
+                    PersonId: 31,
+                    Closed: false)
+            ]);
+        FakeEducationAccountLifecycleRunRepository runs = new();
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer,
+            runs);
+
+        EducationAccountLifecycleRunResult result = await worker.ProcessAsync(
+            new DateOnly(2026, 6, 24),
+            new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero),
+            EducationAccountLifecycleRunTriggerTypes.Manual,
+            CancellationToken.None);
+
+        result.OpenedCount.Should().Be(1);
+        result.ClosedCount.Should().Be(1);
+        EducationAccountLifecycleRun run = runs.Runs.Should().ContainSingle().Subject;
+        run.TriggerTypeCode.Should().Be(EducationAccountLifecycleRunTriggerTypes.Manual);
+        run.StatusCode.Should().Be(EducationAccountLifecycleRunStatusCodes.Completed);
+        run.OpenedCount.Should().Be(1);
+        run.ClosedCount.Should().Be(1);
+        run.Items.Should().HaveCount(2);
+        run.Items.Should().Contain(x =>
+            x.ActionCode == EducationAccountLifecycleRunItemActionCodes.Closed
+            && x.PersonId == 30
+            && x.EducationAccountId == 7001);
+        run.Items.Should().Contain(x =>
+            x.ActionCode == EducationAccountLifecycleRunItemActionCodes.Created
+            && x.PersonId == 10
+            && x.EducationAccountId == 10);
+    }
+
     private static EducationAccountLifecycleWorker CreateWorker(
         EducationAccountLifecycleOptions options,
         IClock clock,
         FakeEligiblePersonLookupGateway people,
         FakeAutomaticEducationAccountCreator creator,
-        FakeAutomaticEducationAccountCloser closer)
+        FakeAutomaticEducationAccountCloser closer,
+        FakeEducationAccountLifecycleRunRepository? runs = null)
     {
+        runs ??= new FakeEducationAccountLifecycleRunRepository();
         ServiceProvider provider = new ServiceCollection()
             .AddSingleton<IEligiblePersonLookupGateway>(people)
             .AddSingleton<IAutomaticEducationAccountCreator>(creator)
             .AddSingleton<IAutomaticEducationAccountCloser>(closer)
+            .AddSingleton<IEducationAccountLifecycleRunRepository>(runs)
+            .AddSingleton<IUnitOfWork, FakeUnitOfWork>()
             .BuildServiceProvider();
 
         return new EducationAccountLifecycleWorker(
@@ -188,7 +246,8 @@ public sealed class EducationAccountLifecycleWorkerTests
     private sealed class FakeAutomaticEducationAccountCloser(
         List<string>? events = null,
         int activeAccountCount = 0,
-        int closedCount = 0) : IAutomaticEducationAccountCloser
+        int closedCount = 0,
+        IReadOnlyCollection<AutomaticEducationAccountClosureResult>? closedResults = null) : IAutomaticEducationAccountCloser
     {
         public int Calls { get; private set; }
 
@@ -199,9 +258,18 @@ public sealed class EducationAccountLifecycleWorkerTests
         {
             Calls++;
             events?.Add("close");
+            if (closedResults is not null)
+            {
+                return Task.FromResult(new AutomaticEducationAccountClosureSummary(
+                    ActiveAccountCount: activeAccountCount,
+                    ClosedCount: closedResults.Count(x => x.Closed),
+                    Results: closedResults));
+            }
+
             return Task.FromResult(new AutomaticEducationAccountClosureSummary(
                 ActiveAccountCount: activeAccountCount,
-                ClosedCount: closedCount));
+                ClosedCount: closedCount,
+                Results: []));
         }
 
         public Task<AutomaticEducationAccountClosureResult> EnsureClosedAsync(
@@ -211,5 +279,25 @@ public sealed class EducationAccountLifecycleWorkerTests
         {
             throw new NotSupportedException();
         }
+    }
+
+    private sealed class FakeEducationAccountLifecycleRunRepository
+        : IEducationAccountLifecycleRunRepository
+    {
+        public List<EducationAccountLifecycleRun> Runs { get; } = [];
+
+        public Task AddAsync(
+            EducationAccountLifecycleRun run,
+            CancellationToken cancellationToken)
+        {
+            Runs.Add(run);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeUnitOfWork : IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(1);
     }
 }

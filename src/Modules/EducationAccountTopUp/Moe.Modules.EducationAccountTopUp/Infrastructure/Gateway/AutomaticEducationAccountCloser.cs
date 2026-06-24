@@ -26,7 +26,7 @@ internal sealed class AutomaticEducationAccountCloser(
             await educationAccounts.ListActiveAsync(cancellationToken);
         if (activeAccounts.Count == 0)
         {
-            return new AutomaticEducationAccountClosureSummary(0, 0);
+            return new AutomaticEducationAccountClosureSummary(0, 0, []);
         }
 
         IReadOnlyCollection<long> eligiblePersonIds =
@@ -37,18 +37,18 @@ internal sealed class AutomaticEducationAccountCloser(
                 cancellationToken);
         HashSet<long> eligiblePersonIdSet = eligiblePersonIds.ToHashSet();
 
-        int closedCount = 0;
+        List<AutomaticEducationAccountClosureResult> results = [];
         foreach (EducationAccount account in activeAccounts.Where(x => eligiblePersonIdSet.Contains(x.PersonId)))
         {
             AutomaticEducationAccountClosureResult result =
                 await EnsureClosedAsync(account, closedAtUtc, cancellationToken);
-            if (result.Closed)
-            {
-                closedCount++;
-            }
+            results.Add(result);
         }
 
-        return new AutomaticEducationAccountClosureSummary(activeAccounts.Count, closedCount);
+        return new AutomaticEducationAccountClosureSummary(
+            activeAccounts.Count,
+            results.Count(x => x.Closed),
+            results);
     }
 
     public async Task<AutomaticEducationAccountClosureResult> EnsureClosedAsync(

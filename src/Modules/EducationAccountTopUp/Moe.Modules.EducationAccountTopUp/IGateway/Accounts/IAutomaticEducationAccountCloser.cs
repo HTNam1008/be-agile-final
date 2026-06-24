@@ -9,7 +9,8 @@ public sealed record AutomaticEducationAccountClosureResult(
 
 public sealed record AutomaticEducationAccountClosureSummary(
     int ActiveAccountCount,
-    int ClosedCount);
+    int ClosedCount,
+    IReadOnlyCollection<AutomaticEducationAccountClosureResult> Results);
 
 public interface IAutomaticEducationAccountCloser
 {
