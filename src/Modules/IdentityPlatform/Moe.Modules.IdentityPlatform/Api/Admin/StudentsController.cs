@@ -29,6 +29,7 @@ public sealed class StudentsController(
     {
         var result = await queries.Send(
             new ListAdminStudentsQuery(
+                request.OrganizationId,
                 request.Search,
                 request.LevelCode,
                 request.ClassCode,

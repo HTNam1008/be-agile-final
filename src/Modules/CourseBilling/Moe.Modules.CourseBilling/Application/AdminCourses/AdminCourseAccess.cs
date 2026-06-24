@@ -32,6 +32,8 @@ internal sealed class AdminCourseAccess(
     public bool CanAccessOrganization(long organizationId)
         => adminAccess.CanAccessOrganization(organizationId);
 
+    public bool IsHqAdmin => currentAdmin.IsHqAdmin;
+
     public Error OrganizationForbidden()
         => new("COURSE.ORGANIZATION_FORBIDDEN", "User does not have access to this organization unit.");
 

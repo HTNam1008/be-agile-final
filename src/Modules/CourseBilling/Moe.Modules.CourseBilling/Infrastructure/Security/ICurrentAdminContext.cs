@@ -4,4 +4,5 @@ public interface ICurrentAdminContext
 {
     string RoleCode { get; }
     bool IsAdmin { get; }
+    bool IsHqAdmin { get; }
 }

@@ -53,4 +53,9 @@ public sealed class AdminFeeComponentsController(
     public async Task<IActionResult> Deactivate(long feeComponentId, CancellationToken cancellationToken)
         => this.ToCourseBillingResponse(
             await commands.Send(new DeactivateFeeComponentCommand(feeComponentId), cancellationToken));
+
+    [HttpDelete("{feeComponentId:long}")]
+    public async Task<IActionResult> Delete(long feeComponentId, CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(
+            await commands.Send(new DeleteFeeComponentCommand(feeComponentId), cancellationToken));
 }

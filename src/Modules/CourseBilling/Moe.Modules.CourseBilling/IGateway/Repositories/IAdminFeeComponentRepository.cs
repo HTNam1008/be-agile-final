@@ -9,6 +9,8 @@ internal interface IAdminFeeComponentRepository
     Task<PageResponse<FeeComponentDto>> ListAsync(FeeComponentQueryRequest request, CancellationToken cancellationToken);
     Task<FeeComponent?> FindAsync(long feeComponentId, CancellationToken cancellationToken);
     Task<bool> ComponentCodeExistsAsync(string componentCode, long? excludeFeeComponentId, CancellationToken cancellationToken);
+    Task<bool> IsInUseAsync(long feeComponentId, CancellationToken cancellationToken);
     Task AddAsync(FeeComponent feeComponent, CancellationToken cancellationToken);
     Task SaveAsync(FeeComponent feeComponent, CancellationToken cancellationToken);
+    Task DeleteAsync(FeeComponent feeComponent, CancellationToken cancellationToken);
 }

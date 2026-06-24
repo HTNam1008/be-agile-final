@@ -6,6 +6,7 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Security;
 internal sealed class CurrentAdminContext(ICurrentUser currentUser) : ICurrentAdminContext
 {
     public string RoleCode => currentUser.Roles.FirstOrDefault() ?? string.Empty;
+    public bool IsHqAdmin => currentUser.Roles.Contains(CourseBillingRoles.HqAdmin, StringComparer.OrdinalIgnoreCase);
     public bool IsAdmin => currentUser.IsAuthenticated
         && currentUser.Roles.Any(role => role is CourseBillingRoles.HqAdmin or CourseBillingRoles.SchoolAdmin);
 }
