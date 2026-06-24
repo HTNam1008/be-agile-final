@@ -1,6 +1,7 @@
 namespace Moe.Modules.IdentityPlatform.IGateway.Students;
 
 public sealed record AdminStudentListCriteria(
+    long? OrganizationId,
     string? Search,
     string? LevelCode,
     string? ClassCode,
@@ -11,6 +12,7 @@ public sealed record AdminStudentListCriteria(
     int PageSize)
 {
     public static AdminStudentListCriteria Default(
+        long? organizationId = null,
         string? search = null,
         string? levelCode = null,
         string? classCode = null,
@@ -19,7 +21,7 @@ public sealed record AdminStudentListCriteria(
         AdminStudentEnrollmentStatusFilter enrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
         int page = 1,
         int pageSize = 20)
-        => new(search, levelCode, classCode, accountStatus, residency, enrollmentStatus, page, pageSize);
+        => new(organizationId, search, levelCode, classCode, accountStatus, residency, enrollmentStatus, page, pageSize);
 }
 
 public enum AdminStudentAccountStatusFilter
@@ -54,6 +56,7 @@ public sealed record AdminStudentListPage(
 
 public sealed record AdminStudentListItem(
     long PersonId,
+    string? StudentNumber,
     string? MaskedNric,
     string FullName,
     string? LevelCode,

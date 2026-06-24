@@ -43,6 +43,11 @@ internal sealed class AddCourseFeeCommandHandler(AdminCourseAccess access)
             return Result<CourseFeeDto>.Failure(CourseErrors.FeeComponentNotFound);
         }
 
+        if (component.IsSystemManaged && !access.IsHqAdmin)
+        {
+            return Result<CourseFeeDto>.Failure(CourseErrors.SystemCourseFeeForbidden);
+        }
+
         if (await access.Courses.FindCourseFeeByComponentAsync(command.CourseId, request.FeeComponentId, cancellationToken) is not null)
         {
             return Result<CourseFeeDto>.Failure(CourseErrors.DuplicateCourseFee);
@@ -82,6 +87,11 @@ internal sealed class UpdateCourseFeeCommandHandler(AdminCourseAccess access)
             return Result<CourseFeeDto>.Failure(CourseErrors.FeeComponentNotFound);
         }
 
+        if (component.IsSystemManaged && !access.IsHqAdmin)
+        {
+            return Result<CourseFeeDto>.Failure(CourseErrors.SystemCourseFeeForbidden);
+        }
+
         fee.Update(request.FeeValue, request.SequenceNumber);
         await access.Courses.SaveFeeAsync(fee, cancellationToken);
         return Result<CourseFeeDto>.Success(CourseFeeMapper.ToFeeDto(new CourseFeeDetail(fee, component)));
@@ -112,6 +122,11 @@ internal sealed class DeleteCourseFeeCommandHandler(AdminCourseAccess access)
         if (component is null)
         {
             return Result<CourseFeeDto>.Failure(CourseErrors.FeeComponentNotFound);
+        }
+
+        if (component.IsSystemManaged && !access.IsHqAdmin)
+        {
+            return Result<CourseFeeDto>.Failure(CourseErrors.SystemCourseFeeForbidden);
         }
 
         fee.Deactivate();

@@ -103,6 +103,8 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                     courseFee.Id,
                     feeComponent.Id,
                     feeComponent.ComponentName,
+                    feeComponent.CalculationTypeCode,
+                    feeComponent.IsTaxComponent,
                     courseFee.FeeValue))
             .ToArrayAsync(cancellationToken);
     }
@@ -209,25 +211,31 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             enrollment.ChangePaymentPlan(coursePaymentPlanId, installment);
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            long totalMinor = decimal.ToInt64(
-                decimal.Round(feeLines.Sum(x => x.FeeValue), 2, MidpointRounding.AwayFromZero) * 100m);
-            long baseMinor = totalMinor / installmentCount;
-            long remainderMinor = totalMinor % installmentCount;
+            IReadOnlyList<CourseFeeBillingAmount> totalAmounts = CourseFeeAmountCalculator.Calculate(feeLines);
             List<GeneratedBillResult> generated = [];
             for (int sequence = 1; sequence <= installmentCount; sequence++)
             {
-                decimal installmentAmount = (baseMinor + (sequence <= remainderMinor ? 1 : 0)) / 100m;
+                IReadOnlyList<CourseFeeBillingAmount> installmentAmounts =
+                    CourseFeeAmountCalculator.AllocateInstallment(totalAmounts, sequence, installmentCount);
+                decimal installmentAmount = installmentAmounts.Sum(x => x.Amount);
                 DateOnly dueDate = firstDueDate.AddMonths((sequence - 1) * intervalMonths);
                 Bill bill = Bill.IssueForCourseEnrollment(
                     enrollment.Id, $"{billNumberPrefix}-{sequence:D2}", issuedAtUtc,
                     dueDate, installmentAmount, sequenceNumber: sequence).Value;
                 await dbContext.Set<Bill>().AddAsync(bill, cancellationToken);
                 await dbContext.SaveChangesAsync(cancellationToken);
-                BillLine line = BillLine.FromCourseFee(
-                    bill.Id, feeLines.First().FeeComponentId, feeLines.First().CourseFeeId,
-                    $"Course installment {sequence} of {installmentCount}", installmentAmount).Value;
-                await dbContext.Set<BillLine>().AddAsync(line, cancellationToken);
-                generated.Add(new GeneratedBillResult(bill, 1));
+                foreach (CourseFeeBillingAmount amount in installmentAmounts.Where(x => x.Amount > 0m))
+                {
+                    BillLine line = BillLine.FromCourseFee(
+                        bill.Id,
+                        amount.FeeComponentId,
+                        amount.CourseFeeId,
+                        $"{amount.FeeComponentName} installment {sequence} of {installmentCount}",
+                        amount.Amount).Value;
+                    await dbContext.Set<BillLine>().AddAsync(line, cancellationToken);
+                }
+
+                generated.Add(new GeneratedBillResult(bill, installmentAmounts.Count(x => x.Amount > 0m)));
             }
             await dbContext.SaveChangesAsync(cancellationToken);
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
@@ -259,16 +267,14 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         if (installmentCount <= 0 || intervalMonths < 0)
             throw new InvalidOperationException("The payment plan schedule is invalid.");
 
-        long totalMinor = decimal.ToInt64(
-            decimal.Round(feeLines.Sum(x => x.FeeValue), 2, MidpointRounding.AwayFromZero) * 100m);
-        long baseMinor = totalMinor / installmentCount;
-        long remainderMinor = totalMinor % installmentCount;
+        IReadOnlyList<CourseFeeBillingAmount> totalAmounts = CourseFeeAmountCalculator.Calculate(feeLines);
         List<GeneratedBillResult> generated = [];
 
         for (int sequence = 1; sequence <= installmentCount; sequence++)
         {
-            decimal installmentAmount =
-                (baseMinor + (sequence <= remainderMinor ? 1 : 0)) / 100m;
+            IReadOnlyList<CourseFeeBillingAmount> installmentAmounts =
+                CourseFeeAmountCalculator.AllocateInstallment(totalAmounts, sequence, installmentCount);
+            decimal installmentAmount = installmentAmounts.Sum(x => x.Amount);
             DateOnly dueDate = firstDueDate.AddMonths((sequence - 1) * intervalMonths);
             Result<Bill> billResult = Bill.IssueForCourseEnrollment(
                 enrollment.Id,
@@ -283,17 +289,23 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             await dbContext.Set<Bill>().AddAsync(billResult.Value, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            Result<BillLine> lineResult = BillLine.FromCourseFee(
-                billResult.Value.Id,
-                feeLines.First().FeeComponentId,
-                feeLines.First().CourseFeeId,
-                $"Course installment {sequence} of {installmentCount}",
-                installmentAmount);
-            if (lineResult.IsFailure)
-                throw new InvalidOperationException(lineResult.Error.Message);
+            int billLineCount = 0;
+            foreach (CourseFeeBillingAmount amount in installmentAmounts.Where(x => x.Amount > 0m))
+            {
+                Result<BillLine> lineResult = BillLine.FromCourseFee(
+                    billResult.Value.Id,
+                    amount.FeeComponentId,
+                    amount.CourseFeeId,
+                    $"{amount.FeeComponentName} installment {sequence} of {installmentCount}",
+                    amount.Amount);
+                if (lineResult.IsFailure)
+                    throw new InvalidOperationException(lineResult.Error.Message);
 
-            await dbContext.Set<BillLine>().AddAsync(lineResult.Value, cancellationToken);
-            generated.Add(new GeneratedBillResult(billResult.Value, 1));
+                await dbContext.Set<BillLine>().AddAsync(lineResult.Value, cancellationToken);
+                billLineCount++;
+            }
+
+            generated.Add(new GeneratedBillResult(billResult.Value, billLineCount));
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

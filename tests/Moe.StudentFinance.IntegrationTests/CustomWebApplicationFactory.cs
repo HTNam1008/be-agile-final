@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Encodings.Web;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -129,6 +131,11 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
 internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 {
+    private static readonly ConcurrentDictionary<string, byte> ExpireFailures = new();
+
+    public static void FailNextExpireForSession(string providerSessionId)
+        => ExpireFailures[providerSessionId] = 0;
+
     public Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
         StripeCheckoutGatewayRequest request,
         CancellationToken cancellationToken)
@@ -140,7 +147,15 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 
     public Task ExpireCheckoutAsync(
         string providerSessionId,
-        CancellationToken cancellationToken) => Task.CompletedTask;
+        CancellationToken cancellationToken)
+    {
+        if (ExpireFailures.TryRemove(providerSessionId, out _))
+        {
+            throw new PaymentProviderUnavailableException();
+        }
+
+        return Task.CompletedTask;
+    }
 
     public Task<StripeScheduleGatewayResult> AttachFiniteScheduleAsync(
         string providerSubscriptionId,
@@ -216,6 +231,7 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
         var db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
 
         SeedDemoSchool(db);
+        SeedGstFeeComponent(db);
         SeedStudent(db, 2101, "IT-STU-0001", "Integration Student One", new DateOnly(2008, 2, 10), "SEC_4", "4A", 1);
         SeedStudent(db, 2102, "IT-STU-0002", "Integration Student Two", new DateOnly(2009, 7, 15), "SEC_3", "3B", 1);
         SeedAccount(db, 2101, "EA-IT-0001", 125.00m);
@@ -259,6 +275,24 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
 
         SetId(otherSchool, 2);
         db.Add(otherSchool);
+    }
+
+    private static void SeedGstFeeComponent(MoeDbContext db)
+    {
+        if (db.Set<FeeComponent>().Any(x => x.ComponentCode == SystemFeeComponentCodes.Gst))
+        {
+            return;
+        }
+
+        db.Set<FeeComponent>().Add(new FeeComponent(
+            SystemFeeComponentCodes.Gst,
+            "Goods and Services Tax",
+            FeeComponentTypeCodes.Tax,
+            FeeComponentCalculationTypes.Percentage,
+            isTaxComponent: true,
+            defaultValue: 9m,
+            isSystemManaged: true,
+            isActive: true));
     }
 
     private static void SeedStudent(
@@ -447,4 +481,5 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             yield return new Claim(ClaimNames.OrganizationUnitId, value);
         }
     }
+
 }
