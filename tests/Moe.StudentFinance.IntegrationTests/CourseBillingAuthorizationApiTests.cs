@@ -546,6 +546,16 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         await AssertStatusAsync(HttpStatusCode.Created, createResponse);
         long personId = await ReadLongAsync(createResponse, "personId");
 
+        using HttpResponseMessage openAccResponse = await _client.PostAsJsonAsync(
+            "/api/admin/v1/education-accounts",
+            new
+            {
+                personId,
+                reasonCode = "EXCEPTION",
+                remarks = "Open account for test student"
+            });
+        await AssertStatusAsync(HttpStatusCode.Created, openAccResponse);
+
         using IServiceScope scope = factory.Services.CreateScope();
         IEServiceLoginResolver resolver = scope.ServiceProvider.GetRequiredService<IEServiceLoginResolver>();
         EServiceLoginResolution resolution = await resolver.ResolveAsync(

@@ -347,8 +347,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        if (Request.Headers.TryGetValue("X-Test-Anonymous", out var anonymous) &&
-            string.Equals(anonymous.ToString(), "true", StringComparison.OrdinalIgnoreCase))
+        if (Request.Headers.ContainsKey("X-Test-Anonymous"))
         {
             return Task.FromResult(AuthenticateResult.NoResult());
         }
@@ -366,7 +365,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.PersonId, GetHeaderValue("X-Test-PersonId", "2001")),
                 new Claim(ClaimNames.UserAccountId, GetHeaderValue("X-Test-UserAccountId", "1003"))
             ]
-            : new List<Claim>
+            : new[]
             {
                 new Claim(ClaimTypes.Name, "Test User"),
                 new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
