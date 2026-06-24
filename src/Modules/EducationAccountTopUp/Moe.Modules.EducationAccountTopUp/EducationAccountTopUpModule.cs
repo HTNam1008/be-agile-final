@@ -102,7 +102,8 @@ public sealed class EducationAccountTopUpModule : IModule
         // Workers
         services.AddHostedService<TopUpRunWorker>();
         services.AddHostedService<TopUpSchedulerWorker>();
-        services.AddHostedService<EducationAccountLifecycleWorker>();
+        services.AddSingleton<EducationAccountLifecycleWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
 
         // Commands

@@ -89,6 +89,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.LifecycleManualTrigger, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ManageAccounts, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -368,19 +376,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.PersonId, GetHeaderValue("X-Test-PersonId", "2001")),
                 new Claim(ClaimNames.UserAccountId, GetHeaderValue("X-Test-UserAccountId", "1003"))
             ]
-            : new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, "Test User"),
-                new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
-                new Claim(ClaimNames.Portal, PortalCodes.Admin),
-                new Claim(ClaimNames.Role, requestedRole),
-                new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
-                new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
-                new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"),
-                new Claim(ClaimNames.UserAccountId, "1001")
-            }.Concat(Request.Headers.ContainsKey("X-Test-No-Fas-Permission")
-                ? Array.Empty<Claim>()
-                : new[] { new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE") }).ToArray();
+            : CreateAdminClaims(requestedRole);
 
         if (!Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase))
         {
@@ -403,6 +399,40 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         return Request.Headers.TryGetValue(name, out var values) && !string.IsNullOrWhiteSpace(values.ToString())
             ? values.ToString()
             : fallback;
+    }
+
+    private Claim[] CreateAdminClaims(string requestedRole)
+    {
+        List<Claim> claims =
+        [
+            new Claim(ClaimTypes.Name, "Test User"),
+            new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
+            new Claim(ClaimNames.Portal, PortalCodes.Admin),
+            new Claim(ClaimNames.Role, requestedRole),
+            new Claim(ClaimNames.UserAccountId, "1001")
+        ];
+
+        if (Request.Headers.ContainsKey("X-Test-Only-Manage-Accounts"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"));
+            return claims.ToArray();
+        }
+
+        claims.Add(new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"));
+        claims.Add(new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"));
+        claims.Add(new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"));
+
+        if (Request.Headers.ContainsKey("X-Test-Lifecycle-Manual-Trigger"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER"));
+        }
+
+        if (!Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"));
+        }
+
+        return claims.ToArray();
     }
 
     private IEnumerable<Claim> GetOrganizationUnitClaims()
