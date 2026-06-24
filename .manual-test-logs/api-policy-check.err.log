@@ -1,0 +1,2 @@
+Unhandled exception. System.IO.FileLoadException: Could not load file or assembly 'C:\Agile Final\agile-final-moe-backend\src\Hosts\Moe.StudentFinance.Api\bin\Debug\net10.0\Moe.StudentFinance.Api.dll'. An Application Control policy has blocked this file. (0x800711C7)
+File name: 'C:\Agile Final\agile-final-moe-backend\src\Hosts\Moe.StudentFinance.Api\bin\Debug\net10.0\Moe.StudentFinance.Api.dll'

@@ -1,0 +1,98 @@
+[
+    {
+        "Case":  "01 Start challenge for account 1002",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"1f0dd126-6cb4-4c59-81db-2b0886276477\",\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"SETUP\",\"expiresAtUtc\":\"2026-06-23T16:13:00.5580042Z\"},\"errors\":null,\"traceId\":\"a7f02b89686b41d68ff023658c664968\",\"timestampUtc\":\"2026-06-23T16:08:03.560246Z\"}"
+    },
+    {
+        "Case":  "02 Setup invalid PIN format",
+        "Result":  "EXPECTED_OR_ERROR",
+        "HttpStatus":  400,
+        "Body":  "The remote server returned an error: (400) Bad Request."
+    },
+    {
+        "Case":  "03 Setup first PIN 2468",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"verified\":true,\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"SETUP\",\"verifiedAtUtc\":\"2026-06-23T16:08:04.2264843Z\"},\"errors\":null,\"traceId\":\"88e809fff1174c3ba9f4c1df0f7e06f4\",\"timestampUtc\":\"2026-06-23T16:08:07.6124331Z\"}"
+    },
+    {
+        "Case":  "04 Setup same verified challenge again",
+        "Result":  "EXPECTED_OR_ERROR",
+        "HttpStatus":  400,
+        "Body":  "The remote server returned an error: (400) Bad Request."
+    },
+    {
+        "Case":  "05 Start challenge after PIN configured",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"e17eea1f-ac3b-4e76-8c2f-5b0bab94503d\",\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"expiresAtUtc\":\"2026-06-23T16:13:07.9098969Z\"},\"errors\":null,\"traceId\":\"395e9310a26a4fe4a2796875271918fe\",\"timestampUtc\":\"2026-06-23T16:08:08.1525074Z\"}"
+    },
+    {
+        "Case":  "06 Verify wrong PIN",
+        "Result":  "EXPECTED_OR_ERROR",
+        "HttpStatus":  401,
+        "Body":  "The remote server returned an error: (401) Unauthorized."
+    },
+    {
+        "Case":  "07 Start fresh verify challenge",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"0b810bbe-90d5-4984-85f1-c5bc6bc9f938\",\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"expiresAtUtc\":\"2026-06-23T16:13:08.6933338Z\"},\"errors\":null,\"traceId\":\"3d00ac84c90042ce8f2228ed789a18cc\",\"timestampUtc\":\"2026-06-23T16:08:08.9691084Z\"}"
+    },
+    {
+        "Case":  "08 Verify correct current PIN",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"verified\":true,\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"verifiedAtUtc\":\"2026-06-23T16:08:08.9863972Z\"},\"errors\":null,\"traceId\":\"b6cdeca6e5be4808aa0a579756933818\",\"timestampUtc\":\"2026-06-23T16:08:09.2760576Z\"}"
+    },
+    {
+        "Case":  "09 Get MFA status without token",
+        "Result":  "EXPECTED_OR_ERROR",
+        "HttpStatus":  401,
+        "Body":  "The remote server returned an error: (401) Unauthorized."
+    },
+    {
+        "Case":  "10 Get MFA status with token",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"isPinConfigured\":true,\"statusCode\":\"ACTIVE\",\"lockedUntilUtc\":null,\"lastVerifiedAtUtc\":\"2026-06-23T16:08:08.9863972\"},\"errors\":null,\"traceId\":\"851a27790aae4c309bd0f0852abf4bd8\",\"timestampUtc\":\"2026-06-23T16:08:09.8629499Z\"}"
+    },
+    {
+        "Case":  "11 Change PIN with wrong old PIN",
+        "Result":  "EXPECTED_OR_ERROR",
+        "HttpStatus":  401,
+        "Body":  "The remote server returned an error: (401) Unauthorized."
+    },
+    {
+        "Case":  "12 Change PIN 2468 to 1357",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"isPinConfigured\":true,\"statusCode\":\"ACTIVE\",\"lockedUntilUtc\":null,\"lastVerifiedAtUtc\":\"2026-06-23T16:08:08.9863972\"},\"errors\":null,\"traceId\":\"e8551cfa7d1b475ea81f7a9381454502\",\"timestampUtc\":\"2026-06-23T16:08:11.2090222Z\"}"
+    },
+    {
+        "Case":  "13 Start challenge after PIN changed",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"c14458de-6e20-4001-afd0-00c4f1fd3758\",\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"expiresAtUtc\":\"2026-06-23T16:13:11.2222179Z\"},\"errors\":null,\"traceId\":\"e88b8f629cae49daa60116a7ca8db978\",\"timestampUtc\":\"2026-06-23T16:08:12.3969434Z\"}"
+    },
+    {
+        "Case":  "14 Verify new PIN 1357",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"verified\":true,\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"verifiedAtUtc\":\"2026-06-23T16:08:12.4292034Z\"},\"errors\":null,\"traceId\":\"a51588bb8b904f9ca54c0d2d3622aec1\",\"timestampUtc\":\"2026-06-23T16:08:13.5058456Z\"}"
+    },
+    {
+        "Case":  "15 Start challenge to confirm old PIN rejected",
+        "Result":  "OK",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"bf95aec9-3c11-4738-a6a2-ba476ad0f987\",\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"expiresAtUtc\":\"2026-06-23T16:13:13.5734167Z\"},\"errors\":null,\"traceId\":\"f2c7fab80ea14aed88cffb93654ad7aa\",\"timestampUtc\":\"2026-06-23T16:08:14.3635371Z\"}"
+    },
+    {
+        "Case":  "16 Verify old PIN 2468 should fail",
+        "Result":  "EXPECTED_OR_ERROR",
+        "HttpStatus":  401,
+        "Body":  "The remote server returned an error: (401) Unauthorized."
+    }
+]
