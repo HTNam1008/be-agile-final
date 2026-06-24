@@ -539,6 +539,45 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task CancelPendingCheckout_ReleasesEducationAccountHold_WhenStripeExpireFails()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage firstResponse = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Created, firstResponse);
+        JsonElement firstPayment = await ReadDataAsync(firstResponse);
+        long firstPaymentId = firstPayment.GetProperty("paymentId").GetInt64();
+        long checkoutId = firstPayment.GetProperty("paymentCheckoutSessionId").GetInt64();
+
+        IntegrationTestStripeGateway.FailNextExpireForSession($"cs_test_{checkoutId}");
+
+        using HttpResponseMessage cancelResponse = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statement.StatementId}/payments/{firstPaymentId}/cancel");
+        await AssertStatusAsync(HttpStatusCode.OK, cancelResponse);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Payment cancelled = await db.Set<Payment>().SingleAsync(x => x.Id == firstPaymentId);
+        long educationPartId = await db.Set<PaymentPart>()
+            .Where(part => part.PaymentId == firstPaymentId &&
+                part.PaymentMethodCode == PaymentMethodCodes.EducationAccount)
+            .Select(part => part.Id)
+            .SingleAsync();
+        AccountHold hold = await db.Set<AccountHold>()
+            .SingleAsync(x => x.PaymentPartId == educationPartId);
+
+        Assert.Equal(PaymentStatusCodes.Cancelled, cancelled.PaymentStatusCode);
+        Assert.Equal("RELEASED", hold.HoldStatusCode);
+    }
+
+    [Fact]
     public async Task ExpiredStripeCheckout_ReleasesEducationAccountHold_AndAllowsRetry()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
