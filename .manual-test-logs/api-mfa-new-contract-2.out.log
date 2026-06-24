@@ -1,0 +1,103 @@
+Using launch settings from src\Hosts\Moe.StudentFinance.Api\Properties\launchSettings.json...
+2026-06-24 11:14:56,802 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (39ms) [Parameters=[@bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [org].[Organization] AS [o]
+        WHERE [o].[OrganizationId] = @bootstrap_OrganizationUnitId AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-24 11:14:56,866 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@utcNow='?' (DbType = DateTime2), @utcNow1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[RolePermission] AS [r]
+        WHERE [r].[RoleCode] = 'HQ_ADMIN' AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow1)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-24 11:14:56,934 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (9ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @entraObjectId
+2026-06-24 11:14:57,045 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@account_Id='?' (DbType = Int64), @bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @bootstrap_OrganizationUnitId AND [u].[RoleCode] = 'HQ_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-24 11:14:57,060 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpRunWorker - Top-up run worker started
+2026-06-24 11:14:57,060 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpSchedulerWorker - Top-up scheduler worker started
+2026-06-24 11:14:57,154 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: https://localhost:7000
+2026-06-24 11:14:57,156 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: http://localhost:7001
+2026-06-24 11:14:57,157 INFO  [(null)] Microsoft.Hosting.Lifetime - Application started. Press Ctrl+C to shut down.
+2026-06-24 11:14:57,157 INFO  [(null)] Microsoft.Hosting.Lifetime - Hosting environment: Development
+2026-06-24 11:14:57,158 INFO  [(null)] Microsoft.Hosting.Lifetime - Content root path: C:\Agile Final\agile-final-moe-backend\src\Hosts\Moe.StudentFinance.Api
+2026-06-24 11:14:57,181 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[NextRunAt], [t].[OrganizationId], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+2026-06-24 11:14:58,258 INFO  [870c71a1d6c14c548559a329217c2044] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/mfa/v1/status
+2026-06-24 11:14:58,645 INFO  [870c71a1d6c14c548559a329217c2044] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (7ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN'
+2026-06-24 11:14:58,836 INFO  [870c71a1d6c14c548559a329217c2044] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/mfa/v1/status completed in 569 ms with 200
+2026-06-24 11:14:58,847 INFO  [870c71a1d6c14c548559a329217c2044] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/mfa/v1/status => 200 in 583 ms. TraceId=870c71a1d6c14c548559a329217c2044
+2026-06-24 11:14:58,937 INFO  [03fe6437688b42ff9cb8634f9ab965e9] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/mfa/v1/challenge
+2026-06-24 11:14:59,038 INFO  [03fe6437688b42ff9cb8634f9ab965e9] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN' AND [l].[StatusCode] = 'ACTIVE'
+2026-06-24 11:14:59,439 INFO  [03fe6437688b42ff9cb8634f9ab965e9] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (12ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime2), @p2='?' (DbType = DateTime2), @p3='?' (DbType = Int64), @p4='?' (Size = 30) (DbType = AnsiString), @p5='?' (Size = 30) (DbType = AnsiString), @p6='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [iam].[LoginMfaChallenge] ([LoginMfaChallengeId], [CreatedAtUtc], [ExpiresAtUtc], [LoginAccountId], [PurposeCode], [StatusCode], [VerifiedAtUtc])
+OUTPUT INSERTED.[FailedAttemptCount]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6);
+2026-06-24 11:14:59,595 INFO  [03fe6437688b42ff9cb8634f9ab965e9] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (9ms) [Parameters=[@p0='?' (DbType = DateTime2), @p1='?' (Size = 60) (DbType = AnsiString), @p2='?' (Size = 64), @p3='?' (DbType = Int64), @p4='?' (DbType = Guid), @p5='?' (Size = 512)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [iam].[LoginMfaAuditEvent] ([CreatedAtUtc], [EventCode], [IpAddress], [LoginAccountId], [LoginMfaChallengeId], [UserAgent])
+OUTPUT INSERTED.[LoginMfaAuditEventId]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5);
+2026-06-24 11:14:59,650 INFO  [03fe6437688b42ff9cb8634f9ab965e9] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/mfa/v1/challenge completed in 711 ms with 200
+2026-06-24 11:14:59,651 INFO  [03fe6437688b42ff9cb8634f9ab965e9] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/mfa/v1/challenge => 200 in 712 ms. TraceId=03fe6437688b42ff9cb8634f9ab965e9
+2026-06-24 11:14:59,664 INFO  [11995597099942999b6db19ab98641ef] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/mfa/v1/verify
+2026-06-24 11:14:59,783 INFO  [11995597099942999b6db19ab98641ef] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@challengeId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaChallengeId], [l].[CreatedAtUtc], [l].[ExpiresAtUtc], [l].[FailedAttemptCount], [l].[LoginAccountId], [l].[PurposeCode], [l].[StatusCode], [l].[VerifiedAtUtc]
+FROM [iam].[LoginMfaChallenge] AS [l]
+WHERE [l].[LoginMfaChallengeId] = @challengeId
+2026-06-24 11:14:59,797 INFO  [11995597099942999b6db19ab98641ef] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN' AND [l].[StatusCode] = 'ACTIVE'
+2026-06-24 11:14:59,945 INFO  [11995597099942999b6db19ab98641ef] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (24ms) [Parameters=[@p0='?' (DbType = DateTime2), @p1='?' (Size = 60) (DbType = AnsiString), @p2='?' (Size = 64), @p3='?' (DbType = Int64), @p4='?' (DbType = Guid), @p5='?' (Size = 512), @p8='?' (DbType = Guid), @p6='?' (Size = 30) (DbType = AnsiString), @p7='?' (DbType = DateTime2), @p12='?' (DbType = Int64), @p9='?' (DbType = Int32), @p10='?' (DbType = DateTime2), @p13='?' (Size = 8) (DbType = Binary), @p11='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET NOCOUNT ON;
+INSERT INTO [iam].[LoginMfaAuditEvent] ([CreatedAtUtc], [EventCode], [IpAddress], [LoginAccountId], [LoginMfaChallengeId], [UserAgent])
+OUTPUT INSERTED.[LoginMfaAuditEventId]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5);
+UPDATE [iam].[LoginMfaChallenge] SET [StatusCode] = @p6, [VerifiedAtUtc] = @p7
+OUTPUT 1
+WHERE [LoginMfaChallengeId] = @p8;
+UPDATE [iam].[LoginMfaCredential] SET [FailedAttemptCount] = @p9, [LastVerifiedAtUtc] = @p10, [UpdatedAtUtc] = @p11
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginMfaCredentialId] = @p12 AND [RowVersion] = @p13;
+2026-06-24 11:15:00,001 INFO  [11995597099942999b6db19ab98641ef] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/mfa/v1/verify completed in 335 ms with 200
+2026-06-24 11:15:00,002 INFO  [11995597099942999b6db19ab98641ef] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/mfa/v1/verify => 200 in 337 ms. TraceId=11995597099942999b6db19ab98641ef
+2026-06-24 11:15:00,007 INFO  [4f73b91515274ef7a49a308d4c07d5e5] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/mfa/v1/pin/update
+2026-06-24 11:15:00,048 INFO  [4f73b91515274ef7a49a308d4c07d5e5] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN' AND [l].[StatusCode] = 'ACTIVE'
+2026-06-24 11:15:00,111 INFO  [4f73b91515274ef7a49a308d4c07d5e5] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (12ms) [Parameters=[@p0='?' (DbType = DateTime2), @p1='?' (Size = 60) (DbType = AnsiString), @p2='?' (Size = 64), @p3='?' (DbType = Int64), @p4='?' (DbType = Guid), @p5='?' (Size = 512), @p8='?' (DbType = Int64), @p6='?' (DbType = Int32), @p9='?' (Size = 8) (DbType = Binary), @p7='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET NOCOUNT ON;
+INSERT INTO [iam].[LoginMfaAuditEvent] ([CreatedAtUtc], [EventCode], [IpAddress], [LoginAccountId], [LoginMfaChallengeId], [UserAgent])
+OUTPUT INSERTED.[LoginMfaAuditEventId]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5);
+UPDATE [iam].[LoginMfaCredential] SET [FailedAttemptCount] = @p6, [UpdatedAtUtc] = @p7
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginMfaCredentialId] = @p8 AND [RowVersion] = @p9;
+2026-06-24 11:15:00,123 INFO  [4f73b91515274ef7a49a308d4c07d5e5] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/mfa/v1/pin/update completed in 115 ms with 401
+2026-06-24 11:15:00,124 INFO  [4f73b91515274ef7a49a308d4c07d5e5] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/mfa/v1/pin/update => 401 in 116 ms. TraceId=4f73b91515274ef7a49a308d4c07d5e5

@@ -1,0 +1,17 @@
+[
+    {
+        "Case":  "start challenge account 1002",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"df34ad92-b2cf-4607-959d-db909179d384\",\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"expiresAtUtc\":\"2026-06-23T16:50:31.4699505Z\"},\"errors\":null,\"traceId\":\"66eb27f8b66b4be0bbca897352bc3926\",\"timestampUtc\":\"2026-06-23T16:45:31.7187192Z\"}"
+    },
+    {
+        "Case":  "wrong PIN on challenge",
+        "HttpStatus":  401,
+        "Body":  "The remote server returned an error: (401) Unauthorized."
+    },
+    {
+        "Case":  "correct PIN on same failed challenge",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"verified\":true,\"loginAccountId\":1002,\"portalAccessCode\":\"ADMIN\",\"purposeCode\":\"VERIFY\",\"verifiedAtUtc\":\"2026-06-23T16:45:32.0049698Z\"},\"errors\":null,\"traceId\":\"934188a51f7b47bfb8dcd14eeabd95ef\",\"timestampUtc\":\"2026-06-23T16:45:32.0549292Z\"}"
+    }
+]
