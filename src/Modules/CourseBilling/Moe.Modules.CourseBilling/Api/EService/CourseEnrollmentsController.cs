@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Api;
-using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 using Moe.Modules.CourseBilling.Application.Enrollments.CourseContent;
+using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 
 namespace Moe.Modules.CourseBilling.Api.EService;
