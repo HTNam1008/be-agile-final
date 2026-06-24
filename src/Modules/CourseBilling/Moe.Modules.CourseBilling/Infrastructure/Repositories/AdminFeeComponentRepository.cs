@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
+using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
@@ -39,6 +40,8 @@ internal sealed class AdminFeeComponentRepository(MoeDbContext dbContext) : IAdm
                 x.ComponentTypeCode,
                 x.CalculationTypeCode,
                 x.IsTaxComponent,
+                x.DefaultValue,
+                x.IsSystemManaged,
                 x.IsActive))
             .ToListAsync(cancellationToken);
 
@@ -58,6 +61,10 @@ internal sealed class AdminFeeComponentRepository(MoeDbContext dbContext) : IAdm
             cancellationToken);
     }
 
+    public async Task<bool> IsInUseAsync(long feeComponentId, CancellationToken cancellationToken)
+        => await dbContext.Set<CourseFee>().AnyAsync(x => x.FeeComponentId == feeComponentId, cancellationToken)
+           || await dbContext.Set<BillLine>().AnyAsync(x => x.FeeComponentId == feeComponentId, cancellationToken);
+
     public async Task AddAsync(FeeComponent feeComponent, CancellationToken cancellationToken)
     {
         await dbContext.Set<FeeComponent>().AddAsync(feeComponent, cancellationToken);
@@ -66,4 +73,10 @@ internal sealed class AdminFeeComponentRepository(MoeDbContext dbContext) : IAdm
 
     public Task SaveAsync(FeeComponent feeComponent, CancellationToken cancellationToken)
         => dbContext.SaveChangesAsync(cancellationToken);
+
+    public async Task DeleteAsync(FeeComponent feeComponent, CancellationToken cancellationToken)
+    {
+        dbContext.Set<FeeComponent>().Remove(feeComponent);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 }

@@ -14,7 +14,7 @@ public sealed class DesignTimeMoeDbContextFactory : IDesignTimeDbContextFactory<
     public MoeDbContext CreateDbContext(string[] args)
     {
         var connection = Environment.GetEnvironmentVariable("MOE_DESIGN_CONNECTION")
-            ?? "Server=localhost,1433;Database=MOEStudentFinance;User Id=sa;Password=Change_me_123!;TrustServerCertificate=True";
+            ?? "Server=localhost\\SQLEXPRESS;Database=SF;Integrated Security=True;TrustServerCertificate=True";
         var options = new DbContextOptionsBuilder<MoeDbContext>()
             .UseSqlServer(connection, x => x.MigrationsAssembly(typeof(DesignTimeMoeDbContextFactory).Assembly.FullName))
             .Options;
