@@ -14,4 +14,5 @@ public sealed record CourseFeeDto(
     string CalculationTypeCode,
     decimal FeeValue,
     int SequenceNumber,
+    bool IsSystemManaged,
     bool IsActive);

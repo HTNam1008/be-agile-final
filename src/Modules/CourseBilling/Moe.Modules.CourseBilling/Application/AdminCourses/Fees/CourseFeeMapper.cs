@@ -16,5 +16,6 @@ internal static class CourseFeeMapper
             detail.FeeComponent.CalculationTypeCode,
             detail.CourseFee.FeeValue,
             detail.CourseFee.SequenceNumber,
+            detail.FeeComponent.IsSystemManaged,
             detail.CourseFee.IsActive);
 }

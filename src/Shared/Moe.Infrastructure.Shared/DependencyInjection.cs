@@ -70,6 +70,7 @@ public static class DependencyInjection
                 authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountDetails, "ACCOUNT_DETAILS_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountLifecycle, "ACCOUNT_LIFECYCLE_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.LifecycleManualTrigger, "LIFECYCLE_MANUAL_TRIGGER", useStrictPermissionPolicies: true);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(

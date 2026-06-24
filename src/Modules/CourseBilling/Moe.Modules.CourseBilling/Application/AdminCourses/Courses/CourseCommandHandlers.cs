@@ -59,6 +59,20 @@ internal sealed class CreateCourseCommandHandler(AdminCourseAccess access)
             request.AfterStartRefundPercentage);
 
         await access.Courses.AddCourseAsync(course, cancellationToken);
+        FeeComponent? gst = await access.Courses.FindActiveFeeComponentByCodeAsync(
+            SystemFeeComponentCodes.Gst,
+            cancellationToken);
+        if (gst is not null && (!gst.IsSystemManaged || !gst.IsTaxComponent))
+        {
+            return Result<CourseDetailDto>.Failure(CourseErrors.GstComponentNotConfigured);
+        }
+
+        if (gst is not null)
+        {
+            CourseFee gstFee = new(course.Id, gst.Id, gst.DefaultValue, sequenceNumber: 999);
+            await access.Courses.AddFeeAsync(gstFee, cancellationToken);
+        }
+
         return await access.LoadCourseDetailAsync(course.Id, cancellationToken);
     }
 }
