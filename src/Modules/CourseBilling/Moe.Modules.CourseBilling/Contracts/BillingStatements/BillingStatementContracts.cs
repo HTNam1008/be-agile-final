@@ -26,4 +26,20 @@ public sealed record BillingStatementItemResponse(
     string BillStatusCode,
     bool IsInstallment,
     bool CanDefer,
-    string? DeferBlockedReason);
+    string? DeferBlockedReason,
+    IReadOnlyCollection<BillingStatementItemLineResponse> Lines);
+
+public sealed record BillingStatementItemLineResponse(
+    long BillLineId,
+    long FeeComponentId,
+    long? CourseFeeId,
+    string ComponentCode,
+    string ComponentName,
+    string ComponentTypeCode,
+    string CalculationTypeCode,
+    string Description,
+    decimal Quantity,
+    decimal UnitAmount,
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetAmount);

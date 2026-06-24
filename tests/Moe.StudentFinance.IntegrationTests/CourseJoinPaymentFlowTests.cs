@@ -34,14 +34,23 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         await AssertStatusAsync(HttpStatusCode.Created, response);
         JsonElement data = await ReadDataAsync(response);
         Assert.Equal("PENDING_PAYMENT", data.GetProperty("enrollmentStatusCode").GetString());
-        Assert.Equal(100m, data.GetProperty("outstandingAmount").GetDecimal());
+        Assert.Equal(109m, data.GetProperty("outstandingAmount").GetDecimal());
         JsonElement.ArrayEnumerator bills = data.GetProperty("generatedBills").EnumerateArray();
         Assert.Single(bills);
         JsonElement bill = bills.Single();
         Assert.Equal(1, bill.GetProperty("sequenceNumber").GetInt32());
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow), ReadDateOnly(bill.GetProperty("currentDueDate")));
-        Assert.Equal(100m, bill.GetProperty("outstandingAmount").GetDecimal());
+        Assert.Equal(109m, bill.GetProperty("outstandingAmount").GetDecimal());
         Assert.Equal("ISSUED", bill.GetProperty("billStatusCode").GetString());
+
+        long billId = bill.GetProperty("billId").GetInt64();
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        BillLine[] billLines = await db.Set<BillLine>()
+            .Where(x => x.BillId == billId)
+            .OrderBy(x => x.NetAmount)
+            .ToArrayAsync();
+        Assert.Equal([9m, 100m], billLines.Select(x => x.NetAmount).ToArray());
     }
 
     [Fact]
@@ -62,8 +71,8 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal("ACTIVE", data.GetProperty("enrollmentStatusCode").GetString());
         JsonElement[] bills = data.GetProperty("generatedBills").EnumerateArray().ToArray();
         Assert.Equal(3, bills.Length);
-        Assert.Equal(100m, bills.Sum(x => x.GetProperty("netPayableAmount").GetDecimal()));
-        Assert.Equal([33.34m, 33.33m, 33.33m],
+        Assert.Equal(109m, bills.Sum(x => x.GetProperty("netPayableAmount").GetDecimal()));
+        Assert.Equal([36.34m, 36.33m, 36.33m],
             bills.Select(x => x.GetProperty("netPayableAmount").GetDecimal()).ToArray());
 
         DateOnly firstOfNextMonth = new(
@@ -74,6 +83,44 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal(
             [firstOfNextMonth, firstOfNextMonth.AddMonths(1), firstOfNextMonth.AddMonths(2)],
             bills.Select(x => ReadDateOnly(x.GetProperty("currentDueDate"))).ToArray());
+    }
+
+    [Fact]
+    public async Task CourseCreation_AttachesSystemGstFee_AndSchoolAdminCannotDeleteIt()
+    {
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        var gstFee = await (
+                from fee in db.Set<CourseFee>()
+                join component in db.Set<FeeComponent>() on fee.FeeComponentId equals component.Id
+                where fee.CourseId == course.CourseId &&
+                    component.ComponentCode == SystemFeeComponentCodes.Gst
+                select new
+                {
+                    fee.Id,
+                    fee.FeeValue,
+                    component.IsSystemManaged,
+                    component.IsTaxComponent,
+                    component.CalculationTypeCode
+                })
+            .SingleAsync();
+
+        Assert.Equal(9m, gstFee.FeeValue);
+        Assert.True(gstFee.IsSystemManaged);
+        Assert.True(gstFee.IsTaxComponent);
+        Assert.Equal(FeeComponentCalculationTypes.Percentage, gstFee.CalculationTypeCode);
+
+        using HttpRequestMessage deleteGst = AdminMessage(
+            HttpMethod.Delete,
+            $"/api/admin/v1/courses/{course.CourseId}/fees/{gstFee.Id}",
+            roleCode: CourseBillingRoles.SchoolAdmin);
+        using HttpResponseMessage deleteResponse = await _client.SendAsync(deleteGst);
+
+        await AssertStatusAsync(HttpStatusCode.Forbidden, deleteResponse);
     }
 
     [Fact]
@@ -536,6 +583,45 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         JsonElement retryPayment = await ReadDataAsync(retryResponse);
         Assert.NotEqual(firstPaymentId, retryPayment.GetProperty("paymentId").GetInt64());
         Assert.False(retryPayment.GetProperty("resumed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task CancelPendingCheckout_ReleasesEducationAccountHold_WhenStripeExpireFails()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage firstResponse = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Created, firstResponse);
+        JsonElement firstPayment = await ReadDataAsync(firstResponse);
+        long firstPaymentId = firstPayment.GetProperty("paymentId").GetInt64();
+        long checkoutId = firstPayment.GetProperty("paymentCheckoutSessionId").GetInt64();
+
+        IntegrationTestStripeGateway.FailNextExpireForSession($"cs_test_{checkoutId}");
+
+        using HttpResponseMessage cancelResponse = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statement.StatementId}/payments/{firstPaymentId}/cancel");
+        await AssertStatusAsync(HttpStatusCode.OK, cancelResponse);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Payment cancelled = await db.Set<Payment>().SingleAsync(x => x.Id == firstPaymentId);
+        long educationPartId = await db.Set<PaymentPart>()
+            .Where(part => part.PaymentId == firstPaymentId &&
+                part.PaymentMethodCode == PaymentMethodCodes.EducationAccount)
+            .Select(part => part.Id)
+            .SingleAsync();
+        AccountHold hold = await db.Set<AccountHold>()
+            .SingleAsync(x => x.PaymentPartId == educationPartId);
+
+        Assert.Equal(PaymentStatusCodes.Cancelled, cancelled.PaymentStatusCode);
+        Assert.Equal("RELEASED", hold.HoldStatusCode);
     }
 
     [Fact]
@@ -1032,10 +1118,11 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     private static HttpRequestMessage AdminMessage(
         HttpMethod method,
         string uri,
-        object? body = null)
+        object? body = null,
+        string roleCode = CourseBillingRoles.HqAdmin)
     {
         HttpRequestMessage request = new(method, uri);
-        request.Headers.Add("X-Test-Role", "HQ_ADMIN");
+        request.Headers.Add("X-Test-Role", roleCode);
         if (body is not null) request.Content = JsonContent.Create(body);
         return request;
     }

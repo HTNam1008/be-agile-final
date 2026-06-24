@@ -17,6 +17,7 @@ internal sealed class ListAdminStudentsHandler(
     {
         DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         AdminStudentListCriteria criteria = new(
+            query.OrganizationId,
             query.Search,
             query.LevelCode,
             query.ClassCode,

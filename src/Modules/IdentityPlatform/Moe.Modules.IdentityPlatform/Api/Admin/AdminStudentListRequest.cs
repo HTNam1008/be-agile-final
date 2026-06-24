@@ -3,6 +3,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
 public sealed record AdminStudentListRequest(
+    long? OrganizationId,
     string? Search,
     string? LevelCode,
     string? ClassCode,

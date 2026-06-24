@@ -7,3 +7,4 @@ public sealed record CreateFeeComponentCommand(CreateFeeComponentRequest Request
 public sealed record UpdateFeeComponentCommand(long FeeComponentId, UpdateFeeComponentRequest Request) : ICommand<FeeComponentDto>;
 public sealed record ActivateFeeComponentCommand(long FeeComponentId) : ICommand<FeeComponentDto>;
 public sealed record DeactivateFeeComponentCommand(long FeeComponentId) : ICommand<FeeComponentDto>;
+public sealed record DeleteFeeComponentCommand(long FeeComponentId) : ICommand<long>;

@@ -64,10 +64,42 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         }
 
         long total = await query.LongCountAsync(cancellationToken);
-        List<CourseSummaryDto> items = await query
+        List<Course> courses = await query
             .OrderByDescending(x => x.UpdatedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        long[] courseIds = courses.Select(x => x.Id).ToArray();
+        List<CourseFeeProjection> feeProjections = await (
+                from fee in dbContext.Set<CourseFee>().AsNoTracking()
+                join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                    on fee.FeeComponentId equals component.Id
+                where courseIds.Contains(fee.CourseId) && fee.IsActive && component.IsActive
+                select new CourseFeeProjection(
+                    fee.CourseId,
+                    fee.Id,
+                    component.Id,
+                    component.ComponentName,
+                    fee.FeeValue,
+                    component.CalculationTypeCode,
+                    component.IsTaxComponent))
+            .ToListAsync(cancellationToken);
+        Dictionary<long, decimal> feeTotals = feeProjections
+            .GroupBy(x => x.CourseId)
+            .ToDictionary(
+                group => group.Key,
+                group => CourseFeeAmountCalculator.Calculate(group.Select(x => x.ToBillingLine()).ToArray()).Sum(x => x.Amount));
+
+        Dictionary<long, int> enrollmentCounts = await dbContext.Set<CourseEnrollment>()
+            .AsNoTracking()
+            .Where(enrollment => courseIds.Contains(enrollment.CourseId)
+                && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled)
+            .GroupBy(enrollment => enrollment.CourseId)
+            .Select(group => new { CourseId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(x => x.CourseId, x => x.Count, cancellationToken);
+
+        List<CourseSummaryDto> items = courses
             .Select(x => new CourseSummaryDto(
                 x.Id,
                 x.OrganizationId,
@@ -81,15 +113,11 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
                 x.BeforeStartRefundPercentage,
                 x.AfterStartRefundPercentage,
                 x.CourseStatusCode,
-                dbContext.Set<CourseFee>()
-                    .Where(fee => fee.CourseId == x.Id && fee.IsActive)
-                    .Sum(fee => (decimal?)fee.FeeValue) ?? 0m,
-                dbContext.Set<CourseEnrollment>()
-                    .Count(enrollment => enrollment.CourseId == x.Id
-                        && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled),
+                feeTotals.GetValueOrDefault(x.Id),
+                enrollmentCounts.GetValueOrDefault(x.Id),
                 x.UpdatedAtUtc,
                 x.DisabledAtUtc))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return new PageResponse<CourseSummaryDto>(items, page, pageSize, total);
     }
@@ -237,6 +265,17 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         => dbContext.Set<FeeComponent>()
             .SingleOrDefaultAsync(x => x.Id == feeComponentId && x.IsActive, cancellationToken);
 
+    public Task<FeeComponent?> FindActiveFeeComponentByCodeAsync(
+        string componentCode,
+        CancellationToken cancellationToken)
+    {
+        string normalizedCode = componentCode.Trim().ToUpperInvariant();
+        return dbContext.Set<FeeComponent>()
+            .SingleOrDefaultAsync(
+                x => x.ComponentCode == normalizedCode && x.IsActive,
+                cancellationToken);
+    }
+
     public Task<CourseFee?> FindCourseFeeAsync(long courseId, long courseFeeId, CancellationToken cancellationToken)
         => dbContext.Set<CourseFee>()
             .SingleOrDefaultAsync(x => x.CourseId == courseId && x.Id == courseFeeId, cancellationToken);
@@ -336,7 +375,8 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
             int issuedCount = 0;
-            decimal grossAmount = fees.Sum(x => x.CourseFee.FeeValue);
+            IReadOnlyList<CourseFeeBillingAmount> feeAmounts = CourseFeeAmountCalculator.Calculate(fees);
+            decimal grossAmount = feeAmounts.Sum(x => x.Amount);
 
             foreach (CourseEnrollment enrollment in enrollments)
             {
@@ -355,14 +395,14 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
                 await dbContext.Set<Bill>().AddAsync(billResult.Value, cancellationToken);
                 await dbContext.SaveChangesAsync(cancellationToken);
 
-                foreach (CourseFeeDetail fee in fees)
+                foreach (CourseFeeBillingAmount amount in feeAmounts.Where(x => x.Amount > 0m))
                 {
                     Result<BillLine> billLineResult = BillLine.FromCourseFee(
                         billResult.Value.Id,
-                        fee.FeeComponent.Id,
-                        fee.CourseFee.Id,
-                        fee.FeeComponent.ComponentName,
-                        fee.CourseFee.FeeValue);
+                        amount.FeeComponentId,
+                        amount.CourseFeeId,
+                        amount.FeeComponentName,
+                        amount.Amount);
 
                     if (billLineResult.IsFailure)
                     {
@@ -415,4 +455,17 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
            where fee.CourseId == courseId && (!activeOnly || fee.IsActive)
            orderby fee.SequenceNumber, component.ComponentName
            select new CourseFeeDetail(fee, component);
+}
+
+internal sealed record CourseFeeProjection(
+    long CourseId,
+    long CourseFeeId,
+    long FeeComponentId,
+    string FeeComponentName,
+    decimal FeeValue,
+    string CalculationTypeCode,
+    bool IsTaxComponent)
+{
+    public CourseFeeBillingLine ToBillingLine()
+        => new(CourseFeeId, FeeComponentId, FeeComponentName, CalculationTypeCode, IsTaxComponent, FeeValue);
 }
