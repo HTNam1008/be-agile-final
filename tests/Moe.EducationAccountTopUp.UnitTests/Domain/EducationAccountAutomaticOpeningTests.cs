@@ -22,4 +22,41 @@ public sealed class EducationAccountAutomaticOpeningTests
         result.Value.OpeningRemarks.Should().BeNull();
         result.Value.OpenedByUserId.Should().BeNull();
     }
+
+    [Fact]
+    public void CloseAutomatically_WhenActive_ClosesWithAutoAgeLimitReasonAndDoesNotChangeBalance()
+    {
+        DateTimeOffset openedAt = new(2026, 6, 24, 2, 0, 0, TimeSpan.Zero);
+        DateTimeOffset closedAt = openedAt.AddDays(1);
+        EducationAccount account = EducationAccount.OpenAutomatically(123, "PSEA-00000123", openedAt).Value;
+        account.UpdateBalance(125.50m);
+
+        var result = account.CloseAutomatically(closedAt);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
+        account.StatusCode.Should().Be(AccountStatuses.Closed);
+        account.ClosedAtUtc.Should().Be(closedAt);
+        account.ClosingReasonCode.Should().Be(EducationAccountClosingReasonCodes.AutoAgeLimit);
+        account.ClosingRemarks.Should().BeNull();
+        account.ClosedByLoginAccountId.Should().BeNull();
+        account.CachedBalance.Should().Be(125.50m);
+    }
+
+    [Fact]
+    public void CloseAutomatically_WhenAlreadyClosed_IsNoOpSuccess()
+    {
+        DateTimeOffset openedAt = new(2026, 6, 24, 2, 0, 0, TimeSpan.Zero);
+        DateTimeOffset firstClosedAt = openedAt.AddDays(1);
+        DateTimeOffset secondClosedAt = openedAt.AddDays(2);
+        EducationAccount account = EducationAccount.OpenAutomatically(123, "PSEA-00000123", openedAt).Value;
+        account.CloseAutomatically(firstClosedAt).IsSuccess.Should().BeTrue();
+
+        var result = account.CloseAutomatically(secondClosedAt);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
+        account.ClosedAtUtc.Should().Be(firstClosedAt);
+        account.ClosingReasonCode.Should().Be(EducationAccountClosingReasonCodes.AutoAgeLimit);
+    }
 }

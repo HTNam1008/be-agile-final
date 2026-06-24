@@ -16,7 +16,7 @@ using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
-using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
 using NSwag;
 using NSwag.Generation.Processors.Security;
@@ -296,14 +296,3 @@ static string GetSwaggerTag(string path)
 }
 
 public partial class Program;
-
-internal sealed class EligiblePersonLookupGatewayAdapter(IEligiblePersonReader reader)
-    : IEligiblePersonLookupGateway
-{
-    public Task<IReadOnlyCollection<long>> FindEligibleForEducationAccountAsync(
-        DateOnly today,
-        CancellationToken cancellationToken)
-    {
-        return reader.FindEligibleForEducationAccountAsync(today, cancellationToken);
-    }
-}

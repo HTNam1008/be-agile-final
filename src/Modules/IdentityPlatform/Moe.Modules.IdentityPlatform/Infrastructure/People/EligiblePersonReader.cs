@@ -24,4 +24,25 @@ internal sealed class EligiblePersonReader(MoeDbContext dbContext) : IEligiblePe
             .Select(person => person.Id)
             .ToArrayAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyCollection<long>> FindPersonIdsAgedAtLeastAsync(
+        IReadOnlyCollection<long> personIds,
+        int minAge,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        if (personIds.Count == 0)
+        {
+            return [];
+        }
+
+        DateOnly latestEligibleBirthDate = today.AddYears(-minAge);
+        return await dbContext.Set<Person>()
+            .AsNoTracking()
+            .Where(person =>
+                personIds.Contains(person.Id) &&
+                person.DateOfBirth <= latestEligibleBirthDate)
+            .Select(person => person.Id)
+            .ToArrayAsync(cancellationToken);
+    }
 }

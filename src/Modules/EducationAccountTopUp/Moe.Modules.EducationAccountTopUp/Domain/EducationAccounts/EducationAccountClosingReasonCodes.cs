@@ -6,12 +6,14 @@ public static class EducationAccountClosingReasonCodes
     public const string DuplicateAccount = "DUPLICATE_ACCOUNT";
     public const string AdminError = "ADMIN_ERROR";
     public const string Other = "OTHER";
+    public const string AutoAgeLimit = "AUTO_AGE_LIMIT";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         StudentIneligible,
         DuplicateAccount,
         AdminError,
-        Other
+        Other,
+        AutoAgeLimit
     };
 }

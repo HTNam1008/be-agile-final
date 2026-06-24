@@ -124,6 +124,21 @@ public sealed class EducationAccount : AggregateRoot<long>
         return Result.Success();
     }
 
+    public Result<bool> CloseAutomatically(DateTimeOffset now)
+    {
+        if (StatusCode == AccountStatuses.Closed)
+        {
+            return Result<bool>.Success(false);
+        }
+
+        StatusCode = AccountStatuses.Closed;
+        ClosedAtUtc = now;
+        ClosingReasonCode = EducationAccountClosingReasonCodes.AutoAgeLimit;
+        ClosingRemarks = null;
+        ClosedByLoginAccountId = null;
+        return Result<bool>.Success(true);
+    }
+
     public void UpdateBalance(decimal amount)
     {
         CachedBalance += amount;
