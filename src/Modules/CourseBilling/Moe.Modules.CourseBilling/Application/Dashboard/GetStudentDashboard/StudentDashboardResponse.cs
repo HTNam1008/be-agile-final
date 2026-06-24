@@ -56,6 +56,7 @@ public sealed record StudentDashboardCourseResponse(
     bool HasActiveFee,
     decimal TotalFee,
     string? TotalFeeDisplay,
+    int MaterialCount,
     DateOnly StartDate,
     DateOnly? EndDate,
     string DateRangeDisplay,
