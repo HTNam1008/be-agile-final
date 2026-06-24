@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -44,6 +45,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.AddHostedService<IntegrationTestDbSeeder>();
             services.RemoveAll<IStripePaymentGateway>();
             services.AddSingleton<IStripePaymentGateway, IntegrationTestStripeGateway>();
+            services.Configure<EducationAccountLifecycleOptions>(options => options.Enabled = false);
 
             // Mock Authentication
             services.AddAuthentication(options =>
