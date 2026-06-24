@@ -55,6 +55,8 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
                 dbContext.Set<CourseFee>()
                     .Where(fee => fee.CourseId == course.Id && fee.IsActive)
                     .Sum(fee => (decimal?)fee.FeeValue) ?? 0m,
+                dbContext.Set<CourseMaterial>()
+                    .Count(material => material.CourseId == course.Id && material.IsActive),
                 course.StartDate,
                 course.EndDate,
                 enrollment.EnrollmentStatusCode);
@@ -104,6 +106,8 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
                 dbContext.Set<CourseFee>()
                     .Where(fee => fee.CourseId == course.Id && fee.IsActive)
                     .Sum(fee => (decimal?)fee.FeeValue) ?? 0m,
+                dbContext.Set<CourseMaterial>()
+                    .Count(material => material.CourseId == course.Id && material.IsActive),
                 course.StartDate,
                 course.EndDate,
                 "AVAILABLE");
@@ -126,5 +130,4 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
             var normalized => normalized
         };
     }
-
 }

@@ -104,6 +104,7 @@ internal sealed class GetStudentDashboardHandler(
             course.HasActiveFee,
             course.TotalFee,
             course.HasActiveFee ? ToCurrencyDisplay("SGD", course.TotalFee) : null,
+            course.MaterialCount,
             course.StartDate,
             course.EndDate,
             ToDateRangeDisplay(course.StartDate, course.EndDate),
