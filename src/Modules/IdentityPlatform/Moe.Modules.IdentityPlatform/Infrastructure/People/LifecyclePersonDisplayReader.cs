@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.StudentFinance.Persistence;
 
@@ -17,13 +19,24 @@ internal sealed class LifecyclePersonDisplayReader(MoeDbContext dbContext)
             return [];
         }
 
-        return await dbContext.Set<Person>()
-            .AsNoTracking()
-            .Where(x => personIds.Contains(x.Id))
-            .Select(x => new LifecyclePersonDisplaySummary(
-                x.Id,
-                x.OfficialFullName,
-                x.IdentityNumberMasked ?? string.Empty))
+        return await (
+                from person in dbContext.Set<Person>().AsNoTracking()
+                where personIds.Contains(person.Id)
+                join enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
+                    on person.Id equals enrollment.PersonId into enrollments
+                from enrollment in enrollments
+                    .Where(x => x.SchoolingStatusCode == "ACTIVE")
+                    .OrderByDescending(x => x.StartDate)
+                    .Take(1)
+                    .DefaultIfEmpty()
+                join organization in dbContext.Set<OrganizationUnit>().AsNoTracking()
+                    on enrollment.OrganizationId equals organization.Id into organizations
+                from organization in organizations.DefaultIfEmpty()
+                select new LifecyclePersonDisplaySummary(
+                    person.Id,
+                    person.OfficialFullName,
+                    person.IdentityNumberMasked ?? string.Empty,
+                    organization == null ? null : organization.UnitName))
             .ToArrayAsync(cancellationToken);
     }
 }
