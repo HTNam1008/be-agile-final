@@ -20,7 +20,6 @@ public sealed class EducationAccountLifecycleController(
     IClock clock) : ControllerBase
 {
     [HttpPost("run-now")]
-    [Authorize(Policy = AuthorizationPolicies.LifecycleManualTrigger)]
     [ProducesResponseType(typeof(ApiResponse<EducationAccountLifecycleRunNowResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RunNow(CancellationToken cancellationToken)
