@@ -17,7 +17,8 @@ internal sealed class LifecyclePersonDisplayGatewayAdapter(ILifecyclePersonDispl
             .Select(x => new LifecyclePersonDisplay(
                 x.PersonId,
                 x.FullName,
-                x.MaskedNric))
+                x.MaskedNric,
+                x.SchoolName))
             .ToArray();
     }
 }
