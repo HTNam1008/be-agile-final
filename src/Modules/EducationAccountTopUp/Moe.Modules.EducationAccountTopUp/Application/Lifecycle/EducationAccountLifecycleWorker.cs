@@ -62,7 +62,7 @@ public sealed class EducationAccountLifecycleWorker(
         _lastRunDate = today;
     }
 
-    internal async Task ProcessAsync(
+    internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
         DateOnly today,
         DateTimeOffset lifecycleAtUtc,
         CancellationToken cancellationToken)
@@ -94,7 +94,7 @@ public sealed class EducationAccountLifecycleWorker(
 
         if (candidatePersonIds.Count == 0)
         {
-            return;
+            return new EducationAccountLifecycleRunResult(0, closureSummary.ClosedCount);
         }
 
         int createdCount = 0;
@@ -119,5 +119,7 @@ public sealed class EducationAccountLifecycleWorker(
                 createdCount,
                 candidatePersonIds.Count);
         }
+
+        return new EducationAccountLifecycleRunResult(createdCount, closureSummary.ClosedCount);
     }
 }

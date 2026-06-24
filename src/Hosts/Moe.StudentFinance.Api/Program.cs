@@ -182,6 +182,7 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new(LocalIdentityClaimNames.Role, "HQ_ADMIN"),
         new(LocalIdentityClaimNames.Permission, "TOPUPS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
+        new(LocalIdentityClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER"),
         new(LocalIdentityClaimNames.Permission, "ACCESS_SCOPE_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "EXTERNAL_ACCOUNTS_PROVISION"),
         new(LocalIdentityClaimNames.Permission, "FAS_SCHEME_MANAGE"),

@@ -92,6 +92,29 @@ public sealed class EducationAccountLifecycleWorkerTests
         events.Should().Equal("close", "open:1");
     }
 
+    [Fact]
+    public async Task ProcessAsync_ReturnsClosedAndOpenedCounts()
+    {
+        FakeEligiblePersonLookupGateway people = new([1, 2, 2, 3]);
+        FakeAutomaticEducationAccountCreator creator = new(createdPersonIds: [1, 3]);
+        FakeAutomaticEducationAccountCloser closer = new(activeAccountCount: 5, closedCount: 2);
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer);
+
+        EducationAccountLifecycleRunResult result = await worker.ProcessAsync(
+            new DateOnly(2026, 6, 24),
+            new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero),
+            CancellationToken.None);
+
+        result.ClosedCount.Should().Be(2);
+        result.OpenedCount.Should().Be(2);
+        creator.CreatedPersonIds.Should().Equal(1, 2, 3);
+    }
+
     private static EducationAccountLifecycleWorker CreateWorker(
         EducationAccountLifecycleOptions options,
         IClock clock,
@@ -140,8 +163,11 @@ public sealed class EducationAccountLifecycleWorkerTests
         }
     }
 
-    private sealed class FakeAutomaticEducationAccountCreator(List<string>? events = null) : IAutomaticEducationAccountCreator
+    private sealed class FakeAutomaticEducationAccountCreator(
+        List<string>? events = null,
+        IReadOnlyCollection<long>? createdPersonIds = null) : IAutomaticEducationAccountCreator
     {
+        private readonly IReadOnlyCollection<long>? _createdPersonIds = createdPersonIds;
         public List<long> CreatedPersonIds { get; } = [];
 
         public Task<AutomaticEducationAccountCreationResult> EnsureCreatedAsync(
@@ -151,14 +177,18 @@ public sealed class EducationAccountLifecycleWorkerTests
         {
             CreatedPersonIds.Add(personId);
             events?.Add($"open:{personId}");
+            bool created = _createdPersonIds is null || _createdPersonIds.Contains(personId);
             return Task.FromResult(new AutomaticEducationAccountCreationResult(
                 personId,
                 $"PSEA-{personId:D8}",
-                Created: true));
+                Created: created));
         }
     }
 
-    private sealed class FakeAutomaticEducationAccountCloser(List<string>? events = null) : IAutomaticEducationAccountCloser
+    private sealed class FakeAutomaticEducationAccountCloser(
+        List<string>? events = null,
+        int activeAccountCount = 0,
+        int closedCount = 0) : IAutomaticEducationAccountCloser
     {
         public int Calls { get; private set; }
 
@@ -170,8 +200,8 @@ public sealed class EducationAccountLifecycleWorkerTests
             Calls++;
             events?.Add("close");
             return Task.FromResult(new AutomaticEducationAccountClosureSummary(
-                ActiveAccountCount: 0,
-                ClosedCount: 0));
+                ActiveAccountCount: activeAccountCount,
+                ClosedCount: closedCount));
         }
 
         public Task<AutomaticEducationAccountClosureResult> EnsureClosedAsync(
