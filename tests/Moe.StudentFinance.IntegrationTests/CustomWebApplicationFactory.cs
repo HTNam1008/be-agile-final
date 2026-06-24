@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Encodings.Web;
@@ -119,6 +120,11 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
 internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 {
+    private static readonly ConcurrentDictionary<string, byte> ExpireFailures = new();
+
+    public static void FailNextExpireForSession(string providerSessionId)
+        => ExpireFailures[providerSessionId] = 0;
+
     public Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
         StripeCheckoutGatewayRequest request,
         CancellationToken cancellationToken)
@@ -130,7 +136,15 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 
     public Task ExpireCheckoutAsync(
         string providerSessionId,
-        CancellationToken cancellationToken) => Task.CompletedTask;
+        CancellationToken cancellationToken)
+    {
+        if (ExpireFailures.TryRemove(providerSessionId, out _))
+        {
+            throw new PaymentProviderUnavailableException();
+        }
+
+        return Task.CompletedTask;
+    }
 
     public Task<StripeScheduleGatewayResult> AttachFiniteScheduleAsync(
         string providerSubscriptionId,
