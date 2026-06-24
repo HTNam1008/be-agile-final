@@ -10,7 +10,7 @@ internal sealed class FasSchemeConfiguration : IEntityTypeConfiguration<FasSchem
     {
         builder.ToTable("FASScheme", "fas", table =>
         {
-            table.HasCheckConstraint("CK_FASScheme_Status", "[StatusCode] IN ('DRAFT','ACTIVE','RETIRED')");
+            table.HasCheckConstraint("CK_FASScheme_Status", "[StatusCode] IN ('DRAFT','ACTIVE','RETIRED','DISABLED','DELETED')");
             table.HasCheckConstraint("CK_FASScheme_Dates", "[EndDate] >= [StartDate]");
         });
         builder.HasKey(x => x.Id);

@@ -23,13 +23,13 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
         builder.Property(x => x.ClosureExceptionReason).HasMaxLength(1000);
         builder.Property(x => x.ClosedAtUtc).HasColumnName("ClosedAt");
         builder.Property(x => x.ClosingTypeCode).HasMaxLength(30).IsUnicode(false);
+        builder.Property(x => x.ClosingReasonCode).HasColumnName("ClosingReasonCode").HasMaxLength(50).IsUnicode(false);
         builder.Property(x => x.ClosingRemarks).HasColumnName("ClosingReason").HasMaxLength(1000);
         builder.Property(x => x.ClosedByLoginAccountId).HasColumnName("ClosedByLoginAccountId");
         builder.Property(x => x.CachedBalance).HasColumnName("CurrentBalance").HasPrecision(19, 2);
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Ignore(x => x.DomainEvents);
         builder.Ignore(x => x.OpeningReasonCode);
-        builder.Ignore(x => x.ClosingReasonCode);
         builder.HasData(AccountDemoSeedData.DemoStudentAccounts.Select(Seed));
     }
 
@@ -50,6 +50,7 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
             ClosureExceptionApprovedByLoginAccountId = (long?)null,
             ClosedAtUtc = (DateTimeOffset?)null,
             ClosingTypeCode = (string?)null,
+            ClosingReasonCode = (string?)null,
             ClosingRemarks = (string?)null,
             ClosedByLoginAccountId = (long?)null,
             CachedBalance = 0m

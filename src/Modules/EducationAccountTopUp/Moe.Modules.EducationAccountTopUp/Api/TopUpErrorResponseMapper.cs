@@ -20,6 +20,7 @@ internal static class TopUpErrorResponseMapper
             "TopUp.OrganizationOutsideScope" => ApiResponseCodes.Forbidden,
             "TopUp.AccountSelectionOutsideScope" => ApiResponseCodes.Forbidden,
             "TopUp.AdminOrganizationScopeRequired" => ApiResponseCodes.Forbidden,
+            "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
 
             "TOPUP.HISTORY_ACCESS_DENIED" => ApiResponseCodes.Forbidden,
             "TOPUP.HISTORY_ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
@@ -27,6 +28,9 @@ internal static class TopUpErrorResponseMapper
 
             "TopUp.ActorRequired" => ApiResponseCodes.Unauthorized,
             "ACCOUNT.AUTHENTICATED_STUDENT_REQUIRED" => ApiResponseCodes.Unauthorized,
+            "ACCOUNT.ACTOR_REQUIRED" => ApiResponseCodes.Unauthorized,
+
+            "ACCOUNT.ALREADY_CLOSED" => ApiResponseCodes.Conflict,
 
             _ => ApiResponseCodes.BadRequest
         };

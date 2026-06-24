@@ -80,22 +80,23 @@ public sealed class EducationAccount : AggregateRoot<long>
         return Result<EducationAccount>.Success(account);
     }
 
-    public Result CloseManual(DateTimeOffset now, string reason, string remarks)
+    public Result CloseManual(DateTimeOffset now, string reasonCode, string? remarks, long closedByLoginAccountId)
     {
         if (StatusCode == AccountStatuses.Closed)
         {
             return Result.Failure(AccountErrors.AlreadyClosed);
         }
 
-        if (string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(remarks))
+        if (string.IsNullOrWhiteSpace(reasonCode))
         {
             return Result.Failure(AccountErrors.ManualReasonRequired);
         }
 
         StatusCode = AccountStatuses.Closed;
         ClosedAtUtc = now;
-        ClosingReasonCode = reason.Trim();
-        ClosingRemarks = remarks.Trim();
+        ClosingReasonCode = reasonCode.Trim();
+        ClosingRemarks = string.IsNullOrWhiteSpace(remarks) ? null : remarks.Trim();
+        ClosedByLoginAccountId = closedByLoginAccountId;
         return Result.Success();
     }
 
@@ -129,4 +130,6 @@ public static class AccountErrors
     public static readonly Error ManualReasonRequired = new("ACCOUNT.MANUAL_REASON_REQUIRED", "Manual actions require a reason and remarks.");
     public static readonly Error AlreadyClosed = new("ACCOUNT.ALREADY_CLOSED", "The Education Account is already closed.");
     public static readonly Error DuplicatePersonAccount = new("ACCOUNT.DUPLICATE", "The person already has an Education Account.");
+    public static readonly Error OrganizationOutsideScope = new("AUTH.ORGANIZATION_OUTSIDE_SCOPE", "The requested organization is outside the current admin's scope.");
+    public static readonly Error ActorRequired = new("ACCOUNT.ACTOR_REQUIRED", "A closing admin is required.");
 }

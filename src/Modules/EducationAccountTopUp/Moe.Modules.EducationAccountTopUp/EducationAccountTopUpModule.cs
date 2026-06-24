@@ -7,6 +7,7 @@ using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.EducationAccountTopUp.Api.Admin;
+using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
@@ -27,6 +28,7 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipients;
+using Moe.Modules.EducationAccountTopUp.Application.TransactionHistory;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.AdminDashboard;
@@ -66,10 +68,15 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpCampaignReader, TopUpCampaignReader>();
         services.AddScoped<IEducationAccountReader, EducationAccountReader>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
+        services.AddScoped<IAccountTransactionHistoryReader, AccountTransactionHistoryReader>();
         services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
         services.AddScoped<ITopUpTransactionResultsReader, TopUpTransactionResultsReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
         services.AddScoped<IEducationAccountDirectory, EducationAccountDirectory>();
+        services.AddScoped<EducationAccountDirectory>();
+        services.AddScoped<IEducationAccountLookupGateway, EducationAccountLookupGateway>();
+        services.AddScoped<IEducationAccountBulkLookupGateway, EducationAccountBulkLookupGateway>();
+        services.AddScoped<IEducationAccountReasonCodeGateway, EducationAccountReasonCodeGateway>();
         services.AddScoped<IEducationAccountPaymentGateway, EducationAccountPaymentGateway>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
@@ -100,6 +107,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandHandler>();
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
         services.AddScoped<ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>, OpenManualAccountHandler>();
+        services.AddScoped<ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>, CloseManualAccountHandler>();
 
         // Queries
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
@@ -113,15 +121,18 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
         services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
+        services.AddScoped<IQueryHandler<GetAccountTransactionHistoryQuery, PageResponse<AccountTransactionHistoryItem>>, GetAccountTransactionHistoryHandler>();
 
         // Validators
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();
+        services.AddScoped<IValidator<CloseManualAccountRequest>, CloseManualAccountRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsRequest>, SearchTopUpAccountsRequestValidator>();
         services.AddScoped<IValidator<UpsertFixedRecipientsRequest>, UpsertFixedRecipientsRequestValidator>();
         services.AddScoped<IValidator<CampaignHistoryRequest>, CampaignHistoryRequestValidator>();
         services.AddScoped<IValidator<RunHistoryRequest>, RunHistoryRequestValidator>();
         services.AddScoped<IValidator<TopUpTransactionResultsRequest>, TopUpTransactionResultsRequestValidator>();
         services.AddScoped<IValidator<OpenManualAccountCommand>, OpenManualAccountValidator>();
+        services.AddScoped<IValidator<CloseManualAccountCommand>, CloseManualAccountValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsQuery>, SearchTopUpAccountsValidator>();
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
         services.AddScoped<IValidator<CreateCampaignCommand>, CreateCampaignCommandValidator>();

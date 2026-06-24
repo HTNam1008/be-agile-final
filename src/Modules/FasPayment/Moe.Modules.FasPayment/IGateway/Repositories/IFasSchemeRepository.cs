@@ -14,6 +14,9 @@ internal interface IFasSchemeRepository
     Task<CreateFasSchemeResponse> SaveDraftAsync(long? schemeId, CreateFasSchemeRequest request, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<CreateFasSchemeResponse> ActivateDraftAsync(long schemeId, CreateFasSchemeRequest request, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<bool> DeleteDraftAsync(long schemeId, CancellationToken cancellationToken);
+    Task<CreateFasSchemeResponse?> PublishAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
+    Task<CreateFasSchemeResponse?> DisableAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
+    Task<CreateFasSchemeResponse?> DeleteAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken);
     Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken);
 }

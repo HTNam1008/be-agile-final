@@ -79,11 +79,28 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.ManageAccountLifecycle, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE");
+                });
+
+                options.AddPolicy(AuthorizationPolicies.ManageAccounts, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ManageFasSchemes, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
                     policy.AddAuthenticationSchemes("Test");
                     policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
                     policy.RequireClaim(ClaimNames.Permission, "FAS_SCHEME_MANAGE");
                 });
 
@@ -323,6 +340,13 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.TryGetValue("X-Test-Unauthenticated", out var unauthenticated)
+            && bool.TryParse(unauthenticated.ToString(), out bool isUnauthenticated)
+            && isUnauthenticated)
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         if (Request.Headers.ContainsKey("X-Test-Anonymous"))
         {
             return Task.FromResult(AuthenticateResult.NoResult());
@@ -332,7 +356,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             ? values.ToString()
             : "SCHOOL_ADMIN";
 
-        Claim[] baseClaims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
+        Claim[] claims = Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase)
             ? [
                 new Claim(ClaimTypes.Name, "Test Student"),
                 new Claim(ClaimTypes.NameIdentifier, "test-student-id"),
@@ -341,21 +365,25 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.PersonId, GetHeaderValue("X-Test-PersonId", "2001")),
                 new Claim(ClaimNames.UserAccountId, GetHeaderValue("X-Test-UserAccountId", "1003"))
             ]
-            : [
+            : new[]
+            {
                 new Claim(ClaimTypes.Name, "Test User"),
                 new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
                 new Claim(ClaimNames.Portal, PortalCodes.Admin),
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
-                new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"),
-                new Claim(ClaimNames.OrganizationUnitId, "1"),
+                new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
+                new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"),
                 new Claim(ClaimNames.UserAccountId, "1001")
-            ];
+            }.Concat(Request.Headers.ContainsKey("X-Test-No-Fas-Permission")
+                ? Array.Empty<Claim>()
+                : new[] { new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE") }).ToArray();
 
-        List<Claim> claims = baseClaims.ToList();
-        if (Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
+        if (!Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase))
         {
-            claims.RemoveAll(claim => claim.Type == ClaimNames.Permission && claim.Value == "FAS_SCHEME_MANAGE");
+            claims = claims
+                .Concat(GetOrganizationUnitClaims())
+                .ToArray();
         }
 
         var identity = new ClaimsIdentity(claims, "Test");
@@ -372,5 +400,19 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         return Request.Headers.TryGetValue(name, out var values) && !string.IsNullOrWhiteSpace(values.ToString())
             ? values.ToString()
             : fallback;
+    }
+
+    private IEnumerable<Claim> GetOrganizationUnitClaims()
+    {
+        string raw = GetHeaderValue("X-Test-OrganizationUnitIds", "1");
+        if (string.Equals(raw, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        foreach (string value in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            yield return new Claim(ClaimNames.OrganizationUnitId, value);
+        }
     }
 }

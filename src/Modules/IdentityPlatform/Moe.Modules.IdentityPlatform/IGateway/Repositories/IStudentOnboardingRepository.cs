@@ -13,10 +13,14 @@ internal interface IStudentOnboardingRepository
 
     Task<bool> StudentNumberExistsAsync(string studentNumber, CancellationToken cancellationToken);
 
-    Task<long> AddPersonAsync(Person person, CancellationToken cancellationToken);
+    Task<long> AddPersonAsync(
+        Person person,
+        CancellationToken cancellationToken,
+        bool saveChanges = true);
 
     Task<CreatedStudentRecord> AddStudentIdentityAndEnrollmentAsync(
         PersonIdentifier identityNumber,
         SchoolEnrollment enrollment,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool saveChanges = true);
 }
