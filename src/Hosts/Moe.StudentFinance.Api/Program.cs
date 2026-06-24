@@ -11,6 +11,7 @@ using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
+using Moe.Modules.AiCopilot;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.FasPayment;
@@ -33,7 +34,8 @@ IModule[] modules =
     new IdentityPlatformModule(),
     new EducationAccountTopUpModule(),
     new CourseBillingModule(),
-    new FasPaymentModule()
+    new FasPaymentModule(),
+    new AiCopilotModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddSingleton<IReadOnlyCollection<IModule>>(modules);
@@ -55,7 +57,8 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(EducationAccountTopUpModule).Assembly)
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
-    .AddApplicationPart(typeof(FasPaymentModule).Assembly);
+    .AddApplicationPart(typeof(FasPaymentModule).Assembly)
+    .AddApplicationPart(typeof(AiCopilotModule).Assembly);
 
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
 {

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Asp.Versioning.Mvc" />
+    <PackageReference Include="Microsoft.SemanticKernel" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Moe.Application.Abstractions\Moe.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Moe.Infrastructure.Shared\Moe.Infrastructure.Shared.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Moe.SharedKernel\Moe.SharedKernel.csproj" />
+  </ItemGroup>
+</Project>
