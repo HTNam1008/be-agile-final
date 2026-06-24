@@ -7,14 +7,14 @@ using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.FasPayment.Api;
 using Moe.Modules.FasPayment.Application.Applications.Approve;
 using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
 using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Application.Applications.Reject;
+using Moe.Modules.FasPayment.Application.StudentApplications;
 using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.SharedKernel.Results;
-using Moe.Modules.FasPayment.Application.StudentApplications;
-using Moe.Modules.FasPayment.Api;
 
 namespace Moe.Modules.FasPayment.Api.Admin;
 
@@ -27,26 +27,26 @@ namespace Moe.Modules.FasPayment.Api.Admin;
 public sealed class AdminFasApplicationsController(ICommandDispatcher commands, IQueryDispatcher queries, StudentFasApplicationService? studentApplications = null) : ControllerBase
 {
     [HttpGet("applications")]
-    public Task<object> GetApplications([FromQuery]string? status,[FromQuery]long? schemeId,[FromQuery]string? keyword,[FromQuery]DateOnly? submittedFrom,[FromQuery]DateOnly? submittedTo,[FromQuery]int page=1,[FromQuery]int pageSize=20,CancellationToken cancellationToken=default)
-        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplications(status,schemeId,keyword,submittedFrom,submittedTo,page,pageSize,cancellationToken);
+    public Task<object> GetApplications([FromQuery] string? status, [FromQuery] long? schemeId, [FromQuery] string? keyword, [FromQuery] DateOnly? submittedFrom, [FromQuery] DateOnly? submittedTo, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
+        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplications(status, schemeId, keyword, submittedFrom, submittedTo, page, pageSize, cancellationToken);
 
     [HttpGet("applications/{applicationId:long}/full")]
-    public Task<object> GetFullApplication(long applicationId,CancellationToken cancellationToken)
-        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplication(applicationId,cancellationToken);
+    public Task<object> GetFullApplication(long applicationId, CancellationToken cancellationToken)
+        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplication(applicationId, cancellationToken);
 
     [HttpPost("application-schemes/{id:long}/approve")]
-    public Task<object> ApproveScheme(long id,AdminApproveSchemeRequest request,CancellationToken cancellationToken)
-        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).ApproveScheme(id,request,cancellationToken);
+    public Task<object> ApproveScheme(long id, AdminApproveSchemeRequest request, CancellationToken cancellationToken)
+        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).ApproveScheme(id, request, cancellationToken);
 
     [HttpPost("application-schemes/{id:long}/reject")]
-    public Task<object> RejectScheme(long id,AdminRejectSchemeRequest request,CancellationToken cancellationToken)
-        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).RejectScheme(id,request,cancellationToken);
+    public Task<object> RejectScheme(long id, AdminRejectSchemeRequest request, CancellationToken cancellationToken)
+        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).RejectScheme(id, request, cancellationToken);
 
     [HttpGet("documents/{documentId:long}/download")]
-    public async Task<IActionResult> DownloadDocument(long documentId,CancellationToken cancellationToken){var d=await(studentApplications??throw new InvalidOperationException("FAS service is unavailable.")).AdminDownloadDocument(documentId,cancellationToken);return File(d.Stream,d.Mime,d.Name);}
+    public async Task<IActionResult> DownloadDocument(long documentId, CancellationToken cancellationToken) { var d = await (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminDownloadDocument(documentId, cancellationToken); return File(d.Stream, d.Mime, d.Name); }
 
     [HttpPost("documents/{documentId:long}/scan-result")]
-    public Task<object> RecordScanResult(long documentId,DocumentScanResultRequest request,CancellationToken cancellationToken)=>(studentApplications??throw new InvalidOperationException("FAS service is unavailable.")).RecordScanResult(documentId,request.Passed,cancellationToken);
+    public Task<object> RecordScanResult(long documentId, DocumentScanResultRequest request, CancellationToken cancellationToken) => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).RecordScanResult(documentId, request.Passed, cancellationToken);
     [HttpGet("schemes/{schemeId}/applications")]
     public async Task<IActionResult> GetSchemeApplications(long schemeId, CancellationToken cancellationToken)
     {
@@ -56,7 +56,7 @@ public sealed class AdminFasApplicationsController(ICommandDispatcher commands, 
 
     [HttpGet("applications/{applicationId}")]
     public Task<object> GetApplicationDetail(long applicationId, CancellationToken cancellationToken)
-        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplication(applicationId,cancellationToken);
+        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplication(applicationId, cancellationToken);
 
     [HttpGet("applications/{applicationId:long}/compat")]
     public async Task<IActionResult> GetCompatibleApplicationDetail(long applicationId, CancellationToken cancellationToken)
