@@ -894,6 +894,12 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("ClosedByLoginAccountId");
 
+                    b.Property<string>("ClosingReasonCode")
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("ClosingReasonCode");
+
                     b.Property<string>("ClosingRemarks")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)")
@@ -3850,6 +3856,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         },
                         new
                         {
+                            PermissionCode = "ACCOUNT_DETAILS_MANAGE",
+                            ActionCode = "MANAGE",
+                            ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
+                            PermissionName = "Manage education account details",
+                            ResourceCode = "ACCOUNT_DETAILS",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
                             PermissionCode = "ACCOUNT_LIFECYCLE_MANAGE",
                             ActionCode = "MANAGE",
                             ModuleCode = "EDUCATION_ACCOUNT_TOPUP",
@@ -4274,6 +4289,22 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             PermissionCode = "STUDENT_ACCOUNT_VIEW_SELF",
                             RoleCode = "STUDENT",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 27L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "ACCOUNT_DETAILS_MANAGE",
+                            RoleCode = "HQ_ADMIN",
+                            StatusCode = "ACTIVE"
+                        },
+                        new
+                        {
+                            Id = 28L,
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            PermissionCode = "ACCOUNT_DETAILS_MANAGE",
+                            RoleCode = "SCHOOL_ADMIN",
                             StatusCode = "ACTIVE"
                         });
                 });

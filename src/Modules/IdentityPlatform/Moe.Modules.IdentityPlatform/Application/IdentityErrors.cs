@@ -20,8 +20,13 @@ internal static class IdentityErrors
     public static readonly Error SingpassAccountAlreadyExists = new("IDENTITY.SINGPASS_ACCOUNT_ALREADY_EXISTS", "A Singpass account is already linked to this person.");
     public static readonly Error ActiveProvisioningRequestAlreadyExists = new("IDENTITY.ACTIVE_PROVISIONING_REQUEST_ALREADY_EXISTS", "An active provisioning request already exists.");
     public static readonly Error ProfileUpdateConflict = new("IDENTITY.PROFILE_UPDATE_CONFLICT", "The profile was updated by another request. Reload the latest profile before saving changes.");
+    public static readonly Error EducationAccountNotFound = new("IDENTITY.EDUCATION_ACCOUNT_NOT_FOUND", "The education account was not found.");
+    public static readonly Error ActiveSchoolEnrollmentRequired = new("IDENTITY.ACTIVE_SCHOOL_ENROLLMENT_REQUIRED", "An active school enrollment is required to update class details.");
+    public static readonly Error OrganizationOutsideScope = new("AUTH.ORGANIZATION_OUTSIDE_SCOPE", "The requested organization is outside the current admin's scope.");
+    public static readonly Error SchoolRequired = new("IDENTITY.SCHOOL_REQUIRED", "A school is required when it cannot be resolved from the current admin scope.");
     public static readonly Error SchoolNameRequired = new("IDENTITY.SCHOOL_NAME_REQUIRED", "A school name is required when the school cannot be resolved from the current admin scope.");
     public static readonly Error SchoolScopeAmbiguous = new("IDENTITY.SCHOOL_SCOPE_AMBIGUOUS", "The current school admin has more than one school scope. Provide the school name.");
+    public static readonly Error SchoolIdentifiersConflict = new("IDENTITY.SCHOOL_IDENTIFIERS_CONFLICT", "The provided school identifiers refer to different schools.");
     public static readonly Error SchoolOutsideScope = new("IDENTITY.SCHOOL_OUTSIDE_SCOPE", "The requested school is outside the current admin scope.");
     public static readonly Error StudentIdentityAlreadyExists = new("IDENTITY.STUDENT_IDENTITY_ALREADY_EXISTS", "A student already exists with this identity number.");
     public static readonly Error StudentNumberAlreadyExists = new("IDENTITY.STUDENT_NUMBER_ALREADY_EXISTS", "A student already exists with this student number.");

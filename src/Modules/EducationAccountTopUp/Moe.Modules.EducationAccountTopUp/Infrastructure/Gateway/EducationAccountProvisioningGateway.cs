@@ -14,7 +14,8 @@ internal sealed class EducationAccountProvisioningGateway(
         long personId,
         long openedByUserAccountId,
         DateTimeOffset openedAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool saveChanges = true)
     {
         EducationAccount? existingAccount = await educationAccounts.FindByPersonIdAsync(personId, cancellationToken);
 
@@ -41,7 +42,10 @@ internal sealed class EducationAccountProvisioningGateway(
         }
 
         await educationAccounts.AddAsync(result.Value, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (saveChanges)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         return new EducationAccountProvisioningResult(
             result.Value.Id,

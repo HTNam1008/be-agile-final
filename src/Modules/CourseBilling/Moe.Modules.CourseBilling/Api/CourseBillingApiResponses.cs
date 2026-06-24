@@ -29,6 +29,7 @@ internal static class CourseBillingApiResponses
         {
             "COURSE.ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
             "COURSE.ORGANIZATION_FORBIDDEN" => ApiResponseCodes.Forbidden,
+            "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "COURSE.NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.MATERIAL_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.FEE_NOT_FOUND" => ApiResponseCodes.NotFound,
