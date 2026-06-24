@@ -30,6 +30,7 @@ using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
+using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.AdminDashboard;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -70,6 +71,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IStudentDirectory, StudentDirectory>();
         services.AddScoped<ITopUpStudentSearchDirectory, TopUpStudentSearchDirectory>();
         services.AddScoped<IAdminStudentListReader, AdminStudentListReader>();
+        services.AddScoped<IStudentBulkImportWorkbookReader, ClosedXmlStudentBulkImportWorkbookReader>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
         services.AddScoped<IEligiblePersonReader, EligiblePersonReader>();
         services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();
@@ -95,6 +97,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IQueryHandler<GetStudentManagementReferenceDataQuery, StudentManagementReferenceDataResponse>, GetStudentManagementReferenceDataHandler>();
         services.AddScoped<ICommandHandler<CreateAdminUserCommand, CreateAdminUserResponse>, CreateAdminUserHandler>();
         services.AddScoped<ICommandHandler<CreateStudentCommand, CreateStudentResponse>, CreateStudentHandler>();
+        services.AddScoped<ICommandHandler<BulkImportStudentsCommand, BulkImportStudentsResponse>, BulkImportStudentsHandler>();
         services.AddScoped<ICommandHandler<UpdateMyAdminContactCommand, AdminProfileResponse>, UpdateMyAdminContactHandler>();
         services.AddScoped<ICommandHandler<UpdateMyStudentContactCommand, StudentProfileResponse>, UpdateMyStudentContactHandler>();
         services.AddScoped<ICommandHandler<UpdateAdminAccountDetailsCommand, AdminAccountDetailsResponse>, UpdateAdminAccountDetailsHandler>();
