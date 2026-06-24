@@ -12,6 +12,8 @@ using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEduca
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
+using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
+using Moe.Modules.EducationAccountTopUp.Application.Lifecycle.RunHistory;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
@@ -58,16 +60,20 @@ public sealed class EducationAccountTopUpModule : IModule
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IModelConfigurationContributor, EducationAccountTopUpModelConfiguration>();
+        services.AddOptions<EducationAccountLifecycleOptions>()
+            .BindConfiguration(EducationAccountLifecycleOptions.SectionName);
         // Gateways & Repositories
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
+        services.AddScoped<IEducationAccountLifecycleRunRepository, EducationAccountLifecycleRunRepository>();
         services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
         services.AddScoped<IAccountCreditGateway, AccountCreditGateway>();
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
         services.AddScoped<ITopUpCampaignReader, TopUpCampaignReader>();
         services.AddScoped<IEducationAccountReader, EducationAccountReader>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
+        services.AddScoped<IEducationAccountLifecycleHistoryReader, EducationAccountLifecycleHistoryReader>();
         services.AddScoped<IAccountTransactionHistoryReader, AccountTransactionHistoryReader>();
         services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
         services.AddScoped<ITopUpTransactionResultsReader, TopUpTransactionResultsReader>();
@@ -78,6 +84,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountBulkLookupGateway, EducationAccountBulkLookupGateway>();
         services.AddScoped<IEducationAccountReasonCodeGateway, EducationAccountReasonCodeGateway>();
         services.AddScoped<IEducationAccountPaymentGateway, EducationAccountPaymentGateway>();
+        services.AddScoped<IAutomaticEducationAccountCreator, AutomaticEducationAccountCreator>();
+        services.AddScoped<IAutomaticEducationAccountCloser, AutomaticEducationAccountCloser>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
 
         // Services & Utilities
@@ -97,6 +105,8 @@ public sealed class EducationAccountTopUpModule : IModule
         // Workers
         services.AddHostedService<TopUpRunWorker>();
         services.AddHostedService<TopUpSchedulerWorker>();
+        services.AddSingleton<EducationAccountLifecycleWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
 
         // Commands
@@ -120,6 +130,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetTopUpTransactionResultsQuery, PageResponse<TopUpTransactionResultItem>>, GetTopUpTransactionResultsHandler>();
         services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunsQuery, PageResponse<EducationAccountLifecycleRunListItem>>, GetEducationAccountLifecycleRunsHandler>();
+        services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunDetailQuery, EducationAccountLifecycleRunDetail>, GetEducationAccountLifecycleRunDetailHandler>();
         services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
         services.AddScoped<IQueryHandler<GetAccountTransactionHistoryQuery, PageResponse<AccountTransactionHistoryItem>>, GetAccountTransactionHistoryHandler>();
 

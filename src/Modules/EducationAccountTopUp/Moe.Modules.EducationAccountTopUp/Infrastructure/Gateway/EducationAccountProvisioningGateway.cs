@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -24,17 +25,17 @@ internal sealed class EducationAccountProvisioningGateway(
             return new EducationAccountProvisioningResult(
                 existingAccount.Id,
                 existingAccount.AccountNumber,
-                true);
+                true)
+            {
+                Created = false
+            };
         }
 
-        string accountNumber = $"PSEA-{personId:D8}";
-        Result<EducationAccount> result = EducationAccount.OpenManual(
+        string accountNumber = EducationAccountNumberFactory.ForPerson(personId);
+        Result<EducationAccount> result = EducationAccount.OpenAutomatically(
             personId,
             accountNumber,
-            openedAtUtc,
-            "SINGPASS_STUDENT_PROVISIONING",
-            "Created automatically when the student Singpass account was provisioned.",
-            openedByUserAccountId);
+            openedAtUtc);
 
         if (result.IsFailure)
         {
@@ -44,13 +45,35 @@ internal sealed class EducationAccountProvisioningGateway(
         await educationAccounts.AddAsync(result.Value, cancellationToken);
         if (saveChanges)
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (EducationAccountDuplicateExceptionDetector.IsDuplicateEducationAccount(exception))
+            {
+                EducationAccount? reloaded = await educationAccounts.FindByPersonIdAsync(personId, cancellationToken);
+                if (reloaded is null)
+                {
+                    throw;
+                }
+
+                return new EducationAccountProvisioningResult(
+                    reloaded.Id,
+                    reloaded.AccountNumber,
+                    true)
+                {
+                    Created = false
+                };
+            }
         }
 
         return new EducationAccountProvisioningResult(
             result.Value.Id,
             result.Value.AccountNumber,
-            true);
+            true)
+        {
+            Created = true
+        };
     }
 
     public Task<bool> HasAccountAsync(long personId, CancellationToken cancellationToken)

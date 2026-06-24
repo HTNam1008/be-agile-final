@@ -16,5 +16,6 @@ internal sealed class FeeComponentConfiguration : IEntityTypeConfiguration<FeeCo
         builder.Property(x => x.ComponentName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.ComponentTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.CalculationTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.DefaultValue).HasPrecision(19, 4);
     }
 }

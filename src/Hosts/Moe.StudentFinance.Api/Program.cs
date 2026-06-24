@@ -13,8 +13,10 @@ using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.EducationAccountTopUp;
+using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
 using NSwag;
 using NSwag.Generation.Processors.Security;
@@ -36,6 +38,8 @@ IModule[] modules =
     new FasPaymentModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
+builder.Services.AddScoped<IEligiblePersonLookupGateway, EligiblePersonLookupGatewayAdapter>();
+builder.Services.AddScoped<ILifecyclePersonDisplayGateway, LifecyclePersonDisplayGatewayAdapter>();
 builder.Services.AddSingleton<IReadOnlyCollection<IModule>>(modules);
 builder.Services.AddRateLimiter(options =>
 {
@@ -179,6 +183,7 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new(LocalIdentityClaimNames.Role, "HQ_ADMIN"),
         new(LocalIdentityClaimNames.Permission, "TOPUPS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
+        new(LocalIdentityClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER"),
         new(LocalIdentityClaimNames.Permission, "ACCESS_SCOPE_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "EXTERNAL_ACCOUNTS_PROVISION"),
         new(LocalIdentityClaimNames.Permission, "FAS_SCHEME_MANAGE"),
