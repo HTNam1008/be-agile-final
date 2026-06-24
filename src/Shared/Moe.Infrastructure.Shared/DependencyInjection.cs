@@ -81,6 +81,7 @@ public static class DependencyInjection
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageFasSchemes, "FAS_SCHEME_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAiReviews, "AI_REVIEW_MANAGE", authorization.UseStrictPermissionPolicies);
         });
 
         services.AddCors(options =>

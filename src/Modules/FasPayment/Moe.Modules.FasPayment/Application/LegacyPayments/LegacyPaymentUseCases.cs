@@ -9,7 +9,7 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.LegacyPayments;
 
-internal sealed record GetOutstandingBillsQuery : IQuery<OutstandingBillsResponse>;
+public sealed record GetOutstandingBillsQuery : IQuery<OutstandingBillsResponse>;
 internal sealed record PayOutstandingBillCommand(PayBillRequest Request) : ICommand<PayBillResponse>;
 
 internal sealed class PayBillRequestValidator : AbstractValidator<PayBillRequest>

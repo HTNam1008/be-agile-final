@@ -191,6 +191,7 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new(LocalIdentityClaimNames.Permission, "EXTERNAL_ACCOUNTS_PROVISION"),
         new(LocalIdentityClaimNames.Permission, "FAS_SCHEME_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "FAS_REVIEW"),
+        new(LocalIdentityClaimNames.Permission, "AI_REVIEW_MANAGE"),
         new(LocalIdentityClaimNames.Portal, PortalCodes.Admin),
         new(LocalIdentityClaimNames.IdentityProvider, "ENTRA_WORKFORCE")
     ];

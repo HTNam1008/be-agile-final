@@ -9,5 +9,6 @@
     <ProjectReference Include="..\..\Modules\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
     <ProjectReference Include="..\..\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
     <ProjectReference Include="..\..\Modules\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
+    <ProjectReference Include="..\..\Modules\AiCopilot\Moe.Modules.AiCopilot\Moe.Modules.AiCopilot.csproj" />
   </ItemGroup>
 </Project>
