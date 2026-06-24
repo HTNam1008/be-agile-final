@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -18,7 +19,7 @@ using Moe.StudentFinance.Persistence;
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class AiOrchestratorService(
-    Kernel kernel, MoeDbContext db, ICurrentUser currentUser, AiFinanceReader finance,
+    IServiceProvider services, MoeDbContext db, ICurrentUser currentUser, AiFinanceReader finance,
     StudentFasApplicationService fas, IKnowledgeRetriever knowledge, SensitiveDataRedactor redactor,
     ILogger<AiOrchestratorService> logger)
 {
@@ -154,6 +155,7 @@ public sealed class AiOrchestratorService(
             {string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"))}
             """);
         history.AddUserMessage(request.Message);
+        Kernel kernel = services.GetRequiredService<Kernel>();
         ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
         string text = string.IsNullOrWhiteSpace(answer.Content) ? "I do not have enough reliable information to answer that." : answer.Content.Trim();
         if (sources.Count == 0)

@@ -23,6 +23,9 @@ public sealed class AiRetentionService(IServiceScopeFactory scopeFactory, ILogge
                     .Select(x => x.Id).Take(500).ToArrayAsync(stoppingToken);
                 if (expired.Length > 0)
                 {
+                    Guid[] reviews = await db.Set<AiReviewRecord>().Where(x => expired.Contains(x.ConversationId)).Select(x => x.Id).ToArrayAsync(stoppingToken);
+                    await db.Set<AdminCenterCase>().Where(x => reviews.Contains(x.ReviewRecordId)).ExecuteDeleteAsync(stoppingToken);
+                    await db.Set<AiReviewRecord>().Where(x => expired.Contains(x.ConversationId)).ExecuteDeleteAsync(stoppingToken);
                     await db.Set<AiMessage>().Where(x => expired.Contains(x.ConversationId)).ExecuteDeleteAsync(stoppingToken);
                     await db.Set<AiConversation>().Where(x => expired.Contains(x.Id)).ExecuteDeleteAsync(stoppingToken);
                     logger.LogInformation("Deleted {Count} expired AI conversations.", expired.Length);
