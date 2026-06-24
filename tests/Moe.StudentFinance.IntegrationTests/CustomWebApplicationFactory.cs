@@ -79,6 +79,22 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "TOPUPS_MANAGE", "TOPUP_VIEW_ALL");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.ManageAccountLifecycle, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE");
+                });
+
+                options.AddPolicy(AuthorizationPolicies.ManageAccounts, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ManageFasSchemes, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -324,9 +340,18 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.TryGetValue("X-Test-Unauthenticated", out var unauthenticated)
+            && bool.TryParse(unauthenticated.ToString(), out bool isUnauthenticated)
+            && isUnauthenticated)
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         if (Request.Headers.TryGetValue("X-Test-Anonymous", out var anonymous) &&
             string.Equals(anonymous.ToString(), "true", StringComparison.OrdinalIgnoreCase))
+        {
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
         string requestedRole = Request.Headers.TryGetValue("X-Test-Role", out var values)
             ? values.ToString()
@@ -348,11 +373,20 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.Portal, PortalCodes.Admin),
                 new Claim(ClaimNames.Role, requestedRole),
                 new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
-                new Claim(ClaimNames.OrganizationUnitId, "1"),
+                new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
+                new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"),
                 new Claim(ClaimNames.UserAccountId, "1001")
             }.Concat(Request.Headers.ContainsKey("X-Test-No-Fas-Permission")
                 ? Array.Empty<Claim>()
-                : [new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE")]).ToArray();
+                : new[] { new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE") }).ToArray();
+
+        if (!Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase))
+        {
+            claims = claims
+                .Concat(GetOrganizationUnitClaims())
+                .ToArray();
+        }
+
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, "Test");
@@ -367,5 +401,19 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         return Request.Headers.TryGetValue(name, out var values) && !string.IsNullOrWhiteSpace(values.ToString())
             ? values.ToString()
             : fallback;
+    }
+
+    private IEnumerable<Claim> GetOrganizationUnitClaims()
+    {
+        string raw = GetHeaderValue("X-Test-OrganizationUnitIds", "1");
+        if (string.Equals(raw, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        foreach (string value in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            yield return new Claim(ClaimNames.OrganizationUnitId, value);
+        }
     }
 }

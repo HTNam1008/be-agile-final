@@ -7,6 +7,12 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 
 internal sealed class EducationAccountRepository(MoeDbContext dbContext) : IEducationAccountRepository
 {
+    public Task<EducationAccount?> FindByIdAsync(long educationAccountId, CancellationToken cancellationToken)
+    {
+        return dbContext.Set<EducationAccount>()
+            .SingleOrDefaultAsync(x => x.Id == educationAccountId, cancellationToken);
+    }
+
     public Task<EducationAccount?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
     {
         return dbContext.Set<EducationAccount>()

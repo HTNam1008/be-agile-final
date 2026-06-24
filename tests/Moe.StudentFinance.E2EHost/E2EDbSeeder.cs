@@ -191,7 +191,7 @@ public class E2EDbSeeder : IHostedService
         accountResult.Value.UpdateBalance(balance);
         if (closeAccountAfterSeed)
         {
-            accountResult.Value.CloseManual(DateTimeOffset.UtcNow, "E2E_DEMO_CLOSED", "Seeded closed account");
+            accountResult.Value.CloseManual(DateTimeOffset.UtcNow, EducationAccountClosingReasonCodes.Other, "Seeded closed account", 1001);
         }
 
         db.Set<EducationAccount>().Add(accountResult.Value);

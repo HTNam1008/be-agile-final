@@ -63,6 +63,12 @@ public static class DependencyInjection
             });
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(
+                options,
+                AuthorizationPolicies.ViewAccountDetails,
+                ["ACCOUNT_VIEW_ALL", "ACCOUNT_VIEW_SCHOOL"],
+                authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountDetails, "ACCOUNT_DETAILS_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountLifecycle, "ACCOUNT_LIFECYCLE_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE", authorization.UseStrictPermissionPolicies);
