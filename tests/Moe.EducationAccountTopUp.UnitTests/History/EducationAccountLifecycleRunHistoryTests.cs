@@ -114,8 +114,8 @@ public sealed class EducationAccountLifecycleRunHistoryTests : IAsyncLifetime
             .SingleAsync(x => x.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Manual);
         FakeLifecyclePersonDisplayGateway people = new(
             [
-                new LifecyclePersonDisplay(9001, "Created Student", "S****001A"),
-                new LifecyclePersonDisplay(9002, "Closed Student", "S****002B")
+                new LifecyclePersonDisplay(9001, "Created Student", "S****001A", "North View Secondary School"),
+                new LifecyclePersonDisplay(9002, "Closed Student", "S****002B", "West Coast Junior College")
             ]);
         GetEducationAccountLifecycleRunDetailHandler handler = new(_reader, people);
 
@@ -131,12 +131,14 @@ public sealed class EducationAccountLifecycleRunHistoryTests : IAsyncLifetime
             x.PersonId == 9001
             && x.FullName == "Created Student"
             && x.MaskedNric == "S****001A"
+            && x.SchoolName == "North View Secondary School"
             && x.AccountNumber == "PSEA-00009001"
             && x.ActionCode == EducationAccountLifecycleRunItemActionCodes.Created);
         detail.Items.Should().Contain(x =>
             x.PersonId == 9002
             && x.FullName == "Closed Student"
             && x.MaskedNric == "S****002B"
+            && x.SchoolName == "West Coast Junior College"
             && x.AccountNumber == "PSEA-00009002"
             && x.ActionCode == EducationAccountLifecycleRunItemActionCodes.Closed);
     }
