@@ -39,6 +39,7 @@ IModule[] modules =
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddScoped<IEligiblePersonLookupGateway, EligiblePersonLookupGatewayAdapter>();
+builder.Services.AddScoped<ILifecyclePersonDisplayGateway, LifecyclePersonDisplayGatewayAdapter>();
 builder.Services.AddSingleton<IReadOnlyCollection<IModule>>(modules);
 builder.Services.AddRateLimiter(options =>
 {
