@@ -17,6 +17,7 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
         builder.Property(x => x.StatusCode).HasColumnName("AccountStatusCode").HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.OpenedAtUtc).HasColumnName("OpenedAt");
         builder.Property(x => x.OpeningModeCode).HasColumnName("OpeningTypeCode").HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.OpeningReasonCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.OpeningRemarks).HasColumnName("OpeningReason").HasMaxLength(1000);
         builder.Property(x => x.OpenedByUserId).HasColumnName("OpenedByLoginAccountId");
         builder.Property(x => x.PendingClosureAtUtc).HasColumnName("PendingClosureAt");
@@ -29,7 +30,6 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
         builder.Property(x => x.CachedBalance).HasColumnName("CurrentBalance").HasPrecision(19, 2);
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Ignore(x => x.DomainEvents);
-        builder.Ignore(x => x.OpeningReasonCode);
         builder.HasData(AccountDemoSeedData.DemoStudentAccounts.Select(Seed));
     }
 
@@ -42,6 +42,7 @@ public sealed class EducationAccountConfiguration : IEntityTypeConfiguration<Edu
             StatusCode = AccountStatuses.Active,
             OpenedAtUtc = AccountDemoSeedData.SeededAtUtc,
             OpeningModeCode = AccountOpeningModeCodes.Manual,
+            OpeningReasonCode = "MANUAL_LEGACY",
             OpeningRemarks = "Demo seeded account for top-up search",
             OpenedByUserId = (long?)AccountDemoSeedData.HqAdminLoginAccountId,
             PendingClosureAtUtc = (DateTimeOffset?)null,

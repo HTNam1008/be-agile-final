@@ -3,7 +3,10 @@ namespace Moe.Modules.IdentityPlatform.IGateway.Accounts;
 public sealed record EducationAccountProvisioningResult(
     long? EducationAccountId,
     string? AccountNumber,
-    bool IsAccountHolder);
+    bool IsAccountHolder)
+{
+    public bool Created { get; init; }
+}
 
 public interface IEducationAccountProvisioningGateway
 {
