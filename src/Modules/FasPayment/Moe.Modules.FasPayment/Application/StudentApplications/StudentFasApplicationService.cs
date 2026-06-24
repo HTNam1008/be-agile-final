@@ -376,6 +376,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
 
     private async Task<string> ResolveAccountType(long personId, CancellationToken ct)
     {
+        if (!IsSqlServer()) return "EDUCATION_ACCOUNT";
         int exists = await db.Database.SqlQuery<int>($"SELECT CASE WHEN EXISTS (SELECT 1 FROM account.EducationAccount WHERE PersonId = {personId}) THEN 1 ELSE 0 END AS Value").SingleAsync(ct);
         return exists == 1 ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
     }
