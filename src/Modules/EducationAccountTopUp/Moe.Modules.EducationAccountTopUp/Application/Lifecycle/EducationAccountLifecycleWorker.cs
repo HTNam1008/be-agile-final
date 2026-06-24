@@ -64,9 +64,25 @@ public sealed class EducationAccountLifecycleWorker(
 
     internal async Task ProcessAsync(
         DateOnly today,
-        DateTimeOffset openedAtUtc,
+        DateTimeOffset lifecycleAtUtc,
         CancellationToken cancellationToken)
     {
+        AutomaticEducationAccountClosureSummary closureSummary;
+        using (IServiceScope closureScope = scopeFactory.CreateScope())
+        {
+            IAutomaticEducationAccountCloser closer =
+                closureScope.ServiceProvider.GetRequiredService<IAutomaticEducationAccountCloser>();
+            closureSummary = await closer.CloseEligibleAsync(today, lifecycleAtUtc, cancellationToken);
+        }
+
+        if (closureSummary.ClosedCount > 0)
+        {
+            logger.LogInformation(
+                "Closed {ClosedCount} Education Accounts from {ActiveAccountCount} active accounts.",
+                closureSummary.ClosedCount,
+                closureSummary.ActiveAccountCount);
+        }
+
         IReadOnlyCollection<long> candidatePersonIds;
 
         using (IServiceScope scope = scopeFactory.CreateScope())
@@ -88,7 +104,7 @@ public sealed class EducationAccountLifecycleWorker(
             IAutomaticEducationAccountCreator creator =
                 accountScope.ServiceProvider.GetRequiredService<IAutomaticEducationAccountCreator>();
             AutomaticEducationAccountCreationResult result =
-                await creator.EnsureCreatedAsync(personId, openedAtUtc, cancellationToken);
+                await creator.EnsureCreatedAsync(personId, lifecycleAtUtc, cancellationToken);
 
             if (result.Created)
             {

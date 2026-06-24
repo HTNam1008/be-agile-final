@@ -50,6 +50,28 @@ public sealed class EligiblePersonReaderTests
         result.Should().ContainSingle().Which.Should().Be(10);
     }
 
+    [Fact]
+    public async Task FindPersonIdsAgedAtLeastAsync_FiltersSpecificPeopleByMinimumAge()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        dbContext.Set<Person>().Add(CreatePerson(20, Today.AddYears(-30), ResidencyStatusCodes.PermanentResident));
+        dbContext.Set<Person>().Add(CreatePerson(21, Today.AddYears(-30).AddDays(1), ResidencyStatusCodes.Citizen));
+        dbContext.Set<Person>().Add(CreatePerson(22, Today.AddYears(-30), ResidencyStatusCodes.Citizen));
+        dbContext.Set<Person>().Add(CreatePerson(23, Today.AddYears(-31), ResidencyStatusCodes.Citizen));
+        dbContext.Set<Person>().Add(CreatePerson(24, Today.AddYears(-40), ResidencyStatusCodes.Citizen));
+        await dbContext.SaveChangesAsync();
+
+        EligiblePersonReader reader = new(dbContext);
+
+        IReadOnlyCollection<long> result = await reader.FindPersonIdsAgedAtLeastAsync(
+            [20, 21, 22, 23],
+            minAge: 30,
+            Today,
+            CancellationToken.None);
+
+        result.Should().BeEquivalentTo([20L, 22L, 23L]);
+    }
+
     private static Person CreatePerson(long id, DateOnly dateOfBirth, string citizenshipStatusCode)
     {
         return new Person(
