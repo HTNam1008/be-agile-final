@@ -59,7 +59,7 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         long id = await ReadLong(created, "schemeId");
 
         using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: "Should not save"));
-        await AssertStatus(HttpStatusCode.UnprocessableEntity, updated);
+        await AssertStatus(HttpStatusCode.NotFound, updated);
         Assert.Contains("FAS.SCHEME_NOT_FOUND", await updated.Content.ReadAsStringAsync());
     }
 

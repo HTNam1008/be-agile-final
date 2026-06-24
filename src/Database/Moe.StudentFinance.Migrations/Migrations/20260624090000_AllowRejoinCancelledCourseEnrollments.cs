@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Moe.StudentFinance.Persistence;
 
 #nullable disable
 
 namespace Moe.StudentFinance.Migrations.Migrations;
 
+[DbContext(typeof(MoeDbContext))]
 [Migration("20260624090000_AllowRejoinCancelledCourseEnrollments")]
 public partial class AllowRejoinCancelledCourseEnrollments : Migration
 {

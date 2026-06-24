@@ -357,8 +357,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        if (Request.Headers.TryGetValue("X-Test-Anonymous", out var anonymous) &&
-            string.Equals(anonymous.ToString(), "true", StringComparison.OrdinalIgnoreCase))
+        if (Request.Headers.ContainsKey("X-Test-Anonymous"))
         {
             return Task.FromResult(AuthenticateResult.NoResult());
         }
