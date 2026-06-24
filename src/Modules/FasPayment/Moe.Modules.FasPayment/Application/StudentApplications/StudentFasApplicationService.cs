@@ -35,7 +35,26 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             enrollment.OrganizationId, schoolName, enrollment.StudentNumber);
     }
 
-    public async Task<object> Prefill(CancellationToken ct) { var p = await Profile(ct); return p; }
+    public async Task<object> Prefill(CancellationToken ct)
+    {
+        var p = await Profile(ct);
+        var accountTypeCode = await ResolveAccountType(p.PersonId, ct);
+        return new
+        {
+            p.PersonId,
+            p.Name,
+            p.NricFinMasked,
+            p.DateOfBirth,
+            p.NationalityCode,
+            p.Mobile,
+            p.Address,
+            p.Email,
+            p.SchoolOrganizationId,
+            p.SchoolName,
+            p.StudentNumber,
+            accountTypeCode
+        };
+    }
 
     public async Task<object> ListSchemes(CancellationToken ct)
     {
