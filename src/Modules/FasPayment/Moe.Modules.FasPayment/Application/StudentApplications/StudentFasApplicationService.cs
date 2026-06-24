@@ -37,7 +37,26 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             enrollment.OrganizationId, schoolName, enrollment.StudentNumber);
     }
 
-    public async Task<object> Prefill(CancellationToken ct) { var p = await Profile(ct); return p; }
+    public async Task<object> Prefill(CancellationToken ct)
+    {
+        var p = await Profile(ct);
+        var accountTypeCode = await ResolveAccountType(p.PersonId, ct);
+        return new
+        {
+            p.PersonId,
+            p.Name,
+            p.NricFinMasked,
+            p.DateOfBirth,
+            p.NationalityCode,
+            p.Mobile,
+            p.Address,
+            p.Email,
+            p.SchoolOrganizationId,
+            p.SchoolName,
+            p.StudentNumber,
+            accountTypeCode
+        };
+    }
 
     public async Task<object> ListSchemes(CancellationToken ct)
     {
@@ -264,13 +283,36 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         var total = await q.CountAsync(ct); var items = await q.OrderByDescending(x => x.a.SubmittedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).Select(x => new { applicationId = x.a.Id, applicationSchemeId = x.i.Id, applicationReference = x.a.ApplicationNo, studentName = x.a.StudentName, studentId = x.a.StudentId, schemeId = x.s.Id, schemeName = x.s.Name, submittedAt = x.a.SubmittedAtUtc, status = x.i.StatusCode }).ToListAsync(ct); return new { items, page, pageSize, total, totalPages = (int)Math.Ceiling(total / (double)pageSize) };
     }
 
-    public async Task<object> AdminApplication(long id, CancellationToken ct)
-    { var app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND"); var schemes = await (from i in db.Set<FasApplicationScheme>().AsNoTracking() join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id where i.FasApplicationId == id select new { i.Id, i.FasSchemeId, s.Name, i.StatusCode, i.ApprovedAmount, i.ApprovedComponentsJson, i.RejectionNotes, i.ValidFrom, i.ValidTo, i.IsActive }).ToListAsync(ct); var documents = await db.Set<FasDocument>().AsNoTracking().Where(x => x.FasApplicationId == id && x.UploadStatusCode != "REMOVED").Select(x => new { x.Id, x.ChecklistItemCode, x.FileName, x.MimeType, x.FileSizeBytes, x.UploadStatusCode }).ToListAsync(ct); var declarations = await db.Set<FasDeclaration>().AsNoTracking().Where(x => x.FasApplicationId == id).Select(x => new { x.DeclarationTypeCode, x.IsAccepted, x.AcceptedAtUtc, x.DeclarationTextSnapshot }).ToListAsync(ct); var history = await db.Set<FasStatusHistory>().AsNoTracking().Where(x => x.FasApplicationId == id).OrderBy(x => x.ChangedAtUtc).Select(x => new { x.FasApplicationSchemeId, x.OldStatusCode, x.NewStatusCode, x.Notes, x.ChangedAtUtc, x.ChangedByRole }).ToListAsync(ct); return new { app.Id, applicationReference = app.ApplicationNo, app.StudentName, app.StudentId, app.NricFinMasked, app.DateOfBirth, app.NationalityCode, app.Mobile, app.Address, app.Email, currentSchool = new { id = app.SchoolOrganizationId, name = app.SchoolName, app.StudentNumber }, income = new { app.IsWelfareHomeResident, app.EmploymentStatusCode, app.MonthlyHouseholdIncome, app.HouseholdMemberCount, app.OtherMonthlyIncome, app.PerCapitaIncome }, app.StatusCode, app.SubmittedAtUtc, schemes, documents, declarations, history }; }
+    public async Task<object> AdminApplication(long id,CancellationToken ct)
+    {
+        var app=await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id,ct)
+            ??throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
+        var items=await(from i in db.Set<FasApplicationScheme>().AsNoTracking()
+            join s in db.Set<FasScheme>().AsNoTracking()on i.FasSchemeId equals s.Id
+            where i.FasApplicationId==id
+            select new{i.Id,i.FasSchemeId,s.Name,s.StartDate,s.EndDate,i.StatusCode,i.ApprovedAmount,i.ApprovedComponentsJson,i.RejectionNotes,i.ValidFrom,i.ValidTo,i.IsActive}).ToListAsync(ct);
+        var schemeIds=items.Select(x=>x.FasSchemeId).Distinct().ToArray();
+        var tiers=await db.Set<FasTier>().AsNoTracking().Where(x=>schemeIds.Contains(x.FasSchemeId)).OrderBy(x=>x.DisplayOrder).ToListAsync(ct);
+        var tierIds=tiers.Select(x=>x.Id).ToArray();
+        var criteria=await db.Set<FasTierCriteria>().AsNoTracking().Where(x=>tierIds.Contains(x.FasTierId)).OrderBy(x=>x.DisplayOrder).ToListAsync(ct);
+        var criteriaIds=criteria.Select(x=>x.Id).ToArray();
+        var categorical=await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x=>criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+        var schemes=items.Select(item=>new{
+            item.Id,item.FasSchemeId,item.Name,item.StatusCode,item.ApprovedAmount,item.ApprovedComponentsJson,item.RejectionNotes,item.ValidFrom,item.ValidTo,item.IsActive,
+            tiers=tiers.Where(t=>t.FasSchemeId==item.FasSchemeId).Select(t=>new{tierId=t.Id,t.Label,t.SubsidyType,t.SubsidyValue,t.DisplayOrder}).ToArray(),
+            recommendedTierId=tiers.Where(t=>t.FasSchemeId==item.FasSchemeId).OrderBy(t=>t.DisplayOrder)
+                .Where(t=>TierMatches(t.Id,app,criteria,categorical)).Select(t=>(long?)t.Id).FirstOrDefault()
+        }).ToArray();
+        var documents=await db.Set<FasDocument>().AsNoTracking().Where(x=>x.FasApplicationId==id&&x.UploadStatusCode!="REMOVED").Select(x=>new{x.Id,x.ChecklistItemCode,x.FileName,x.MimeType,x.FileSizeBytes,x.UploadStatusCode}).ToListAsync(ct);
+        var declarations=await db.Set<FasDeclaration>().AsNoTracking().Where(x=>x.FasApplicationId==id).Select(x=>new{x.DeclarationTypeCode,x.IsAccepted,x.AcceptedAtUtc,x.DeclarationTextSnapshot}).ToListAsync(ct);
+        var history=await db.Set<FasStatusHistory>().AsNoTracking().Where(x=>x.FasApplicationId==id).OrderBy(x=>x.ChangedAtUtc).Select(x=>new{x.FasApplicationSchemeId,x.OldStatusCode,x.NewStatusCode,x.Notes,x.ChangedAtUtc,x.ChangedByRole}).ToListAsync(ct);
+        return new{app.Id,applicationReference=app.ApplicationNo,app.StudentName,app.StudentId,app.NricFinMasked,app.DateOfBirth,app.NationalityCode,app.Mobile,app.Address,app.Email,currentSchool=new{id=app.SchoolOrganizationId,name=app.SchoolName,app.StudentNumber},income=new{app.IsWelfareHomeResident,app.EmploymentStatusCode,app.MonthlyHouseholdIncome,app.HouseholdMemberCount,app.OtherMonthlyIncome,app.PerCapitaIncome},app.StatusCode,app.SubmittedAtUtc,schemes,documents,declarations,history};
+    }
 
-    public async Task<object> ApproveScheme(long id, AdminApproveSchemeRequest r, CancellationToken ct)
-    { var actor = Actor(); return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () => { await using var tx = await db.Database.BeginTransactionAsync(ct); var item = await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND"); item.Approve(actor, r.Amount, r.Components == null ? null : JsonSerializer.Serialize(r.Components), r.ValidFrom, r.ValidTo, DateTime.UtcNow); db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "APPROVED", r.Remarks, actor, "ADMIN", DateTime.UtcNow)); await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new { applicationSchemeId = item.Id, status = item.StatusCode, item.ApprovedAmount, item.ValidFrom, item.ValidTo }; }); }
-    public async Task<object> RejectScheme(long id, AdminRejectSchemeRequest r, CancellationToken ct)
-    { var actor = Actor(); return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () => { await using var tx = await db.Database.BeginTransactionAsync(ct); var item = await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND"); item.Reject(actor, r.Notes, DateTime.UtcNow); db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "REJECTED", r.Notes, actor, "ADMIN", DateTime.UtcNow)); await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new { applicationSchemeId = item.Id, status = item.StatusCode, item.RejectionNotes }; }); }
+    public async Task<object> ApproveScheme(long id,AdminApproveSchemeRequest r,CancellationToken ct)
+    {var actor=Actor();return await db.Database.CreateExecutionStrategy().ExecuteAsync(async()=>{await using var tx=await db.Database.BeginTransactionAsync(ct);var item=await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");var tier=await db.Set<FasTier>().AsNoTracking().SingleOrDefaultAsync(x=>x.Id==r.TierId&&x.FasSchemeId==item.FasSchemeId,ct)??throw new ArgumentException("FAS.INVALID_TIER");var scheme=await db.Set<FasScheme>().AsNoTracking().SingleAsync(x=>x.Id==item.FasSchemeId,ct);var components=JsonSerializer.Serialize(new{tierId=tier.Id,tier.Label,tier.SubsidyType,tier.SubsidyValue});item.Approve(actor,tier.SubsidyValue,components,scheme.StartDate,scheme.EndDate,DateTime.UtcNow);db.Add(FasStatusHistory.Create(item.FasApplicationId,item.Id,"PENDING","APPROVED",r.Remarks,actor,"ADMIN",DateTime.UtcNow));await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return new{applicationSchemeId=item.Id,status=item.StatusCode,selectedTierId=tier.Id,item.ApprovedAmount,item.ValidFrom,item.ValidTo};});}
+    public async Task<object> RejectScheme(long id,AdminRejectSchemeRequest r,CancellationToken ct)
+    {var actor=Actor();return await db.Database.CreateExecutionStrategy().ExecuteAsync(async()=>{await using var tx=await db.Database.BeginTransactionAsync(ct);var item=await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");item.Reject(actor,r.Notes,DateTime.UtcNow);db.Add(FasStatusHistory.Create(item.FasApplicationId,item.Id,"PENDING","REJECTED",r.Notes,actor,"ADMIN",DateTime.UtcNow));await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return new{applicationSchemeId=item.Id,status=item.StatusCode,item.RejectionNotes};});}
 
     public async Task<object> ReviewValidation(long id, CancellationToken ct)
     {
@@ -310,7 +352,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
     }
 
     public async Task<object> MyApplications(CancellationToken ct)
-    { var (person, _) = Identity(); return await (from a in db.Set<FasApplication>().AsNoTracking() join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id where a.StudentPersonId == person select new { applicationId = a.Id, applicationSchemeId = i.Id, applicationReference = a.ApplicationNo, schemeId = s.Id, schemeName = s.Name, submittedDate = a.SubmittedAtUtc, status = i.StatusCode, i.RejectionNotes, i.IsActive, i.ValidFrom, i.ValidTo }).ToListAsync(ct); }
+     { var (person, _) = Identity(); return await (from a in db.Set<FasApplication>().AsNoTracking() join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id where a.StudentPersonId == person select new { applicationId=a.Id,applicationSchemeId=i.Id,applicationReference=a.ApplicationNo,schemeId=s.Id,schemeName=s.Name,submittedDate=a.SubmittedAtUtc,status=i.StatusCode,i.RejectionNotes,i.ApprovedAmount,i.ApprovedComponentsJson,i.IsActive,i.ValidFrom,i.ValidTo }).ToListAsync(ct); }
     public async Task<object> Summary(CancellationToken ct)
     { var (person, _) = Identity(); var draft = await db.Set<FasApplication>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "DRAFT").Select(x => (long?)x.Id).FirstOrDefaultAsync(ct); var active = await db.Set<FasActiveScheme>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "ACTIVE").Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo }).FirstOrDefaultAsync(ct); return new { canApply = active == null, blockingReason = active == null ? null : "FAS.ACTIVE_SCHEME_EXISTS", activeScheme = active, resumableDraftId = draft }; }
 
@@ -336,6 +378,31 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
     {
         int exists = await db.Database.SqlQuery<int>($"SELECT CASE WHEN EXISTS (SELECT 1 FROM account.EducationAccount WHERE PersonId = {personId}) THEN 1 ELSE 0 END AS Value").SingleAsync(ct);
         return exists == 1 ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
+    }
+    private static bool TierMatches(long tierId,FasApplication app,IReadOnlyCollection<FasTierCriteria> allCriteria,IReadOnlyCollection<FasTierCriteriaNationality> allValues)
+    {
+        var criteria=allCriteria.Where(x=>x.FasTierId==tierId).OrderBy(x=>x.DisplayOrder).ToArray();
+        if(criteria.Length==0)return true;
+        var age=app.DateOfBirth.HasValue?DateOnly.FromDateTime(DateTime.UtcNow).Year-app.DateOfBirth.Value.Year:(int?)null;
+        if(age.HasValue&&app.DateOfBirth!.Value.AddYears(age.Value)>DateOnly.FromDateTime(DateTime.UtcNow))age--;
+        var parents=ParseParentNationalities(app.ParentNationalitiesJson);
+        bool Match(FasTierCriteria c)
+        {
+            var values=allValues.Where(x=>x.FasTierCriteriaId==c.Id).Select(x=>x.Nationality).ToArray();
+            return c.CriteriaType switch
+            {
+                "AGE"=>age.HasValue&&age.Value>=c.NumberFrom&&age.Value<=c.NumberTo,
+                "GDP" or "GHI"=>app.MonthlyHouseholdIncome.HasValue&&app.MonthlyHouseholdIncome.Value>=c.NumberFrom&&app.MonthlyHouseholdIncome.Value<=c.NumberTo,
+                "PCI"=>app.PerCapitaIncome.HasValue&&app.PerCapitaIncome.Value>=c.NumberFrom&&app.PerCapitaIncome.Value<=c.NumberTo,
+                "NATIONALITY"=>values.Contains(app.NationalityCode??string.Empty,StringComparer.OrdinalIgnoreCase)||app.NationalityCode=="SG"&&values.Contains("Singapore Citizen",StringComparer.OrdinalIgnoreCase),
+                "PARENT_NATIONALITY"=>parents.Any(p=>values.Contains(p,StringComparer.OrdinalIgnoreCase)),
+                "ACCOUNT_TYPE"=>values.Contains(app.AccountTypeCode,StringComparer.OrdinalIgnoreCase),
+                _=>false
+            };
+        }
+        var result=Match(criteria[0]);
+        for(var index=1;index<criteria.Length;index++)result=criteria[index-1].ConnectorToNext=="OR"?result||Match(criteria[index]):result&&Match(criteria[index]);
+        return result;
     }
     private static string[] ParseParentNationalities(string? json) => string.IsNullOrWhiteSpace(json) ? Array.Empty<string>() : JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);
