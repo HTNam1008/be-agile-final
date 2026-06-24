@@ -10,6 +10,11 @@ public sealed class FasPaymentModelConfiguration : IModelConfigurationContributo
     {
         modelBuilder.ApplyConfiguration(new FasApplicationConfiguration());
         modelBuilder.ApplyConfiguration(new FasApplicationReviewDecisionConfiguration());
+        modelBuilder.ApplyConfiguration(new FasApplicationSchemeConfiguration());
+        modelBuilder.ApplyConfiguration(new FasDocumentConfiguration());
+        modelBuilder.ApplyConfiguration(new FasDeclarationConfiguration());
+        modelBuilder.ApplyConfiguration(new FasStatusHistoryConfiguration());
+        modelBuilder.ApplyConfiguration(new FasActiveSchemeConfiguration());
         modelBuilder.ApplyConfiguration(new FasSchemeConfiguration());
         modelBuilder.ApplyConfiguration(new FasSchemeCourseConfiguration());
         modelBuilder.ApplyConfiguration(new FasTierConfiguration());

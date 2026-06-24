@@ -116,13 +116,15 @@ public sealed class FasSqlPersistenceTests
         await using MoeDbContext context = database.CreateContext();
         var logger = new RecordingLogger<FasSchemeRepository>();
         var repository = new FasSchemeRepository(context, logger);
-        CreateFasSchemeRequest payload = new(
-            "SCHEME-CORRUPT", "GRANT-CORRUPT", "Scheme", null, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), [],
+        CreateFasSchemeRequest request = Request("CORRUPT", []) with
+        {
+            Tiers =
             [
-                new("First", "FIXED", 100, 1, [new("AGE", 13, 18, null, "AND", 1)]),
-                new("Second", "FIXED", 50, 2, [new("AGE", 13, 18, null, "AND", 1)])
-            ]);
-        CreateFasSchemeResponse created = await repository.CreateAsync(payload, 77, DateTime.UtcNow, CancellationToken.None);
+                new("First", 100, 1, [new(1, 13, 18, null)]),
+                new("Second", 50, 2, [new(1, 13, 18, null)])
+            ]
+        };
+        CreateFasSchemeResponse created = await repository.CreateAsync(request, 77, DateTime.UtcNow, CancellationToken.None);
         await context.Database.ExecuteSqlAsync($"UPDATE [fas].[FASTier] SET [SubsidyType]='FIXED' WHERE [FASSchemeId]={created.SchemeId} AND [DisplayOrder]=2");
 
         Func<Task> action = async () => await repository.GetAsync(created.SchemeId, CancellationToken.None);
@@ -136,12 +138,9 @@ public sealed class FasSqlPersistenceTests
 
     private static CreateFasSchemeRequest Request(string suffix, IReadOnlyList<long> courseIds) => new(
         $"SCHEME-{suffix}", $"GRANT-{suffix}", $"Scheme {suffix}", null,
-        new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), courseIds,
-        [
-            new CreateFasTierRequest("Full", "PERCENTAGE", 100, 1, [
-                new FasTierCriteriaRequest("AGE", 13m, 18m, null, null, 1)
-            ])
-        ]);
+        new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), courseIds, "PERCENTAGE",
+        [new("AGE", null, 1)],
+        [new("Full", 100, 1, [new(1, 13, 18, null)])]);
 
     private static async Task<long> SeedCourse(MoeDbContext context)
     {

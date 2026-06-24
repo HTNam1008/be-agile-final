@@ -25,21 +25,32 @@ internal sealed class StudentOnboardingRepository(MoeDbContext dbContext) : IStu
             .AnyAsync(x => x.StudentNumber == normalizedStudentNumber, cancellationToken);
     }
 
-    public async Task<long> AddPersonAsync(Person person, CancellationToken cancellationToken)
+    public async Task<long> AddPersonAsync(
+        Person person,
+        CancellationToken cancellationToken,
+        bool saveChanges = true)
     {
         await dbContext.Set<Person>().AddAsync(person, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (saveChanges)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
         return person.Id;
     }
 
     public async Task<CreatedStudentRecord> AddStudentIdentityAndEnrollmentAsync(
         PersonIdentifier identityNumber,
         SchoolEnrollment enrollment,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool saveChanges = true)
     {
         await dbContext.Set<PersonIdentifier>().AddAsync(identityNumber, cancellationToken);
         await dbContext.Set<SchoolEnrollment>().AddAsync(enrollment, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (saveChanges)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         return new CreatedStudentRecord(enrollment.PersonId, enrollment.Id);
     }

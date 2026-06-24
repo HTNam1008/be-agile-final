@@ -41,7 +41,7 @@ public sealed class PersonConfiguration : IEntityTypeConfiguration<Person>
             OfficialFullName = student.FullName,
             DateOfBirth = student.DateOfBirth,
             NationalityCode = student.Nric.StartsWith('F') ? "FOREIGN" : "SG",
-            CitizenshipStatusCode = student.Nric.StartsWith('F') ? "VALID_PASS_HOLDER" : "CITIZEN",
+            CitizenshipStatusCode = student.Nric.StartsWith('F') ? ResidencyStatusCodes.ValidPassHolder : ResidencyStatusCodes.Citizen,
             OfficialEmail = student.Email,
             PreferredEmail = student.Email,
             OfficialMobile = student.Mobile,

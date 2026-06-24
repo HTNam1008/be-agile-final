@@ -63,19 +63,20 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
 
                 foreach (CreateFasTierRequest tierRequest in request.Tiers.OrderBy(x => x.DisplayOrder))
                 {
-                    FasTier tier = FasTier.Create(scheme.Id, tierRequest.Label, tierRequest.SubsidyType, tierRequest.SubsidyValue, tierRequest.DisplayOrder, utcNow);
+                    FasTier tier = FasTier.Create(scheme.Id, tierRequest.Label, request.SubsidyType, tierRequest.SubsidyValue, tierRequest.DisplayOrder, utcNow);
                     dbContext.Add(tier);
                     await dbContext.SaveChangesAsync(cancellationToken);
-                    foreach (FasTierCriteriaRequest criteriaReq in tierRequest.Criteria.OrderBy(x => x.DisplayOrder))
+                    foreach (FasCriteriaTemplateItem template in request.CriteriaTemplate.OrderBy(x => x.DisplayOrder))
                     {
-                        FasTierCriteria criteria = FasTierCriteria.Create(tier.Id, criteriaReq.CriteriaType, criteriaReq.NumberFrom, criteriaReq.NumberTo,
-                            criteriaReq.ConnectorToNext, criteriaReq.DisplayOrder, utcNow);
+                        FasTierCriteriaValue value = tierRequest.CriteriaValues.Single(x => x.DisplayOrder == template.DisplayOrder);
+                        FasTierCriteria criteria = FasTierCriteria.Create(tier.Id, template.CriteriaType, value.NumberFrom, value.NumberTo,
+                            template.ConnectorToNext, template.DisplayOrder, utcNow);
                         dbContext.Add(criteria);
                         await dbContext.SaveChangesAsync(cancellationToken);
-                        if (criteriaReq.CriteriaType == "NATIONALITY" && criteriaReq.Nationalities is not null)
+                        if (template.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE")
                         {
-                            foreach (string nationality in criteriaReq.Nationalities.Distinct(StringComparer.Ordinal))
-                                dbContext.Add(FasTierCriteriaNationality.Create(criteria.Id, nationality));
+                            foreach (string nationality in value.Nationalities!.Distinct(StringComparer.Ordinal))
+                                dbContext.Add(FasTierCriteriaNationality.Create(criteria.Id, template.CriteriaType, nationality));
                             await dbContext.SaveChangesAsync(cancellationToken);
                         }
                     }
@@ -129,6 +130,33 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         return true;
     }
 
+    public Task<CreateFasSchemeResponse?> PublishAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken)
+        => ChangeStatusAsync(schemeId, actorId, utcNow, "PUBLISH", cancellationToken);
+
+    public Task<CreateFasSchemeResponse?> DisableAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken)
+        => ChangeStatusAsync(schemeId, actorId, utcNow, "DISABLE", cancellationToken);
+
+    public Task<CreateFasSchemeResponse?> DeleteAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken)
+        => ChangeStatusAsync(schemeId, actorId, utcNow, "DELETE", cancellationToken);
+
+    private async Task<CreateFasSchemeResponse?> ChangeStatusAsync(
+        long schemeId,
+        long actorId,
+        DateTime utcNow,
+        string transition,
+        CancellationToken cancellationToken)
+    {
+        FasScheme? scheme = await dbContext.Set<FasScheme>().SingleOrDefaultAsync(x => x.Id == schemeId, cancellationToken);
+        if (scheme is null) return null;
+
+        if (transition == "PUBLISH") scheme.Activate(actorId, utcNow);
+        else if (transition == "DISABLE") scheme.Disable(actorId, utcNow);
+        else scheme.Delete(actorId, utcNow);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new CreateFasSchemeResponse(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.StatusCode);
+    }
+
     public async Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken)
     {
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
@@ -151,11 +179,22 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         FasTierCriteria[] criteria = await dbContext.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToArrayAsync(cancellationToken);
         long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
         FasTierCriteriaNationality[] nationalities = await dbContext.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToArrayAsync(cancellationToken);
-        var tierDetails = tiers.Select(t => new FasTierDetail(t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder,
-            criteria.Where(c => c.FasTierId == t.Id).OrderBy(c => c.DisplayOrder).Select(c => new FasTierCriteriaDetail(c.Id, c.CriteriaType, c.NumberFrom, c.NumberTo,
-                c.CriteriaType == "NATIONALITY" ? nationalities.Where(n => n.FasTierCriteriaId == c.Id).Select(n => n.Nationality).Order().ToArray() : null, c.ConnectorToNext, c.DisplayOrder)).ToArray())).ToArray();
+        if (tiers.Length == 0) throw Corrupt(schemeId, "scheme has no tiers");
+        string subsidyType = tiers[0].SubsidyType;
+        if (tiers.Any(x => x.SubsidyType != subsidyType)) throw Corrupt(schemeId, "tier subsidy types differ");
+        FasTierCriteria[] firstCriteria = criteria.Where(x => x.FasTierId == tiers[0].Id).OrderBy(x => x.DisplayOrder).ToArray();
+        foreach (FasTier tier in tiers.Skip(1))
+        {
+            FasTierCriteria[] candidate = criteria.Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToArray();
+            if (candidate.Length != firstCriteria.Length || candidate.Where((x, i) => x.CriteriaType != firstCriteria[i].CriteriaType || x.ConnectorToNext != firstCriteria[i].ConnectorToNext || x.DisplayOrder != firstCriteria[i].DisplayOrder).Any())
+                throw Corrupt(schemeId, "tier criteria templates differ");
+        }
+        var template = firstCriteria.Select(x => new FasCriteriaTemplateItem(x.CriteriaType, x.ConnectorToNext, x.DisplayOrder)).ToArray();
+        var tierDetails = tiers.Select(t => new FasTierDetail(t.Id, t.Label, t.SubsidyValue, t.DisplayOrder,
+            criteria.Where(c => c.FasTierId == t.Id).OrderBy(c => c.DisplayOrder).Select(c => new FasTierCriteriaValue(c.DisplayOrder, c.NumberFrom, c.NumberTo,
+                c.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE" ? nationalities.Where(n => n.FasTierCriteriaId == c.Id).Select(n => n.Nationality).Order().ToArray() : null)).ToArray())).ToArray();
         return new FasSchemeDetail(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.Name, scheme.Description,
-            scheme.StartDate, scheme.EndDate, scheme.StatusCode, courseIds, tierDetails);
+            scheme.StartDate, scheme.EndDate, scheme.StatusCode, courseIds, subsidyType, template, tierDetails);
     }
 
     private InvalidOperationException Corrupt(long schemeId, string reason)

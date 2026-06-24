@@ -44,9 +44,21 @@ internal sealed class FasApplicationRepository(MoeDbContext dbContext) : IFasApp
 
         var summary = new SchemeApplicationsSummary(pendingCount, approvedCount, rejectedCount);
 
-        var dbItems = await dbContext.Set<FasApplication>()
-            .Where(x => x.FasSchemeId == schemeId)
-            .Select(x => new { x.Id, x.ApplicationNo, x.StudentName, x.StudentId, x.SubmittedDate, x.StatusCode })
+        // FASApplication still uses the legacy person-normalized schema. Read the
+        // student fields from person.Person rather than expecting duplicated V4
+        // snake-case columns on fas.FASApplication.
+        var dbItems = await dbContext.Database.SqlQuery<ApplicationListRow>($"""
+            SELECT
+                application.FASApplicationId AS Id,
+                application.ApplicationNumber AS ApplicationNo,
+                person.FullName AS StudentName,
+                COALESCE(person.IdentityNumberMasked, person.MockPassPersonId) AS StudentId,
+                application.SubmittedAt AS SubmittedAt,
+                application.ApplicationStatusCode AS StatusCode
+            FROM fas.FASApplication AS application
+            INNER JOIN person.Person AS person ON person.PersonId = application.PersonId
+            WHERE application.FASSchemeId = {schemeId}
+            """)
             .ToListAsync(cancellationToken);
 
         var items = dbItems.Select(x => new SchemeApplicationItem(
@@ -54,12 +66,20 @@ internal sealed class FasApplicationRepository(MoeDbContext dbContext) : IFasApp
             x.ApplicationNo,
             x.StudentName,
             x.StudentId,
-            x.SubmittedDate.ToString("yyyy-MM-dd"),
+            x.SubmittedAt?.ToString("yyyy-MM-dd") ?? string.Empty,
             x.StatusCode
         )).ToList();
 
         return new GetSchemeApplicationsResponse(summary, items);
     }
+
+    private sealed record ApplicationListRow(
+        long Id,
+        string ApplicationNo,
+        string StudentName,
+        string StudentId,
+        DateTime? SubmittedAt,
+        string StatusCode);
 
     public async Task<GetApplicationDetailResponse?> GetApplicationDetailAsync(long applicationId, CancellationToken cancellationToken = default)
     {

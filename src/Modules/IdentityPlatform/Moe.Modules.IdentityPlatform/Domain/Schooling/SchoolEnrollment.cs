@@ -42,4 +42,10 @@ public class SchoolEnrollment : Entity<long>
     public string SourceCode { get; private set; } = string.Empty;
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
+
+    public void UpdateClassCode(string classCode, DateTime utcNow)
+    {
+        ClassCode = classCode.Trim().ToUpperInvariant();
+        UpdatedAtUtc = utcNow;
+    }
 }

@@ -21,7 +21,7 @@ public sealed class GoldenWizardContractTests
     {
         CreateFasSchemeRequest request = Load(fixture);
 
-        request.Tiers[0].SubsidyType.Should().Be(subsidyType);
+        request.SubsidyType.Should().Be(subsidyType);
         request.CourseIds.Should().HaveCount(courseCount);
         request.Tiers.Should().HaveCount(tierCount);
         new CreateFasSchemeRequestValidator().Validate(request).IsValid.Should().BeTrue();
@@ -38,7 +38,8 @@ public sealed class GoldenWizardContractTests
         {
             tier.TryGetProperty("id", out _).Should().BeFalse();
             tier.TryGetProperty("grantCode", out _).Should().BeFalse();
-            foreach (JsonElement value in tier.GetProperty("criteria").EnumerateArray())
+            tier.TryGetProperty("subsidyType", out _).Should().BeFalse();
+            foreach (JsonElement value in tier.GetProperty("criteriaValues").EnumerateArray())
                 value.TryGetProperty("id", out _).Should().BeFalse();
         }
     }

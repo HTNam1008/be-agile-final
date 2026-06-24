@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
@@ -14,7 +16,8 @@ internal sealed class OpenManualAccountHandler(
     IPersonDirectory people,
     ICurrentUser currentUser,
     IClock clock,
-    IUnitOfWork unitOfWork) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
+    IUnitOfWork unitOfWork,
+    IAuditService auditService) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
 {
     public async Task<Result<OpenManualAccountResponse>> Handle(
         OpenManualAccountCommand command,
@@ -51,6 +54,20 @@ internal sealed class OpenManualAccountHandler(
         }
 
         await educationAccounts.AddAsync(accountResult.Value, cancellationToken);
+        string detailsJson = JsonSerializer.Serialize(new
+        {
+            personId = command.PersonId,
+            accountNumber = accountResult.Value.AccountNumber,
+            openedByUserId = actorId
+        });
+
+        await auditService.RecordAsync(
+            AuditActionCodes.EducationAccountCreatedManually,
+            "EducationAccount",
+            accountResult.Value.Id.ToString(),
+            detailsJson,
+            cancellationToken);
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         OpenManualAccountResponse response = new(

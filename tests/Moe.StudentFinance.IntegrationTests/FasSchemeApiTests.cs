@@ -34,6 +34,72 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Draft_can_be_loaded_and_edited_through_canonical_endpoint()
+    {
+        string suffix = NewSuffix();
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes/draft", PercentageRequest(suffix));
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+
+        using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: $"Edited FAS {suffix}"));
+        await AssertStatus(HttpStatusCode.OK, updated);
+        using HttpResponseMessage detail = await _client.GetAsync($"/api/admin/v1/fas/schemes/{id}");
+        await AssertStatus(HttpStatusCode.OK, detail);
+        string body = await detail.Content.ReadAsStringAsync();
+        Assert.Contains($"Edited FAS {suffix}", body);
+        Assert.Contains("\"status\":\"DRAFT\"", body);
+    }
+
+    [Fact]
+    public async Task Active_scheme_cannot_be_edited_as_draft()
+    {
+        string suffix = NewSuffix();
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", PercentageRequest(suffix));
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+
+        using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: "Should not save"));
+        await AssertStatus(HttpStatusCode.NotFound, updated);
+        Assert.Contains("FAS.SCHEME_NOT_FOUND", await updated.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Parent_nationality_and_account_type_round_trip_without_numeric_bounds()
+    {
+        string suffix = NewSuffix();
+        var request = new
+        {
+            schemeCode = $"CATEGORICAL-{suffix}", grantCode = $"CATEGORICAL-GRANT-{suffix}", name = $"Categorical {suffix}",
+            startDate = new DateOnly(2026, 1, 1), endDate = new DateOnly(2026, 12, 31), courseIds = Array.Empty<long>(),
+            subsidyType = "PERCENTAGE",
+            criteriaTemplate = new object[]
+            {
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 1 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 2 }
+            },
+            tiers = new object[]
+            {
+                new { label = "Eligible", subsidyValue = 75m, displayOrder = 1, criteriaValues = new object[]
+                {
+                    new { displayOrder = 1, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Vietnamese", "Singapore Citizen" } },
+                    new { displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                }}
+            }
+        };
+
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", request);
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+        using HttpResponseMessage detail = await _client.GetAsync($"/api/admin/v1/fas/schemes/{id}");
+        await AssertStatus(HttpStatusCode.OK, detail);
+        string body = await detail.Content.ReadAsStringAsync();
+        Assert.Contains("PARENT_NATIONALITY", body);
+        Assert.Contains("Vietnamese", body);
+        Assert.Contains("ACCOUNT_TYPE", body);
+        Assert.Contains("EDUCATION_ACCOUNT", body);
+    }
+
+    [Fact]
     public async Task Course_restricted_fixed_scheme_returns_numeric_course_ids()
     {
         long courseId = await CreateCourse();
@@ -62,6 +128,8 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             startDate = "",
             endDate = "",
             courseIds = Array.Empty<long>(),
+            subsidyType = "Percentage",
+            criteriaTemplate = Array.Empty<object>(),
             tiers = Array.Empty<object>()
         });
 
@@ -146,37 +214,42 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             courseCode = $"FAS-{suffix}",
             courseName = $"FAS Course {suffix}",
             description = "FAS integration course",
-            startDate = new DateOnly(2027, 3, 1),
-            endDate = new DateOnly(2027, 12, 31),
-            enrollmentOpenAt = new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            enrollmentCloseAt = new DateTime(2027, 2, 1, 0, 0, 0, DateTimeKind.Utc)
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            enrollmentOpenAt = DateTime.UtcNow.AddMinutes(1),
+            enrollmentCloseAt = DateTime.UtcNow.AddDays(14)
         });
         using HttpResponseMessage response = await _client.SendAsync(request);
         await AssertStatus(HttpStatusCode.Created, response);
         return await ReadLong(response, "courseId");
     }
 
-    private static object PercentageRequest(string suffix, string? grantCode = null) => new
+    private static object PercentageRequest(string suffix, string? grantCode = null, string? name = null) => new
     {
         schemeCode = $"FAS-{suffix}",
         grantCode = grantCode ?? $"GRANT-{suffix}",
-        name = $"FAS {suffix}",
+        name = name ?? $"FAS {suffix}",
         description = "Integration scheme",
-        startDate = new DateOnly(2027, 1, 1),
-        endDate = new DateOnly(2027, 12, 31),
+        startDate = new DateOnly(2026, 1, 1),
+        endDate = new DateOnly(2026, 12, 31),
         courseIds = Array.Empty<long>(),
+        subsidyType = "PERCENTAGE",
+        criteriaTemplate = new object[]
+        {
+            new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
+            new { criteriaType = "NATIONALITY", connectorToNext = (string?)null, displayOrder = 2 }
+        },
         tiers = new object[]
         {
             new
             {
                 label = "Full",
-                subsidyType = "PERCENTAGE",
                 subsidyValue = 100m,
                 displayOrder = 1,
-                criteria = new object[]
+                criteriaValues = new object[]
                 {
-                    new { criteriaType = "AGE", displayOrder = 1, numberFrom = 13m, numberTo = 18m, nationalities = (string[]?)null, connectorToNext = "AND" },
-                    new { criteriaType = "NATIONALITY", displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" }, connectorToNext = (string?)null }
+                    new { displayOrder = 1, numberFrom = 13m, numberTo = 18m, nationalities = (string[]?)null },
+                    new { displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } }
                 }
             }
         }
@@ -187,18 +260,19 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         schemeCode = $"FIXED-{suffix}",
         grantCode = $"FIXED-GRANT-{suffix}",
         name = $"Fixed FAS {suffix}",
-        startDate = new DateOnly(2027, 1, 1),
-        endDate = new DateOnly(2027, 12, 31),
+        startDate = new DateOnly(2026, 1, 1),
+        endDate = new DateOnly(2026, 12, 31),
         courseIds,
+        subsidyType = "FIXED",
+        criteriaTemplate = new object[] { new { criteriaType = "AGE", connectorToNext = (string?)null, displayOrder = 1 } },
         tiers = new object[]
         {
             new
             {
                 label = "Fixed Support",
-                subsidyType = "FIXED",
                 subsidyValue = 750m,
                 displayOrder = 1,
-                criteria = new object[] { new { criteriaType = "AGE", displayOrder = 1, numberFrom = 7m, numberTo = 25m, nationalities = (string[]?)null, connectorToNext = (string?)null } }
+                criteriaValues = new object[] { new { displayOrder = 1, numberFrom = 7m, numberTo = 25m, nationalities = (string[]?)null } }
             }
         }
     };

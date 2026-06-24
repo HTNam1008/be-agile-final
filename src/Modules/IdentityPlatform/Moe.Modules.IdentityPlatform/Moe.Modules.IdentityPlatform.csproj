@@ -14,4 +14,7 @@
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
 
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moe.IdentityPlatform.UnitTests" />
+  </ItemGroup>
 </Project>
