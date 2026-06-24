@@ -19,9 +19,6 @@ public sealed class AiCopilotModule : IModule
         var kernelBuilder = Kernel.CreateBuilder()
             .AddAzureOpenAIChatCompletion(deploymentName, endpoint, apiKey);
 
-        kernelBuilder.Plugins.AddFromType<Application.Plugins.StudentFinanceMockPlugin>();
-        kernelBuilder.Plugins.AddFromType<Application.Plugins.FasApplicationMockPlugin>();
-
         services.AddSingleton(sp => kernelBuilder.Build());
         services.AddScoped<Moe.Modules.AiCopilot.Application.Orchestration.AiOrchestratorService>();
     }
