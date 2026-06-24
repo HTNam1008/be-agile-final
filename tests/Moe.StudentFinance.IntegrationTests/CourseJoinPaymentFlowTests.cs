@@ -835,6 +835,16 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         JsonElement data = await ReadDataAsync(response);
         long personId = data.GetProperty("personId").GetInt64();
 
+        using HttpResponseMessage openAccResponse = await _client.PostAsJsonAsync(
+            "/api/admin/v1/education-accounts",
+            new
+            {
+                personId,
+                reasonCode = "EXCEPTION",
+                remarks = "Open account for test student"
+            });
+        await AssertStatusAsync(HttpStatusCode.Created, openAccResponse);
+
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
         EducationAccount account = await db.Set<EducationAccount>().SingleAsync(x => x.PersonId == personId);
