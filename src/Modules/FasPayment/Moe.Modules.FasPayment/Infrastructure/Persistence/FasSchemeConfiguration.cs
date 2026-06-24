@@ -8,14 +8,22 @@ internal sealed class FasSchemeConfiguration : IEntityTypeConfiguration<FasSchem
 {
     public void Configure(EntityTypeBuilder<FasScheme> builder)
     {
-        builder.ToTable("FASScheme", "fas");
+        builder.ToTable("FASScheme", "fas", table =>
+        {
+            table.HasCheckConstraint("CK_FASScheme_Status", "[StatusCode] IN ('DRAFT','ACTIVE','RETIRED','DISABLED','DELETED')");
+            table.HasCheckConstraint("CK_FASScheme_Dates", "[EndDate] >= [StartDate]");
+        });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("FASSchemeId").UseIdentityColumn();
+        builder.Property(x => x.SchemeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
+        builder.Property(x => x.GrantCode).HasMaxLength(100).IsUnicode(false).IsRequired();
+        builder.Property(x => x.Name).HasMaxLength(255).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(2000);
+        builder.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
+        builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
+        builder.Property(x => x.ActivatedAtUtc).HasColumnName("ActivatedAt");
         builder.HasIndex(x => x.SchemeCode).IsUnique();
-        builder.Property(x => x.SchemeCode).HasMaxLength(50).IsRequired();
-        builder.Property(x => x.SchemeName).HasMaxLength(200).IsRequired();
-        builder.Property(x => x.Description).HasMaxLength(1000);
-        builder.Property(x => x.ProviderName).HasMaxLength(200).IsRequired();
-        builder.Property(x => x.SchemeStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.HasIndex(x => x.GrantCode).IsUnique();
     }
 }

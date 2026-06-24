@@ -9,6 +9,8 @@ internal sealed class CreateCourseRequestValidator : AbstractValidator<CreateCou
     {
         RuleFor(x => x.CourseCode).NotEmpty().MaximumLength(50);
         RuleFor(x => x.CourseName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.BeforeStartRefundPercentage).InclusiveBetween(0m, 100m);
+        RuleFor(x => x.AfterStartRefundPercentage).InclusiveBetween(0m, 100m);
     }
 }
 
@@ -18,5 +20,7 @@ internal sealed class UpdateCourseRequestValidator : AbstractValidator<UpdateCou
     {
         RuleFor(x => x.CourseCode).NotEmpty().MaximumLength(50);
         RuleFor(x => x.CourseName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.BeforeStartRefundPercentage).InclusiveBetween(0m, 100m);
+        RuleFor(x => x.AfterStartRefundPercentage).InclusiveBetween(0m, 100m);
     }
 }

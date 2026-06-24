@@ -35,7 +35,7 @@ internal sealed class CreateCourseCommandHandler(AdminCourseAccess access)
             request.CourseCode,
             request.StartDate,
             request.EndDate,
-            utcNow,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             null,
             cancellationToken);
@@ -51,23 +51,15 @@ internal sealed class CreateCourseCommandHandler(AdminCourseAccess access)
             request.Description,
             request.StartDate,
             request.EndDate,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             actorId,
-            utcNow);
+            utcNow,
+            request.BeforeStartRefundPercentage,
+            request.AfterStartRefundPercentage);
 
         await access.Courses.AddCourseAsync(course, cancellationToken);
-        return await LoadDetailAsync(access, course.Id, cancellationToken);
-    }
-
-    private static async Task<Result<CourseDetailDto>> LoadDetailAsync(
-        AdminCourseAccess access,
-        long courseId,
-        CancellationToken cancellationToken)
-    {
-        CourseAggregate? aggregate = await access.Courses.GetCourseAggregateAsync(courseId, cancellationToken);
-        return aggregate is null
-            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
-            : Result<CourseDetailDto>.Success(CourseMapper.ToDetail(aggregate));
+        return await access.LoadCourseDetailAsync(course.Id, cancellationToken);
     }
 }
 
@@ -112,7 +104,7 @@ internal sealed class UpdateCourseCommandHandler(AdminCourseAccess access)
             request.CourseCode,
             request.StartDate,
             request.EndDate,
-            course.EnrollmentOpenAtUtc,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             command.CourseId,
             cancellationToken);
@@ -121,29 +113,30 @@ internal sealed class UpdateCourseCommandHandler(AdminCourseAccess access)
             return Result<CourseDetailDto>.Failure(validation.Error);
         }
 
+        DateTime utcNow = access.UtcNow();
         course.Update(
             request.CourseCode,
             request.CourseName,
             request.Description,
             request.StartDate,
             request.EndDate,
+            request.EnrollmentOpenAt,
             request.EnrollmentCloseAt,
             actorId,
-            access.UtcNow());
+            utcNow);
 
-        await access.Courses.SaveChangesAsync(cancellationToken);
-        return await LoadDetailAsync(access, command.CourseId, cancellationToken);
-    }
+        Result refundPolicy = course.UpdateRefundPolicy(
+            request.BeforeStartRefundPercentage,
+            request.AfterStartRefundPercentage,
+            actorId,
+            utcNow);
+        if (refundPolicy.IsFailure)
+        {
+            return Result<CourseDetailDto>.Failure(refundPolicy.Error);
+        }
 
-    private static async Task<Result<CourseDetailDto>> LoadDetailAsync(
-        AdminCourseAccess access,
-        long courseId,
-        CancellationToken cancellationToken)
-    {
-        CourseAggregate? aggregate = await access.Courses.GetCourseAggregateAsync(courseId, cancellationToken);
-        return aggregate is null
-            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
-            : Result<CourseDetailDto>.Success(CourseMapper.ToDetail(aggregate));
+        await access.Courses.SaveCourseAsync(course, cancellationToken);
+        return await access.LoadCourseDetailAsync(command.CourseId, cancellationToken);
     }
 }
 
@@ -226,7 +219,7 @@ internal sealed class PublishCourseCommandHandler(AdminCourseAccess access)
 
         DateTime utcNow = access.UtcNow();
         course.Publish(actorId, utcNow);
-        await access.Courses.SaveChangesAsync(cancellationToken);
+        await access.Courses.SaveCourseAsync(course, cancellationToken);
         await access.Courses.IssueBillsForUnbilledEnrollmentsAsync(
             command.CourseId,
             $"BILL-{utcNow:yyyyMMdd}",
@@ -234,18 +227,7 @@ internal sealed class PublishCourseCommandHandler(AdminCourseAccess access)
             DateOnly.FromDateTime(utcNow).AddDays(30),
             cancellationToken);
 
-        return await LoadDetailAsync(access, command.CourseId, cancellationToken);
-    }
-
-    private static async Task<Result<CourseDetailDto>> LoadDetailAsync(
-        AdminCourseAccess access,
-        long courseId,
-        CancellationToken cancellationToken)
-    {
-        CourseAggregate? aggregate = await access.Courses.GetCourseAggregateAsync(courseId, cancellationToken);
-        return aggregate is null
-            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
-            : Result<CourseDetailDto>.Success(CourseMapper.ToDetail(aggregate));
+        return await access.LoadCourseDetailAsync(command.CourseId, cancellationToken);
     }
 }
 
@@ -254,52 +236,7 @@ internal sealed class DisableCourseCommandHandler(AdminCourseAccess access)
 {
     public async Task<Result<CourseDetailDto>> Handle(DisableCourseCommand command, CancellationToken cancellationToken)
     {
-        return await SetEnabledStateAsync(access, command.CourseId, enabled: false, cancellationToken);
-    }
-
-    private static async Task<Result<CourseDetailDto>> SetEnabledStateAsync(
-        AdminCourseAccess access,
-        long courseId,
-        bool enabled,
-        CancellationToken cancellationToken)
-    {
-        Result admin = access.RequireAdmin();
-        if (admin.IsFailure)
-        {
-            return Result<CourseDetailDto>.Failure(admin.Error);
-        }
-
-        Course? course = await access.Courses.FindCourseAsync(courseId, cancellationToken);
-        if (course is null)
-        {
-            return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
-        }
-
-        if (!access.CanAccessOrganization(course.OrganizationId))
-        {
-            return Result<CourseDetailDto>.Failure(access.OrganizationForbidden());
-        }
-
-        if (access.CurrentUser.UserAccountId is not long actorId)
-        {
-            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
-        }
-
-        if (enabled)
-        {
-            course.Enable(actorId, access.UtcNow());
-        }
-        else
-        {
-            course.Disable(actorId, access.UtcNow());
-        }
-
-        await access.Courses.SaveChangesAsync(cancellationToken);
-
-        CourseAggregate? aggregate = await access.Courses.GetCourseAggregateAsync(courseId, cancellationToken);
-        return aggregate is null
-            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
-            : Result<CourseDetailDto>.Success(CourseMapper.ToDetail(aggregate));
+        return await access.SetCourseEnabledStateAsync(command.CourseId, enabled: false, cancellationToken);
     }
 }
 
@@ -308,51 +245,6 @@ internal sealed class EnableCourseCommandHandler(AdminCourseAccess access)
 {
     public async Task<Result<CourseDetailDto>> Handle(EnableCourseCommand command, CancellationToken cancellationToken)
     {
-        return await SetEnabledStateAsync(access, command.CourseId, enabled: true, cancellationToken);
-    }
-
-    private static async Task<Result<CourseDetailDto>> SetEnabledStateAsync(
-        AdminCourseAccess access,
-        long courseId,
-        bool enabled,
-        CancellationToken cancellationToken)
-    {
-        Result admin = access.RequireAdmin();
-        if (admin.IsFailure)
-        {
-            return Result<CourseDetailDto>.Failure(admin.Error);
-        }
-
-        Course? course = await access.Courses.FindCourseAsync(courseId, cancellationToken);
-        if (course is null)
-        {
-            return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound);
-        }
-
-        if (!access.CanAccessOrganization(course.OrganizationId))
-        {
-            return Result<CourseDetailDto>.Failure(access.OrganizationForbidden());
-        }
-
-        if (access.CurrentUser.UserAccountId is not long actorId)
-        {
-            return Result<CourseDetailDto>.Failure(CourseBillingErrors.ActorRequired);
-        }
-
-        if (enabled)
-        {
-            course.Enable(actorId, access.UtcNow());
-        }
-        else
-        {
-            course.Disable(actorId, access.UtcNow());
-        }
-
-        await access.Courses.SaveChangesAsync(cancellationToken);
-
-        CourseAggregate? aggregate = await access.Courses.GetCourseAggregateAsync(courseId, cancellationToken);
-        return aggregate is null
-            ? Result<CourseDetailDto>.Failure(CourseErrors.CourseNotFound)
-            : Result<CourseDetailDto>.Success(CourseMapper.ToDetail(aggregate));
+        return await access.SetCourseEnabledStateAsync(command.CourseId, enabled: true, cancellationToken);
     }
 }

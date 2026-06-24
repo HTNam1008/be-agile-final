@@ -1,0 +1,110 @@
+using Microsoft.EntityFrameworkCore;
+using Moe.Modules.CourseBilling.Contracts.BillingStatements;
+using Moe.Modules.CourseBilling.Domain.Billing;
+using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.StudentFinance.Persistence;
+
+namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
+
+internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBillingStatementRepository
+{
+    public async Task<BillingStatementResponse> GetOrCreateAsync(
+        long personId,
+        int year,
+        int month,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        DateOnly monthStart = new(year, month, 1);
+        DateOnly monthEnd = monthStart.AddMonths(1);
+        BillingStatement? statement = await dbContext.Set<BillingStatement>()
+            .SingleOrDefaultAsync(x =>
+                x.PersonId == personId &&
+                x.StatementYear == year &&
+                x.StatementMonth == month,
+                cancellationToken);
+        if (statement is null)
+        {
+            statement = BillingStatement.Create(personId, year, month, utcNow);
+            await dbContext.Set<BillingStatement>().AddAsync(statement, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var bills = await (
+            from bill in dbContext.Set<Bill>()
+            join enrollment in dbContext.Set<CourseEnrollment>()
+                on bill.CourseEnrollmentId equals enrollment.Id
+            join course in dbContext.Set<Course>()
+                on enrollment.CourseId equals course.Id
+            where enrollment.PersonId == personId
+                && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.PendingPlanSelection
+                && bill.CurrentDueDate >= monthStart
+                && bill.CurrentDueDate < monthEnd
+                && bill.OutstandingAmount > 0m
+                && bill.BillStatusCode != BillStatusCodes.Paid
+                && bill.BillStatusCode != BillStatusCodes.Cancelled
+            orderby bill.CurrentDueDate, bill.OriginalDueDate, bill.Id
+            select new
+            {
+                Bill = bill,
+                Course = course,
+                Enrollment = enrollment,
+                IsInstallment = dbContext.Set<Bill>()
+                    .Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1
+            })
+            .ToListAsync(cancellationToken);
+
+        List<BillingStatementItem> existingItems = await dbContext.Set<BillingStatementItem>()
+            .Where(x => x.BillingStatementId == statement.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var row in bills)
+        {
+            BillingStatementItem? item = existingItems.SingleOrDefault(x => x.BillId == row.Bill.Id);
+            if (item is null)
+            {
+                item = new BillingStatementItem(statement.Id, row.Bill.Id, row.Bill.OutstandingAmount, utcNow);
+                await dbContext.Set<BillingStatementItem>().AddAsync(item, cancellationToken);
+                existingItems.Add(item);
+            }
+            else
+            {
+                item.Refresh(row.Bill.OutstandingAmount, 0m);
+            }
+        }
+
+        decimal total = bills.Sum(x => x.Bill.OutstandingAmount);
+        statement.Refresh(total, 0m, utcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new BillingStatementResponse(
+            statement.Id,
+            year,
+            month,
+            statement.CurrencyCode,
+            statement.TotalAmount,
+            statement.PaidAmount,
+            statement.OutstandingAmount,
+            statement.StatementStatusCode,
+            bills.Select(row =>
+            {
+                BillingStatementItem item = existingItems.Single(x => x.BillId == row.Bill.Id);
+                return new BillingStatementItemResponse(
+                    item.Id,
+                    row.Bill.Id,
+                    row.Enrollment.Id,
+                    row.Course.Id,
+                    row.Course.CourseCode,
+                    row.Course.CourseName,
+                    row.Bill.SequenceNumber,
+                    row.Bill.OriginalDueDate,
+                    row.Bill.CurrentDueDate,
+                    row.Bill.DeferralCount,
+                    row.Bill.OutstandingAmount,
+                    row.Bill.BillStatusCode,
+                    row.IsInstallment,
+                    row.IsInstallment,
+                    row.IsInstallment ? null : "Full payment bills cannot be deferred.");
+            }).ToArray());
+    }
+}
