@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Moe.StudentFinance.Persistence;
 
@@ -11,9 +12,11 @@ using Moe.StudentFinance.Persistence;
 namespace Moe.StudentFinance.Migrations.Migrations
 {
     [DbContext(typeof(MoeDbContext))]
-    partial class MoeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623094246_AddMfaTables")]
+    partial class AddMfaTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -8619,6 +8622,11 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<Guid?>("LoginMfaChallengeId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("PortalAccessCode")
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
                     b.Property<string>("UserAgent")
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
@@ -8650,6 +8658,12 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.Property<long>("LoginAccountId")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("PortalAccessCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
 
                     b.Property<string>("PurposeCode")
                         .IsRequired()
