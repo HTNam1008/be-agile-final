@@ -30,6 +30,7 @@ internal sealed class CreateFeeComponentCommandHandler(
             request.ComponentCode,
             componentTypeCode,
             calculationTypeCode,
+            request.DefaultValue,
             null,
             cancellationToken);
         if (validation.IsFailure)
@@ -43,6 +44,8 @@ internal sealed class CreateFeeComponentCommandHandler(
             componentTypeCode,
             calculationTypeCode,
             componentTypeCode == FeeComponentTypeCodes.Tax,
+            request.DefaultValue,
+            isSystemManaged: false,
             request.IsActive);
 
         await feeComponents.AddAsync(feeComponent, cancellationToken);
@@ -70,6 +73,11 @@ internal sealed class UpdateFeeComponentCommandHandler(
             return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentNotFound);
         }
 
+        if (feeComponent.IsSystemManaged && !currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.SystemFeeComponentForbidden);
+        }
+
         UpdateFeeComponentRequest request = command.Request;
         string componentTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.ComponentTypeCode);
         string calculationTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.CalculationTypeCode);
@@ -79,6 +87,7 @@ internal sealed class UpdateFeeComponentCommandHandler(
             request.ComponentCode,
             componentTypeCode,
             calculationTypeCode,
+            request.DefaultValue,
             command.FeeComponentId,
             cancellationToken);
         if (validation.IsFailure)
@@ -92,6 +101,7 @@ internal sealed class UpdateFeeComponentCommandHandler(
             componentTypeCode,
             calculationTypeCode,
             componentTypeCode == FeeComponentTypeCodes.Tax,
+            request.DefaultValue,
             request.IsActive);
 
         await feeComponents.SaveAsync(feeComponent, cancellationToken);
@@ -117,6 +127,11 @@ internal sealed class ActivateFeeComponentCommandHandler(
         if (feeComponent is null)
         {
             return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentNotFound);
+        }
+
+        if (feeComponent.IsSystemManaged && !currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.SystemFeeComponentForbidden);
         }
 
         feeComponent.Activate();
@@ -145,8 +160,48 @@ internal sealed class DeactivateFeeComponentCommandHandler(
             return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentNotFound);
         }
 
+        if (feeComponent.IsSystemManaged && !currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.SystemFeeComponentForbidden);
+        }
+
         feeComponent.Deactivate();
         await feeComponents.SaveAsync(feeComponent, cancellationToken);
         return Result<FeeComponentDto>.Success(FeeComponentMapper.ToDto(feeComponent));
+    }
+}
+
+internal sealed class DeleteFeeComponentCommandHandler(
+    IAdminFeeComponentRepository feeComponents,
+    ICurrentAdminContext currentAdmin)
+    : ICommandHandler<DeleteFeeComponentCommand, long>
+{
+    public async Task<Result<long>> Handle(
+        DeleteFeeComponentCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (!currentAdmin.IsAdmin)
+        {
+            return Result<long>.Failure(CourseErrors.AdminRequired);
+        }
+
+        FeeComponent? feeComponent = await feeComponents.FindAsync(command.FeeComponentId, cancellationToken);
+        if (feeComponent is null)
+        {
+            return Result<long>.Failure(CourseErrors.FeeComponentNotFound);
+        }
+
+        if (feeComponent.IsSystemManaged && !currentAdmin.IsHqAdmin)
+        {
+            return Result<long>.Failure(CourseErrors.SystemFeeComponentForbidden);
+        }
+
+        if (await feeComponents.IsInUseAsync(command.FeeComponentId, cancellationToken))
+        {
+            return Result<long>.Failure(CourseErrors.FeeComponentInUse);
+        }
+
+        await feeComponents.DeleteAsync(feeComponent, cancellationToken);
+        return Result<long>.Success(command.FeeComponentId);
     }
 }

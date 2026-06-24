@@ -27,6 +27,7 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
             new Permission(PermissionCodes.AccountsManualCreate, "Manually create education accounts", "EDUCATION_ACCOUNT_TOPUP", "CREATE", "ACCOUNTS"),
             new Permission(PermissionCodes.AccountDetailsManage, "Manage education account details", "EDUCATION_ACCOUNT_TOPUP", "MANAGE", "ACCOUNT_DETAILS"),
             new Permission(PermissionCodes.AccountsLifecycleManage, "Suspend, reactivate and close education accounts", "EDUCATION_ACCOUNT_TOPUP", "MANAGE", "ACCOUNT_LIFECYCLE"),
+            new Permission(PermissionCodes.LifecycleManualTrigger, "Trigger education account lifecycle manually", "EDUCATION_ACCOUNT_TOPUP", "TRIGGER", "ACCOUNT_LIFECYCLE"),
             new Permission(PermissionCodes.AccountsSettlementView, "View settlement operations", "EDUCATION_ACCOUNT_TOPUP", "VIEW", "SETTLEMENTS"),
             new Permission(PermissionCodes.ExternalAccountsProvision, "Create admin users and prepare student Singpass access", "IDENTITY_PLATFORM", "PROVISION", "EXTERNAL_ACCOUNTS"),
             new Permission(PermissionCodes.AccessScopeManage, "Manage access scopes", "IDENTITY_PLATFORM", "MANAGE", "ACCESS_SCOPE"),

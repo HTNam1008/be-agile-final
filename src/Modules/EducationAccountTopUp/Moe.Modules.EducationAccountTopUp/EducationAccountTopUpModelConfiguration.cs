@@ -12,6 +12,8 @@ public sealed class EducationAccountTopUpModelConfiguration : IModelConfiguratio
         modelBuilder.ApplyConfiguration(new AccountSettlementConfiguration());
         modelBuilder.ApplyConfiguration(new AccountTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new EducationAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new EducationAccountLifecycleRunConfiguration());
+        modelBuilder.ApplyConfiguration(new EducationAccountLifecycleRunItemConfiguration());
         modelBuilder.ApplyConfiguration(new SettlementPreferenceConfiguration());
         modelBuilder.ApplyConfiguration(new TopUpCampaignConfiguration());
         modelBuilder.ApplyConfiguration(new TopUpCampaignRecipientConfiguration());

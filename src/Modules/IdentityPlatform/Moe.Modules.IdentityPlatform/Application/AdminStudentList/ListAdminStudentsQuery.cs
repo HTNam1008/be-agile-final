@@ -4,6 +4,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 namespace Moe.Modules.IdentityPlatform.Application.AdminStudentList;
 
 internal sealed record ListAdminStudentsQuery(
+    long? OrganizationId,
     string? Search,
     string? LevelCode,
     string? ClassCode,

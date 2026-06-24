@@ -22,6 +22,11 @@ internal static class CourseErrors
     public static readonly Error DuplicateFeeComponentCode = new("COURSE.FEE_COMPONENT_DUPLICATE_CODE", "Fee component code already exists.");
     public static readonly Error InvalidFeeComponentType = new("COURSE.INVALID_FEE_COMPONENT_TYPE", "Fee component type must be TUITION, MATERIAL or TAX.");
     public static readonly Error InvalidCalculationType = new("COURSE.INVALID_CALCULATION_TYPE", "Calculation type must be FIXED or PERCENTAGE.");
+    public static readonly Error InvalidFeeDefaultValue = new("COURSE.INVALID_FEE_DEFAULT_VALUE", "Fee default value must be valid for its calculation type.");
+    public static readonly Error SystemFeeComponentForbidden = new("COURSE.SYSTEM_FEE_COMPONENT_FORBIDDEN", "Only HQ administrators can manage system fee components.");
+    public static readonly Error FeeComponentInUse = new("COURSE.FEE_COMPONENT_IN_USE", "Fee component is already used by course billing data. Deactivate it instead of deleting it.");
+    public static readonly Error SystemCourseFeeForbidden = new("COURSE.SYSTEM_COURSE_FEE_FORBIDDEN", "System-managed course fees cannot be changed by school administrators.");
+    public static readonly Error GstComponentNotConfigured = new("COURSE.GST_COMPONENT_NOT_CONFIGURED", "GST fee component is not configured.");
     public static readonly Error DuplicateCourseFee = new("COURSE.DUPLICATE_FEE_COMPONENT", "This fee component is already configured for the course.");
     public static readonly Error CourseFeeNotFound = new("COURSE.FEE_NOT_FOUND", "Course fee was not found.");
     public static readonly Error MaterialNotFound = new("COURSE.MATERIAL_NOT_FOUND", "Course material was not found.");

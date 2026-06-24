@@ -13,5 +13,7 @@ internal static class FeeComponentMapper
             feeComponent.ComponentTypeCode,
             feeComponent.CalculationTypeCode,
             feeComponent.IsTaxComponent,
+            feeComponent.DefaultValue,
+            feeComponent.IsSystemManaged,
             feeComponent.IsActive);
 }

@@ -27,16 +27,15 @@ internal sealed class AdminStudentListReader(
         List<SchoolEnrollment> enrollments = await dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()
             .Where(x => hasGlobalAccess || scopedOrganizationIds.Contains(x.OrganizationId))
+            .Where(x => criteria.OrganizationId == null || x.OrganizationId == criteria.OrganizationId.Value)
             .ToListAsync(cancellationToken);
 
         IQueryable<Person> peopleQuery = dbContext.Set<Person>().AsNoTracking();
-        if (!hasGlobalAccess)
-        {
-            peopleQuery = peopleQuery.Where(person => dbContext.Set<SchoolEnrollment>()
-                .AsNoTracking()
-                .Any(enrollment => enrollment.PersonId == person.Id
-                    && scopedOrganizationIds.Contains(enrollment.OrganizationId)));
-        }
+        peopleQuery = peopleQuery.Where(person => dbContext.Set<SchoolEnrollment>()
+            .AsNoTracking()
+            .Any(enrollment => enrollment.PersonId == person.Id
+                && (hasGlobalAccess || scopedOrganizationIds.Contains(enrollment.OrganizationId))
+                && (criteria.OrganizationId == null || enrollment.OrganizationId == criteria.OrganizationId.Value)));
 
         List<Person> people = await peopleQuery.ToListAsync(cancellationToken);
 
@@ -146,6 +145,7 @@ internal sealed class AdminStudentListReader(
     private static AdminStudentListItem ToItem(Row row)
         => new(
             row.Person.Id,
+            row.Enrollment?.StudentNumber,
             MaskNric(row.Person.IdentityNumberMasked),
             row.Person.OfficialFullName,
             row.Enrollment?.LevelCode,
