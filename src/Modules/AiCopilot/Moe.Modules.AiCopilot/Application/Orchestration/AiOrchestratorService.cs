@@ -117,6 +117,12 @@ public sealed class AiOrchestratorService(
                 [new("PAYMENT_HISTORY", snapshot.RecentPayments)],
                 [new("NAVIGATE", "Open Bills & payments page", "/portal/bills")], null);
         }
+        if (intent.Contains("WITHDRAW"))
+        {
+            string withdrawText = "To withdraw from a course, start by reviewing the withdrawal policy on the Bills & payments page. Withdrawals may affect your outstanding charges and Education Account balance. Contact your school for eligibility, deadlines, and any supporting documents needed. You can also reach the Admin Center for further assistance.";
+            return new(c.Id, 0, withdrawText, "PAYMENT", Grounding(sources), [],
+                [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")], null);
+        }
         if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
         {
             string billText = snapshot.BillCount == 0
@@ -234,7 +240,7 @@ public sealed class AiOrchestratorService(
     {
         string value = $"{domain} {message}".ToUpperInvariant();
         if (current == "FAS_INTERVIEW" || value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE") || value.Contains("ELIGIB")) return "FAS_INTERVIEW";
-        if (value.Contains("PAY") || value.Contains("BILL") || value.Contains("BALANCE") || value.Contains("OUTSTANDING") || value.Contains("REFUND")) return "PAYMENT";
+        if (value.Contains("PAY") || value.Contains("BILL") || value.Contains("BALANCE") || value.Contains("OUTSTANDING") || value.Contains("REFUND") || value.Contains("WITHDRAW")) return "PAYMENT";
         return "GENERAL";
     }
 
