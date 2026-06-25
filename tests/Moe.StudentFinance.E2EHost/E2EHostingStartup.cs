@@ -67,6 +67,18 @@ public class E2EHostingStartup : IHostingStartup
                     policy.RequireClaim(ClaimNames.Role, "STUDENT");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.MfaPortal, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireAssertion(context =>
+                        (context.User.HasClaim(ClaimNames.Portal, PortalCodes.Admin)
+                            && context.User.FindAll(ClaimNames.Role).Any(claim => claim.Value is "HQ_ADMIN" or "SCHOOL_ADMIN"))
+                        || (context.User.HasClaim(ClaimNames.Portal, PortalCodes.EService)
+                            && context.User.HasClaim(ClaimNames.Role, "STUDENT")));
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ManageFasSchemes, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();

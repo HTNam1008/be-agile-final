@@ -176,7 +176,7 @@ internal sealed class DynamicRuleFilter(MoeDbContext dbContext) : IDynamicRuleFi
             {
                 var inValues = System.Text.Json.JsonSerializer.Deserialize<List<string>>(text) ?? [];
                 query = query.Where(acc => dbContext.Set<SchoolEnrollment>().Any(e =>
-                    e.PersonId == acc.PersonId && inValues.Contains(e.ClassCode) &&
+                    e.PersonId == acc.PersonId && e.ClassCode != null && inValues.Contains(e.ClassCode) &&
                     e.StartDate <= nowOnly && (e.EndDate == null || e.EndDate >= nowOnly)));
             }
         }

@@ -1,0 +1,22 @@
+[
+    {
+        "Case":  "GET status",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"statusCode\":\"ACTIVE\",\"lockedUntilUtc\":null,\"lastVerifiedAtUtc\":\"2026-06-23T16:45:32.0049698\"},\"errors\":null,\"traceId\":\"870c71a1d6c14c548559a329217c2044\",\"timestampUtc\":\"2026-06-24T04:14:58.7183497Z\"}"
+    },
+    {
+        "Case":  "POST challenge empty body",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"challengeId\":\"407c5aeb-f9ca-4d24-9f43-30933d8fb35b\",\"expiresAtUtc\":\"2026-06-24T04:19:58.9861821Z\"},\"errors\":null,\"traceId\":\"03fe6437688b42ff9cb8634f9ab965e9\",\"timestampUtc\":\"2026-06-24T04:14:59.6241613Z\"}"
+    },
+    {
+        "Case":  "POST verify current user",
+        "HttpStatus":  200,
+        "Body":  "{\"success\":true,\"code\":200,\"message\":\"Success\",\"data\":{\"verified\":true,\"loginAccountId\":1002,\"purposeCode\":\"LOGIN\",\"verifiedAtUtc\":\"2026-06-24T04:14:59.7541717Z\"},\"errors\":null,\"traceId\":\"11995597099942999b6db19ab98641ef\",\"timestampUtc\":\"2026-06-24T04:14:59.9889325Z\"}"
+    },
+    {
+        "Case":  "POST pin/update wrong old pin",
+        "HttpStatus":  401,
+        "Body":  "The remote server returned an error: (401) Unauthorized."
+    }
+]
