@@ -138,7 +138,9 @@ public sealed class AiOrchestratorService(
     private async Task<AiChatResponse> HandleFas(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
         bool isNewInterview = c.FasInterviewJson is null;
-        FasInterviewData state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct);
+        FasInterviewData state;
+        try { state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct); }
+        catch { return new(c.Id, 0, "I could not retrieve your profile information right now. Please proceed with the FAS form directly or contact Admin Center if the issue persists.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
         FasExtractionResult extraction = isNewInterview ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message);
         if (extraction.Status == "MANUAL_FALLBACK")
         {
@@ -163,12 +165,16 @@ public sealed class AiOrchestratorService(
         string text;
         if (next is null && state.IsWelfareHomeResident == false)
         {
-            object rawRecommendation = await fas.CheckEligibility(new EligibilityRequest(state.MonthlyHouseholdIncome!.Value,
-                state.HouseholdMemberCount!.Value, 0, state.ParentNationalities), ct);
-            state.Status = "COMPLETE";
-            AiInterviewState completeInterview = ToInterviewState(state, null);
-            recommendation = BuildFasRecommendation(rawRecommendation, completeInterview);
-            text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready.";
+            try
+            {
+                object rawRecommendation = await fas.CheckEligibility(new EligibilityRequest(state.MonthlyHouseholdIncome!.Value,
+                    state.HouseholdMemberCount!.Value, 0, state.ParentNationalities), ct);
+                JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
+                bool hasSchemes = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array && schemes.GetArrayLength() > 0;
+                if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "Based on your information, I could not find a matching FAS scheme. Please proceed with the FAS form to verify manually or contact Admin Center for assistance."; }
+                else { state.Status = "COMPLETE"; AiInterviewState completeInterview = ToInterviewState(state, null); recommendation = BuildFasRecommendation(rawRecommendation, completeInterview); text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready."; }
+            }
+            catch { state.Status = "MANUAL_FALLBACK"; text = "I could not complete the eligibility check right now. Please proceed with the FAS form or contact Admin Center for assistance."; }
         }
         else if (next is null)
         {
