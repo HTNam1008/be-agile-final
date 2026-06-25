@@ -41,7 +41,7 @@ public sealed record AiChatResponse(Guid ConversationId, long MessageId, string 
     AiInterviewState? InterviewState, Guid? ReviewRecordId = null);
 public sealed record AiConversationResponse(Guid ConversationId, string Mode, string Status,
     IReadOnlyCollection<AiConversationMessageResponse> Messages, AiInterviewState? InterviewState);
-public sealed record AiConversationMessageResponse(long MessageId, string Role, string Content, DateTime CreatedAtUtc);
+public sealed record AiConversationMessageResponse(long MessageId, string Role, string Content, DateTime CreatedAtUtc, object? ResponseData = null);
 public sealed record CreateAdminCenterCaseRequest(Guid ReviewRecordId,
     [Required, StringLength(2000, MinimumLength = 5)] string Description,
     [RegularExpression("PORTAL|EMAIL|PHONE")] string ContactPreference = "PORTAL");
