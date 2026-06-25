@@ -2,6 +2,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
+using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
@@ -133,6 +134,17 @@ internal sealed class SelfJoinCourseHandler(
             selectedFasSubsidies,
             utcNow,
             cancellationToken);
+        long[] paidBillIds = billingResult.Bills
+            .Where(x => x.Bill.BillStatusCode == BillStatusCodes.Paid)
+            .Select(x => x.Bill.Id)
+            .ToArray();
+        if (paidBillIds.Length > 0)
+        {
+            await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
+                paidBillIds,
+                utcNow,
+                cancellationToken);
+        }
 
         return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
     }
