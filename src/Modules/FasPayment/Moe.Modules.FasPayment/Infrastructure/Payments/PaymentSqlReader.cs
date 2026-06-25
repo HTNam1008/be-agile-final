@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Moe.Modules.CourseBilling.Domain.Billing;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.StudentFinance.Persistence;
 
@@ -18,10 +20,49 @@ internal static class PaymentSqlReader
                 .OrderBy(x => x.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
+            var inMemoryBills = await (
+                from bill in dbContext.Set<Bill>()
+                join enrollment in dbContext.Set<CourseEnrollment>() on bill.CourseEnrollmentId equals enrollment.Id
+                join course in dbContext.Set<Course>() on enrollment.CourseId equals course.Id
+                where enrollment.PersonId == personId
+                    && enrollment.EnrollmentStatusCode != "PENDING_PLAN_SELECTION"
+                    && bill.OutstandingAmount > 0m
+                    && bill.BillStatusCode != BillStatusCodes.Paid
+                    && bill.BillStatusCode != BillStatusCodes.Cancelled
+                orderby bill.DueDate, bill.IssuedAtUtc
+                select new OutstandingBillDto(
+                    bill.Id,
+                    bill.BillNumber,
+                    bill.CourseEnrollmentId,
+                    course.Id,
+                    course.CourseCode,
+                    course.CourseName,
+                    bill.IssuedAtUtc,
+                    bill.DueDate,
+                    bill.GrossAmount,
+                    bill.SubsidyAmount,
+                    bill.NetPayableAmount,
+                    bill.PaidAmount,
+                    bill.OutstandingAmount,
+                    bill.BillStatusCode,
+                    dbContext.Set<BillLine>()
+                        .Where(line => line.BillId == bill.Id)
+                        .OrderBy(line => line.Id)
+                        .Select(line => new OutstandingBillLineDto(
+                            line.Id,
+                            line.DescriptionSnapshot,
+                            line.Quantity,
+                            line.UnitAmount,
+                            line.GrossAmount,
+                            line.SubsidyAmount,
+                            line.NetAmount))
+                        .ToArray()))
+                .ToArrayAsync(cancellationToken);
+
             return new OutstandingBillsResponse(
                 inMemoryAccount?.CachedBalance ?? 0m,
                 "SGD",
-                Array.Empty<OutstandingBillDto>());
+                inMemoryBills);
         }
 
         AccountBalanceRow? account = await dbContext.Database
