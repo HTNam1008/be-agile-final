@@ -117,16 +117,37 @@ public sealed class AiOrchestratorService(
 
     private async Task<AiChatResponse> HandleFas(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
+        bool isNewInterview = c.FasInterviewJson is null;
         FasInterviewData state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct);
-        ApplyFasAnswer(state, request.Message);
+        FasExtractionResult extraction = isNewInterview ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message);
+        if (extraction.Status == "MANUAL_FALLBACK")
+        {
+            state.Status = "MANUAL_FALLBACK";
+            AiInterviewState manualInterview = ToInterviewState(state, null);
+            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), [],
+                [new("NAVIGATE", "Open FAS application", "/portal/fas")], manualInterview);
+        }
+
+        if (extraction.Status == "CLARIFY")
+        {
+            state.Status = "CLARIFYING";
+            AiInterviewState clarificationInterview = ToInterviewState(state, extraction.Message);
+            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), [],
+                [new("NAVIGATE", "Open FAS application", "/portal/fas")], clarificationInterview);
+        }
+
         string? next = NextQuestion(state);
         object? recommendation = null;
         string text;
         if (next is null && state.IsWelfareHomeResident == false)
         {
-            recommendation = await fas.CheckEligibility(new EligibilityRequest(state.MonthlyHouseholdIncome!.Value,
+            object rawRecommendation = await fas.CheckEligibility(new EligibilityRequest(state.MonthlyHouseholdIncome!.Value,
                 state.HouseholdMemberCount!.Value, 0, state.ParentNationalities), ct);
             state.Status = "COMPLETE";
+            AiInterviewState completeInterview = ToInterviewState(state, null);
+            recommendation = BuildFasRecommendation(rawRecommendation, completeInterview);
             text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready.";
         }
         else if (next is null)
@@ -196,24 +217,53 @@ public sealed class AiOrchestratorService(
         JsonElement profile = JsonSerializer.SerializeToElement(await fas.Prefill(ct), JsonOptions);
         return new FasInterviewData { Profile = profile, Status = "COLLECTING" };
     }
-    private static void ApplyFasAnswer(FasInterviewData s, string message)
+    private static FasExtractionResult ApplyFasAnswer(FasInterviewData s, string message)
     {
-        string lower = message.ToLowerInvariant();
-        if (!s.IsWelfareHomeResident.HasValue && (lower.Contains("welfare") || lower is "yes" or "no"))
-        { s.IsWelfareHomeResident = lower.Contains("yes") || lower.Contains("welfare home"); return; }
-        decimal[] numbers = Regex.Matches(message, @"\d+(?:\.\d+)?").Select(x => decimal.Parse(x.Value, CultureInfo.InvariantCulture)).ToArray();
-        if (!s.MonthlyHouseholdIncome.HasValue && numbers.Length > 0) { s.MonthlyHouseholdIncome = numbers[0]; return; }
-        if (!s.HouseholdMemberCount.HasValue && numbers.Length > 0) { s.HouseholdMemberCount = (int)numbers[0]; return; }
-        if (s.ParentNationalities.Count == 0 && message.Length is > 1 and < 100) s.ParentNationalities = [message.Trim()];
+        string? field = s.ClarificationField ?? NextMissingField(s);
+        if (field is null) return FasExtractionResult.Accepted();
+
+        FasExtractionResult result = field switch
+        {
+            "isWelfareHomeResident" => ExtractWelfareHome(message),
+            "monthlyHouseholdIncome" => ExtractIncome(message),
+            "householdMemberCount" => ExtractHouseholdMemberCount(message),
+            "parentNationalities" => ExtractParentNationalities(message),
+            _ => FasExtractionResult.Accepted()
+        };
+
+        if (result.Status == "ACCEPTED")
+        {
+            s.ClarificationField = null;
+            s.ValidationMessage = null;
+            s.ClarificationAttempts.Remove(field);
+            ApplyAcceptedValue(s, field, result.Value);
+            return result;
+        }
+
+        int attempts = s.ClarificationAttempts.GetValueOrDefault(field);
+        if (attempts >= 1)
+        {
+            s.ClarificationField = null;
+            s.ValidationMessage = result.Message;
+            return FasExtractionResult.ManualFallback("I could not confirm that answer safely. Please continue in the FAS form; your manual entries remain available and editable.");
+        }
+
+        s.ClarificationAttempts[field] = attempts + 1;
+        s.ClarificationField = field;
+        s.ValidationMessage = result.Message;
+        return result;
     }
     private static string? NextQuestion(FasInterviewData s)
     {
-        if (!s.IsWelfareHomeResident.HasValue) return "Are you currently residing in an approved welfare home?";
-        if (s.IsWelfareHomeResident.Value) return null;
-        if (!s.MonthlyHouseholdIncome.HasValue) return "What is your total monthly household income in SGD?";
-        if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0) return "How many people are in your household?";
-        if (s.ParentNationalities.Count == 0) return "What is your parent or guardian's nationality?";
-        return null;
+        string? field = s.ClarificationField ?? NextMissingField(s);
+        return field switch
+        {
+            "isWelfareHomeResident" => "Are you currently residing in an approved welfare home? Please answer yes or no.",
+            "monthlyHouseholdIncome" => "What is your total monthly household income in SGD?",
+            "householdMemberCount" => "How many people are in your household?",
+            "parentNationalities" => "What is your parent or guardian's nationality?",
+            _ => null
+        };
     }
     private static AiInterviewState ToInterviewState(FasInterviewData s, string? next)
     {
@@ -226,9 +276,152 @@ public sealed class AiOrchestratorService(
         ];
         string[] missing = fields.Where(x => !x.Confirmed && !(s.IsWelfareHomeResident == true && x.Name is "monthlyHouseholdIncome" or "householdMemberCount"))
             .Select(x => x.Name).ToArray();
-        object patch = new { s.IsWelfareHomeResident, s.MonthlyHouseholdIncome, s.HouseholdMemberCount, s.ParentNationalities };
+        object? patch = s.Status == "MANUAL_FALLBACK"
+            ? null
+            : new FasFormPatch(s.IsWelfareHomeResident, s.MonthlyHouseholdIncome, s.HouseholdMemberCount, 0, s.ParentNationalities);
         return new(s.Status, next, fields, missing, patch);
     }
+    private static string? NextMissingField(FasInterviewData s)
+    {
+        if (!s.IsWelfareHomeResident.HasValue) return "isWelfareHomeResident";
+        if (s.IsWelfareHomeResident.Value) return null;
+        if (!s.MonthlyHouseholdIncome.HasValue) return "monthlyHouseholdIncome";
+        if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0) return "householdMemberCount";
+        if (s.ParentNationalities.Count == 0) return "parentNationalities";
+        return null;
+    }
+
+    private static void ApplyAcceptedValue(FasInterviewData s, string field, object? value)
+    {
+        switch (field)
+        {
+            case "isWelfareHomeResident":
+                s.IsWelfareHomeResident = (bool)value!;
+                if (s.IsWelfareHomeResident.Value)
+                {
+                    s.MonthlyHouseholdIncome = null;
+                    s.HouseholdMemberCount = null;
+                }
+                break;
+            case "monthlyHouseholdIncome":
+                s.MonthlyHouseholdIncome = (decimal)value!;
+                break;
+            case "householdMemberCount":
+                s.HouseholdMemberCount = (int)value!;
+                break;
+            case "parentNationalities":
+                s.ParentNationalities = ((IReadOnlyCollection<string>)value!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                break;
+        }
+    }
+
+    private static FasExtractionResult ExtractWelfareHome(string message)
+    {
+        string value = message.Trim().ToLowerInvariant();
+        bool yes = Regex.IsMatch(value, @"\b(yes|y|welfare home|approved welfare)\b", RegexOptions.IgnoreCase);
+        bool no = Regex.IsMatch(value, @"\b(no|n|not|not in|not residing|do not)\b", RegexOptions.IgnoreCase);
+        if (yes && !no) return FasExtractionResult.Accepted(true);
+        if (no && !yes) return FasExtractionResult.Accepted(false);
+        return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
+    }
+
+    private static FasExtractionResult ExtractIncome(string message)
+    {
+        decimal[] numbers = ExtractNumbers(message).ToArray();
+        if (numbers.Length == 0) return FasExtractionResult.Clarify("Please provide your total monthly household income as an SGD amount, for example 3200.");
+        if (numbers.Length > 1) return FasExtractionResult.Clarify("I found more than one amount. Please reply with only the total monthly household income in SGD.");
+        decimal income = numbers[0];
+        if (income < 0 || income > 1_000_000) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+        return FasExtractionResult.Accepted(decimal.Round(income, 2));
+    }
+
+    private static FasExtractionResult ExtractHouseholdMemberCount(string message)
+    {
+        decimal[] numbers = ExtractNumbers(message).ToArray();
+        if (numbers.Length == 0) return FasExtractionResult.Clarify("Please provide the number of people in your household, for example 4.");
+        if (numbers.Length > 1 || numbers[0] != decimal.Truncate(numbers[0])) return FasExtractionResult.Clarify("Please reply with one whole number for household members.");
+        int count = (int)numbers[0];
+        if (count is < 1 or > 30) return FasExtractionResult.Clarify("Please provide a household member count between 1 and 30.");
+        return FasExtractionResult.Accepted(count);
+    }
+
+    private static FasExtractionResult ExtractParentNationalities(string message)
+    {
+        string normalized = message.Trim();
+        if (normalized.Length is < 2 or > 120 || ExtractNumbers(normalized).Any())
+            return FasExtractionResult.Clarify("Please provide the parent or guardian nationality as text, for example Singapore Citizen.");
+
+        string[] values = Regex.Split(normalized, @"\s*(?:,|/|\band\b|&)\s*", RegexOptions.IgnoreCase)
+            .Select(NormalizeNationality)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return values.Length == 0
+            ? FasExtractionResult.Clarify("Please provide the parent or guardian nationality as text, for example Singapore Citizen.")
+            : FasExtractionResult.Accepted(values);
+    }
+
+    private static IEnumerable<decimal> ExtractNumbers(string message)
+    {
+        foreach (Match match in Regex.Matches(message, @"(?<![\w.-])-?\d[\d,]*(?:\.\d+)?\s*[kK]?", RegexOptions.CultureInvariant))
+        {
+            string raw = match.Value.Trim();
+            bool thousand = raw.EndsWith("k", StringComparison.OrdinalIgnoreCase);
+            raw = raw.TrimEnd('k', 'K').Replace(",", string.Empty);
+            if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value))
+                yield return thousand ? value * 1000 : value;
+        }
+    }
+
+    private static string NormalizeNationality(string value)
+    {
+        string trimmed = value.Trim().Trim('.');
+        return trimmed.ToUpperInvariant() switch
+        {
+            "SG" or "SINGAPORE" or "SINGAPOREAN" or "SINGAPORE CITIZEN" => "Singapore Citizen",
+            _ => CultureInfo.GetCultureInfo("en-SG").TextInfo.ToTitleCase(trimmed.ToLowerInvariant())
+        };
+    }
+
+    private static FasRecommendationCard BuildFasRecommendation(object rawRecommendation, AiInterviewState interview)
+    {
+        JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
+        decimal? pci = TryGetDecimal(root, "perCapitaIncome");
+        FasRecommendationMatch[] matches = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array
+            ? schemes.EnumerateArray().Select(ToRecommendationMatch).Where(x => x is not null).Cast<FasRecommendationMatch>().ToArray()
+            : [];
+        FasRecommendationMatch? recommended = matches.FirstOrDefault();
+        return new FasRecommendationCard(
+            pci,
+            recommended?.SchemeName,
+            recommended?.TierLabel,
+            recommended?.SubsidyType,
+            recommended?.SubsidyValue,
+            matches,
+            interview.Fields.Where(x => x.Confirmed).ToArray(),
+            interview.MissingFields,
+            "Prototype recommendation. Eligibility is calculated by application code and final approval remains subject to MOE review.");
+    }
+
+    private static FasRecommendationMatch? ToRecommendationMatch(JsonElement item)
+    {
+        long? schemeId = TryGetInt64(item, "schemeId");
+        long? tierId = TryGetInt64(item, "tierId");
+        string? schemeName = TryGetString(item, "schemeName");
+        string? tierLabel = TryGetString(item, "tierLabel");
+        string? subsidyType = TryGetString(item, "subsidyType");
+        decimal? subsidyValue = TryGetDecimal(item, "subsidyValue");
+        return schemeId.HasValue && tierId.HasValue && schemeName is not null && tierLabel is not null && subsidyType is not null && subsidyValue.HasValue
+            ? new FasRecommendationMatch(schemeId.Value, schemeName, tierId.Value, tierLabel, subsidyType, subsidyValue.Value)
+            : null;
+    }
+
+    private static string? TryGetString(JsonElement element, string property)
+        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static long? TryGetInt64(JsonElement element, string property)
+        => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt64(out long result) ? result : null;
+    private static decimal? TryGetDecimal(JsonElement element, string property)
+        => element.TryGetProperty(property, out JsonElement value) && value.TryGetDecimal(out decimal result) ? result : null;
     private static FasInterviewData? DeserializeState(string? value) => string.IsNullOrWhiteSpace(value) ? null : JsonSerializer.Deserialize<FasInterviewData>(value, JsonOptions);
     private static AiInterviewState? DeserializeInterview(string? value) => DeserializeState(value) is { } state ? ToInterviewState(state, NextQuestion(state)) : null;
     private static AiGrounding Grounding(IReadOnlyList<KnowledgeResult> sources) => new(sources.Count > 0, sources.Select(x => x.Citation).ToArray());
@@ -243,5 +436,15 @@ public sealed class AiOrchestratorService(
         public decimal? MonthlyHouseholdIncome { get; set; }
         public int? HouseholdMemberCount { get; set; }
         public List<string> ParentNationalities { get; set; } = [];
+        public string? ClarificationField { get; set; }
+        public string? ValidationMessage { get; set; }
+        public Dictionary<string, int> ClarificationAttempts { get; set; } = [];
+    }
+
+    private sealed record FasExtractionResult(string Status, object? Value = null, string? Message = null)
+    {
+        public static FasExtractionResult Accepted(object? value = null) => new("ACCEPTED", value);
+        public static FasExtractionResult Clarify(string message) => new("CLARIFY", Message: message);
+        public static FasExtractionResult ManualFallback(string message) => new("MANUAL_FALLBACK", Message: message);
     }
 }
