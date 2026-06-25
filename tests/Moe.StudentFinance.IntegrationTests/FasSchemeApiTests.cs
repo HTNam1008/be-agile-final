@@ -69,8 +69,12 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         string suffix = NewSuffix();
         var request = new
         {
-            schemeCode = $"CATEGORICAL-{suffix}", grantCode = $"CATEGORICAL-GRANT-{suffix}", name = $"Categorical {suffix}",
-            startDate = new DateOnly(2026, 1, 1), endDate = new DateOnly(2026, 12, 31), courseIds = Array.Empty<long>(),
+            schemeCode = $"CATEGORICAL-{suffix}",
+            grantCode = $"CATEGORICAL-GRANT-{suffix}",
+            name = $"Categorical {suffix}",
+            startDate = new DateOnly(2026, 1, 1),
+            endDate = new DateOnly(2026, 12, 31),
+            courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {

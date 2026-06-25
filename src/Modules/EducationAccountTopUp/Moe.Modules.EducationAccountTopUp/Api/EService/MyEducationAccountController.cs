@@ -7,8 +7,8 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
+using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.EService;

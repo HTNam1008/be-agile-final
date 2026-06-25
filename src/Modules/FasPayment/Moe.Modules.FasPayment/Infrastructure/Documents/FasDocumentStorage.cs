@@ -24,8 +24,8 @@ internal sealed class PrivateFileFasDocumentStorage : IFasDocumentStorage
         var path = Path.Combine(root, key.Replace('/', Path.DirectorySeparatorChar)); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await using var output = File.Create(path); await content.CopyToAsync(output, ct); return key;
     }
-    public Task DeleteAsync(string key, CancellationToken ct) { var p=Path.Combine(root,key.Replace('/',Path.DirectorySeparatorChar)); if(File.Exists(p))File.Delete(p); return Task.CompletedTask; }
-    public Task<Stream> OpenReadAsync(string key, CancellationToken ct) => Task.FromResult<Stream>(File.OpenRead(Path.Combine(root,key.Replace('/',Path.DirectorySeparatorChar))));
+    public Task DeleteAsync(string key, CancellationToken ct) { var p = Path.Combine(root, key.Replace('/', Path.DirectorySeparatorChar)); if (File.Exists(p)) File.Delete(p); return Task.CompletedTask; }
+    public Task<Stream> OpenReadAsync(string key, CancellationToken ct) => Task.FromResult<Stream>(File.OpenRead(Path.Combine(root, key.Replace('/', Path.DirectorySeparatorChar))));
 }
 
 internal sealed class AzureBlobFasDocumentStorage : IFasDocumentStorage
@@ -38,9 +38,9 @@ internal sealed class AzureBlobFasDocumentStorage : IFasDocumentStorage
         container = new BlobContainerClient(connection, name);
         container.CreateIfNotExists(PublicAccessType.None);
     }
-    public async Task<string> UploadAsync(long applicationId,string fileName,Stream content,CancellationToken ct)
-    {var key=$"{applicationId}/{Guid.NewGuid():N}{Path.GetExtension(fileName).ToLowerInvariant()}";await container.GetBlobClient(key).UploadAsync(content,new BlobUploadOptions{HttpHeaders=new BlobHttpHeaders{ContentType=Mime(fileName)}},ct);return key;}
-    public Task DeleteAsync(string key,CancellationToken ct)=>container.GetBlobClient(key).DeleteIfExistsAsync(cancellationToken:ct);
-    public async Task<Stream> OpenReadAsync(string key,CancellationToken ct)=>(await container.GetBlobClient(key).DownloadStreamingAsync(cancellationToken:ct)).Value.Content;
-    private static string Mime(string name)=>Path.GetExtension(name).ToLowerInvariant() switch{".pdf"=>"application/pdf",".png"=>"image/png",_=>"image/jpeg"};
+    public async Task<string> UploadAsync(long applicationId, string fileName, Stream content, CancellationToken ct)
+    { var key = $"{applicationId}/{Guid.NewGuid():N}{Path.GetExtension(fileName).ToLowerInvariant()}"; await container.GetBlobClient(key).UploadAsync(content, new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = Mime(fileName) } }, ct); return key; }
+    public Task DeleteAsync(string key, CancellationToken ct) => container.GetBlobClient(key).DeleteIfExistsAsync(cancellationToken: ct);
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken ct) => (await container.GetBlobClient(key).DownloadStreamingAsync(cancellationToken: ct)).Value.Content;
+    private static string Mime(string name) => Path.GetExtension(name).ToLowerInvariant() switch { ".pdf" => "application/pdf", ".png" => "image/png", _ => "image/jpeg" };
 }

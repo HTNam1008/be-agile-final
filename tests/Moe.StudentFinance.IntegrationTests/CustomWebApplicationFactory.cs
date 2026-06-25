@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
-using System.Text.Json;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -9,16 +9,16 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Hosting;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
-using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.IntegrationTests;

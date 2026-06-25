@@ -1,15 +1,15 @@
 using FluentValidation;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.FasPayment.Application;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.SharedKernel.Results;
-using Moe.Modules.FasPayment.Application;
 
 namespace Moe.Modules.FasPayment.Application.LegacyPayments;
 
-internal sealed record GetOutstandingBillsQuery : IQuery<OutstandingBillsResponse>;
+public sealed record GetOutstandingBillsQuery : IQuery<OutstandingBillsResponse>;
 internal sealed record PayOutstandingBillCommand(PayBillRequest Request) : ICommand<PayBillResponse>;
 
 internal sealed class PayBillRequestValidator : AbstractValidator<PayBillRequest>
