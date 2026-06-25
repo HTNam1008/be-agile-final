@@ -61,6 +61,21 @@ public static class DependencyInjection
                 policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
                 policy.RequireClaim(ClaimNames.Role, "STUDENT");
             });
+            options.AddPolicy(AuthorizationPolicies.MfaPortal, policy =>
+            {
+                policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra, AuthenticationSchemes.EServiceSingpass);
+                policy.RequireAuthenticatedUser();
+                policy.RequireAssertion(context =>
+                {
+                    bool isAdmin = context.User.HasClaim(ClaimNames.Portal, PortalCodes.Admin)
+                        && context.User.FindAll(ClaimNames.Role).Any(claim => claim.Value is "HQ_ADMIN" or "SCHOOL_ADMIN");
+
+                    bool isEService = context.User.HasClaim(ClaimNames.Portal, PortalCodes.EService)
+                        && context.User.HasClaim(ClaimNames.Role, "STUDENT");
+
+                    return isAdmin || isEService;
+                });
+            });
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(

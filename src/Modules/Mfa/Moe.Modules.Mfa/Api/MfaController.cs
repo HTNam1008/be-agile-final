@@ -17,12 +17,12 @@ namespace Moe.Modules.Mfa.Api;
 [ApiVersion(1.0)]
 [Route("api/mfa/v{version:apiVersion}")]
 [EnableCors("PortalCors")]
+[Authorize(Policy = AuthorizationPolicies.MfaPortal)]
 public sealed class MfaController(
     ICommandDispatcher commands,
     IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost("challenge")]
-    [Authorize(AuthenticationSchemes = $"{AuthenticationSchemes.AdminEntra},{AuthenticationSchemes.EServiceSingpass}")]
     public async Task<IActionResult> StartChallenge(
         CancellationToken cancellationToken)
     {
@@ -34,7 +34,6 @@ public sealed class MfaController(
     }
 
     [HttpGet("status")]
-    [Authorize(AuthenticationSchemes = $"{AuthenticationSchemes.AdminEntra},{AuthenticationSchemes.EServiceSingpass}")]
     public async Task<IActionResult> Status(CancellationToken cancellationToken)
     {
         var result = await queries.Send(new GetMfaStatusQuery(), cancellationToken);
@@ -42,7 +41,6 @@ public sealed class MfaController(
     }
 
     [HttpPost("setup")]
-    [Authorize(AuthenticationSchemes = $"{AuthenticationSchemes.AdminEntra},{AuthenticationSchemes.EServiceSingpass}")]
     public async Task<IActionResult> Setup([FromBody] SetupMfaPinRequest request, CancellationToken cancellationToken)
     {
         var result = await commands.Send(new SetupMfaPinCommand(request.Pin), cancellationToken);
@@ -50,7 +48,6 @@ public sealed class MfaController(
     }
 
     [HttpPost("verify")]
-    [Authorize(AuthenticationSchemes = $"{AuthenticationSchemes.AdminEntra},{AuthenticationSchemes.EServiceSingpass}")]
     public async Task<IActionResult> Verify([FromBody] VerifyMfaPinRequest request, CancellationToken cancellationToken)
     {
         var result = await commands.Send(new VerifyMfaPinCommand(request.ChallengeId, request.Pin), cancellationToken);
@@ -58,7 +55,6 @@ public sealed class MfaController(
     }
 
     [HttpPost("pin/update")]
-    [Authorize(AuthenticationSchemes = $"{AuthenticationSchemes.AdminEntra},{AuthenticationSchemes.EServiceSingpass}")]
     public async Task<IActionResult> ChangePin([FromBody] ChangeMfaPinRequest request, CancellationToken cancellationToken)
     {
         var result = await commands.Send(new ChangeMfaPinCommand(request.OldPin, request.NewPin), cancellationToken);
