@@ -20,6 +20,10 @@ internal sealed class CreateFeeComponentCommandHandler(
         {
             return Result<FeeComponentDto>.Failure(CourseErrors.AdminRequired);
         }
+        if (!currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentManageForbidden);
+        }
 
         CreateFeeComponentRequest request = command.Request;
         string componentTypeCode = FeeComponentValidatorHelper.NormalizeCode(request.ComponentTypeCode);
@@ -65,6 +69,10 @@ internal sealed class UpdateFeeComponentCommandHandler(
         if (!currentAdmin.IsAdmin)
         {
             return Result<FeeComponentDto>.Failure(CourseErrors.AdminRequired);
+        }
+        if (!currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentManageForbidden);
         }
 
         FeeComponent? feeComponent = await feeComponents.FindAsync(command.FeeComponentId, cancellationToken);
@@ -122,6 +130,10 @@ internal sealed class ActivateFeeComponentCommandHandler(
         {
             return Result<FeeComponentDto>.Failure(CourseErrors.AdminRequired);
         }
+        if (!currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentManageForbidden);
+        }
 
         FeeComponent? feeComponent = await feeComponents.FindAsync(command.FeeComponentId, cancellationToken);
         if (feeComponent is null)
@@ -153,6 +165,10 @@ internal sealed class DeactivateFeeComponentCommandHandler(
         {
             return Result<FeeComponentDto>.Failure(CourseErrors.AdminRequired);
         }
+        if (!currentAdmin.IsHqAdmin)
+        {
+            return Result<FeeComponentDto>.Failure(CourseErrors.FeeComponentManageForbidden);
+        }
 
         FeeComponent? feeComponent = await feeComponents.FindAsync(command.FeeComponentId, cancellationToken);
         if (feeComponent is null)
@@ -183,6 +199,10 @@ internal sealed class DeleteFeeComponentCommandHandler(
         if (!currentAdmin.IsAdmin)
         {
             return Result<long>.Failure(CourseErrors.AdminRequired);
+        }
+        if (!currentAdmin.IsHqAdmin)
+        {
+            return Result<long>.Failure(CourseErrors.FeeComponentManageForbidden);
         }
 
         FeeComponent? feeComponent = await feeComponents.FindAsync(command.FeeComponentId, cancellationToken);
