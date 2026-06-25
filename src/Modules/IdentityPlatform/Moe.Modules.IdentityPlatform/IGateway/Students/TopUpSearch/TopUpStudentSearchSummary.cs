@@ -7,5 +7,5 @@ public sealed record TopUpStudentSearchSummary(
     DateOnly DateOfBirth,
     string SchoolingStatusCode,
     string LevelCode,
-    string ClassCode,
+    string? ClassCode,
     long OrganizationId);

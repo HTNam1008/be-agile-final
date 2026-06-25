@@ -11,5 +11,5 @@ public sealed record TopUpAccountSearchItem(
     decimal Balance,
     string SchoolingStatusCode,
     string LevelCode,
-    string ClassCode,
+    string? ClassCode,
     long OrganizationId);

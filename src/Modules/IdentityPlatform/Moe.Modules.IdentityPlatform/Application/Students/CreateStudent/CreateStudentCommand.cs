@@ -13,7 +13,7 @@ public sealed record CreateStudentCommand(
     string StudentNumber,
     string AcademicYear,
     string LevelCode,
-    string ClassCode,
+    string? ClassCode,
     DateOnly? StartDate,
     string? Email,
     string? Mobile,
