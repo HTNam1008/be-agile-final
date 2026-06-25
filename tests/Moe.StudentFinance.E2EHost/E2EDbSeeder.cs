@@ -1,7 +1,7 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
-using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
@@ -24,6 +24,7 @@ public class E2EDbSeeder : IHostedService
 
         SeedIdentityRows(db);
         SeedFasData(db);
+        SeedDemoBillingData(db);
 
         // We use Reflection or direct EF Core insertions to bypass domain rules if necessary, 
         // but OpenManual is better. However, EducationAccount uses long Id. 
@@ -73,6 +74,19 @@ public class E2EDbSeeder : IHostedService
             schemeType.GetMethod("Activate")!.Invoke(scheme, new object[] { 1001L, DateTime.UtcNow });
             db.Add(scheme!);
 
+            Type tierType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasTier", throwOnError: true)!;
+            Type criteriaType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteria", throwOnError: true)!;
+            Type nationalityType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaNationality", throwOnError: true)!;
+
+            object tier = tierType.GetMethod("Create")!.Invoke(null, [100L, "Demo Full Support", "PERCENTAGE", 100m, 1, DateTime.UtcNow])!;
+            SetId(tier, 1001);
+            db.Add(tier);
+
+            SeedFasCriterion(db, criteriaType, nationalityType, 1101, 1001, "AGE", 13m, 25m, "AND", 1);
+            SeedFasCriterion(db, criteriaType, nationalityType, 1102, 1001, "PCI", 0m, 1000m, "AND", 2);
+            SeedFasCriterion(db, criteriaType, nationalityType, 1103, 1001, "PARENT_NATIONALITY", null, null, "AND", 3, "Singapore Citizen");
+            SeedFasCriterion(db, criteriaType, nationalityType, 1104, 1001, "ACCOUNT_TYPE", null, null, null, 4, "EDUCATION_ACCOUNT");
+
             var app1 = appType.GetMethod("Submit")!.Invoke(null, new object[] { "APP-001", 100L, "ef39a074-b64d-4990-a937-6f80772e2bb8", "Tan Mei Ling", new DateOnly(2026, 6, 1) });
             SetId(app1!, 2001);
             db.Add(app1!);
@@ -80,6 +94,118 @@ public class E2EDbSeeder : IHostedService
             var app2 = appType.GetMethod("Submit")!.Invoke(null, new object[] { "APP-002", 100L, "MOCKPASS-STUDENT-2002", "Nur Aisyah", new DateOnly(2026, 6, 2) });
             SetId(app2!, 2002);
             db.Add(app2!);
+        }
+    }
+
+    private static void SeedFasCriterion(
+        MoeDbContext db,
+        Type criteriaType,
+        Type nationalityType,
+        long criteriaId,
+        long tierId,
+        string criteria,
+        decimal? numberFrom,
+        decimal? numberTo,
+        string? connector,
+        int displayOrder,
+        string? categoricalValue = null)
+    {
+        object row = criteriaType.GetMethod("Create")!.Invoke(
+            null,
+            [tierId, criteria, numberFrom, numberTo, connector, displayOrder, DateTime.UtcNow, criteriaId])!;
+        db.Add(row);
+
+        if (!string.IsNullOrWhiteSpace(categoricalValue))
+        {
+            object category = nationalityType.GetMethod("Create")!.Invoke(null, [criteriaId, criteria, categoricalValue])!;
+            db.Add(category);
+        }
+    }
+
+    private static void SeedDemoBillingData(MoeDbContext db)
+    {
+        Assembly courseAssembly = typeof(Moe.Modules.CourseBilling.CourseBillingModule).Assembly;
+        Type courseType = courseAssembly.GetType("Moe.Modules.CourseBilling.Domain.Courses.Course", throwOnError: true)!;
+        Type enrollmentType = courseAssembly.GetType("Moe.Modules.CourseBilling.Domain.Courses.CourseEnrollment", throwOnError: true)!;
+        Type billType = courseAssembly.GetType("Moe.Modules.CourseBilling.Domain.Billing.Bill", throwOnError: true)!;
+        Type billLineType = courseAssembly.GetType("Moe.Modules.CourseBilling.Domain.Billing.BillLine", throwOnError: true)!;
+        Assembly paymentAssembly = typeof(Moe.Modules.FasPayment.Api.EService.EServicePaymentsController).Assembly;
+        Type paymentType = paymentAssembly.GetType("Moe.Modules.FasPayment.Domain.Payments.Payment", throwOnError: true)!;
+        Type paymentRefundType = paymentAssembly.GetType("Moe.Modules.FasPayment.Domain.Payments.PaymentRefund", throwOnError: true)!;
+
+        if (db.Find(courseType, 9001L) is null)
+        {
+            ConstructorInfo courseCtor = courseType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Single(ctor => ctor.GetParameters().Length == 12);
+            object course = courseCtor.Invoke([
+                2L,
+                "DEMO-AI-001",
+                "Client Demo Robotics Programme",
+                "Seeded course for AI Copilot payment demonstration.",
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 9, 30),
+                DateTime.UtcNow.AddDays(-30),
+                DateTime.UtcNow.AddDays(30),
+                1001L,
+                DateTime.UtcNow,
+                100m,
+                50m
+            ]);
+            SetId(course, 9001);
+            courseType.GetMethod("Publish")!.Invoke(course, [1001L, DateTime.UtcNow]);
+            db.Add(course);
+        }
+
+        if (db.Find(enrollmentType, 9002L) is null)
+        {
+            object enrollmentResult = enrollmentType.GetMethod("EnrollByAdmin")!.Invoke(
+                null,
+                [2001L, 9001L, 9101L, 1001L, DateTime.UtcNow.AddDays(-7), 100m, 50m])!;
+            object enrollment = UnwrapResult(enrollmentResult);
+            SetId(enrollment, 9002);
+            db.Add(enrollment);
+        }
+
+        if (db.Find(billType, 9003L) is null)
+        {
+            object billResult = billType.GetMethod("IssueForCourseEnrollment")!.Invoke(
+                null,
+                [9002L, "BILL-DEMO-001", DateTime.UtcNow.AddDays(-5), new DateOnly(2026, 7, 15), 420m, 120m, 1])!;
+            object bill = UnwrapResult(billResult);
+            SetId(bill, 9003);
+            db.Add(bill);
+        }
+
+        if (db.Find(billLineType, 9004L) is null)
+        {
+            object lineResult = billLineType.GetMethod("FromCourseFee")!.Invoke(
+                null,
+                [9003L, 9201L, 9301L, "Robotics programme fee after subsidy", 300m])!;
+            object line = UnwrapResult(lineResult);
+            SetId(line, 9004);
+            db.Add(line);
+        }
+
+        if (db.Find(paymentType, 9005L) is null)
+        {
+            object payment = paymentType.GetMethod("RecordProviderSuccess")!.Invoke(
+                null,
+                [9003L, 2001L, 120m, "pi_demo_ai_copilot", "in_demo_ai_copilot", "ch_demo_ai_copilot", 1, DateTime.UtcNow.AddDays(-14)])!;
+            SetId(payment, 9005);
+            paymentType.GetMethod("ApplyProviderRefundTotal")!.Invoke(payment, [40m]);
+            db.Add(payment);
+        }
+
+        if (db.Find(paymentRefundType, 9006L) is null)
+        {
+            object refundResult = paymentRefundType.GetMethod("Create")!.Invoke(
+                null,
+                [9005L, 40m, "Demo partial refund", 1001L, DateTime.UtcNow.AddDays(-10)])!;
+            object refund = UnwrapResult(refundResult);
+            SetId(refund, 9006);
+            paymentRefundType.GetMethod("AssignProviderRefund")!.Invoke(refund, ["re_demo_ai_copilot"]);
+            paymentRefundType.GetMethod("MarkSucceeded")!.Invoke(refund, [DateTime.UtcNow.AddDays(-9)]);
+            db.Add(refund);
         }
     }
 
@@ -161,6 +287,17 @@ public class E2EDbSeeder : IHostedService
     private static void SetId(object entity, long id)
     {
         entity.GetType().GetProperty("Id")!.SetValue(entity, id);
+    }
+
+    private static object UnwrapResult(object result)
+    {
+        bool success = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        if (!success)
+        {
+            throw new InvalidOperationException("E2E seed domain factory rejected the demo row.");
+        }
+
+        return result.GetType().GetProperty("Value")!.GetValue(result)!;
     }
 
     private static void SeedDemoStudentAccount(
