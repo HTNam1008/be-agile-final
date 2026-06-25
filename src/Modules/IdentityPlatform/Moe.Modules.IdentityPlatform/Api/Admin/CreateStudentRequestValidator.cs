@@ -45,8 +45,8 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
             .MaximumLength(30);
 
         RuleFor(x => x.ClassCode)
-            .NotEmpty()
-            .MaximumLength(30);
+            .MaximumLength(30)
+            .When(x => !string.IsNullOrWhiteSpace(x.ClassCode));
 
         RuleFor(x => x.Email)
             .EmailAddress()

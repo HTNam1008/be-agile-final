@@ -12,7 +12,7 @@ public class SchoolEnrollment : Entity<long>
         string studentNumber,
         string academicYear,
         string levelCode,
-        string classCode,
+        string? classCode,
         DateOnly startDate,
         DateTime utcNow) : base(0)
     {
@@ -21,7 +21,7 @@ public class SchoolEnrollment : Entity<long>
         StudentNumber = studentNumber.Trim().ToUpperInvariant();
         AcademicYear = academicYear.Trim();
         LevelCode = levelCode.Trim().ToUpperInvariant();
-        ClassCode = classCode.Trim().ToUpperInvariant();
+        ClassCode = string.IsNullOrWhiteSpace(classCode) ? null : classCode.Trim().ToUpperInvariant();
         SchoolingStatusCode = "ACTIVE";
         StartDate = startDate;
         SourceCode = "ADMIN_MANUAL";
@@ -34,7 +34,7 @@ public class SchoolEnrollment : Entity<long>
     public string StudentNumber { get; private set; } = string.Empty;
     public string AcademicYear { get; private set; } = string.Empty;
     public string LevelCode { get; private set; } = string.Empty;
-    public string ClassCode { get; private set; } = string.Empty;
+    public string? ClassCode { get; private set; }
     public string SchoolingStatusCode { get; private set; } = string.Empty;
     public string? StatusReasonCode { get; private set; }
     public DateOnly StartDate { get; private set; }
