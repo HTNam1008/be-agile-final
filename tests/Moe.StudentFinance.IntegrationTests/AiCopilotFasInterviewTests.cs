@@ -25,6 +25,22 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task Fas_interview_falls_back_when_no_eligible_schemes()
+    {
+        await CreateSchemeWithPciCap(500);
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        await SendFasMessage("4", conversationId);
+
+        JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+
+        Assert.Equal("MANUAL_FALLBACK", completed.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("could not find a matching FAS scheme", completed.GetProperty("text").GetString());
+        Assert.DoesNotContain(completed.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
+    }
+
+    [Fact]
     public async Task Fas_interview_returns_typed_recommendation_and_form_patch_when_complete()
     {
         await CreateEligibleScheme();
@@ -74,6 +90,47 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         using HttpResponseMessage response = await _client.SendAsync(request);
         await AssertStatus(HttpStatusCode.OK, response);
         return await ReadData(response);
+    }
+
+    private async Task CreateSchemeWithPciCap(decimal maxPci)
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        using HttpResponseMessage response = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", new
+        {
+            schemeCode = $"AI-FAS-NO-{suffix}",
+            grantCode = $"AI-FAS-NO-GRANT-{suffix}",
+            name = $"AI FAS No Match {suffix}",
+            description = "AI copilot no-match scheme",
+            startDate = new DateOnly(2026, 1, 1),
+            endDate = new DateOnly(2026, 12, 31),
+            courseIds = Array.Empty<long>(),
+            subsidyType = "PERCENTAGE",
+            criteriaTemplate = new object[]
+            {
+                new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
+                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 2 },
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 3 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 4 }
+            },
+            tiers = new object[]
+            {
+                new
+                {
+                    label = "Limited",
+                    subsidyValue = 50m,
+                    displayOrder = 1,
+                    criteriaValues = new object[]
+                    {
+                        new { displayOrder = 1, numberFrom = 13m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null },
+                        new { displayOrder = 3, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
+                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                    }
+                }
+            }
+        });
+
+        await AssertStatus(HttpStatusCode.Created, response);
     }
 
     private async Task CreateEligibleScheme()
