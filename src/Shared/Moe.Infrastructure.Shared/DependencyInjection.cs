@@ -103,13 +103,14 @@ public static class DependencyInjection
         services.AddCors(options =>
         {
             var portals = configuration.GetSection(PortalOptions.SectionName).Get<PortalOptions>() ?? new();
-            options.AddPolicy("AdminCors", p => p.WithOrigins(portals.AdminAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
-            options.AddPolicy("EServiceCors", p => p.WithOrigins(portals.EServiceAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+            options.AddPolicy("AdminCors", p => p.WithOrigins(portals.AdminAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("X-Response-Time-Ms", "X-Correlation-ID"));
+            options.AddPolicy("EServiceCors", p => p.WithOrigins(portals.EServiceAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("X-Response-Time-Ms", "X-Correlation-ID"));
             options.AddPolicy("PortalCors", p => p
                 .WithOrigins(portals.AdminAllowedOrigins.Concat(portals.EServiceAllowedOrigins).Distinct().ToArray())
                 .AllowAnyHeader()
                 .AllowAnyMethod()
-                .AllowCredentials());
+                .AllowCredentials()
+                .WithExposedHeaders("X-Response-Time-Ms", "X-Correlation-ID"));
         });
         return services;
     }

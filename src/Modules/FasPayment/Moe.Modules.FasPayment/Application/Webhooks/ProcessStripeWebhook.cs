@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Domain.Payments;
@@ -15,6 +16,7 @@ internal sealed class ProcessStripeWebhookHandler(
     IPaymentCheckoutRepository payments,
     IStripePaymentGateway stripe,
     ICoursePaymentGateway courses,
+    IFasCourseSubsidyGateway fasSubsidies,
     IEducationAccountPaymentGateway accounts,
     IClock clock,
     IPaymentPersistenceTracker persistenceTracker,
@@ -174,6 +176,10 @@ internal sealed class ProcessStripeWebhookHandler(
         await courses.ApplyStatementPaymentAsync(
             payment.BillingStatementId!.Value,
             allocations.Select(x => new BillPaymentAllocation(x.BillId, x.AllocatedAmount)).ToArray(),
+            webhook.CreatedAtUtc,
+            cancellationToken);
+        await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
+            allocations.Select(x => x.BillId).ToArray(),
             webhook.CreatedAtUtc,
             cancellationToken);
         payment.MarkSuccessful(webhook.CreatedAtUtc);
@@ -364,6 +370,10 @@ internal sealed class ProcessStripeWebhookHandler(
             checkout.BillId,
             amount,
             checkout.CheckoutStatusCode == CheckoutStatusCodes.PaidInFull,
+            webhook.CreatedAtUtc,
+            cancellationToken);
+        await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
+            [checkout.BillId],
             webhook.CreatedAtUtc,
             cancellationToken);
     }

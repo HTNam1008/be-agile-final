@@ -2,6 +2,7 @@ using FluentValidation;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Application;
@@ -12,7 +13,9 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.StatementPayments;
 
-internal sealed record PreviewStatementPaymentQuery(long StatementId) : IQuery<StatementPaymentPreviewResponse>;
+internal sealed record PreviewStatementPaymentQuery(
+    long StatementId,
+    IReadOnlyCollection<long>? BillIds = null) : IQuery<StatementPaymentPreviewResponse>;
 internal sealed record PayBillingStatementCommand(long StatementId, PayBillingStatementRequest Request) : ICommand<PayBillingStatementResponse>;
 internal sealed record CancelBillingStatementPaymentCommand(long StatementId, long PaymentId) : ICommand;
 internal sealed record DeferBillingStatementCommand(long StatementId, DeferBillingStatementRequest Request) : ICommand;
@@ -26,6 +29,9 @@ internal sealed class PayBillingStatementRequestValidator : AbstractValidator<Pa
             code is PaymentFundingOptionCodes.EducationAccountOnly
                 or PaymentFundingOptionCodes.OnlineOnly
                 or PaymentFundingOptionCodes.EducationAccountThenOnline);
+        RuleForEach(x => x.BillIds)
+            .GreaterThan(0)
+            .When(x => x.BillIds is not null);
     }
 }
 
@@ -42,11 +48,18 @@ internal sealed class PreviewStatementPaymentHandler(
 
         PayableStatement? statement = await billing.FindPayableStatementAsync(query.StatementId, personId, ct);
         if (statement is null) return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.BillNotFound);
+        Result<IReadOnlyCollection<PayableStatementBill>> selectedBillsResult = StatementBillSelection.Select(
+            statement,
+            query.BillIds);
+        if (selectedBillsResult.IsFailure)
+            return Result<StatementPaymentPreviewResponse>.Failure(selectedBillsResult.Error);
+
+        decimal selectedOutstandingAmount = selectedBillsResult.Value.Sum(bill => bill.OutstandingAmount);
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
         decimal available = balance?.AvailableBalance ?? 0m;
-        decimal education = Math.Min(available, statement.OutstandingAmount);
-        decimal online = statement.OutstandingAmount - education;
-        string recommended = available >= statement.OutstandingAmount
+        decimal education = Math.Min(available, selectedOutstandingAmount);
+        decimal online = selectedOutstandingAmount - education;
+        string recommended = available >= selectedOutstandingAmount
             ? PaymentFundingOptionCodes.EducationAccountOnly
             : available > 0m
                 ? PaymentFundingOptionCodes.EducationAccountThenOnline
@@ -56,33 +69,33 @@ internal sealed class PreviewStatementPaymentHandler(
             new(
                 PaymentFundingOptionCodes.EducationAccountOnly,
                 "Education Account",
-                available >= statement.OutstandingAmount,
-                statement.OutstandingAmount,
+                available >= selectedOutstandingAmount,
+                selectedOutstandingAmount,
                 0m,
-                available >= statement.OutstandingAmount
+                available >= selectedOutstandingAmount
                     ? null
-                    : "Education Account balance is not enough for this statement."),
+                    : "Education Account balance is not enough for the selected bills."),
             new(
                 PaymentFundingOptionCodes.OnlineOnly,
                 "Online payment",
                 true,
                 0m,
-                statement.OutstandingAmount,
+                selectedOutstandingAmount,
                 null),
             new(
                 PaymentFundingOptionCodes.EducationAccountThenOnline,
                 "Education Account + online",
-                available > 0m && available < statement.OutstandingAmount,
+                available > 0m && available < selectedOutstandingAmount,
                 education,
                 online,
                 available <= 0m
                     ? "No Education Account balance is available."
-                    : available >= statement.OutstandingAmount
-                        ? "Education Account can cover the full statement."
+                    : available >= selectedOutstandingAmount
+                        ? "Education Account can cover the selected bills."
                         : null)
         ];
         return Result<StatementPaymentPreviewResponse>.Success(new(
-            statement.BillingStatementId, statement.OutstandingAmount,
+            statement.BillingStatementId, selectedOutstandingAmount,
             balance?.CurrentBalance ?? 0m, balance?.HeldBalance ?? 0m, available, education,
             online, statement.CurrencyCode, recommended, options));
     }
@@ -91,6 +104,7 @@ internal sealed class PreviewStatementPaymentHandler(
 internal sealed class PayBillingStatementHandler(
     IPaymentCheckoutRepository payments,
     ICoursePaymentGateway billing,
+    IFasCourseSubsidyGateway fasSubsidies,
     IEducationAccountPaymentGateway accounts,
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
@@ -103,6 +117,13 @@ internal sealed class PayBillingStatementHandler(
 
         PayableStatement? statement = await billing.FindPayableStatementAsync(command.StatementId, personId, ct);
         if (statement is null) return Result<PayBillingStatementResponse>.Failure(PaymentApplicationErrors.BillNotFound);
+        Result<IReadOnlyCollection<PayableStatementBill>> selectedBillsResult = StatementBillSelection.Select(
+            statement,
+            command.Request.BillIds);
+        if (selectedBillsResult.IsFailure)
+            return Result<PayBillingStatementResponse>.Failure(selectedBillsResult.Error);
+        IReadOnlyCollection<PayableStatementBill> selectedBills = selectedBillsResult.Value;
+        decimal selectedOutstandingAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
 
         Result<PayBillingStatementResponse?> existingAttempt =
             await ResumeOrCloseExistingAttemptAsync(statement.BillingStatementId, personId, ct);
@@ -114,7 +135,7 @@ internal sealed class PayBillingStatementHandler(
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
         Result<StatementFundingAllocation> allocationResult = ResolveFundingAllocation(
             command.Request.FundingOptionCode,
-            statement.OutstandingAmount,
+            selectedOutstandingAmount,
             balance?.AvailableBalance ?? 0m);
         if (allocationResult.IsFailure)
             return Result<PayBillingStatementResponse>.Failure(allocationResult.Error);
@@ -123,7 +144,7 @@ internal sealed class PayBillingStatementHandler(
         decimal onlineAmount = allocationResult.Value.OnlinePaymentAmount;
         DateTime now = clock.UtcNow.UtcDateTime;
         Payment payment = Payment.StartStatementPayment(statement.BillingStatementId, personId,
-            statement.OutstandingAmount, educationAmount, onlineAmount, command.Request.IdempotencyKey, now);
+            selectedOutstandingAmount, educationAmount, onlineAmount, command.Request.IdempotencyKey, now);
         List<PaymentPart> parts = [];
         PaymentPart? educationPart = null;
         if (educationAmount > 0m)
@@ -135,7 +156,7 @@ internal sealed class PayBillingStatementHandler(
         }
         if (onlineAmount > 0m)
             parts.Add(PaymentPart.Create(0, parts.Count + 1, PaymentMethodCodes.OnlinePayment, onlineAmount, PaymentPartStatusCodes.Pending, now));
-        PaymentAllocation[] allocations = statement.Bills.Select(x =>
+        PaymentAllocation[] allocations = selectedBills.Select(x =>
             new PaymentAllocation(0, x.BillId, x.BillingStatementItemId, x.OutstandingAmount, now)).ToArray();
         await payments.AddStatementPaymentAsync(payment, parts, allocations, ct);
 
@@ -147,6 +168,10 @@ internal sealed class PayBillingStatementHandler(
             foreach (PaymentAllocation allocation in allocations) allocation.MarkApplied();
             await billing.ApplyStatementPaymentAsync(statement.BillingStatementId,
                 allocations.Select(x => new BillPaymentAllocation(x.BillId, x.AllocatedAmount)).ToArray(), now, ct);
+            await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
+                allocations.Select(x => x.BillId).ToArray(),
+                now,
+                ct);
             payment.MarkSuccessful(now);
             await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
             return Result<PayBillingStatementResponse>.Success(new(
@@ -357,6 +382,35 @@ internal sealed class CancelBillingStatementPaymentHandler(
         payment.MarkCancelled(now);
         await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
         return Result.Success();
+    }
+}
+
+internal static class StatementBillSelection
+{
+    public static Result<IReadOnlyCollection<PayableStatementBill>> Select(
+        PayableStatement statement,
+        IReadOnlyCollection<long>? billIds)
+    {
+        long[] requestedBillIds = billIds?
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray() ?? [];
+
+        if (requestedBillIds.Length == 0)
+        {
+            return Result<IReadOnlyCollection<PayableStatementBill>>.Success(statement.Bills);
+        }
+
+        PayableStatementBill[] selectedBills = statement.Bills
+            .Where(bill => requestedBillIds.Contains(bill.BillId))
+            .ToArray();
+
+        if (selectedBills.Length != requestedBillIds.Length || selectedBills.Length == 0)
+        {
+            return Result<IReadOnlyCollection<PayableStatementBill>>.Failure(PaymentApplicationErrors.BillNotFound);
+        }
+
+        return Result<IReadOnlyCollection<PayableStatementBill>>.Success(selectedBills);
     }
 }
 
