@@ -1,5 +1,6 @@
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 
 namespace Moe.Modules.CourseBilling.IGateway.Repositories;
 
@@ -39,6 +40,7 @@ internal interface ICourseEnrollmentRepository
         int installmentCount,
         int intervalMonths,
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
         CancellationToken cancellationToken);
 
     Task<CourseEnrollment?> FindEnrollmentAsync(
@@ -56,6 +58,7 @@ internal interface ICourseEnrollmentRepository
         int installmentCount,
         int intervalMonths,
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
         CancellationToken cancellationToken);
 }
 

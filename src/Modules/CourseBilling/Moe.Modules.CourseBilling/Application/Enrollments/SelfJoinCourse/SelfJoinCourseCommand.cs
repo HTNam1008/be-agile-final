@@ -5,4 +5,5 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 
 public sealed record SelfJoinCourseCommand(
     long CourseId,
-    long CoursePaymentPlanId) : ICommand<CourseEnrollmentResponse>;
+    long CoursePaymentPlanId,
+    IReadOnlyCollection<long>? FasApplicationSchemeIds = null) : ICommand<CourseEnrollmentResponse>;

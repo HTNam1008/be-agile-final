@@ -3,18 +3,23 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 
-public sealed record ChangeEnrollmentPaymentPlanCommand(long EnrollmentId, long PaymentPlanId)
+public sealed record ChangeEnrollmentPaymentPlanCommand(
+    long EnrollmentId,
+    long PaymentPlanId,
+    IReadOnlyCollection<long>? FasApplicationSchemeIds = null)
     : ICommand<CourseEnrollmentResponse>;
 
 internal sealed class ChangeEnrollmentPaymentPlanHandler(
     ICourseEnrollmentRepository enrollments,
     ICoursePaymentPlanGateway plans,
+    IFasCourseSubsidyGateway fasSubsidies,
     ICurrentUser currentUser,
     IClock clock) : ICommandHandler<ChangeEnrollmentPaymentPlanCommand, CourseEnrollmentResponse>
 {
@@ -47,14 +52,30 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
         DateOnly dueDate = installment
             ? new DateOnly(now.Year, now.Month, 1).AddMonths(1)
             : DateOnly.FromDateTime(now);
+        IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
+            await fasSubsidies.ListEligibleSubsidiesAsync(
+                personId,
+                enrollment.CourseId,
+                DateOnly.FromDateTime(now),
+                command.FasApplicationSchemeIds,
+                ct);
         CourseEnrollmentBillingResult? result =
             await enrollments.ChangePaymentPlanAndReissueBillsAsync(
                 enrollment, plan.CoursePaymentPlanId, installment,
                 $"BILL-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..30].ToUpperInvariant(),
-                now, dueDate, plan.InstallmentCount, plan.IntervalMonths, fees, ct);
+                now, dueDate, plan.InstallmentCount, plan.IntervalMonths, fees, selectedFasSubsidies, ct);
         if (result is null)
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PaymentPlanChangeNotAllowed);
         GeneratedBillResult first = result.Bills.OrderBy(x => x.Bill.SequenceNumber).First();
+        await fasSubsidies.RecordPendingRedemptionsAsync(
+            personId,
+            enrollment.CourseId,
+            enrollment.Id,
+            first.Bill.Id,
+            result.Bills.Sum(x => x.Bill.SubsidyAmount),
+            selectedFasSubsidies,
+            now,
+            ct);
         return Result<CourseEnrollmentResponse>.Success(new(
             enrollment.Id, enrollment.PersonId, enrollment.CourseId,
             enrollment.EnrollmentSourceCode, enrollment.EnrolledByLoginAccountId,

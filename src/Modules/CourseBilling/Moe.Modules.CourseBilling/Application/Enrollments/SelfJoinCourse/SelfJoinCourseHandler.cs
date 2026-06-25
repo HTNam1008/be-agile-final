@@ -3,6 +3,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.SharedKernel.Results;
@@ -12,6 +13,7 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICoursePaymentPlanGateway paymentPlans,
+    IFasCourseSubsidyGateway fasSubsidies,
     ICurrentUser currentUser,
     IStudentAccessControl studentAccess,
     IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
@@ -105,6 +107,13 @@ internal sealed class SelfJoinCourseHandler(
         DateOnly firstDueDate = installment
             ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
             : enrolledDate;
+        IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
+            await fasSubsidies.ListEligibleSubsidiesAsync(
+                personId.Value,
+                command.CourseId,
+                enrolledDate,
+                command.FasApplicationSchemeIds,
+                cancellationToken);
         CourseEnrollmentBillingResult billingResult = await enrollments.AddEnrollmentAndIssueBillsAsync(
             enrollmentResult.Value,
             CreateBillNumber(utcNow),
@@ -113,6 +122,16 @@ internal sealed class SelfJoinCourseHandler(
             plan.InstallmentCount,
             plan.IntervalMonths,
             feeLines,
+            selectedFasSubsidies,
+            cancellationToken);
+        await fasSubsidies.RecordPendingRedemptionsAsync(
+            personId.Value,
+            command.CourseId,
+            billingResult.Enrollment.Id,
+            billingResult.Bills.OrderBy(x => x.Bill.SequenceNumber).First().Bill.Id,
+            billingResult.Bills.Sum(x => x.Bill.SubsidyAmount),
+            selectedFasSubsidies,
+            utcNow,
             cancellationToken);
 
         return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
