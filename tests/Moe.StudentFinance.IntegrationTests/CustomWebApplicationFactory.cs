@@ -13,9 +13,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
-using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -114,6 +114,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireAuthenticatedUser();
                     policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
                     policy.RequireClaim(ClaimNames.Permission, "FAS_SCHEME_MANAGE");
+                });
+
+                options.AddPolicy(AuthorizationPolicies.ManageAiReviews, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+                    policy.RequireClaim(ClaimNames.Permission, "AI_REVIEW_MANAGE");
                 });
 
                 options.AddPolicy(AuthorizationPolicies.EServicePortal, policy =>
@@ -475,6 +484,11 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         if (!Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
         {
             claims.Add(new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"));
+        }
+
+        if (Request.Headers.ContainsKey("X-Test-Ai-Review-Permission"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "AI_REVIEW_MANAGE"));
         }
 
         return claims.ToArray();

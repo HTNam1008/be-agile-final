@@ -24,25 +24,41 @@ public sealed class AiOrchestratorService(
     ILogger<AiOrchestratorService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly string[] AllowedRoutes = ["/portal/account", "/portal/bills", "/portal/fas", "/portal/courses"];
+    private static readonly string[] AllowedDomains = ["FAS", "PAYMENT", "GENERAL"];
+    private static readonly string[] AllowedRoutePrefixes =
+    [
+        "/portal/account",
+        "/portal/bills",
+        "/portal/courses",
+        "/portal/dashboard",
+        "/portal/education-account",
+        "/portal/fas",
+        "/portal/profile"
+    ];
 
     public async Task<AiChatResponse> ChatAsync(AiChatRequest request, CancellationToken ct)
     {
+        AiChatRequest sanitizedRequest = new()
+        {
+            ConversationId = request.ConversationId,
+            Message = request.Message.Trim(),
+            PageContext = SanitizePageContext(request.PageContext)
+        };
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
         DateTime now = DateTime.UtcNow;
-        AiConversation conversation = await GetOrCreateConversation(request.ConversationId, personId, now, ct);
-        string pageJson = request.PageContext is null ? null! : JsonSerializer.Serialize(request.PageContext, JsonOptions);
-        db.Add(AiMessage.Create(conversation.Id, "USER", redactor.Redact(request.Message), now));
+        AiConversation conversation = await GetOrCreateConversation(sanitizedRequest.ConversationId, personId, now, ct);
+        string pageJson = sanitizedRequest.PageContext is null ? null! : JsonSerializer.Serialize(sanitizedRequest.PageContext, JsonOptions);
+        db.Add(AiMessage.Create(conversation.Id, "USER", redactor.Redact(sanitizedRequest.Message), now));
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         try
         {
-            string mode = DetermineMode(request.Message, conversation.ModeCode, request.PageContext?.Domain);
+            string mode = DetermineMode(sanitizedRequest.Message, conversation.ModeCode, sanitizedRequest.PageContext?.Domain);
             AiChatResponse response = mode switch
             {
-                "PAYMENT" => await HandlePayment(conversation, request, now, ct),
-                "FAS_INTERVIEW" => await HandleFas(conversation, request, now, ct),
-                _ => await HandleGeneral(conversation, request, now, ct)
+                "PAYMENT" => await HandlePayment(conversation, sanitizedRequest, now, ct),
+                "FAS_INTERVIEW" => await HandleFas(conversation, sanitizedRequest, now, ct),
+                _ => await HandleGeneral(conversation, sanitizedRequest, now, ct)
             };
             conversation.Touch(response.Mode, pageJson, conversation.FasInterviewJson, now);
             var assistant = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(response.Text), now,
@@ -54,7 +70,7 @@ public sealed class AiOrchestratorService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Guid reviewId = await CreateReview(conversation, personId, "MODEL_OR_TOOL_FAILURE", request.PageContext, request.Message, now, ct);
+            Guid reviewId = await CreateReview(conversation, personId, "MODEL_OR_TOOL_FAILURE", sanitizedRequest.PageContext, sanitizedRequest.Message, now, ct);
             logger.LogError(ex, "AI conversation {ConversationId} failed after {ElapsedMs} ms", conversation.Id, stopwatch.ElapsedMilliseconds);
             const string text = "I could not complete that request reliably. You can continue in the portal, review the help links, or contact the Admin Center.";
             var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", text, now, latencyMs: (int)stopwatch.ElapsedMilliseconds);
@@ -212,6 +228,30 @@ public sealed class AiOrchestratorService(
         return "GENERAL";
     }
 
+    private static AiPageContext? SanitizePageContext(AiPageContext? pageContext)
+    {
+        if (pageContext is null) return null;
+
+        string domain = AllowedDomains.Contains(pageContext.Domain?.ToUpperInvariant())
+            ? pageContext.Domain!.ToUpperInvariant()
+            : "GENERAL";
+        string? path = IsAllowedPath(pageContext.Path) ? pageContext.Path : null;
+        string? surface = string.IsNullOrWhiteSpace(pageContext.Surface)
+            ? null
+            : pageContext.Surface.Length > 80 ? pageContext.Surface[..80] : pageContext.Surface;
+
+        return new AiPageContext(domain, surface, path, null);
+    }
+
+    private static bool IsAllowedPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith('/')) return false;
+        if (path.Contains("..", StringComparison.Ordinal) || path.Contains("://", StringComparison.Ordinal)) return false;
+        return AllowedRoutePrefixes.Any(prefix =>
+            path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase));
+    }
+
     private async Task<FasInterviewData> InitializeFasState(CancellationToken ct)
     {
         JsonElement profile = JsonSerializer.SerializeToElement(await fas.Prefill(ct), JsonOptions);
@@ -278,7 +318,8 @@ public sealed class AiOrchestratorService(
             .Select(x => x.Name).ToArray();
         object? patch = s.Status == "MANUAL_FALLBACK"
             ? null
-            : new FasFormPatch(s.IsWelfareHomeResident, s.MonthlyHouseholdIncome, s.HouseholdMemberCount, 0, s.ParentNationalities);
+            : new FasFormPatch(s.IsWelfareHomeResident, s.MonthlyHouseholdIncome, s.HouseholdMemberCount, 0, s.ParentNationalities,
+                Provenance: fields.ToDictionary(x => x.Name, x => x.Provenance, StringComparer.OrdinalIgnoreCase));
         return new(s.Status, next, fields, missing, patch);
     }
     private static string? NextMissingField(FasInterviewData s)
@@ -318,8 +359,16 @@ public sealed class AiOrchestratorService(
     private static FasExtractionResult ExtractWelfareHome(string message)
     {
         string value = message.Trim().ToLowerInvariant();
+
+        if (Regex.IsMatch(value, @"\b(not sure|maybe|i don't know|i do not know|what is|unsure|uncertain)\b", RegexOptions.IgnoreCase))
+            return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
+
+        bool notNegatesWelfare = Regex.IsMatch(value, @"\bnot\b.{0,20}\b(welfare|approved)\b", RegexOptions.IgnoreCase);
+        if (notNegatesWelfare) return FasExtractionResult.Accepted(false);
+
         bool yes = Regex.IsMatch(value, @"\b(yes|y|welfare home|approved welfare)\b", RegexOptions.IgnoreCase);
-        bool no = Regex.IsMatch(value, @"\b(no|n|not|not in|not residing|do not)\b", RegexOptions.IgnoreCase);
+        bool no = Regex.IsMatch(value, @"\b(no|n|not|do not|don't)\b", RegexOptions.IgnoreCase);
+
         if (yes && !no) return FasExtractionResult.Accepted(true);
         if (no && !yes) return FasExtractionResult.Accepted(false);
         return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
