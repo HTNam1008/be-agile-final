@@ -15,6 +15,24 @@ public sealed record AiAction(string Type, string Label, string? Route = null, o
 public sealed record AiCard(string Type, object Data);
 public sealed record AiGrounding(bool IsGrounded, IReadOnlyCollection<KnowledgeCitation> Citations);
 public sealed record AiInterviewField(string Name, object? Value, string Provenance, bool Confirmed);
+public sealed record FasRecommendationCard(
+    decimal? PerCapitaIncome,
+    string? RecommendedSchemeName,
+    string? RecommendedTierLabel,
+    string? SubsidyType,
+    decimal? SubsidyValue,
+    IReadOnlyCollection<FasRecommendationMatch> MatchedSchemes,
+    IReadOnlyCollection<AiInterviewField> ConfirmedFacts,
+    IReadOnlyCollection<string> MissingFacts,
+    string Warning);
+public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+public sealed record FasFormPatch(
+    bool? IsWelfareHomeResident,
+    decimal? MonthlyHouseholdIncome,
+    int? HouseholdMemberCount,
+    decimal OtherMonthlyIncome,
+    IReadOnlyCollection<string> ParentNationalities,
+    string EmploymentStatusCode = "EMPLOYED");
 public sealed record AiInterviewState(string Status, string? NextQuestion,
     IReadOnlyCollection<AiInterviewField> Fields, IReadOnlyCollection<string> MissingFields, object? FormPatch);
 public sealed record AiChatResponse(Guid ConversationId, long MessageId, string Text, string Mode,
