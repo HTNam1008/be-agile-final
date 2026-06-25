@@ -108,8 +108,8 @@ public sealed class AiOrchestratorService(
         if (intent.Contains("HISTORY") || intent.Contains("PAID") || intent.Contains("REFUND"))
         {
             string historyText = snapshot.RecentPayments.Count == 0
-                ? "I could not find any recent payment records for your account."
-                : $"I found {snapshot.RecentPayments.Count} recent payment record(s). Refund amounts shown come from recorded payment events.";
+                ? "I could not find recent payment records for your account yet. Your bills page will still show any current outstanding charges."
+                : $"I found {snapshot.RecentPayments.Count} recent payment record(s) for you. If a refund is shown, it is based on recorded payment events rather than an estimate.";
             return new(c.Id, 0, historyText, "PAYMENT", Grounding(sources),
                 [new("PAYMENT_HISTORY", snapshot.RecentPayments)],
                 [new("NAVIGATE", "View bills and payments", "/portal/bills")], null);
@@ -117,15 +117,16 @@ public sealed class AiOrchestratorService(
         if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
         {
             string billText = snapshot.BillCount == 0
-                ? "You have no outstanding bills."
-                : $"You have {snapshot.BillCount} outstanding bill(s) totalling {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}.";
+                ? "I do not see any outstanding bills for your account right now."
+                : $"I found {snapshot.BillCount} outstanding bill(s) on your bills page, totalling {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}.";
             return new(c.Id, 0, billText, "PAYMENT", Grounding(sources),
                 [new("OUTSTANDING_BILLS", snapshot.Bills)], [new("NAVIGATE", "View bills", "/portal/bills")], null);
         }
+        string paymentOptions = PaymentOptionsText(snapshot);
         string warning = snapshot.TotalOutstanding > 0
-            ? $" You have {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))} outstanding; settle it before new enrolments or withdrawals."
+            ? $" {paymentOptions}"
             : " You have no outstanding charges.";
-        string text = $"Your Education Account has {snapshot.AvailableBalance.ToString("C", CultureInfo.GetCultureInfo("en-SG"))} available. Your total outstanding charges are {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}, leaving a net available amount of {snapshot.NetAvailable.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}.{warning}";
+        string text = $"Here is what I found for your Education Account: {snapshot.AvailableBalance.ToString("C", CultureInfo.GetCultureInfo("en-SG"))} is available, current outstanding charges total {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}, and your net available amount is {snapshot.NetAvailable.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}.{warning}";
         AiCard card = new("FINANCE_SUMMARY", snapshot);
         AiAction[] actions = [new("NAVIGATE", "View bills", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")];
         return new(c.Id, 0, text, "PAYMENT", Grounding(sources), [card], actions, null);
@@ -475,7 +476,25 @@ public sealed class AiOrchestratorService(
     private static AiInterviewState? DeserializeInterview(string? value) => DeserializeState(value) is { } state ? ToInterviewState(state, NextQuestion(state)) : null;
     private static AiGrounding Grounding(IReadOnlyList<KnowledgeResult> sources) => new(sources.Count > 0, sources.Select(x => x.Citation).ToArray());
     private static AiAction[] FallbackActions(Guid review) =>
-    [new("NAVIGATE", "View help", "/portal/account"), new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })];
+    [
+        new("NAVIGATE", "Education Account FAQ", "/portal/account"),
+        new("NAVIGATE", "Payment FAQ", "/portal/bills"),
+        new("NAVIGATE", "FAS FAQ", "/portal/fas"),
+        new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })
+    ];
+
+    private static string PaymentOptionsText(AiFinanceSnapshot snapshot)
+    {
+        if (snapshot.TotalOutstanding <= 0m) return "There is nothing due right now.";
+        if (snapshot.AvailableBalance >= snapshot.TotalOutstanding)
+            return "Your Education Account appears sufficient for the current outstanding amount; review the bill before paying.";
+        if (snapshot.AvailableBalance > 0m)
+        {
+            decimal remainder = snapshot.TotalOutstanding - snapshot.AvailableBalance;
+            return $"Your Education Account is short by {remainder.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}; use split payment or another available online payment method for the remainder when the bill supports it.";
+        }
+        return "Your Education Account cannot cover the outstanding amount; use another available online payment method when the bill supports it.";
+    }
 
     private sealed class FasInterviewData
     {
