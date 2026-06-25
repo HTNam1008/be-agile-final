@@ -1878,93 +1878,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.ToTable("SettlementPreference", "account");
                 });
 
-            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRun", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("EducationAccountLifecycleRunId");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("ClosedCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateTimeOffset?>("CompletedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<int>("OpenedCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateOnly>("RunDateUtc")
-                        .HasColumnType("date");
-
-                    b.Property<DateTimeOffset>("StartedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("StatusCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<string>("TriggerTypeCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RunDateUtc");
-
-                    b.HasIndex("StartedAtUtc");
-
-                    b.ToTable("EducationAccountLifecycleRun", "account");
-                });
-
-            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRunItem", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("EducationAccountLifecycleRunItemId");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ActionCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<long>("EducationAccountId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("EducationAccountLifecycleRunId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset>("OccurredAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<long>("PersonId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EducationAccountId");
-
-                    b.HasIndex("EducationAccountLifecycleRunId");
-
-                    b.HasIndex("PersonId");
-
-                    b.ToTable("EducationAccountLifecycleRunItem", "account");
-                });
-
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaign", b =>
                 {
                     b.Property<long>("Id")
@@ -10200,21 +10113,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRunItem", b =>
-                {
-                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount", null)
-                        .WithMany()
-                        .HasForeignKey("EducationAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRun", null)
-                        .WithMany("Items")
-                        .HasForeignKey("EducationAccountLifecycleRunId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRun", b =>
                 {
                     b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaign", null)
@@ -10337,10 +10235,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRun", b =>
-                {
-                    b.Navigation("Items");
-                });
 #pragma warning restore 612, 618
         }
     }
