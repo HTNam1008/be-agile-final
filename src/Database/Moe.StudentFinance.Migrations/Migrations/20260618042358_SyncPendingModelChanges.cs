@@ -11,25 +11,56 @@ public partial class SyncPendingModelChanges : Migration
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropIndex(
-            name: "IX_Course_OrganizationId_CourseCode_AcademicYear",
-            schema: "course",
-            table: "Course");
+        migrationBuilder.Sql("""
+            IF EXISTS (
+                SELECT 1
+                FROM sys.indexes
+                WHERE name = N'IX_Course_OrganizationId_CourseCode_AcademicYear'
+                  AND object_id = OBJECT_ID(N'[course].[Course]')
+            )
+            BEGIN
+                DROP INDEX [IX_Course_OrganizationId_CourseCode_AcademicYear] ON [course].[Course];
+            END
+            """);
 
-        migrationBuilder.DropColumn(
-            name: "AcademicYear",
-            schema: "course",
-            table: "Course");
+        migrationBuilder.Sql("""
+            IF COL_LENGTH(N'course.Course', N'AcademicYear') IS NOT NULL
+            BEGIN
+                DECLARE @constraintName nvarchar(max);
+                SELECT @constraintName = QUOTENAME([d].[name])
+                FROM [sys].[default_constraints] [d]
+                INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+                WHERE ([d].[parent_object_id] = OBJECT_ID(N'[course].[Course]') AND [c].[name] = N'AcademicYear');
+                IF @constraintName IS NOT NULL EXEC(N'ALTER TABLE [course].[Course] DROP CONSTRAINT ' + @constraintName + ';');
+                ALTER TABLE [course].[Course] DROP COLUMN [AcademicYear];
+            END
+            """);
 
-        migrationBuilder.DropColumn(
-            name: "CreatedAt",
-            schema: "course",
-            table: "Course");
+        migrationBuilder.Sql("""
+            IF COL_LENGTH(N'course.Course', N'CreatedAt') IS NOT NULL
+            BEGIN
+                DECLARE @constraintName nvarchar(max);
+                SELECT @constraintName = QUOTENAME([d].[name])
+                FROM [sys].[default_constraints] [d]
+                INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+                WHERE ([d].[parent_object_id] = OBJECT_ID(N'[course].[Course]') AND [c].[name] = N'CreatedAt');
+                IF @constraintName IS NOT NULL EXEC(N'ALTER TABLE [course].[Course] DROP CONSTRAINT ' + @constraintName + ';');
+                ALTER TABLE [course].[Course] DROP COLUMN [CreatedAt];
+            END
+            """);
 
-        migrationBuilder.DropColumn(
-            name: "DisabledReason",
-            schema: "course",
-            table: "Course");
+        migrationBuilder.Sql("""
+            IF COL_LENGTH(N'course.Course', N'DisabledReason') IS NOT NULL
+            BEGIN
+                DECLARE @constraintName nvarchar(max);
+                SELECT @constraintName = QUOTENAME([d].[name])
+                FROM [sys].[default_constraints] [d]
+                INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+                WHERE ([d].[parent_object_id] = OBJECT_ID(N'[course].[Course]') AND [c].[name] = N'DisabledReason');
+                IF @constraintName IS NOT NULL EXEC(N'ALTER TABLE [course].[Course] DROP CONSTRAINT ' + @constraintName + ';');
+                ALTER TABLE [course].[Course] DROP COLUMN [DisabledReason];
+            END
+            """);
 
         migrationBuilder.AlterColumn<string>(
             name: "TransactionStatusCode",
@@ -122,55 +153,60 @@ public partial class SyncPendingModelChanges : Migration
             oldType: "date",
             oldNullable: true);
 
-        migrationBuilder.CreateTable(
-            name: "CourseMaterial",
-            schema: "course",
-            columns: table => new
-            {
-                CourseMaterialId = table.Column<long>(type: "bigint", nullable: false)
-                    .Annotation("SqlServer:Identity", "1, 1"),
-                CourseId = table.Column<long>(type: "bigint", nullable: false),
-                MaterialTitle = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                MaterialDescription = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                MaterialTypeCode = table.Column<string>(type: "varchar(40)", unicode: false, maxLength: 40, nullable: false),
-                FileName = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: false),
-                OriginalFileName = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: false),
-                FileExtension = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
-                ContentType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                FileSizeBytes = table.Column<long>(type: "bigint", nullable: false),
-                StorageProviderCode = table.Column<string>(type: "varchar(40)", unicode: false, maxLength: 40, nullable: false),
-                StoragePath = table.Column<string>(type: "nvarchar(600)", maxLength: 600, nullable: false),
-                PublicUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                DisplayOrder = table.Column<int>(type: "int", nullable: false),
-                IsRequired = table.Column<bool>(type: "bit", nullable: false),
-                IsActive = table.Column<bool>(type: "bit", nullable: false),
-                UploadedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
-            },
-            constraints: table =>
-            {
-                table.PrimaryKey("PK_CourseMaterial", x => x.CourseMaterialId);
-            });
+        migrationBuilder.Sql("""
+            IF OBJECT_ID(N'[course].[CourseMaterial]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [course].[CourseMaterial] (
+                    [CourseMaterialId] bigint NOT NULL IDENTITY,
+                    [CourseId] bigint NOT NULL,
+                    [MaterialTitle] nvarchar(200) NOT NULL,
+                    [MaterialDescription] nvarchar(1000) NULL,
+                    [MaterialTypeCode] varchar(40) NOT NULL,
+                    [FileName] nvarchar(260) NOT NULL,
+                    [OriginalFileName] nvarchar(260) NOT NULL,
+                    [FileExtension] varchar(20) NOT NULL,
+                    [ContentType] nvarchar(100) NOT NULL,
+                    [FileSizeBytes] bigint NOT NULL,
+                    [StorageProviderCode] varchar(40) NOT NULL,
+                    [StoragePath] nvarchar(600) NOT NULL,
+                    [PublicUrl] nvarchar(1000) NULL,
+                    [DisplayOrder] int NOT NULL,
+                    [IsRequired] bit NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [UploadedAt] datetime2 NOT NULL,
+                    [UpdatedAt] datetime2 NULL,
+                    [DeletedAt] datetime2 NULL,
+                    CONSTRAINT [PK_CourseMaterial] PRIMARY KEY ([CourseMaterialId])
+                );
+            END
 
-        migrationBuilder.CreateIndex(
-            name: "IX_CourseMaterial_CourseId",
-            schema: "course",
-            table: "CourseMaterial",
-            column: "CourseId");
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE name = N'IX_CourseMaterial_CourseId'
+                  AND object_id = OBJECT_ID(N'[course].[CourseMaterial]')
+            )
+            BEGIN
+                CREATE INDEX [IX_CourseMaterial_CourseId] ON [course].[CourseMaterial] ([CourseId]);
+            END
 
-        migrationBuilder.CreateIndex(
-            name: "IX_CourseMaterial_CourseId_IsActive",
-            schema: "course",
-            table: "CourseMaterial",
-            columns: new[] { "CourseId", "IsActive" });
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE name = N'IX_CourseMaterial_CourseId_IsActive'
+                  AND object_id = OBJECT_ID(N'[course].[CourseMaterial]')
+            )
+            BEGIN
+                CREATE INDEX [IX_CourseMaterial_CourseId_IsActive] ON [course].[CourseMaterial] ([CourseId], [IsActive]);
+            END
 
-        migrationBuilder.CreateIndex(
-            name: "IX_CourseMaterial_CourseId_StoragePath",
-            schema: "course",
-            table: "CourseMaterial",
-            columns: new[] { "CourseId", "StoragePath" },
-            unique: true);
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE name = N'IX_CourseMaterial_CourseId_StoragePath'
+                  AND object_id = OBJECT_ID(N'[course].[CourseMaterial]')
+            )
+            BEGIN
+                CREATE UNIQUE INDEX [IX_CourseMaterial_CourseId_StoragePath] ON [course].[CourseMaterial] ([CourseId], [StoragePath]);
+            END
+            """);
     }
 
     /// <inheritdoc />

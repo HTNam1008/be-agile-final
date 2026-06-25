@@ -1,0 +1,196 @@
+Using launch settings from src\Hosts\Moe.StudentFinance.Api\Properties\launchSettings.json...
+2026-06-24 11:13:39,166 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (104ms) [Parameters=[@bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [org].[Organization] AS [o]
+        WHERE [o].[OrganizationId] = @bootstrap_OrganizationUnitId AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-24 11:13:39,350 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (10ms) [Parameters=[@utcNow='?' (DbType = DateTime2), @utcNow1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[RolePermission] AS [r]
+        WHERE [r].[RoleCode] = 'HQ_ADMIN' AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow1)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-24 11:13:39,515 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (12ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @entraObjectId
+2026-06-24 11:13:39,748 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (13ms) [Parameters=[@account_Id='?' (DbType = Int64), @bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @bootstrap_OrganizationUnitId AND [u].[RoleCode] = 'HQ_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-06-24 11:13:39,780 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpRunWorker - Top-up run worker started
+2026-06-24 11:13:39,781 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpSchedulerWorker - Top-up scheduler worker started
+2026-06-24 11:13:40,014 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: https://localhost:7000
+2026-06-24 11:13:40,016 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: http://localhost:7001
+2026-06-24 11:13:40,018 INFO  [(null)] Microsoft.Hosting.Lifetime - Application started. Press Ctrl+C to shut down.
+2026-06-24 11:13:40,018 INFO  [(null)] Microsoft.Hosting.Lifetime - Hosting environment: Development
+2026-06-24 11:13:40,019 INFO  [(null)] Microsoft.Hosting.Lifetime - Content root path: C:\Agile Final\agile-final-moe-backend\src\Hosts\Moe.StudentFinance.Api
+2026-06-24 11:13:40,055 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[NextRunAt], [t].[OrganizationId], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+2026-06-24 11:13:42,166 INFO  [497cee9dc21a4ec79578c0ed265a620e] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/mfa/v1/status
+2026-06-24 11:13:42,553 INFO  [497cee9dc21a4ec79578c0ed265a620e] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN'
+2026-06-24 11:13:42,721 INFO  [497cee9dc21a4ec79578c0ed265a620e] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/mfa/v1/status completed in 547 ms with 200
+2026-06-24 11:13:42,732 INFO  [497cee9dc21a4ec79578c0ed265a620e] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/mfa/v1/status => 200 in 560 ms. TraceId=497cee9dc21a4ec79578c0ed265a620e
+2026-06-24 11:13:42,795 INFO  [8e9367d437f64bf19923978e143018de] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/mfa/v1/challenge
+2026-06-24 11:13:42,901 INFO  [8e9367d437f64bf19923978e143018de] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN' AND [l].[StatusCode] = 'ACTIVE'
+2026-06-24 11:13:43,256 INFO  [8e9367d437f64bf19923978e143018de] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (20ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime2), @p2='?' (DbType = DateTime2), @p3='?' (DbType = Int64), @p4='?' (Size = 30) (DbType = AnsiString), @p5='?' (Size = 30) (DbType = AnsiString), @p6='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [iam].[LoginMfaChallenge] ([LoginMfaChallengeId], [CreatedAtUtc], [ExpiresAtUtc], [LoginAccountId], [PurposeCode], [StatusCode], [VerifiedAtUtc])
+OUTPUT INSERTED.[FailedAttemptCount]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6);
+2026-06-24 11:13:43,347 ERROR [8e9367d437f64bf19923978e143018de] Microsoft.EntityFrameworkCore.Update - An exception occurred in the database while saving changes for context type 'Moe.StudentFinance.Persistence.MoeDbContext'.
+Microsoft.EntityFrameworkCore.DbUpdateException: An error occurred while saving the entity changes. See the inner exception for details.
+ ---> Microsoft.Data.SqlClient.SqlException (0x80131904): The INSERT statement conflicted with the CHECK constraint "CK_LoginMfaChallenge_PurposeCode". The conflict occurred in database "StudentFinance", table "iam.LoginMfaChallenge", column 'PurposeCode'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryHasMoreRows(Boolean& moreRows)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryReadInternal(Boolean setTimeout, Boolean& more)
+   at Microsoft.Data.SqlClient.SqlDataReader.ReadAsyncExecute(Task task, Object state)
+   at Microsoft.Data.SqlClient.SqlDataReader.InvokeAsyncCall[T](SqlDataReaderBaseAsyncCallContext`1 context)
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetAsync(Int32 startCommandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+ClientConnectionId:2c666340-6561-4d92-9d7a-4cc8479ec6ce
+Error Number:547,State:0,Class:16
+   --- End of inner exception stack trace ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetAsync(Int32 startCommandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.SqlServer.Update.Internal.SqlServerModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalDatabase.SaveChangesAsync(IList`1 entries, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(IList`1 entriesToSave, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(StateManager stateManager, Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.<>c__DisplayClass30_0`2.<<ExecuteAsync>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteAsync[TState,TResult](TState state, Func`4 operation, Func`4 verifySucceeded, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+Microsoft.EntityFrameworkCore.DbUpdateException: An error occurred while saving the entity changes. See the inner exception for details.
+ ---> Microsoft.Data.SqlClient.SqlException (0x80131904): The INSERT statement conflicted with the CHECK constraint "CK_LoginMfaChallenge_PurposeCode". The conflict occurred in database "StudentFinance", table "iam.LoginMfaChallenge", column 'PurposeCode'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryHasMoreRows(Boolean& moreRows)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryReadInternal(Boolean setTimeout, Boolean& more)
+   at Microsoft.Data.SqlClient.SqlDataReader.ReadAsyncExecute(Task task, Object state)
+   at Microsoft.Data.SqlClient.SqlDataReader.InvokeAsyncCall[T](SqlDataReaderBaseAsyncCallContext`1 context)
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetAsync(Int32 startCommandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+ClientConnectionId:2c666340-6561-4d92-9d7a-4cc8479ec6ce
+Error Number:547,State:0,Class:16
+   --- End of inner exception stack trace ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetAsync(Int32 startCommandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.SqlServer.Update.Internal.SqlServerModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalDatabase.SaveChangesAsync(IList`1 entries, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(IList`1 entriesToSave, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(StateManager stateManager, Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.<>c__DisplayClass30_0`2.<<ExecuteAsync>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteAsync[TState,TResult](TState state, Func`4 operation, Func`4 verifySucceeded, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+2026-06-24 11:13:43,361 INFO  [8e9367d437f64bf19923978e143018de] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/mfa/v1/challenge => 200 in 563 ms. TraceId=8e9367d437f64bf19923978e143018de
+2026-06-24 11:13:43,361 ERROR [8e9367d437f64bf19923978e143018de] Moe.Infrastructure.Shared.Middleware.ExceptionHandlingMiddleware - Unhandled request failure. TraceId=8e9367d437f64bf19923978e143018de
+Microsoft.EntityFrameworkCore.DbUpdateException: An error occurred while saving the entity changes. See the inner exception for details.
+ ---> Microsoft.Data.SqlClient.SqlException (0x80131904): The INSERT statement conflicted with the CHECK constraint "CK_LoginMfaChallenge_PurposeCode". The conflict occurred in database "StudentFinance", table "iam.LoginMfaChallenge", column 'PurposeCode'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryHasMoreRows(Boolean& moreRows)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryReadInternal(Boolean setTimeout, Boolean& more)
+   at Microsoft.Data.SqlClient.SqlDataReader.ReadAsyncExecute(Task task, Object state)
+   at Microsoft.Data.SqlClient.SqlDataReader.InvokeAsyncCall[T](SqlDataReaderBaseAsyncCallContext`1 context)
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetAsync(Int32 startCommandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+ClientConnectionId:2c666340-6561-4d92-9d7a-4cc8479ec6ce
+Error Number:547,State:0,Class:16
+   --- End of inner exception stack trace ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetAsync(Int32 startCommandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.SqlServer.Update.Internal.SqlServerModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalDatabase.SaveChangesAsync(IList`1 entries, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(IList`1 entriesToSave, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(StateManager stateManager, Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.<>c__DisplayClass30_0`2.<<ExecuteAsync>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteAsync[TState,TResult](TState state, Func`4 operation, Func`4 verifySucceeded, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Moe.Modules.Mfa.Application.StartChallenge.StartMfaChallengeHandler.Handle(StartMfaChallengeCommand command, CancellationToken cancellationToken) in C:\Agile Final\agile-final-moe-backend\src\Modules\Mfa\Moe.Modules.Mfa\Application\StartChallenge\StartMfaChallengeHandler.cs:line 50
+   at Moe.Infrastructure.Shared.Messaging.CommandDispatcher.Send[TResponse](ICommand`1 command, CancellationToken cancellationToken) in C:\Agile Final\agile-final-moe-backend\src\Shared\Moe.Infrastructure.Shared\Messaging\CommandDispatcher.cs:line 20
+   at Moe.Modules.Mfa.Api.MfaController.StartChallenge(CancellationToken cancellationToken) in C:\Agile Final\agile-final-moe-backend\src\Modules\Mfa\Moe.Modules.Mfa\Api\MfaController.cs:line 29
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.TaskOfIActionResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeActionMethodAsync>g__Awaited|12_0(ControllerActionInvoker invoker, ValueTask`1 actionResultValueTask)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeNextActionFilterAsync>g__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeInnerFilterAsync>g__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeFilterPipelineAsync>g__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+   at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+   at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+   at Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware.InvokeAsync(HttpContext context) in C:\Agile Final\agile-final-moe-backend\src\Shared\Moe.Infrastructure.Shared\Middleware\PerformanceTrackingMiddleware.cs:line 34
+   at Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware.InvokeAsync(HttpContext context) in C:\Agile Final\agile-final-moe-backend\src\Shared\Moe.Infrastructure.Shared\Middleware\RequestLoggingMiddleware.cs:line 36
+   at Moe.Infrastructure.Shared.Middleware.SecurityHeadersMiddleware.InvokeAsync(HttpContext context) in C:\Agile Final\agile-final-moe-backend\src\Shared\Moe.Infrastructure.Shared\Middleware\SecurityHeadersMiddleware.cs:line 13
+   at Moe.Infrastructure.Shared.Middleware.ApiVersionHeaderMiddleware.InvokeAsync(HttpContext context) in C:\Agile Final\agile-final-moe-backend\src\Shared\Moe.Infrastructure.Shared\Middleware\ApiVersionHeaderMiddleware.cs:line 20
+   at Moe.Infrastructure.Shared.Middleware.ExceptionHandlingMiddleware.InvokeAsync(HttpContext context) in C:\Agile Final\agile-final-moe-backend\src\Shared\Moe.Infrastructure.Shared\Middleware\ExceptionHandlingMiddleware.cs:line 17
+2026-06-24 11:13:43,435 INFO  [8e9367d437f64bf19923978e143018de] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/mfa/v1/challenge completed in 637 ms with 500
+2026-06-24 11:13:43,476 INFO  [8d89559e73704e70b459173d2c1fa511] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/mfa/v1/verify
+2026-06-24 11:13:43,587 INFO  [8d89559e73704e70b459173d2c1fa511] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/mfa/v1/verify completed in 109 ms with 400
+2026-06-24 11:13:43,588 INFO  [8d89559e73704e70b459173d2c1fa511] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/mfa/v1/verify => 400 in 110 ms. TraceId=8d89559e73704e70b459173d2c1fa511
+2026-06-24 11:13:43,594 INFO  [cac4d7820f3d47f59c151b161c836a41] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started POST /api/mfa/v1/pin/update
+2026-06-24 11:13:43,639 INFO  [cac4d7820f3d47f59c151b161c836a41] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[@loginAccountId='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginMfaCredentialId], [l].[CreatedAtUtc], [l].[FailedAttemptCount], [l].[LastVerifiedAtUtc], [l].[LockedUntilUtc], [l].[LoginAccountId], [l].[MfaTypeCode], [l].[RowVersion], [l].[SecretHash], [l].[SecretHashAlgorithm], [l].[SecretSalt], [l].[StatusCode], [l].[UpdatedAtUtc]
+FROM [iam].[LoginMfaCredential] AS [l]
+WHERE [l].[LoginAccountId] = @loginAccountId AND [l].[MfaTypeCode] = 'PIN' AND [l].[StatusCode] = 'ACTIVE'
+2026-06-24 11:13:43,886 INFO  [cac4d7820f3d47f59c151b161c836a41] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (16ms) [Parameters=[@p0='?' (DbType = DateTime2), @p1='?' (Size = 60) (DbType = AnsiString), @p2='?' (Size = 64), @p3='?' (DbType = Int64), @p4='?' (DbType = Guid), @p5='?' (Size = 512), @p8='?' (DbType = Int64), @p6='?' (DbType = Int32), @p9='?' (Size = 8) (DbType = Binary), @p7='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SET NOCOUNT ON;
+INSERT INTO [iam].[LoginMfaAuditEvent] ([CreatedAtUtc], [EventCode], [IpAddress], [LoginAccountId], [LoginMfaChallengeId], [UserAgent])
+OUTPUT INSERTED.[LoginMfaAuditEventId]
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5);
+UPDATE [iam].[LoginMfaCredential] SET [FailedAttemptCount] = @p6, [UpdatedAtUtc] = @p7
+OUTPUT INSERTED.[RowVersion]
+WHERE [LoginMfaCredentialId] = @p8 AND [RowVersion] = @p9;
+2026-06-24 11:13:43,967 INFO  [cac4d7820f3d47f59c151b161c836a41] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - POST /api/mfa/v1/pin/update completed in 372 ms with 401
+2026-06-24 11:13:43,968 INFO  [cac4d7820f3d47f59c151b161c836a41] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP POST /api/mfa/v1/pin/update => 401 in 373 ms. TraceId=cac4d7820f3d47f59c151b161c836a41
