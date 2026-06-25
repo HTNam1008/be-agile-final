@@ -17,7 +17,7 @@ internal sealed class SchoolEnrollmentConfiguration : IEntityTypeConfiguration<S
         builder.Property(x => x.StudentNumber).HasMaxLength(50).IsRequired();
         builder.Property(x => x.AcademicYear).HasMaxLength(20).IsUnicode(false).IsRequired();
         builder.Property(x => x.LevelCode).HasMaxLength(30).IsUnicode(false).IsRequired();
-        builder.Property(x => x.ClassCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.ClassCode).HasMaxLength(30).IsUnicode(false);
         builder.Property(x => x.SchoolingStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.StatusReasonCode).HasMaxLength(50).IsUnicode(false);
         builder.Property(x => x.SourceCode).HasMaxLength(50).IsUnicode(false).IsRequired();

@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -60,6 +61,21 @@ public static class DependencyInjection
                 policy.RequireAuthenticatedUser();
                 policy.RequireClaim(ClaimNames.Portal, PortalCodes.EService);
                 policy.RequireClaim(ClaimNames.Role, "STUDENT");
+            });
+            options.AddPolicy(AuthorizationPolicies.MfaPortal, policy =>
+            {
+                policy.AddAuthenticationSchemes(AuthenticationSchemes.AdminEntra, AuthenticationSchemes.EServiceSingpass);
+                policy.RequireAuthenticatedUser();
+                policy.RequireAssertion(context =>
+                {
+                    bool isAdmin = context.User.HasClaim(ClaimNames.Portal, PortalCodes.Admin)
+                        && context.User.FindAll(ClaimNames.Role).Any(claim => claim.Value is "HQ_ADMIN" or "SCHOOL_ADMIN");
+
+                    bool isEService = context.User.HasClaim(ClaimNames.Portal, PortalCodes.EService)
+                        && context.User.HasClaim(ClaimNames.Role, "STUDENT");
+
+                    return isAdmin || isEService;
+                });
             });
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccessScopes, "ACCESS_SCOPE_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccounts, "ACCOUNT_MANUAL_CREATE", authorization.UseStrictPermissionPolicies);
@@ -147,6 +163,8 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
+        target.MapInboundClaims = false;
+
         if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
         {
             target.RequireHttpsMetadata = source.RequireHttpsMetadata;
@@ -233,11 +251,22 @@ public static class DependencyInjection
         {
             OnMessageReceived = context =>
             {
+                if (authenticationScheme == AuthenticationSchemes.AdminEntra
+                    && IsAdminSessionEstablishmentRequest(context.Request))
+                {
+                    return Task.CompletedTask;
+                }
+
                 if (string.IsNullOrWhiteSpace(context.Token)
                     && !string.IsNullOrWhiteSpace(bearerCookieName)
                     && context.Request.Cookies.TryGetValue(bearerCookieName, out string? cookieToken))
                 {
                     context.Token = cookieToken;
+                }
+                else if (authenticationScheme == AuthenticationSchemes.AdminEntra
+                    && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.NoResult();
                 }
 
                 return Task.CompletedTask;
@@ -253,6 +282,12 @@ public static class DependencyInjection
             }
         };
     }
+
+    private static bool IsAdminSessionEstablishmentRequest(HttpRequest request)
+        => HttpMethods.IsPost(request.Method)
+            && request.Path.Value is string path
+            && path.StartsWith("/api/admin/v", StringComparison.OrdinalIgnoreCase)
+            && path.EndsWith("/auth/session", StringComparison.OrdinalIgnoreCase);
 
     private static void AddAdminFeaturePolicy(
         Microsoft.AspNetCore.Authorization.AuthorizationOptions options,

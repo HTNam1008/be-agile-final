@@ -17,6 +17,7 @@ using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.Mfa;
 using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
 using NSwag;
@@ -37,6 +38,7 @@ IModule[] modules =
     new EducationAccountTopUpModule(),
     new CourseBillingModule(),
     new FasPaymentModule(),
+    new MfaModule(),
     new AiCopilotModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
@@ -62,6 +64,7 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
     .AddApplicationPart(typeof(FasPaymentModule).Assembly)
+    .AddApplicationPart(typeof(MfaModule).Assembly)
     .AddApplicationPart(typeof(AiCopilotModule).Assembly);
 
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
@@ -114,7 +117,7 @@ builder.Services.AddOpenApiDocument(settings =>
         Description = "Enter an admin Microsoft Entra ID access token."
     });
     settings.OperationProcessors.Add(new AspNetCoreOperationSecurityScopeProcessor("Bearer"));
-    settings.PostProcess = document => ConfigureSwaggerArea(document, "/api/admin", "Admin");
+    settings.PostProcess = document => ConfigureSwaggerArea(document, "Admin", "/api/admin", "/api/mfa");
 });
 
 builder.Services.AddOpenApiDocument(settings =>
@@ -130,7 +133,23 @@ builder.Services.AddOpenApiDocument(settings =>
         Description = "Enter an e-service Singpass or MockPass access token."
     });
     settings.OperationProcessors.Add(new AspNetCoreOperationSecurityScopeProcessor("Bearer"));
-    settings.PostProcess = document => ConfigureSwaggerArea(document, "/api/eservice", "E-Service");
+    settings.PostProcess = document => ConfigureSwaggerArea(document, "E-Service", "/api/eservice", "/api/mfa");
+});
+
+builder.Services.AddOpenApiDocument(settings =>
+{
+    settings.DocumentName = "mfa";
+    settings.Title = "MOE Student Finance MFA API";
+    settings.Version = "v1";
+    settings.AddSecurity("Bearer", [], new OpenApiSecurityScheme
+    {
+        Type = OpenApiSecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Enter an admin or e-service access token for authenticated MFA operations."
+    });
+    settings.OperationProcessors.Add(new AspNetCoreOperationSecurityScopeProcessor("Bearer"));
+    settings.PostProcess = document => ConfigureSwaggerArea(document, "MFA", "/api/mfa");
 });
 
 var app = builder.Build();
@@ -180,9 +199,9 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new("name", "HQ Admin"),
         new("oid", "731f2a50-4fa7-4530-9294-1a5b912daf31"),
         new("tid", "ea71ddeb-596c-4034-84d4-d65f91edc14a"),
-        new(LocalIdentityClaimNames.UserAccountId, "1"),
+        new(LocalIdentityClaimNames.UserAccountId, "1002"),
         new(LocalIdentityClaimNames.PersonId, "1"),
-        new(LocalIdentityClaimNames.OrganizationUnitId, "2"),
+        new(LocalIdentityClaimNames.OrganizationUnitId, "1"),
         new(LocalIdentityClaimNames.Role, "HQ_ADMIN"),
         new(LocalIdentityClaimNames.Permission, "TOPUPS_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "ACCOUNTS_MANAGE"),
@@ -231,10 +250,10 @@ app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnony
 foreach (var module in modules) module.MapEndpoints(app);
 app.Run();
 
-static void ConfigureSwaggerArea(OpenApiDocument document, string pathPrefix, string areaName)
+static void ConfigureSwaggerArea(OpenApiDocument document, string areaName, params string[] pathPrefixes)
 {
     var pathsOutsideArea = document.Paths
-        .Where(path => !path.Key.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase))
+        .Where(path => !pathPrefixes.Any(prefix => path.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
         .Select(path => path.Key)
         .ToArray();
 
@@ -296,6 +315,11 @@ static string GetSwaggerTag(string path)
         || path.EndsWith("/me", StringComparison.OrdinalIgnoreCase))
     {
         return "Identity";
+    }
+
+    if (path.Contains("/mfa", StringComparison.OrdinalIgnoreCase))
+    {
+        return "MFA";
     }
 
     return "General";

@@ -5,6 +5,7 @@ using Moe.Modules.CourseBilling;
 using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.Mfa;
 using Moe.Modules.AiCopilot.Infrastructure.Persistence;
 using Moe.StudentFinance.Persistence;
 
@@ -25,6 +26,7 @@ public sealed class DesignTimeMoeDbContextFactory : IDesignTimeDbContextFactory<
             new EducationAccountTopUpModelConfiguration(),
             new CourseBillingModelConfiguration(),
             new FasPaymentModelConfiguration(),
+            new MfaModelConfiguration(),
             new AiModelConfiguration()
         ];
         return new MoeDbContext(options, contributors);
