@@ -144,10 +144,28 @@ public sealed class AiOrchestratorService(
     private async Task<AiChatResponse> HandleFas(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
         bool isNewInterview = c.FasInterviewJson is null;
+        string? fieldKey = request.PageContext?.Entity is JsonElement entity &&
+            entity.ValueKind == JsonValueKind.Object &&
+            entity.TryGetProperty("fieldKey", out JsonElement fk) &&
+            fk.ValueKind == JsonValueKind.String &&
+            fk.GetString() is string fkStr
+            ? fkStr
+            : null;
         FasInterviewData state;
         try { state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct); }
         catch { return new(c.Id, 0, "I could not retrieve your profile information right now. Please proceed with the FAS form directly or contact Admin Center if the issue persists.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
-        FasExtractionResult extraction = isNewInterview ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message);
+        if (!isNewInterview && state.Status == "COMPLETE")
+        {
+            AiInterviewState completedInterview = ToInterviewState(state, null);
+            string completedText = state.IsWelfareHomeResident == true
+                ? "You are marked as living in an approved welfare home for this FAS check. That means the form can skip household income and household-size questions. Use Apply answers to form, then review the remaining particulars and documents before you submit anything."
+                : "I already have the confirmed details for this FAS check. Use Apply answers to form to copy them into the application, or edit the form manually if anything is wrong.";
+            List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
+            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            return new(c.Id, 0, completedText, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), [], completedActions, completedInterview);
+        }
+
+        FasExtractionResult extraction = isNewInterview ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
         if (extraction.Status == "MANUAL_FALLBACK")
         {
             state.Status = "MANUAL_FALLBACK";
@@ -166,8 +184,9 @@ public sealed class AiOrchestratorService(
                 [new("NAVIGATE", "Open FAS application", "/portal/fas")], clarificationInterview);
         }
 
-        string? next = NextQuestion(state);
+        string? next = NextQuestion(state, fieldKey);
         object? recommendation = null;
+        FasRecommendationMatch[] recommendedSchemes = [];
         string text;
         if (next is null && state.IsWelfareHomeResident == false)
         {
@@ -178,18 +197,25 @@ public sealed class AiOrchestratorService(
                 JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
                 bool hasSchemes = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array && schemes.GetArrayLength() > 0;
                 if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "Based on your information, I could not find a matching FAS scheme. Please proceed with the FAS form to verify manually or contact Admin Center for assistance."; }
-                else { state.Status = "COMPLETE"; AiInterviewState completeInterview = ToInterviewState(state, null); recommendation = BuildFasRecommendation(rawRecommendation, completeInterview); text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready."; }
+                else
+                {
+                    state.Status = "COMPLETE";
+                    recommendedSchemes = ExtractRecommendationMatches(root);
+                    AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
+                    recommendation = BuildFasRecommendation(root, completeInterview);
+                    text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready.";
+                }
             }
             catch { state.Status = "MANUAL_FALLBACK"; text = "I could not complete the eligibility check right now. Please proceed with the FAS form or contact Admin Center for assistance."; }
         }
         else if (next is null)
         {
             state.Status = "COMPLETE";
-            text = "Your welfare-home status is confirmed. The application form will skip income fields and continue with the required supporting information.";
+            text = "Got it. I have your welfare-home status and parent or guardian nationality. The FAS form can skip household income and household-size questions, so apply these answers to the form, then review the remaining particulars and documents before anything is submitted.";
         }
         else { state.Status = "COLLECTING"; text = next; }
 
-        AiInterviewState interview = ToInterviewState(state, next);
+        AiInterviewState interview = ToInterviewState(state, next, recommendedSchemes);
         c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
         List<AiCard> cards = recommendation is null ? [] : [new("FAS_RECOMMENDATION", recommendation)];
         List<AiAction> actions = [new("NAVIGATE", "Open FAS application", "/portal/fas")];
@@ -244,6 +270,12 @@ public sealed class AiOrchestratorService(
         return "GENERAL";
     }
 
+    private static readonly HashSet<string> AllowedFieldKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "isWelfareHomeResident", "monthlyHouseholdIncome", "householdMemberCount",
+        "parentNationalities", "employmentStatusCode", "otherMonthlyIncome", "email"
+    };
+
     private static AiPageContext? SanitizePageContext(AiPageContext? pageContext)
     {
         if (pageContext is null) return null;
@@ -256,7 +288,20 @@ public sealed class AiOrchestratorService(
             ? null
             : pageContext.Surface.Length > 80 ? pageContext.Surface[..80] : pageContext.Surface;
 
-        return new AiPageContext(domain, surface, path, null);
+        JsonElement? entity = null;
+        if (pageContext.Entity.HasValue && domain == "FAS")
+        {
+            JsonElement e = pageContext.Entity.Value;
+            if (e.ValueKind == JsonValueKind.Object &&
+                e.TryGetProperty("fieldKey", out JsonElement fk) &&
+                fk.ValueKind == JsonValueKind.String &&
+                fk.GetString() is string fkStr && AllowedFieldKeys.Contains(fkStr))
+            {
+                entity = e;
+            }
+        }
+
+        return new AiPageContext(domain, surface, path, entity);
     }
 
     private static bool IsAllowedPath(string? path)
@@ -273,9 +318,9 @@ public sealed class AiOrchestratorService(
         JsonElement profile = JsonSerializer.SerializeToElement(await fas.Prefill(ct), JsonOptions);
         return new FasInterviewData { Profile = profile, Status = "COLLECTING" };
     }
-    private static FasExtractionResult ApplyFasAnswer(FasInterviewData s, string message)
+    private static FasExtractionResult ApplyFasAnswer(FasInterviewData s, string message, string? preferredField = null)
     {
-        string? field = s.ClarificationField ?? NextMissingField(s);
+        string? field = s.ClarificationField ?? NextMissingField(s, preferredField);
         if (field is null) return FasExtractionResult.Accepted();
 
         FasExtractionResult result = field switch
@@ -309,9 +354,9 @@ public sealed class AiOrchestratorService(
         s.ValidationMessage = result.Message;
         return result;
     }
-    private static string? NextQuestion(FasInterviewData s)
+    private static string? NextQuestion(FasInterviewData s, string? preferred = null)
     {
-        string? field = s.ClarificationField ?? NextMissingField(s);
+        string? field = s.ClarificationField ?? NextMissingField(s, preferred);
         return field switch
         {
             "isWelfareHomeResident" => "Are you currently residing in an approved welfare home? Please answer yes or no.",
@@ -321,7 +366,7 @@ public sealed class AiOrchestratorService(
             _ => null
         };
     }
-    private static AiInterviewState ToInterviewState(FasInterviewData s, string? next)
+    private static AiInterviewState ToInterviewState(FasInterviewData s, string? next, IReadOnlyCollection<FasRecommendationMatch>? recommendedSchemes = null)
     {
         List<AiInterviewField> fields =
         [
@@ -332,18 +377,68 @@ public sealed class AiOrchestratorService(
         ];
         string[] missing = fields.Where(x => !x.Confirmed && !(s.IsWelfareHomeResident == true && x.Name is "monthlyHouseholdIncome" or "householdMemberCount"))
             .Select(x => x.Name).ToArray();
-        object? patch = s.Status == "MANUAL_FALLBACK"
-            ? null
-            : new FasFormPatch(s.IsWelfareHomeResident, s.MonthlyHouseholdIncome, s.HouseholdMemberCount, 0, s.ParentNationalities,
-                Provenance: fields.ToDictionary(x => x.Name, x => x.Provenance, StringComparer.OrdinalIgnoreCase));
+        object? patch = s.Status == "MANUAL_FALLBACK" ? null : BuildFasFormPatch(s, recommendedSchemes);
         return new(s.Status, next, fields, missing, patch);
     }
-    private static string? NextMissingField(FasInterviewData s)
+
+    private static FasFormPatch BuildFasFormPatch(FasInterviewData s, IReadOnlyCollection<FasRecommendationMatch>? recommendedSchemes = null)
     {
+        var particulars = new FasPatchParticulars(
+            Email: TryGetString(s.Profile, "email"),
+            ParentNationalities: s.ParentNationalities.Count > 0 ? s.ParentNationalities.ToArray() : null);
+        var income = new FasPatchIncome(
+            s.IsWelfareHomeResident,
+            TryGetString(s.Profile, "employmentStatusCode") ?? "EMPLOYED",
+            s.MonthlyHouseholdIncome,
+            s.HouseholdMemberCount,
+            TryGetDecimal(s.Profile, "otherMonthlyIncome"));
+        var meta = new Dictionary<string, FasPatchMetaField>();
+        void AddMeta(string name, object? value, string provenance, string? explanation = null)
+        {
+            string conf = value switch
+            {
+                null => "LOW",
+                _ when s.ClarificationAttempts.GetValueOrDefault(name) >= 1 => "MEDIUM",
+                _ => "HIGH"
+            };
+            meta[name] = new FasPatchMetaField(conf, provenance, explanation);
+        }
+        bool skipIncome = s.IsWelfareHomeResident == true;
+        AddMeta("isWelfareHomeResident", s.IsWelfareHomeResident, s.IsWelfareHomeResident.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
+            s.IsWelfareHomeResident.HasValue ? (s.IsWelfareHomeResident.Value ? "Confirmed welfare home resident." : "Confirmed not a welfare home resident.") : null);
+        if (!skipIncome)
+        {
+            AddMeta("employmentStatusCode", TryGetString(s.Profile, "employmentStatusCode"), "PROFILE", "From your profile.");
+            AddMeta("monthlyHouseholdIncome", s.MonthlyHouseholdIncome, s.MonthlyHouseholdIncome.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
+                s.MonthlyHouseholdIncome.HasValue ? $"You said your household income is ${s.MonthlyHouseholdIncome.Value:N0}." : null);
+            AddMeta("householdMemberCount", s.HouseholdMemberCount, s.HouseholdMemberCount.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
+                s.HouseholdMemberCount.HasValue ? $"You said there are {s.HouseholdMemberCount.Value} household members." : null);
+            AddMeta("otherMonthlyIncome", TryGetDecimal(s.Profile, "otherMonthlyIncome"), "PROFILE", "From your profile.");
+        }
+        AddMeta("parentNationalities", s.ParentNationalities.Count > 0 ? s.ParentNationalities : null,
+            s.ParentNationalities.Count > 0 ? "AI_CONFIRMED" : "UNMAPPED",
+            s.ParentNationalities.Count > 0 ? $"Nationalit{(s.ParentNationalities.Count == 1 ? "y" : "ies")}: {string.Join(", ", s.ParentNationalities)}." : null);
+        FasPatchSchemes? schemes = recommendedSchemes is { Count: > 0 }
+            ? new FasPatchSchemes(recommendedSchemes.Select(x => x.SchemeId).Distinct().ToArray(),
+                recommendedSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
+            : null;
+        return new FasFormPatch(particulars, income, schemes, meta);
+    }
+    private static string? NextMissingField(FasInterviewData s, string? preferred = null)
+    {
+        if (preferred is not null)
+        {
+            if (preferred.Equals("isWelfareHomeResident", StringComparison.OrdinalIgnoreCase) && !s.IsWelfareHomeResident.HasValue) return "isWelfareHomeResident";
+            if (preferred.Equals("monthlyHouseholdIncome", StringComparison.OrdinalIgnoreCase) && s.IsWelfareHomeResident == false && !s.MonthlyHouseholdIncome.HasValue) return "monthlyHouseholdIncome";
+            if (preferred.Equals("householdMemberCount", StringComparison.OrdinalIgnoreCase) && s.IsWelfareHomeResident == false && (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0)) return "householdMemberCount";
+            if (preferred.Equals("parentNationalities", StringComparison.OrdinalIgnoreCase) && s.ParentNationalities.Count == 0) return "parentNationalities";
+        }
         if (!s.IsWelfareHomeResident.HasValue) return "isWelfareHomeResident";
-        if (s.IsWelfareHomeResident.Value) return null;
-        if (!s.MonthlyHouseholdIncome.HasValue) return "monthlyHouseholdIncome";
-        if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0) return "householdMemberCount";
+        if (!s.IsWelfareHomeResident.Value)
+        {
+            if (!s.MonthlyHouseholdIncome.HasValue) return "monthlyHouseholdIncome";
+            if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0) return "householdMemberCount";
+        }
         if (s.ParentNationalities.Count == 0) return "parentNationalities";
         return null;
     }
@@ -452,9 +547,7 @@ public sealed class AiOrchestratorService(
     {
         JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
         decimal? pci = TryGetDecimal(root, "perCapitaIncome");
-        FasRecommendationMatch[] matches = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array
-            ? schemes.EnumerateArray().Select(ToRecommendationMatch).Where(x => x is not null).Cast<FasRecommendationMatch>().ToArray()
-            : [];
+        FasRecommendationMatch[] matches = ExtractRecommendationMatches(root);
         FasRecommendationMatch? recommended = matches.FirstOrDefault();
         return new FasRecommendationCard(
             pci,
@@ -466,6 +559,13 @@ public sealed class AiOrchestratorService(
             interview.Fields.Where(x => x.Confirmed).ToArray(),
             interview.MissingFields,
             "Prototype recommendation. Eligibility is calculated by application code and final approval remains subject to MOE review.");
+    }
+
+    private static FasRecommendationMatch[] ExtractRecommendationMatches(JsonElement root)
+    {
+        return root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array
+            ? schemes.EnumerateArray().Select(ToRecommendationMatch).Where(x => x is not null).Cast<FasRecommendationMatch>().ToArray()
+            : [];
     }
 
     private static FasRecommendationMatch? ToRecommendationMatch(JsonElement item)

@@ -19,7 +19,8 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         JsonElement response = await SendFas(answer, cid);
         AssertWelfareStatus(response, true);
-        Assert.Equal("COMPLETE", GetInterviewStatus(response));
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        Assert.Contains("nationality", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -158,6 +159,10 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("Yes", cid);
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        Assert.Contains("nationality", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        response = await SendFas("Singaporean", cid);
         Assert.Equal("COMPLETE", GetInterviewStatus(response));
         JsonElement fields = response.GetProperty("interviewState").GetProperty("fields");
         // Income fields should be unconfirmed when welfare home is true
@@ -166,6 +171,8 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
             if (f.GetProperty("name").GetString() is "monthlyHouseholdIncome" or "householdMemberCount")
                 Assert.False(f.GetProperty("confirmed").GetBoolean());
         }
+        JsonElement nationality = GetField(response, "parentNationalities");
+        Assert.True(nationality.GetProperty("confirmed").GetBoolean());
     }
 
     [Fact]
@@ -179,11 +186,15 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         JsonElement completed = await SendFas("Singaporean", cid);
 
         JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
-        Assert.True(patch.TryGetProperty("provenance", out JsonElement prov));
-        Assert.Equal("AI_CONFIRMED", prov.GetProperty("isWelfareHomeResident").GetString());
-        Assert.Equal("AI_CONFIRMED", prov.GetProperty("monthlyHouseholdIncome").GetString());
-        Assert.Equal("AI_CONFIRMED", prov.GetProperty("householdMemberCount").GetString());
-        Assert.Equal("AI_CONFIRMED", prov.GetProperty("parentNationalities").GetString());
+        JsonElement meta = patch.GetProperty("meta");
+        Assert.Equal("AI_CONFIRMED", meta.GetProperty("isWelfareHomeResident").GetProperty("provenance").GetString());
+        Assert.Equal("AI_CONFIRMED", meta.GetProperty("monthlyHouseholdIncome").GetProperty("provenance").GetString());
+        Assert.Equal("AI_CONFIRMED", meta.GetProperty("householdMemberCount").GetProperty("provenance").GetString());
+        Assert.Equal("AI_CONFIRMED", meta.GetProperty("parentNationalities").GetProperty("provenance").GetString());
+        Assert.Equal("HIGH", meta.GetProperty("isWelfareHomeResident").GetProperty("confidence").GetString());
+        Assert.NotNull(meta.GetProperty("monthlyHouseholdIncome").GetProperty("explanation").GetString());
+        Assert.True(patch.TryGetProperty("income", out _));
+        Assert.True(patch.TryGetProperty("particulars", out _));
     }
 
     [Fact]
@@ -192,11 +203,11 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         JsonElement started = await SendFas("No", cid);
         JsonElement patch = started.GetProperty("interviewState").GetProperty("formPatch");
-        Assert.True(patch.TryGetProperty("provenance", out JsonElement prov));
-        Assert.Equal("AI_CONFIRMED", prov.GetProperty("isWelfareHomeResident").GetString());
-        Assert.Equal("UNMAPPED", prov.GetProperty("monthlyHouseholdIncome").GetString());
-        Assert.Equal("UNMAPPED", prov.GetProperty("householdMemberCount").GetString());
-        Assert.Equal("UNMAPPED", prov.GetProperty("parentNationalities").GetString());
+        JsonElement meta = patch.GetProperty("meta");
+        Assert.Equal("AI_CONFIRMED", meta.GetProperty("isWelfareHomeResident").GetProperty("provenance").GetString());
+        Assert.Equal("UNMAPPED", meta.GetProperty("monthlyHouseholdIncome").GetProperty("provenance").GetString());
+        Assert.Equal("UNMAPPED", meta.GetProperty("householdMemberCount").GetProperty("provenance").GetString());
+        Assert.Equal("UNMAPPED", meta.GetProperty("parentNationalities").GetProperty("provenance").GetString());
     }
 
     private async Task<Guid> StartInterview()
@@ -213,22 +224,76 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         return cid;
     }
 
-    private async Task<JsonElement> SendFas(string message, Guid? conversationId)
+    private async Task<JsonElement> SendFas(string message, Guid? conversationId, object? entity = null)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
         request.Headers.Add("X-Test-PersonId", "2101");
-        request.Content = JsonContent.Create(new
-        {
-            conversationId,
-            message,
-            pageContext = new { domain = "FAS", surface = "FAS", path = "/portal/fas" }
-        });
+        object pageContext = entity is not null
+            ? new { domain = "FAS", surface = "FAS", path = "/portal/fas", entity }
+            : new { domain = "FAS", surface = "FAS", path = "/portal/fas" };
+        request.Content = JsonContent.Create(new { conversationId, message, pageContext });
         using HttpResponseMessage response = await _client.SendAsync(request);
         if (response.StatusCode != HttpStatusCode.OK)
             Assert.Fail($"Expected 200, got {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         JsonElement root = doc.RootElement.Clone();
         return root.TryGetProperty("data", out JsonElement data) ? data : root;
+    }
+
+    [Fact]
+    public async Task Fas_request_with_valid_entity_fieldKey_succeeds()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("No", cid, new { fieldKey = "monthlyHouseholdIncome" });
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Fas_request_with_invalid_entity_fieldKey_treats_as_normal()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("No", cid, new { fieldKey = "bogusField" });
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        string? next = response.GetProperty("interviewState").GetProperty("nextQuestion").GetString();
+        Assert.Contains("income", next, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Fas_request_with_null_entity_still_works()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("No", cid, null);
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task FieldKey_focuses_extraction_on_household_count_after_income()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("3200", cid);
+        JsonElement response = await SendFas("2", cid, new { fieldKey = "householdMemberCount" });
+        JsonElement field = GetField(response, "householdMemberCount");
+        Assert.True(field.GetProperty("confirmed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task FieldKey_can_focus_household_count_before_income_when_welfare_is_known()
+    {
+        Guid cid = await StartNoWelfare();
+        JsonElement response = await SendFas("4", cid, new { fieldKey = "householdMemberCount" });
+        JsonElement household = GetField(response, "householdMemberCount");
+        JsonElement income = GetField(response, "monthlyHouseholdIncome");
+        Assert.True(household.GetProperty("confirmed").GetBoolean());
+        Assert.False(income.GetProperty("confirmed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task FieldKey_does_not_bypass_prerequisite_welfare_home()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("Maybe", cid, new { fieldKey = "monthlyHouseholdIncome" });
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        Assert.Contains("yes or no", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task CreateEligibleScheme()

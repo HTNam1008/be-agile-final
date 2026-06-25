@@ -59,10 +59,12 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Assert.NotEmpty(data.GetProperty("confirmedFacts").EnumerateArray());
 
         JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
-        Assert.False(patch.GetProperty("isWelfareHomeResident").GetBoolean());
-        Assert.Equal(3000m, patch.GetProperty("monthlyHouseholdIncome").GetDecimal());
-        Assert.Equal(4, patch.GetProperty("householdMemberCount").GetInt32());
-        Assert.Equal("Singapore Citizen", patch.GetProperty("parentNationalities")[0].GetString());
+        Assert.False(patch.GetProperty("income").GetProperty("isWelfareHomeResident").GetBoolean());
+        Assert.Equal(3000m, patch.GetProperty("income").GetProperty("monthlyHouseholdIncome").GetDecimal());
+        Assert.Equal(4, patch.GetProperty("income").GetProperty("householdMemberCount").GetInt32());
+        Assert.Equal("Singapore Citizen", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
+        Assert.True(patch.GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
+        Assert.Contains("AI FAS", patch.GetProperty("schemes").GetProperty("recommendedSchemeNames")[0].GetString());
 
         Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "APPLY_FAS_PATCH");
     }

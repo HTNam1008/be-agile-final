@@ -26,14 +26,15 @@ public sealed record FasRecommendationCard(
     IReadOnlyCollection<string> MissingFacts,
     string Warning);
 public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+public sealed record FasPatchParticulars(string? Email, IReadOnlyCollection<string>? ParentNationalities);
+public sealed record FasPatchIncome(
+    bool? IsWelfareHomeResident, string? EmploymentStatusCode,
+    decimal? MonthlyHouseholdIncome, int? HouseholdMemberCount, decimal? OtherMonthlyIncome);
+public sealed record FasPatchSchemes(IReadOnlyCollection<long>? RecommendedSchemeIds, IReadOnlyCollection<string>? RecommendedSchemeNames);
+public sealed record FasPatchMetaField(string Confidence, string Provenance, string? Explanation);
 public sealed record FasFormPatch(
-    bool? IsWelfareHomeResident,
-    decimal? MonthlyHouseholdIncome,
-    int? HouseholdMemberCount,
-    decimal OtherMonthlyIncome,
-    IReadOnlyCollection<string> ParentNationalities,
-    IReadOnlyDictionary<string, string>? Provenance = null,
-    string EmploymentStatusCode = "EMPLOYED");
+    FasPatchParticulars? Particulars, FasPatchIncome? Income, FasPatchSchemes? Schemes,
+    IReadOnlyDictionary<string, FasPatchMetaField>? Meta);
 public sealed record AiInterviewState(string Status, string? NextQuestion,
     IReadOnlyCollection<AiInterviewField> Fields, IReadOnlyCollection<string> MissingFields, object? FormPatch);
 public sealed record AiChatResponse(Guid ConversationId, long MessageId, string Text, string Mode,
