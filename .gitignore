@@ -21,3 +21,4 @@ localdev.db*
 appsettings.Development.json
 test_*.ps1
 
+.verification

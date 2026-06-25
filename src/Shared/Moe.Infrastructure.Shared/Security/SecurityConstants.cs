@@ -17,6 +17,7 @@ public static class AuthorizationPolicies
 {
     public const string AdminPortal = "AdminPortal";
     public const string EServicePortal = "EServicePortal";
+    public const string MfaPortal = "MfaPortal";
     public const string ManageAccessScopes = "ManageAccessScopes";
     public const string ManageAccounts = "ManageAccounts";
     public const string ViewAccountDetails = "ViewAccountDetails";
