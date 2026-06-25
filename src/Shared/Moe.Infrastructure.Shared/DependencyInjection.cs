@@ -147,6 +147,8 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
+        target.MapInboundClaims = false;
+
         if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
         {
             target.RequireHttpsMetadata = source.RequireHttpsMetadata;
