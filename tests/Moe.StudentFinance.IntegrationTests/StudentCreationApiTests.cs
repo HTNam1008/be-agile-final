@@ -175,6 +175,33 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task CreateStudent_Should_Create_When_ClassCode_Is_Not_Provided()
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var request = CreateRequest(
+            schoolName: null,
+            identityNumber: $"C{suffix[..7]}B",
+            studentNumber: $"IT-NO-CLASS-{suffix}") with
+        {
+            ClassCode = null
+        };
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/admin/v1/students",
+            request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        long personId = await ReadPersonIdAsync(response);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
+        SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
+        Assert.Equal("SEC_4", enrollment.LevelCode);
+        Assert.Null(enrollment.ClassCode);
+    }
+
+    [Fact]
     public async Task HqAdmin_Should_Create_Student_When_OrganizationId_Is_Provided()
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
@@ -612,7 +639,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string StudentNumber,
         string AcademicYear,
         string LevelCode,
-        string ClassCode,
+        string? ClassCode,
         DateOnly? StartDate,
         string? Email,
         string? Mobile,

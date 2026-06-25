@@ -14,6 +14,6 @@ public sealed record AdminStudentSearchSummary(
     string FullName,
     DateOnly DateOfBirth,
     string LevelCode,
-    string ClassCode,
+    string? ClassCode,
     string SchoolingStatusCode,
     long OrganizationId);

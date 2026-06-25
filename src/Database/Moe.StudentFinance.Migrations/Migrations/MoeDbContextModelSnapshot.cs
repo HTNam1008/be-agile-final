@@ -9384,7 +9384,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("varchar(20)");
 
                     b.Property<string>("ClassCode")
-                        .IsRequired()
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
