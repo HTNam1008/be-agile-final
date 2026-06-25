@@ -1,5 +1,5 @@
-using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.Application.Enrollments.CourseContent;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;

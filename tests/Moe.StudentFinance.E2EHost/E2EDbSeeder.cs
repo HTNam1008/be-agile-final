@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
-using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.E2EHost;
@@ -68,12 +68,12 @@ public class E2EDbSeeder : IHostedService
         var appType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasApplication");
         if (schemeType != null && appType != null)
         {
-            var scheme = schemeType.GetMethod("CreateDraft")!.Invoke(null, new object[] { "FAS-E2E", "GRANT-E2E", "E2E Seeded Scheme", "Test", new DateOnly(2026,1,1), new DateOnly(2026,12,31), 1001L, DateTime.UtcNow });
+            var scheme = schemeType.GetMethod("CreateDraft")!.Invoke(null, new object[] { "FAS-E2E", "GRANT-E2E", "E2E Seeded Scheme", "Test", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), 1001L, DateTime.UtcNow });
             SetId(scheme!, 100);
             schemeType.GetMethod("Activate")!.Invoke(scheme, new object[] { 1001L, DateTime.UtcNow });
             db.Add(scheme!);
 
-            var app1 = appType.GetMethod("Submit")!.Invoke(null, new object[] { "APP-001", 100L, "MOCKPASS-STUDENT-2001", "Tan Mei Ling", new DateOnly(2026, 6, 1) });
+            var app1 = appType.GetMethod("Submit")!.Invoke(null, new object[] { "APP-001", 100L, "ef39a074-b64d-4990-a937-6f80772e2bb8", "Tan Mei Ling", new DateOnly(2026, 6, 1) });
             SetId(app1!, 2001);
             db.Add(app1!);
 
@@ -87,7 +87,7 @@ public class E2EDbSeeder : IHostedService
     {
         DemoStudentSeed[] demoStudents =
         [
-            new(2001, "MOCKPASS-STUDENT-2001", "Tan Mei Ling", new DateOnly(2008, 5, 12), "DEMO-STU-0001", "SEC_4", "4A", "ACTIVE", 2, "EA-DEMO-0001", 250.00m, false),
+            new(2001, "ef39a074-b64d-4990-a937-6f80772e2bb8", "Tan Mei Ling", new DateOnly(2008, 5, 12), "DEMO-STU-0001", "SEC_4", "4A", "ACTIVE", 2, "EA-DEMO-0001", 250.00m, false),
             new(2002, "MOCKPASS-STUDENT-2002", "Nur Aisyah", new DateOnly(2009, 3, 1), "DEMO-STU-0002", "SEC_3", "3B", "ACTIVE", 2, "EA-DEMO-0002", 80.00m, false),
             new(2003, "MOCKPASS-STUDENT-2003", "Loh Jun Jie", new DateOnly(2010, 9, 20), "DEMO-STU-0003", "SEC_2", "2C", "ACTIVE", 2, "EA-DEMO-0003", 600.00m, false),
             new(2004, "MOCKPASS-STUDENT-2004", "Alicia Tan", new DateOnly(2011, 11, 3), "DEMO-STU-0004", "SEC_1", "1A", "ACTIVE", 2, "EA-DEMO-0004", 15.50m, false),
@@ -146,8 +146,8 @@ public class E2EDbSeeder : IHostedService
             object student = userAccountType.GetMethod("CreateStudentSingpass")!.Invoke(null,
             [
                 2001L,
-                "http://localhost:5001/mockpass",
-                "MOCKPASS-STUDENT-2001",
+                "http://localhost:5156/singpass/v3/fapi",
+                "ef39a074-b64d-4990-a937-6f80772e2bb8",
                 "Tan Mei Ling",
                 1001L,
                 DateTime.UtcNow

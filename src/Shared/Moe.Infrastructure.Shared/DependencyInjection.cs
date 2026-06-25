@@ -70,6 +70,7 @@ public static class DependencyInjection
                 authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountDetails, "ACCOUNT_DETAILS_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAccountLifecycle, "ACCOUNT_LIFECYCLE_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.LifecycleManualTrigger, "LIFECYCLE_MANUAL_TRIGGER", useStrictPermissionPolicies: true);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageExternalAccounts, "EXTERNAL_ACCOUNTS_PROVISION", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageTopUps, "TOPUPS_MANAGE", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(
@@ -80,6 +81,7 @@ public static class DependencyInjection
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageCourses, "COURSE_MANAGE_OWN_SCHOOL", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ReviewFas, "FAS_REVIEW", authorization.UseStrictPermissionPolicies);
             AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageFasSchemes, "FAS_SCHEME_MANAGE", authorization.UseStrictPermissionPolicies);
+            AddAdminFeaturePolicy(options, AuthorizationPolicies.ManageAiReviews, "AI_REVIEW_MANAGE", authorization.UseStrictPermissionPolicies);
         });
 
         services.AddCors(options =>

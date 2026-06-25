@@ -51,8 +51,8 @@ internal sealed class FasDocument : Entity<long>
         new() { FasApplicationId = applicationId, DocumentTypeCode = type, ChecklistItemCode = item, IsMandatory = mandatory, FileName = fileName, BlobKey = blobKey, MimeType = mime, FileSizeBytes = size, UploadedByLoginAccountId = actorId, UploadedAtUtc = now, UploadStatusCode = scan ? "SCAN_PENDING" : "UPLOADED" };
     public void Remove(long actorId, DateTime now) { UploadStatusCode = "REMOVED"; RemovedByLoginAccountId = actorId; RemovedAtUtc = now; }
     public void Replace(long replacementId, long actorId, DateTime now) { ReplacedByDocumentId = replacementId; Remove(actorId, now); }
-    public void MarkScanPassed() { if(UploadStatusCode!="SCAN_PENDING")throw new DomainException("Only pending documents can pass scanning.");UploadStatusCode="SCAN_PASSED"; }
-    public void MarkScanFailed() { if(UploadStatusCode!="SCAN_PENDING")throw new DomainException("Only pending documents can fail scanning.");UploadStatusCode="SCAN_FAILED"; }
+    public void MarkScanPassed() { if (UploadStatusCode != "SCAN_PENDING") throw new DomainException("Only pending documents can pass scanning."); UploadStatusCode = "SCAN_PASSED"; }
+    public void MarkScanFailed() { if (UploadStatusCode != "SCAN_PENDING") throw new DomainException("Only pending documents can fail scanning."); UploadStatusCode = "SCAN_FAILED"; }
 }
 
 internal sealed class FasDeclaration : Entity<long>
@@ -98,5 +98,5 @@ internal sealed class FasActiveScheme : Entity<long>
     public long? DeactivatedByLoginAccountId { get; private set; }
     public string? DeactivatedReason { get; private set; }
     public static FasActiveScheme Activate(long studentId, long itemId, long schemeId, DateOnly from, DateOnly to, long actorId, DateTime now) { if (to < from) throw new ArgumentException("Active period is invalid."); return new() { StudentPersonId = studentId, FasApplicationSchemeId = itemId, FasSchemeId = schemeId, ActiveFrom = from, ActiveTo = to, ActivatedByLoginAccountId = actorId, ActivatedAtUtc = now }; }
-    public void Deactivate(long actorId,DateTime now,string reason) { StatusCode = "DEACTIVATED";DeactivatedByLoginAccountId=actorId;DeactivatedAtUtc=now;DeactivatedReason=reason; }
+    public void Deactivate(long actorId, DateTime now, string reason) { StatusCode = "DEACTIVATED"; DeactivatedByLoginAccountId = actorId; DeactivatedAtUtc = now; DeactivatedReason = reason; }
 }

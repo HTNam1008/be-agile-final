@@ -8,6 +8,7 @@ using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application;
 using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 using Moe.Modules.IdentityPlatform.Application.AdminStudentList;
+using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
@@ -21,6 +22,8 @@ public sealed class StudentsController(
     ICommandDispatcher commands,
     IQueryDispatcher queries) : ControllerBase
 {
+    private const long BulkImportMaxFileSizeBytes = 5 * 1024 * 1024;
+
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ViewAccountDetails)]
     public async Task<IActionResult> List(
@@ -29,6 +32,7 @@ public sealed class StudentsController(
     {
         var result = await queries.Send(
             new ListAdminStudentsQuery(
+                request.OrganizationId,
                 request.Search,
                 request.LevelCode,
                 request.ClassCode,
@@ -146,9 +150,60 @@ public sealed class StudentsController(
             "Student created.");
     }
 
+    [HttpPost("bulk-import")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> BulkImport(
+        [FromForm] BulkImportStudentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length == 0)
+        {
+            return ApiResponseFactory.Failure(
+                new Moe.SharedKernel.Results.Error(
+                    "BULK_IMPORT.FILE_REQUIRED",
+                    "An Excel workbook file is required."),
+                ApiResponseCodes.BadRequest,
+                HttpContext.TraceIdentifier);
+        }
+
+        if (request.File.Length > BulkImportMaxFileSizeBytes)
+        {
+            return ApiResponseFactory.Failure(
+                new Moe.SharedKernel.Results.Error(
+                    "BULK_IMPORT.FILE_TOO_LARGE",
+                    "The uploaded workbook must be 5 MB or smaller."),
+                ApiResponseCodes.BadRequest,
+                HttpContext.TraceIdentifier);
+        }
+
+        if (!request.File.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponseFactory.Failure(
+                new Moe.SharedKernel.Results.Error(
+                    "BULK_IMPORT.INVALID_FILE_TYPE",
+                    "The uploaded file must be an .xlsx workbook."),
+                ApiResponseCodes.BadRequest,
+                HttpContext.TraceIdentifier);
+        }
+
+        await using Stream workbookStream = request.File.OpenReadStream();
+        var result = await commands.Send(
+            new BulkImportStudentsCommand(workbookStream, request.File.FileName),
+            cancellationToken);
+
+        return result.IsFailure
+            ? ApiResponseFactory.Failure(result.Error, GetFailureStatusCode(result.Error.Code), HttpContext.TraceIdentifier)
+            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
     private static int GetFailureStatusCode(string errorCode)
         => errorCode switch
         {
+            "BULK_IMPORT.FILE_REQUIRED" => ApiResponseCodes.BadRequest,
+            "BULK_IMPORT.FILE_TOO_LARGE" => ApiResponseCodes.BadRequest,
+            "BULK_IMPORT.INVALID_FILE_TYPE" => ApiResponseCodes.BadRequest,
+            "BULK_IMPORT.ROW_LIMIT_EXCEEDED" => ApiResponseCodes.BadRequest,
+            "BULK_IMPORT.ROW_VALIDATION_FAILED" => ApiResponseCodes.BadRequest,
             "IDENTITY.AUTHENTICATED_ADMIN_REQUIRED" => ApiResponseCodes.Unauthorized,
             "IDENTITY.SCHOOL_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,

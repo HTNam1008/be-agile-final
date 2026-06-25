@@ -206,6 +206,10 @@ public sealed class CloseManualAccountHandlerTests
         public Task<EducationAccount?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
             => Task.FromResult(Accounts.Values.SingleOrDefault(x => x.PersonId == personId));
 
+        public Task<IReadOnlyCollection<EducationAccount>> ListActiveAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<EducationAccount>>(
+                Accounts.Values.Where(x => x.StatusCode == AccountStatuses.Active).ToArray());
+
         public Task<bool> ExistsForPersonAsync(long personId, CancellationToken cancellationToken)
             => Task.FromResult(Accounts.Values.Any(x => x.PersonId == personId));
 
