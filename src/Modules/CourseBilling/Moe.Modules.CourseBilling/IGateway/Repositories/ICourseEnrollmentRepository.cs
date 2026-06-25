@@ -63,6 +63,8 @@ internal sealed record CourseFeeBillingLine(
     long CourseFeeId,
     long FeeComponentId,
     string FeeComponentName,
+    string CalculationTypeCode,
+    bool IsTaxComponent,
     decimal FeeValue);
 
 internal sealed record CourseEnrollmentBillingResult(

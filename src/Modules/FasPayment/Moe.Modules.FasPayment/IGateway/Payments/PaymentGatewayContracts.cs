@@ -1,5 +1,5 @@
-using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.Contracts.Payments;
+using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.IGateway.Payments;

@@ -2,11 +2,11 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
-using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.FasPayment.Application.LegacyPayments;
 using Moe.Modules.FasPayment.Application.StatementPayments;
+using Moe.Modules.FasPayment.Contracts.Payments;
 
 namespace Moe.Modules.FasPayment.Api.EService;
 

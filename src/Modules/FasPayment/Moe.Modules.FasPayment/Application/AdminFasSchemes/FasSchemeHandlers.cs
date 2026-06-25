@@ -1,9 +1,9 @@
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.IGateway.Courses;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.IGateway.Repositories;
-using Moe.Modules.CourseBilling.IGateway.Courses;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.AdminFasSchemes;

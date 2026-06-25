@@ -112,7 +112,30 @@ internal sealed class PreviewCourseQueryHandler(AdminCourseAccess access)
 
         return Result<CoursePreviewDto>.Success(new CoursePreviewDto(
             detail,
-            activeFees.Sum(x => x.FeeValue),
+            CalculateTotalFeeAmount(activeFees),
             activeFees.Length));
+    }
+
+    private static decimal CalculateTotalFeeAmount(IReadOnlyCollection<CourseFeeDto> activeFees)
+    {
+        decimal subtotal = activeFees
+            .Where(fee => !string.Equals(fee.ComponentTypeCode, FeeComponentTypeCodes.Tax, StringComparison.OrdinalIgnoreCase))
+            .Where(fee => string.Equals(fee.CalculationTypeCode, FeeComponentCalculationTypes.Fixed, StringComparison.OrdinalIgnoreCase))
+            .Sum(fee => fee.FeeValue);
+
+        decimal total = activeFees.Sum(fee =>
+        {
+            if (string.Equals(fee.ComponentTypeCode, FeeComponentTypeCodes.Tax, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(fee.CalculationTypeCode, FeeComponentCalculationTypes.Percentage, StringComparison.OrdinalIgnoreCase))
+            {
+                return decimal.Round(subtotal * fee.FeeValue / 100m, 2, MidpointRounding.AwayFromZero);
+            }
+
+            return string.Equals(fee.CalculationTypeCode, FeeComponentCalculationTypes.Fixed, StringComparison.OrdinalIgnoreCase)
+                ? fee.FeeValue
+                : 0m;
+        });
+
+        return decimal.Round(total, 2, MidpointRounding.AwayFromZero);
     }
 }

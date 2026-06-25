@@ -12,6 +12,7 @@ public sealed record CreateFeeComponentRequest(
     string ComponentTypeCode,
     string CalculationTypeCode,
     bool IsTaxComponent,
+    decimal DefaultValue = 0m,
     bool IsActive = true);
 
 public sealed record UpdateFeeComponentRequest(
@@ -20,6 +21,7 @@ public sealed record UpdateFeeComponentRequest(
     string ComponentTypeCode,
     string CalculationTypeCode,
     bool IsTaxComponent,
+    decimal DefaultValue,
     bool IsActive);
 
 public sealed record FeeComponentDto(
@@ -29,4 +31,6 @@ public sealed record FeeComponentDto(
     string ComponentTypeCode,
     string CalculationTypeCode,
     bool IsTaxComponent,
+    decimal DefaultValue,
+    bool IsSystemManaged,
     bool IsActive);

@@ -7,7 +7,7 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.StatementPayments;
 
-internal sealed record ListUserPaymentHistoryQuery
+public sealed record ListUserPaymentHistoryQuery
     : IQuery<IReadOnlyCollection<UserPaymentHistoryResponse>>;
 
 internal sealed class ListUserPaymentHistoryHandler(

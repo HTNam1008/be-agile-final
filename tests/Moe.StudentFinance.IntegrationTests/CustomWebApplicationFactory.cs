@@ -1,6 +1,7 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
-using System.Text.Json;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -8,14 +9,16 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Hosting;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
-using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -44,6 +47,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.AddHostedService<IntegrationTestDbSeeder>();
             services.RemoveAll<IStripePaymentGateway>();
             services.AddSingleton<IStripePaymentGateway, IntegrationTestStripeGateway>();
+            services.Configure<EducationAccountLifecycleOptions>(options => options.Enabled = false);
 
             // Mock Authentication
             services.AddAuthentication(options =>
@@ -87,6 +91,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                     policy.RequireClaim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE");
                 });
 
+                options.AddPolicy(AuthorizationPolicies.LifecycleManualTrigger, policy =>
+                {
+                    policy.AuthenticationSchemes.Clear();
+                    policy.AddAuthenticationSchemes("Test");
+                    policy.RequireAuthenticatedUser();
+                    policy.RequireClaim(ClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER");
+                });
+
                 options.AddPolicy(AuthorizationPolicies.ManageAccounts, policy =>
                 {
                     policy.AuthenticationSchemes.Clear();
@@ -119,6 +131,11 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
 internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 {
+    private static readonly ConcurrentDictionary<string, byte> ExpireFailures = new();
+
+    public static void FailNextExpireForSession(string providerSessionId)
+        => ExpireFailures[providerSessionId] = 0;
+
     public Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
         StripeCheckoutGatewayRequest request,
         CancellationToken cancellationToken)
@@ -130,7 +147,15 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 
     public Task ExpireCheckoutAsync(
         string providerSessionId,
-        CancellationToken cancellationToken) => Task.CompletedTask;
+        CancellationToken cancellationToken)
+    {
+        if (ExpireFailures.TryRemove(providerSessionId, out _))
+        {
+            throw new PaymentProviderUnavailableException();
+        }
+
+        return Task.CompletedTask;
+    }
 
     public Task<StripeScheduleGatewayResult> AttachFiniteScheduleAsync(
         string providerSubscriptionId,
@@ -206,6 +231,7 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
         var db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
 
         SeedDemoSchool(db);
+        SeedGstFeeComponent(db);
         SeedStudent(db, 2101, "IT-STU-0001", "Integration Student One", new DateOnly(2008, 2, 10), "SEC_4", "4A", 1);
         SeedStudent(db, 2102, "IT-STU-0002", "Integration Student Two", new DateOnly(2009, 7, 15), "SEC_3", "3B", 1);
         SeedAccount(db, 2101, "EA-IT-0001", 125.00m);
@@ -249,6 +275,24 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
 
         SetId(otherSchool, 2);
         db.Add(otherSchool);
+    }
+
+    private static void SeedGstFeeComponent(MoeDbContext db)
+    {
+        if (db.Set<FeeComponent>().Any(x => x.ComponentCode == SystemFeeComponentCodes.Gst))
+        {
+            return;
+        }
+
+        db.Set<FeeComponent>().Add(new FeeComponent(
+            SystemFeeComponentCodes.Gst,
+            "Goods and Services Tax",
+            FeeComponentTypeCodes.Tax,
+            FeeComponentCalculationTypes.Percentage,
+            isTaxComponent: true,
+            defaultValue: 9m,
+            isSystemManaged: true,
+            isActive: true));
     }
 
     private static void SeedStudent(
@@ -365,19 +409,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
                 new Claim(ClaimNames.PersonId, GetHeaderValue("X-Test-PersonId", "2001")),
                 new Claim(ClaimNames.UserAccountId, GetHeaderValue("X-Test-UserAccountId", "1003"))
             ]
-            : new[]
-            {
-                new Claim(ClaimTypes.Name, "Test User"),
-                new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
-                new Claim(ClaimNames.Portal, PortalCodes.Admin),
-                new Claim(ClaimNames.Role, requestedRole),
-                new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"),
-                new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"),
-                new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"),
-                new Claim(ClaimNames.UserAccountId, "1001")
-            }.Concat(Request.Headers.ContainsKey("X-Test-No-Fas-Permission")
-                ? Array.Empty<Claim>()
-                : new[] { new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE") }).ToArray();
+            : CreateAdminClaims(requestedRole);
 
         if (!Request.Path.StartsWithSegments("/api/eservice", StringComparison.OrdinalIgnoreCase))
         {
@@ -402,6 +434,40 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             : fallback;
     }
 
+    private Claim[] CreateAdminClaims(string requestedRole)
+    {
+        List<Claim> claims =
+        [
+            new Claim(ClaimTypes.Name, "Test User"),
+            new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
+            new Claim(ClaimNames.Portal, PortalCodes.Admin),
+            new Claim(ClaimNames.Role, requestedRole),
+            new Claim(ClaimNames.UserAccountId, "1001")
+        ];
+
+        if (Request.Headers.ContainsKey("X-Test-Only-Manage-Accounts"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"));
+            return claims.ToArray();
+        }
+
+        claims.Add(new Claim(ClaimNames.Permission, "TOPUPS_MANAGE"));
+        claims.Add(new Claim(ClaimNames.Permission, "ACCOUNT_LIFECYCLE_MANAGE"));
+        claims.Add(new Claim(ClaimNames.Permission, "ACCOUNT_MANUAL_CREATE"));
+
+        if (Request.Headers.ContainsKey("X-Test-Lifecycle-Manual-Trigger"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER"));
+        }
+
+        if (!Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
+        {
+            claims.Add(new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"));
+        }
+
+        return claims.ToArray();
+    }
+
     private IEnumerable<Claim> GetOrganizationUnitClaims()
     {
         string raw = GetHeaderValue("X-Test-OrganizationUnitIds", "1");
@@ -415,4 +481,5 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             yield return new Claim(ClaimNames.OrganizationUnitId, value);
         }
     }
+
 }

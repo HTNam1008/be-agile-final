@@ -77,6 +77,50 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
         statement.Refresh(total, 0m, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        long[] billIds = bills.Select(x => x.Bill.Id).ToArray();
+        List<StatementBillLineProjection> billLines = await (
+            from line in dbContext.Set<BillLine>().AsNoTracking()
+            join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                on line.FeeComponentId equals component.Id
+            where billIds.Contains(line.BillId)
+            orderby line.BillId, line.Id
+            select new StatementBillLineProjection(
+                line.BillId,
+                line.Id,
+                line.FeeComponentId,
+                line.CourseFeeId,
+                component.ComponentCode,
+                component.ComponentName,
+                component.ComponentTypeCode,
+                component.CalculationTypeCode,
+                line.DescriptionSnapshot,
+                line.Quantity,
+                line.UnitAmount,
+                line.GrossAmount,
+                line.SubsidyAmount,
+                line.NetAmount))
+            .ToListAsync(cancellationToken);
+        Dictionary<long, BillingStatementItemLineResponse[]> linesByBillId = billLines
+            .GroupBy(line => line.BillId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(line => new BillingStatementItemLineResponse(
+                        line.BillLineId,
+                        line.FeeComponentId,
+                        line.CourseFeeId,
+                        line.ComponentCode,
+                        line.ComponentName,
+                        line.ComponentTypeCode,
+                        line.CalculationTypeCode,
+                        line.Description,
+                        line.Quantity,
+                        line.UnitAmount,
+                        line.GrossAmount,
+                        line.SubsidyAmount,
+                        line.NetAmount))
+                    .ToArray());
+
         return new BillingStatementResponse(
             statement.Id,
             year,
@@ -104,7 +148,24 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
                     row.Bill.BillStatusCode,
                     row.IsInstallment,
                     row.IsInstallment,
-                    row.IsInstallment ? null : "Full payment bills cannot be deferred.");
+                    row.IsInstallment ? null : "Full payment bills cannot be deferred.",
+                    linesByBillId.GetValueOrDefault(row.Bill.Id, []));
             }).ToArray());
     }
 }
+
+internal sealed record StatementBillLineProjection(
+    long BillId,
+    long BillLineId,
+    long FeeComponentId,
+    long? CourseFeeId,
+    string ComponentCode,
+    string ComponentName,
+    string ComponentTypeCode,
+    string CalculationTypeCode,
+    string Description,
+    decimal Quantity,
+    decimal UnitAmount,
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetAmount);
