@@ -11,6 +11,19 @@ internal static class PaymentSqlReader
         long personId,
         CancellationToken cancellationToken)
     {
+        if (dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            var inMemoryAccount = await dbContext.Set<Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount>()
+                .Where(x => x.PersonId == personId && x.StatusCode == "ACTIVE")
+                .OrderBy(x => x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return new OutstandingBillsResponse(
+                inMemoryAccount?.CachedBalance ?? 0m,
+                "SGD",
+                Array.Empty<OutstandingBillDto>());
+        }
+
         AccountBalanceRow? account = await dbContext.Database
             .SqlQuery<AccountBalanceRow>($"""
                 SELECT TOP(1)

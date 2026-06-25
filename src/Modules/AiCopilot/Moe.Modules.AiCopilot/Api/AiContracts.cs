@@ -32,6 +32,7 @@ public sealed record FasFormPatch(
     int? HouseholdMemberCount,
     decimal OtherMonthlyIncome,
     IReadOnlyCollection<string> ParentNationalities,
+    IReadOnlyDictionary<string, string>? Provenance = null,
     string EmploymentStatusCode = "EMPLOYED");
 public sealed record AiInterviewState(string Status, string? NextQuestion,
     IReadOnlyCollection<AiInterviewField> Fields, IReadOnlyCollection<string> MissingFields, object? FormPatch);
@@ -42,5 +43,5 @@ public sealed record AiConversationResponse(Guid ConversationId, string Mode, st
     IReadOnlyCollection<AiConversationMessageResponse> Messages, AiInterviewState? InterviewState);
 public sealed record AiConversationMessageResponse(long MessageId, string Role, string Content, DateTime CreatedAtUtc);
 public sealed record CreateAdminCenterCaseRequest(Guid ReviewRecordId,
-    [property: Required, StringLength(2000, MinimumLength = 5)] string Description,
-    [property: RegularExpression("PORTAL|EMAIL|PHONE")] string ContactPreference = "PORTAL");
+    [Required, StringLength(2000, MinimumLength = 5)] string Description,
+    [RegularExpression("PORTAL|EMAIL|PHONE")] string ContactPreference = "PORTAL");

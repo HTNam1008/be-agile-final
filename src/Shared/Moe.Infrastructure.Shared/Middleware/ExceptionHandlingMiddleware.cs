@@ -27,6 +27,25 @@ public sealed class ExceptionHandlingMiddleware(
                 "Validation failed.",
                 exception.Errors.Select(error => error.ErrorMessage).Distinct().ToArray());
         }
+        catch (KeyNotFoundException exception)
+        {
+            await WriteAsync(
+                context,
+                StatusCodes.Status404NotFound,
+                "NOT_FOUND",
+                exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            bool authenticationRequired = exception.Message.Contains("AUTHENTICATION_REQUIRED", StringComparison.OrdinalIgnoreCase);
+            await WriteAsync(
+                context,
+                authenticationRequired ? StatusCodes.Status401Unauthorized : StatusCodes.Status403Forbidden,
+                authenticationRequired ? "UNAUTHORIZED" : "FORBIDDEN",
+                string.IsNullOrWhiteSpace(exception.Message)
+                    ? (authenticationRequired ? "Authentication is required." : "Access is forbidden.")
+                    : exception.Message);
+        }
         catch (ApiException exception)
         {
             await WriteAsync(
