@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.SharedKernel.Results;
@@ -123,6 +124,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         int installmentCount,
         int intervalMonths,
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
         CancellationToken cancellationToken)
     {
         var strategy = dbContext.Database.CreateExecutionStrategy();
@@ -139,6 +141,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                     installmentCount,
                     intervalMonths,
                     feeLines,
+                    fasSubsidies,
                     cancellationToken);
             }
 
@@ -151,6 +154,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                 installmentCount,
                 intervalMonths,
                 feeLines,
+                fasSubsidies,
                 cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
@@ -176,6 +180,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         int installmentCount,
         int intervalMonths,
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
         CancellationToken cancellationToken)
     {
         var strategy = dbContext.Database.CreateExecutionStrategy();
@@ -211,17 +216,19 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             enrollment.ChangePaymentPlan(coursePaymentPlanId, installment);
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            IReadOnlyList<CourseFeeBillingAmount> totalAmounts = CourseFeeAmountCalculator.Calculate(feeLines);
+            FasBillingCalculation calculation = FasBillingCalculator.Calculate(feeLines, fasSubsidies);
+            IReadOnlyList<CourseFeeBillingAmount> totalAmounts = calculation.Amounts;
             List<GeneratedBillResult> generated = [];
             for (int sequence = 1; sequence <= installmentCount; sequence++)
             {
                 IReadOnlyList<CourseFeeBillingAmount> installmentAmounts =
                     CourseFeeAmountCalculator.AllocateInstallment(totalAmounts, sequence, installmentCount);
                 decimal installmentAmount = installmentAmounts.Sum(x => x.Amount);
+                decimal installmentSubsidy = CourseFeeAmountCalculator.AllocateAmount(calculation.SubsidyAmount, sequence, installmentCount);
                 DateOnly dueDate = firstDueDate.AddMonths((sequence - 1) * intervalMonths);
                 Bill bill = Bill.IssueForCourseEnrollment(
                     enrollment.Id, $"{billNumberPrefix}-{sequence:D2}", issuedAtUtc,
-                    dueDate, installmentAmount, sequenceNumber: sequence).Value;
+                    dueDate, installmentAmount, installmentSubsidy, sequenceNumber: sequence).Value;
                 await dbContext.Set<Bill>().AddAsync(bill, cancellationToken);
                 await dbContext.SaveChangesAsync(cancellationToken);
                 foreach (CourseFeeBillingAmount amount in installmentAmounts.Where(x => x.Amount > 0m))
@@ -259,6 +266,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         int installmentCount,
         int intervalMonths,
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
         CancellationToken cancellationToken)
     {
         await dbContext.Set<CourseEnrollment>().AddAsync(enrollment, cancellationToken);
@@ -267,7 +275,8 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         if (installmentCount <= 0 || intervalMonths < 0)
             throw new InvalidOperationException("The payment plan schedule is invalid.");
 
-        IReadOnlyList<CourseFeeBillingAmount> totalAmounts = CourseFeeAmountCalculator.Calculate(feeLines);
+        FasBillingCalculation calculation = FasBillingCalculator.Calculate(feeLines, fasSubsidies);
+        IReadOnlyList<CourseFeeBillingAmount> totalAmounts = calculation.Amounts;
         List<GeneratedBillResult> generated = [];
 
         for (int sequence = 1; sequence <= installmentCount; sequence++)
@@ -275,6 +284,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             IReadOnlyList<CourseFeeBillingAmount> installmentAmounts =
                 CourseFeeAmountCalculator.AllocateInstallment(totalAmounts, sequence, installmentCount);
             decimal installmentAmount = installmentAmounts.Sum(x => x.Amount);
+            decimal installmentSubsidy = CourseFeeAmountCalculator.AllocateAmount(calculation.SubsidyAmount, sequence, installmentCount);
             DateOnly dueDate = firstDueDate.AddMonths((sequence - 1) * intervalMonths);
             Result<Bill> billResult = Bill.IssueForCourseEnrollment(
                 enrollment.Id,
@@ -282,6 +292,7 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                 issuedAtUtc,
                 dueDate,
                 installmentAmount,
+                installmentSubsidy,
                 sequenceNumber: sequence);
             if (billResult.IsFailure)
                 throw new InvalidOperationException(billResult.Error.Message);
@@ -311,4 +322,5 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         await dbContext.SaveChangesAsync(cancellationToken);
         return new CourseEnrollmentBillingResult(enrollment, generated);
     }
+
 }
