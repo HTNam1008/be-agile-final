@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
-using Moe.StudentFinance.Persistence;
 using Moe.SharedKernel.Results;
+using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Infrastructure.Payments;
 

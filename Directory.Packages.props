@@ -24,6 +24,8 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.25.1" />
+    <PackageVersion Include="Microsoft.SemanticKernel" Version="1.42.0" />
+    <PackageVersion Include="Microsoft.SemanticKernel.Plugins.Memory" Version="1.38.0-alpha" />
     <PackageVersion Include="ClosedXML" Version="0.105.0" />
   </ItemGroup>
 </Project>

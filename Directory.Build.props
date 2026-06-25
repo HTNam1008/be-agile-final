@@ -9,6 +9,6 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <NoWarn>$(NoWarn);NU1903;NU1904</NoWarn>
   </PropertyGroup>
 </Project>

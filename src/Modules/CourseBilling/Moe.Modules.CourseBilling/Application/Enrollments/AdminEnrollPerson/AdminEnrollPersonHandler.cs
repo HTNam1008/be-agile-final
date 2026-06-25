@@ -3,8 +3,8 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
-using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;

@@ -45,6 +45,7 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
             new Permission(PermissionCodes.AuditViewAll, "View national audit", "IDENTITY_PLATFORM", "VIEW", "AUDIT_ALL"),
             new Permission(PermissionCodes.ReportExportAll, "Export national reports", "IDENTITY_PLATFORM", "EXPORT", "REPORTS_ALL"),
             new Permission(PermissionCodes.AuditViewSchool, "View own-school audit", "IDENTITY_PLATFORM", "VIEW", "AUDIT_SCHOOL"),
-            new Permission(PermissionCodes.ReportExportSchool, "Export own-school reports", "IDENTITY_PLATFORM", "EXPORT", "REPORTS_SCHOOL"));
+            new Permission(PermissionCodes.ReportExportSchool, "Export own-school reports", "IDENTITY_PLATFORM", "EXPORT", "REPORTS_SCHOOL"),
+            new Permission(PermissionCodes.AiReviewManage, "Manage AI review queue", "AI_COPILOT", "MANAGE", "AI_REVIEWS"));
     }
 }

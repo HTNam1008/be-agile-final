@@ -11,6 +11,7 @@ using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
+using Moe.Modules.AiCopilot;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
@@ -35,7 +36,8 @@ IModule[] modules =
     new IdentityPlatformModule(),
     new EducationAccountTopUpModule(),
     new CourseBillingModule(),
-    new FasPaymentModule()
+    new FasPaymentModule(),
+    new AiCopilotModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddScoped<IEligiblePersonLookupGateway, EligiblePersonLookupGatewayAdapter>();
@@ -59,7 +61,8 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(EducationAccountTopUpModule).Assembly)
     .AddApplicationPart(typeof(CourseBillingModule).Assembly)
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
-    .AddApplicationPart(typeof(FasPaymentModule).Assembly);
+    .AddApplicationPart(typeof(FasPaymentModule).Assembly)
+    .AddApplicationPart(typeof(AiCopilotModule).Assembly);
 
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
 {
@@ -188,6 +191,7 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
         new(LocalIdentityClaimNames.Permission, "EXTERNAL_ACCOUNTS_PROVISION"),
         new(LocalIdentityClaimNames.Permission, "FAS_SCHEME_MANAGE"),
         new(LocalIdentityClaimNames.Permission, "FAS_REVIEW"),
+        new(LocalIdentityClaimNames.Permission, "AI_REVIEW_MANAGE"),
         new(LocalIdentityClaimNames.Portal, PortalCodes.Admin),
         new(LocalIdentityClaimNames.IdentityProvider, "ENTRA_WORKFORCE")
     ];

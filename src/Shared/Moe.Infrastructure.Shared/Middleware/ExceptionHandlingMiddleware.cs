@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Exceptions;
@@ -8,6 +9,7 @@ namespace Moe.Infrastructure.Shared.Middleware;
 
 public sealed class ExceptionHandlingMiddleware(
     RequestDelegate next,
+    IHostEnvironment environment,
     ILogger<ExceptionHandlingMiddleware> logger)
 {
     public async Task InvokeAsync(HttpContext context)
@@ -40,7 +42,12 @@ public sealed class ExceptionHandlingMiddleware(
                 context,
                 StatusCodes.Status500InternalServerError,
                 "UNEXPECTED_ERROR",
-                "An unexpected error occurred.");
+                environment.IsDevelopment()
+                    ? $"{exception.GetType().Name}: {exception.Message}"
+                    : "An unexpected error occurred.",
+                environment.IsDevelopment()
+                    ? [exception.GetType().FullName ?? exception.GetType().Name, exception.Message]
+                    : null);
         }
     }
 
