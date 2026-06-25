@@ -162,7 +162,7 @@ public sealed class AiOrchestratorService(
                 : "I already have the confirmed details for this FAS check. Use Apply answers to form to copy them into the application, or edit the form manually if anything is wrong.";
             List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
             c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
-            return new(c.Id, 0, completedText, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), [], completedActions, completedInterview);
+            return new(c.Id, 0, completedText, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
         }
 
         FasExtractionResult extraction = isNewInterview ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
@@ -171,7 +171,7 @@ public sealed class AiOrchestratorService(
             state.Status = "MANUAL_FALLBACK";
             AiInterviewState manualInterview = ToInterviewState(state, null);
             c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
-            return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), [],
+            return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [],
                 [new("NAVIGATE", "Open FAS application", "/portal/fas")], manualInterview);
         }
 
@@ -180,8 +180,7 @@ public sealed class AiOrchestratorService(
             state.Status = "CLARIFYING";
             AiInterviewState clarificationInterview = ToInterviewState(state, extraction.Message);
             c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
-            return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), [],
-                [new("NAVIGATE", "Open FAS application", "/portal/fas")], clarificationInterview);
+            return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [], clarificationInterview);
         }
 
         string? next = NextQuestion(state, fieldKey);
@@ -218,9 +217,11 @@ public sealed class AiOrchestratorService(
         AiInterviewState interview = ToInterviewState(state, next, recommendedSchemes);
         c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
         List<AiCard> cards = recommendation is null ? [] : [new("FAS_RECOMMENDATION", recommendation)];
-        List<AiAction> actions = [new("NAVIGATE", "Open FAS application", "/portal/fas")];
+        List<AiAction> actions = state.Status == "COMPLETE" || state.Status == "MANUAL_FALLBACK"
+            ? [new("NAVIGATE", "Open FAS application", "/portal/fas")]
+            : [];
         if (state.Status == "COMPLETE") actions.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: interview.FormPatch));
-        return new(c.Id, 0, text, "FAS_INTERVIEW", Grounding(knowledge.Retrieve(request.Message, "FAS")), cards, actions, interview);
+        return new(c.Id, 0, text, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), cards, actions, interview);
     }
 
     private async Task<AiChatResponse> HandleGeneral(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
@@ -322,6 +323,20 @@ public sealed class AiOrchestratorService(
     {
         string? field = s.ClarificationField ?? NextMissingField(s, preferredField);
         if (field is null) return FasExtractionResult.Accepted();
+
+        if (field != "isWelfareHomeResident" && LooksLikeWelfareHomeCorrection(message))
+        {
+            FasExtractionResult welfareCorrection = ExtractWelfareHome(message);
+            if (welfareCorrection.Status == "ACCEPTED")
+            {
+                s.ClarificationField = null;
+                s.ValidationMessage = null;
+                s.ClarificationAttempts.Remove(field);
+                s.ClarificationAttempts.Remove("isWelfareHomeResident");
+                ApplyAcceptedValue(s, "isWelfareHomeResident", welfareCorrection.Value);
+                return welfareCorrection;
+            }
+        }
 
         FasExtractionResult result = field switch
         {
@@ -474,15 +489,21 @@ public sealed class AiOrchestratorService(
         if (Regex.IsMatch(value, @"\b(not sure|maybe|i don't know|i do not know|what is|unsure|uncertain)\b", RegexOptions.IgnoreCase))
             return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
 
-        bool notNegatesWelfare = Regex.IsMatch(value, @"\bnot\b.{0,20}\b(welfare|approved)\b", RegexOptions.IgnoreCase);
+        bool notNegatesWelfare = Regex.IsMatch(value, @"\b(not|don't|do not)\b.{0,30}\b(welfare|approved|home|one)\b", RegexOptions.IgnoreCase);
         if (notNegatesWelfare) return FasExtractionResult.Accepted(false);
 
-        bool yes = Regex.IsMatch(value, @"\b(yes|y|welfare home|approved welfare)\b", RegexOptions.IgnoreCase);
+        bool yes = Regex.IsMatch(value, @"\b(yes|y|welfare home|approved welfare)\b", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(value, @"\b(do have|have|reside in|live in)\b.{0,30}\b(welfare|approved home|home|one)\b", RegexOptions.IgnoreCase);
         bool no = Regex.IsMatch(value, @"\b(no|n|not|do not|don't)\b", RegexOptions.IgnoreCase);
 
         if (yes && !no) return FasExtractionResult.Accepted(true);
         if (no && !yes) return FasExtractionResult.Accepted(false);
         return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
+    }
+
+    private static bool LooksLikeWelfareHomeCorrection(string message)
+    {
+        return Regex.IsMatch(message, @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b", RegexOptions.IgnoreCase);
     }
 
     private static FasExtractionResult ExtractIncome(string message)
@@ -590,6 +611,7 @@ public sealed class AiOrchestratorService(
     private static FasInterviewData? DeserializeState(string? value) => string.IsNullOrWhiteSpace(value) ? null : JsonSerializer.Deserialize<FasInterviewData>(value, JsonOptions);
     private static AiInterviewState? DeserializeInterview(string? value) => DeserializeState(value) is { } state ? ToInterviewState(state, NextQuestion(state)) : null;
     private static AiGrounding Grounding(IReadOnlyList<KnowledgeResult> sources) => new(sources.Count > 0, sources.Select(x => x.Citation).ToArray());
+    private static AiGrounding FasInterviewGrounding(string _) => new(false, []);
     private static AiAction[] FallbackActions(Guid review) =>
     [
         new("NAVIGATE", "Education Account FAQ", "/portal/account"),

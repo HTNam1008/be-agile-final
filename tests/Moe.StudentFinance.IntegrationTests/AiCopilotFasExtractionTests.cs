@@ -176,6 +176,35 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Welfare_home_correction_during_income_step_recovers_without_clutter()
+    {
+        Guid cid = await StartInterview();
+
+        JsonElement ambiguous = await SendFas("maybe no", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(ambiguous));
+        Assert.Empty(ambiguous.GetProperty("actions").EnumerateArray());
+        Assert.False(ambiguous.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        Assert.Empty(ambiguous.GetProperty("grounding").GetProperty("citations").EnumerateArray());
+
+        JsonElement no = await SendFas("no?", cid);
+        Assert.Equal("COLLECTING", GetInterviewStatus(no));
+        Assert.Contains("income", no.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement corrected = await SendFas("wait, I do have the welfare", cid);
+        Assert.Equal("COLLECTING", GetInterviewStatus(corrected));
+        AssertWelfareStatus(corrected, true);
+        Assert.Contains("nationality", corrected.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(corrected.GetProperty("actions").EnumerateArray());
+        Assert.False(corrected.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        Assert.Empty(corrected.GetProperty("grounding").GetProperty("citations").EnumerateArray());
+
+        JsonElement income = GetField(corrected, "monthlyHouseholdIncome");
+        JsonElement household = GetField(corrected, "householdMemberCount");
+        Assert.False(income.GetProperty("confirmed").GetBoolean());
+        Assert.False(household.GetProperty("confirmed").GetBoolean());
+    }
+
+    [Fact]
     public async Task Form_patch_includes_provenance_dictionary()
     {
         await CreateEligibleScheme();
