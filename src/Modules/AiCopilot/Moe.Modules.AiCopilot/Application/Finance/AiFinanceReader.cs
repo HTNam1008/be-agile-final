@@ -7,6 +7,8 @@ using Moe.Modules.FasPayment.Contracts.Payments;
 
 namespace Moe.Modules.AiCopilot.Application.Finance;
 
+/// <param name="BillCount">Number of bills with OutstandingAmount > 0</param>
+/// <param name="TotalOutstanding">Sum of OutstandingAmount across those bills</param>
 public sealed record AiFinanceSnapshot(
     decimal CurrentBalance,
     decimal HeldBalance,
