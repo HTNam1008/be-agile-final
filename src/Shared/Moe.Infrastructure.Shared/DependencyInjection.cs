@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -162,6 +163,8 @@ public static class DependencyInjection
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
     {
+        target.MapInboundClaims = false;
+
         if (!string.IsNullOrWhiteSpace(source.LocalTokenSigningKey))
         {
             target.RequireHttpsMetadata = source.RequireHttpsMetadata;
@@ -254,6 +257,12 @@ public static class DependencyInjection
                 {
                     context.Token = cookieToken;
                 }
+                else if (authenticationScheme == AuthenticationSchemes.AdminEntra
+                    && !IsAdminSessionEstablishmentRequest(context.Request)
+                    && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.NoResult();
+                }
 
                 return Task.CompletedTask;
             },
@@ -268,6 +277,12 @@ public static class DependencyInjection
             }
         };
     }
+
+    private static bool IsAdminSessionEstablishmentRequest(HttpRequest request)
+        => HttpMethods.IsPost(request.Method)
+            && request.Path.Value is string path
+            && path.StartsWith("/api/admin/v", StringComparison.OrdinalIgnoreCase)
+            && path.EndsWith("/auth/session", StringComparison.OrdinalIgnoreCase);
 
     private static void AddAdminFeaturePolicy(
         Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
