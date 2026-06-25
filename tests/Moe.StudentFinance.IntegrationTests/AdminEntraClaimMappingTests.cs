@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using Asp.Versioning;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.TestHost;
@@ -13,9 +14,12 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Configuration;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.IdentityPlatform.Application.Authentication.GetCurrentIdentity;
 using Moe.Modules.IdentityPlatform.Api.Admin;
+using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.SharedKernel.Results;
 using Xunit;
 using MoeAuthSchemes = Moe.Infrastructure.Shared.Security.AuthenticationSchemes;
@@ -57,13 +61,95 @@ public sealed class AdminEntraClaimMappingTests
         using HttpClient client = app.GetTestClient();
         string token = CreateAdminToken();
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/admin/v1/auth/session");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+        using HttpRequestMessage request = CreateBearerRequest(HttpMethod.Post, "/api/admin/v1/auth/session", token);
 
         HttpResponseMessage response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith($"{AuthenticationCookies.AdminSession}=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Auth_me_accepts_session_cookie_without_bearer_header()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync();
+        using HttpClient client = app.GetTestClient();
+        string token = CreateAdminToken();
+
+        using HttpRequestMessage request = CreateCookieRequest(HttpMethod.Get, "/api/admin/v1/auth/me", token);
+
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auth_me_rejects_bearer_without_session_cookie()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync();
+        using HttpClient client = app.GetTestClient();
+        string token = CreateAdminToken();
+
+        using HttpRequestMessage request = CreateBearerRequest(HttpMethod.Get, "/api/admin/v1/auth/me", token);
+
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auth_me_rejects_old_bearer_after_logout_when_cookie_is_absent()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync();
+        using HttpClient client = app.GetTestClient();
+        string token = CreateAdminToken();
+
+        using HttpRequestMessage request = CreateBearerRequest(HttpMethod.Get, "/api/admin/v1/auth/me", token);
+
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auth_logout_rejects_bearer_without_session_cookie()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync();
+        using HttpClient client = app.GetTestClient();
+        string token = CreateAdminToken();
+
+        using HttpRequestMessage request = CreateBearerRequest(HttpMethod.Post, "/api/admin/v1/auth/logout", token);
+
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Other_admin_endpoint_rejects_bearer_without_session_cookie()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync();
+        using HttpClient client = app.GetTestClient();
+        string token = CreateAdminToken();
+
+        using HttpRequestMessage request = CreateBearerRequest(HttpMethod.Get, "/api/admin/v1/auth-test/protected", token);
+
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Dev_admin_token_remains_usable_for_auth_session()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync(mapDevAdminToken: true);
+        using HttpClient client = app.GetTestClient();
+
+        HttpResponseMessage tokenResponse = await client.GetAsync("/dev/admin-token");
+        string tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+        Assert.Contains("accessToken", tokenJson, StringComparison.Ordinal);
     }
 
     private static JwtBearerOptions CreateJwtOptions(string scheme)
@@ -127,6 +213,22 @@ public sealed class AdminEntraClaimMappingTests
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    private static HttpRequestMessage CreateBearerRequest(HttpMethod method, string path, string token)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Content = method == HttpMethod.Get ? null : new StringContent("{}", Encoding.UTF8, "application/json");
+        return request;
+    }
+
+    private static HttpRequestMessage CreateCookieRequest(HttpMethod method, string path, string token)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("Cookie", $"{AuthenticationCookies.AdminSession}={token}");
+        request.Content = method == HttpMethod.Get ? null : new StringContent("{}", Encoding.UTF8, "application/json");
+        return request;
+    }
+
     private static ClaimsPrincipal Validate(string token, JwtBearerOptions options)
     {
         var handler = new JwtSecurityTokenHandler
@@ -137,13 +239,13 @@ public sealed class AdminEntraClaimMappingTests
         return handler.ValidateToken(token, options.TokenValidationParameters, out _);
     }
 
-    private static async Task<WebApplication> CreateAuthSessionAppAsync()
+    private static async Task<WebApplication> CreateAuthSessionAppAsync(bool mapDevAdminToken = false)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Configuration.AddConfiguration(CreateConfiguration());
         builder.Services.AddSharedInfrastructure(builder.Configuration);
-        builder.Services.AddSingleton<IQueryDispatcher, ThrowingQueryDispatcher>();
+        builder.Services.AddSingleton<IQueryDispatcher, TestQueryDispatcher>();
         builder.Services.AddControllers().AddApplicationPart(typeof(AdminAuthController).Assembly);
         builder.Services.AddApiVersioning(options =>
         {
@@ -157,15 +259,46 @@ public sealed class AdminEntraClaimMappingTests
         app.UseCors();
         app.UseSharedInfrastructure();
         app.MapControllers();
+        app.MapGet(
+                "/api/admin/v1/auth-test/protected",
+                () => Results.Ok(new { ok = true }))
+            .RequireAuthorization(AuthorizationPolicies.AdminPortal);
+        if (mapDevAdminToken)
+        {
+            app.MapGet(
+                "/dev/admin-token",
+                () => Results.Ok(new { accessToken = CreateAdminToken() }));
+        }
+
         await app.StartAsync();
         return app;
     }
 
-    private sealed class ThrowingQueryDispatcher : IQueryDispatcher
+    private sealed class TestQueryDispatcher : IQueryDispatcher
     {
         public Task<Result<TResponse>> Send<TResponse>(
             IQuery<TResponse> query,
             CancellationToken cancellationToken)
-            => throw new NotSupportedException("The auth/session action does not dispatch queries.");
+        {
+            if (query is GetCurrentIdentityQuery)
+            {
+                var summary = new LocalIdentitySummary(
+                    1,
+                    null,
+                    "Test Admin",
+                    "ENTRA_WORKFORCE",
+                    PortalCodes.Admin,
+                    "ACTIVE",
+                    null,
+                    false,
+                    [2],
+                    ["HQ_ADMIN"],
+                    ["TOPUPS_MANAGE"]);
+
+                return Task.FromResult(Result<TResponse>.Success((TResponse)(object)summary));
+            }
+
+            throw new NotSupportedException($"Unexpected query type {query.GetType().Name}.");
+        }
     }
 }
