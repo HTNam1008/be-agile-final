@@ -63,7 +63,8 @@ public sealed class AiOrchestratorService(
             conversation.Touch(response.Mode, pageJson, conversation.FasInterviewJson, now);
             var assistant = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(response.Text), now,
                 JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
-                JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions), (int)stopwatch.ElapsedMilliseconds);
+                JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
+                (int)stopwatch.ElapsedMilliseconds, SerializeResponse(response));
             db.Add(assistant); await db.SaveChangesAsync(ct);
             logger.LogInformation("AI conversation {ConversationId} mode {Mode} completed in {ElapsedMs} ms", conversation.Id, response.Mode, stopwatch.ElapsedMilliseconds);
             return response with { MessageId = assistant.Id };
@@ -73,7 +74,8 @@ public sealed class AiOrchestratorService(
             Guid reviewId = await CreateReview(conversation, personId, "MODEL_OR_TOOL_FAILURE", sanitizedRequest.PageContext, sanitizedRequest.Message, now, ct);
             logger.LogError(ex, "AI conversation {ConversationId} failed after {ElapsedMs} ms", conversation.Id, stopwatch.ElapsedMilliseconds);
             const string text = "I could not complete that request reliably. You can continue in the portal, review the help links, or contact the Admin Center.";
-            var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", text, now, latencyMs: (int)stopwatch.ElapsedMilliseconds);
+            var fallbackResponse = new AiChatResponse(conversation.Id, 0, text, "FALLBACK", new(false, []), [], FallbackActions(reviewId), null, reviewId);
+            var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", text, now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(fallbackResponse));
             db.Add(fallback); await db.SaveChangesAsync(ct);
             return new AiChatResponse(conversation.Id, fallback.Id, text, "FALLBACK", new(false, []), [],
                 FallbackActions(reviewId), null, reviewId);
@@ -86,7 +88,8 @@ public sealed class AiOrchestratorService(
         AiConversation conversation = await db.Set<AiConversation>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.PersonId == personId, ct)
             ?? throw new KeyNotFoundException("AI.CONVERSATION_NOT_FOUND");
         AiConversationMessageResponse[] messages = await db.Set<AiMessage>().AsNoTracking().Where(x => x.ConversationId == id)
-            .OrderBy(x => x.CreatedAtUtc).Select(x => new AiConversationMessageResponse(x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc)).ToArrayAsync(ct);
+            .OrderBy(x => x.CreatedAtUtc).Select(x => new AiConversationMessageResponse(x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc,
+                x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions))).ToArrayAsync(ct);
         return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages, DeserializeInterview(conversation.FasInterviewJson));
     }
 
@@ -495,6 +498,21 @@ public sealed class AiOrchestratorService(
             return $"Your Education Account can cover part of the outstanding amount, but is short by {remainder.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}. You may use split payment or another available online payment method for the remainder when the bill supports it.{settle}";
         }
         return $"Your Education Account does not have available funds to cover the outstanding amount. Use another available online payment method when the bill supports it.{settle}";
+    }
+
+    private static string SerializeResponse(AiChatResponse response)
+    {
+        var data = new
+        {
+            response.Mode,
+            response.Cards,
+            response.Actions,
+            response.ReviewRecordId,
+            response.InterviewState,
+            GroundingCards = response.Grounding.Citations,
+            GroundingIsGrounded = response.Grounding.IsGrounded,
+        };
+        return JsonSerializer.Serialize(data, JsonOptions);
     }
 
     private sealed class FasInterviewData

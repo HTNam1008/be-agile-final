@@ -38,6 +38,7 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
             b.Property(x => x.ContentRedacted).HasMaxLength(4000);
             b.Property(x => x.CitationsJson).HasMaxLength(4000);
             b.Property(x => x.ToolSummaryJson).HasMaxLength(2000);
+            b.Property(x => x.ResponseJson).HasMaxLength(8000);
         }
     }
     private sealed class ReviewConfiguration : IEntityTypeConfiguration<AiReviewRecord>
