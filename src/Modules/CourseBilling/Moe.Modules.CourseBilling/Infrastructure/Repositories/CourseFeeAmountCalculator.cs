@@ -52,6 +52,9 @@ internal static class CourseFeeAmountCalculator
             .ToArray();
     }
 
+    public static decimal AllocateAmount(decimal amount, int sequence, int installmentCount)
+        => AllocateBySequence(amount, sequence, installmentCount);
+
     private static decimal CalculateAmount(CourseFeeBillingLine line, decimal subtotal)
         => CalculateAmount(line.FeeValue, line.CalculationTypeCode, line.IsTaxComponent, subtotal);
 

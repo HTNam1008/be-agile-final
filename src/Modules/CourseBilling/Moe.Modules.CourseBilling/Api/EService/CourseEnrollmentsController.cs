@@ -28,7 +28,8 @@ public sealed class CourseEnrollmentsController(
         var result = await commands.Send(
             new SelfJoinCourseCommand(
                 request.CourseId,
-                request.CoursePaymentPlanId),
+                request.CoursePaymentPlanId,
+                request.FasApplicationSchemeIds),
             cancellationToken);
         return this.ToCourseBillingResponse(result, created: true);
     }
@@ -41,7 +42,8 @@ public sealed class CourseEnrollmentsController(
         => this.ToCourseBillingResponse(await commands.Send(
             new ChangeEnrollmentPaymentPlanCommand(
                 enrollmentId,
-                request.CoursePaymentPlanId),
+                request.CoursePaymentPlanId,
+                request.FasApplicationSchemeIds),
             cancellationToken));
 
     [HttpGet("{enrollmentId:long}/content")]

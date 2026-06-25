@@ -176,11 +176,27 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
                     x.BillStatusCode == BillStatusCodes.Cancelled);
             enrollment.GrantPaidAccess(allBillsPaid);
         }
-        decimal total = await dbContext.Set<BillingStatementItem>()
-            .Where(x => x.BillingStatementId == statementId)
-            .Join(dbContext.Set<Bill>(), item => item.BillId, bill => bill.Id, (_, bill) => bill.NetPayableAmount)
-            .SumAsync(cancellationToken);
-        decimal outstanding = bills.Sum(x => x.OutstandingAmount);
+        var statementBillAmounts = await (
+                from item in dbContext.Set<BillingStatementItem>()
+                join bill in dbContext.Set<Bill>() on item.BillId equals bill.Id
+                where item.BillingStatementId == statementId
+                select new
+                {
+                    Item = item,
+                    bill.NetPayableAmount,
+                    bill.OutstandingAmount
+                })
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in statementBillAmounts)
+        {
+            row.Item.Refresh(
+                row.NetPayableAmount,
+                row.NetPayableAmount - row.OutstandingAmount);
+        }
+
+        decimal total = statementBillAmounts.Sum(x => x.NetPayableAmount);
+        decimal outstanding = statementBillAmounts.Sum(x => x.OutstandingAmount);
         statement.Refresh(total, total - outstanding, paidAtUtc);
     }
 

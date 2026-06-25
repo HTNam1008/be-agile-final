@@ -13,7 +13,8 @@ internal sealed class BillLine : Entity<long>
         long? courseFeeId,
         string descriptionSnapshot,
         decimal quantity,
-        decimal unitAmount) : base(0)
+        decimal unitAmount,
+        decimal subsidyAmount) : base(0)
     {
         BillId = billId;
         FeeComponentId = feeComponentId;
@@ -22,8 +23,8 @@ internal sealed class BillLine : Entity<long>
         Quantity = quantity;
         UnitAmount = unitAmount;
         GrossAmount = Money(quantity * unitAmount);
-        SubsidyAmount = 0m;
-        NetAmount = GrossAmount;
+        SubsidyAmount = Money(subsidyAmount);
+        NetAmount = Money(GrossAmount - SubsidyAmount);
     }
 
     public long BillId { get; private set; }
@@ -41,9 +42,11 @@ internal sealed class BillLine : Entity<long>
         long feeComponentId,
         long courseFeeId,
         string descriptionSnapshot,
-        decimal feeValue)
+        decimal feeValue,
+        decimal subsidyAmount = 0m)
     {
-        if (billId <= 0 || feeComponentId <= 0 || courseFeeId <= 0 || feeValue < 0m)
+        if (billId <= 0 || feeComponentId <= 0 || courseFeeId <= 0 || feeValue < 0m ||
+            subsidyAmount < 0m || subsidyAmount > feeValue)
         {
             return Result<BillLine>.Failure(BillingErrors.InvalidBillLine);
         }
@@ -59,7 +62,8 @@ internal sealed class BillLine : Entity<long>
             courseFeeId,
             descriptionSnapshot.Trim(),
             1m,
-            feeValue);
+            feeValue,
+            subsidyAmount);
 
         return Result<BillLine>.Success(line);
     }

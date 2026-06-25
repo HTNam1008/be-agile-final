@@ -15,6 +15,7 @@ public sealed class FasPaymentModelConfiguration : IModelConfigurationContributo
         modelBuilder.ApplyConfiguration(new FasDeclarationConfiguration());
         modelBuilder.ApplyConfiguration(new FasStatusHistoryConfiguration());
         modelBuilder.ApplyConfiguration(new FasActiveSchemeConfiguration());
+        modelBuilder.ApplyConfiguration(new FasVoucherRedemptionConfiguration());
         modelBuilder.ApplyConfiguration(new FasSchemeConfiguration());
         modelBuilder.ApplyConfiguration(new FasSchemeCourseConfiguration());
         modelBuilder.ApplyConfiguration(new FasTierConfiguration());
