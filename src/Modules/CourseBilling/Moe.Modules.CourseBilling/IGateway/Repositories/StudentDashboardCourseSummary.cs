@@ -7,6 +7,9 @@ internal sealed record StudentDashboardCourseSummary(
     string CourseCode,
     string CourseName,
     string? LecturerName,
+    bool HasActiveFee,
+    decimal TotalFee,
+    int MaterialCount,
     DateOnly StartDate,
     DateOnly? EndDate,
     string EnrollmentStatusCode);
