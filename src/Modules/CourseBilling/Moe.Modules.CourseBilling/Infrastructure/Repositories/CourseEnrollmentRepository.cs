@@ -245,6 +245,8 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                 generated.Add(new GeneratedBillResult(bill, installmentAmounts.Count(x => x.Amount > 0m)));
             }
             await dbContext.SaveChangesAsync(cancellationToken);
+            await FinalizeEnrollmentAccessForPaidGeneratedBillsAsync(enrollment, generated, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             return new CourseEnrollmentBillingResult(enrollment, generated);
         });
@@ -320,7 +322,28 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await FinalizeEnrollmentAccessForPaidGeneratedBillsAsync(enrollment, generated, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
         return new CourseEnrollmentBillingResult(enrollment, generated);
+    }
+
+    private async Task FinalizeEnrollmentAccessForPaidGeneratedBillsAsync(
+        CourseEnrollment enrollment,
+        IReadOnlyCollection<GeneratedBillResult> generated,
+        CancellationToken cancellationToken)
+    {
+        if (!generated.Any(x => x.Bill.BillStatusCode == BillStatusCodes.Paid))
+        {
+            return;
+        }
+
+        bool allBillsPaid = await dbContext.Set<Bill>()
+            .Where(candidate => candidate.CourseEnrollmentId == enrollment.Id)
+            .AllAsync(candidate =>
+                candidate.BillStatusCode == BillStatusCodes.Paid ||
+                candidate.BillStatusCode == BillStatusCodes.Cancelled,
+                cancellationToken);
+        enrollment.GrantPaidAccess(allBillsPaid);
     }
 
 }
