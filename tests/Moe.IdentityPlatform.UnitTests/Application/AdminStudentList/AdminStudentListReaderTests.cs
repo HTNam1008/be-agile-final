@@ -37,6 +37,7 @@ public sealed class AdminStudentListReaderTests
 
         page.TotalCount.Should().Be(2);
         page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1001L, 1002L]);
+        page.Items.Should().OnlyContain(x => x.NationalityCode == "SG");
     }
 
     [Fact]
@@ -157,6 +158,27 @@ public sealed class AdminStudentListReaderTests
             CancellationToken.None);
 
         page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1014L, 1031L]);
+    }
+
+    [Fact]
+    public async Task ListAsync_FilterByCommaSeparatedLevelsAndClass_Composes()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1033, "Comma Level Match", "S1234033K", "CITIZEN", 10, "SEC_2", "2A");
+        SeedStudent(dbContext, 1034, "Comma Second Match", "S1234034L", "CITIZEN", 10, "SEC_3", "2A");
+        SeedStudent(dbContext, 1035, "Comma Wrong Class", "S1234035M", "CITIZEN", 10, "SEC_2", "2B");
+        SeedStudent(dbContext, 1036, "Comma Wrong Level", "S1234036N", "CITIZEN", 10, "SEC_4", "2A");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(levelCodes: ["SEC_2, SEC_3"], classCode: "2A", page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1033L, 1034L]);
     }
 
     [Fact]
