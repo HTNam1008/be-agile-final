@@ -151,7 +151,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Assert.Equal("CLARIFYING", GetInterviewStatus(first));
         JsonElement second = await SendFas("Still not sure", cid);
         Assert.Equal("MANUAL_FALLBACK", GetInterviewStatus(second));
-        Assert.Contains("Please continue in the FAS form", second.GetProperty("text").GetString());
+        Assert.Contains("couldn't safely prefill that field", second.GetProperty("text").GetString());
     }
 
     [Fact]

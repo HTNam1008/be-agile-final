@@ -153,7 +153,7 @@ public sealed class AiOrchestratorService(
             : null;
         FasInterviewData state;
         try { state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct); }
-        catch { return new(c.Id, 0, "I could not retrieve your profile information right now. Please proceed with the FAS form directly or contact Admin Center if the issue persists.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
+        catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly or contact Admin Center for help.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
         if (!isNewInterview && state.Status == "COMPLETE")
         {
             AiInterviewState completedInterview = ToInterviewState(state, null);
@@ -195,7 +195,7 @@ public sealed class AiOrchestratorService(
                     state.HouseholdMemberCount!.Value, 0, state.ParentNationalities), ct);
                 JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
                 bool hasSchemes = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array && schemes.GetArrayLength() > 0;
-                if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "Based on your information, I could not find a matching FAS scheme. Please proceed with the FAS form to verify manually or contact Admin Center for assistance."; }
+                if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "I couldn't find an eligible FAS scheme based on your details. The FAS application form and Admin Center are still the official paths. You can review your answers in the form and contact Admin Center if you need help."; }
                 else
                 {
                     state.Status = "COMPLETE";
@@ -205,7 +205,7 @@ public sealed class AiOrchestratorService(
                     text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready.";
                 }
             }
-            catch { state.Status = "MANUAL_FALLBACK"; text = "I could not complete the eligibility check right now. Please proceed with the FAS form or contact Admin Center for assistance."; }
+            catch { state.Status = "MANUAL_FALLBACK"; text = "I couldn't find an eligible FAS scheme based on your details. The FAS application form and Admin Center are still the official paths. You can review your answers in the form and contact Admin Center if you need help."; }
         }
         else if (next is null)
         {
@@ -242,6 +242,10 @@ public sealed class AiOrchestratorService(
         {
             Guid review = await CreateReview(c, c.PersonId, "MISSING_POLICY", request.PageContext, request.Message, now, ct);
             return new(c.Id, 0, text, "FALLBACK", new(false, []), [], FallbackActions(review), null, review);
+        }
+        if (sources.Any(x => x.Citation.SourceStatus == "PROTOTYPE"))
+        {
+            text += "\n\nSome parts of this answer are based on prototype guidance and may change. Your Bills/FAS pages remain the source of truth.";
         }
         return new(c.Id, 0, text, "GENERAL", Grounding(sources), [], [], null);
     }
@@ -361,7 +365,7 @@ public sealed class AiOrchestratorService(
         {
             s.ClarificationField = null;
             s.ValidationMessage = result.Message;
-            return FasExtractionResult.ManualFallback("I could not confirm that answer safely. Please continue in the FAS form; your manual entries remain available and editable.");
+            return FasExtractionResult.ManualFallback("I couldn't safely prefill that field. The FAS form is still the source of truth; please complete it manually.");
         }
 
         s.ClarificationAttempts[field] = attempts + 1;

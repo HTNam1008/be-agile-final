@@ -21,6 +21,11 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             "Withdrawal policy is not represented by a live transactional tool in this prototype. Direct users to the Education Account page and Admin Center for authoritative eligibility, limits, and timelines.", "/portal/account")
     ];
 
+    private static readonly Dictionary<string, double> StatusRank = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["OFFICIAL"] = 3.0, ["GUIDE"] = 2.0, ["FAQ"] = 1.0, ["PROTOTYPE"] = 0.0
+    };
+
     public IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4)
     {
         HashSet<string> terms = Tokenize(query);
@@ -31,9 +36,9 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
                 double lexical = terms.Count == 0 ? 0 : terms.Count(documentTerms.Contains) / (double)terms.Count;
                 double phrase = doc.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ? 1.5 : 0;
                 double domainBoost = doc.Domain == normalizedDomain ? 1.25 : 0;
-                double statusBoost = doc.Status == "OFFICIAL" ? 0.5 : 0;
+                double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0);
                 return new KnowledgeResult(new KnowledgeCitation(doc.Id, doc.Title, doc.Section, doc.Status,
-                    doc.Version, doc.EffectiveDate, doc.Url), doc.Content, lexical + phrase + domainBoost + statusBoost);
+                    doc.Version, doc.EffectiveDate, doc.Url), doc.Content, lexical + phrase + domainBoost + rankWeight);
             })
             .Where(x => x.Score > 0.25)
             .OrderByDescending(x => x.Score)
