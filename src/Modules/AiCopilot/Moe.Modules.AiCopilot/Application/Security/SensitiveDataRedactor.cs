@@ -11,6 +11,8 @@ public sealed partial class SensitiveDataRedactor
         result = NricRegex().Replace(result, "[IDENTITY]");
         result = PhoneRegex().Replace(result, "[PHONE]");
         result = CredentialRegex().Replace(result, "$1=[REDACTED]");
+        result = AddressRegex().Replace(result, "[ADDRESS]");
+        result = PaymentRefRegex().Replace(result, "[PAYMENT_REF]");
         return result.Length <= 4000 ? result : result[..4000];
     }
 
@@ -22,4 +24,8 @@ public sealed partial class SensitiveDataRedactor
     private static partial Regex PhoneRegex();
     [GeneratedRegex(@"\b(password|api[_ -]?key|secret|token)\s*[:=]\s*\S+", RegexOptions.IgnoreCase)]
     private static partial Regex CredentialRegex();
+    [GeneratedRegex(@"\bSingapore\s+\d{6}\b")]
+    private static partial Regex AddressRegex();
+    [GeneratedRegex(@"\bBILL-\d{8}-[A-Fa-f0-9]{6,}\b")]
+    private static partial Regex PaymentRefRegex();
 }
