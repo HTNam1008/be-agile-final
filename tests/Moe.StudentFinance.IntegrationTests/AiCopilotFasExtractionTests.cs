@@ -282,6 +282,40 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Bare_welfare_home_correction_during_income_step_recovers()
+    {
+        Guid cid = await StartInterview();
+
+        await SendFas("No", cid);
+        JsonElement corrected = await SendFas("wait, yes", cid);
+
+        Assert.Equal("COLLECTING", GetInterviewStatus(corrected));
+        AssertWelfareStatus(corrected, true);
+        Assert.Contains("nationality", corrected.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement income = GetField(corrected, "monthlyHouseholdIncome");
+        JsonElement household = GetField(corrected, "householdMemberCount");
+        Assert.False(income.GetProperty("confirmed").GetBoolean());
+        Assert.False(household.GetProperty("confirmed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Nationality_options_question_explains_options_without_completing_interview()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("3000", cid);
+        await SendFas("4", cid);
+
+        JsonElement response = await SendFas("idk, what are the options?", cid);
+
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        Assert.Contains("Singapore Citizen", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        JsonElement nationality = GetField(response, "parentNationalities");
+        Assert.False(nationality.GetProperty("confirmed").GetBoolean());
+        Assert.Empty(response.GetProperty("actions").EnumerateArray());
+    }
+
+    [Fact]
     public async Task Form_patch_includes_provenance_dictionary()
     {
         await CreateEligibleScheme();
