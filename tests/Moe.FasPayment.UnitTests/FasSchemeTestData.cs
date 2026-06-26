@@ -11,7 +11,7 @@ internal static class FasSchemeTestData
         null,
         new DateOnly(2026, 1, 1),
         new DateOnly(2026, 12, 31),
-        [],
+        [101],
         "PERCENTAGE",
         [new("AGE", "AND", 1), new("NATIONALITY", null, 2)],
         [new("Full", 100, 1, [new(1, 13, 18, null), new(2, null, null, ["Singapore Citizen"])])]);
