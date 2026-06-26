@@ -7,11 +7,12 @@ using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
+using Moe.Modules.IdentityPlatform.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Application.StudentApplications;
 
-public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser currentUser, IFasDocumentStorage storage, IFasDocumentScanner scanner)
+public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser currentUser, IFasDocumentStorage storage, IFasDocumentScanner scanner, IOrganizationUnitRepository organizations)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
@@ -29,10 +30,8 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                         (x.EndDate == null || x.EndDate >= DateOnly.FromDateTime(DateTime.UtcNow)))
             .OrderByDescending(x => x.StartDate).FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("FAS.CURRENT_SCHOOL_REQUIRED");
-        string? schoolName = await db.Database.SqlQuery<string>(
-            $"SELECT OrganizationName AS Value FROM org.Organization WHERE OrganizationId = {enrollment.OrganizationId}")
-            .FirstOrDefaultAsync(ct);
-        schoolName ??= $"School {enrollment.OrganizationId}";
+        string? schoolName = (await organizations.FindActiveSchoolByIdAsync(enrollment.OrganizationId, ct))?.UnitName
+            ?? $"School {enrollment.OrganizationId}";
         return new(person.Id, person.OfficialFullName, person.IdentityNumberMasked, person.DateOfBirth,
             person.NationalityCode, person.PreferredMobile ?? person.OfficialMobile,
             person.PreferredAddress ?? person.OfficialAddress, person.PreferredEmail ?? person.OfficialEmail,
