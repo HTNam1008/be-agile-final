@@ -75,6 +75,9 @@ internal sealed class GetStudentManagementReferenceDataHandler(
             SchoolLevelCodes.Secondary3 => Option(value, "Secondary 3"),
             SchoolLevelCodes.Secondary4 => Option(value, "Secondary 4"),
             SchoolLevelCodes.Secondary5 => Option(value, "Secondary 5"),
+            SchoolLevelCodes.Bachelor => Option(value, "Bachelor"),
+            SchoolLevelCodes.Master => Option(value, "Master"),
+            SchoolLevelCodes.Phd => Option(value, "PhD"),
             _ => Option(value, value)
         };
 }
