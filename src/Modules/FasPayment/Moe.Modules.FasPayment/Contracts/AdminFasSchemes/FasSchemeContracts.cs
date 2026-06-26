@@ -22,7 +22,8 @@ public sealed record FasTierCriteriaValue(
 public sealed record CreateFasSchemeResponse(long SchemeId, string SchemeCode, string GrantCode, string Status);
 public sealed record FasSchemeListResponse(IReadOnlyList<FasSchemeListItem> Items);
 public sealed record FasSchemeListItem(long SchemeId, string SchemeCode, string GrantCode, string Name,
-    string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds);
+    string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds,
+    int ApplicationCount);
 public sealed record FasSchemeDetail(long SchemeId, string SchemeCode, string GrantCode, string Name,
     string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds,
     string SubsidyType, IReadOnlyList<FasCriteriaTemplateItem> CriteriaTemplate, IReadOnlyList<FasTierDetail> Tiers);

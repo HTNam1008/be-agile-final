@@ -5,7 +5,7 @@
   "description": "Standard financial assistance for 2026",
   "startDate": "2026-01-01",
   "endDate": "2026-12-31",
-  "courseIds": [],
+  "courseIds": [101],
   "subsidyType": "PERCENTAGE",
   "criteriaTemplate": [
     { "criteriaType": "AGE", "connectorToNext": "AND", "displayOrder": 1 },

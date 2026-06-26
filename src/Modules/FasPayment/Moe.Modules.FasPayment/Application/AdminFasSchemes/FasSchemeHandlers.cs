@@ -27,13 +27,14 @@ internal sealed class CreateFasSchemeHandler(
     public async Task<Result<CreateFasSchemeResponse>> Handle(CreateFasSchemeCommand command, CancellationToken cancellationToken)
     {
         if (currentUser.UserAccountId is not long actorId) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.Unauthenticated);
-        if (await repository.SchemeCodeExistsAsync(command.Request.SchemeCode, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateSchemeCode);
-        if (await repository.GrantCodeExistsAsync(command.Request.GrantCode, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateGrantCode);
-        IReadOnlyList<long> unknown = await courses.FindUnknownCourseIdsAsync(command.Request.CourseIds.Distinct().ToArray(), cancellationToken);
+        CreateFasSchemeRequest request = FasSchemeRequestDefaults.WithSystemGrantCode(command.Request);
+        if (await repository.SchemeCodeExistsAsync(request.SchemeCode, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateSchemeCode);
+        if (await repository.GrantCodeExistsAsync(request.GrantCode, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateGrantCode);
+        IReadOnlyList<long> unknown = await courses.FindUnknownCourseIdsAsync(request.CourseIds.Distinct().ToArray(), cancellationToken);
         if (unknown.Count > 0) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.UnknownCourses(unknown));
         try
         {
-            return Result<CreateFasSchemeResponse>.Success(await repository.CreateAsync(command.Request, actorId, clock.UtcNow.UtcDateTime, cancellationToken));
+            return Result<CreateFasSchemeResponse>.Success(await repository.CreateAsync(request, actorId, clock.UtcNow.UtcDateTime, cancellationToken));
         }
         catch (FasSchemeWriteConflictException exception)
         {
@@ -52,19 +53,20 @@ internal sealed class SaveFasSchemeDraftHandler(
     public async Task<Result<CreateFasSchemeResponse>> Handle(SaveFasSchemeDraftCommand command, CancellationToken cancellationToken)
     {
         if (currentUser.UserAccountId is not long actorId) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.Unauthenticated);
+        CreateFasSchemeRequest request = FasSchemeRequestDefaults.WithSystemGrantCode(command.Request);
         bool duplicateScheme = command.SchemeId.HasValue
-            ? await repository.SchemeCodeExistsExcludingAsync(command.Request.SchemeCode, command.SchemeId.Value, cancellationToken)
-            : await repository.SchemeCodeExistsAsync(command.Request.SchemeCode, cancellationToken);
+            ? await repository.SchemeCodeExistsExcludingAsync(request.SchemeCode, command.SchemeId.Value, cancellationToken)
+            : await repository.SchemeCodeExistsAsync(request.SchemeCode, cancellationToken);
         bool duplicateGrant = command.SchemeId.HasValue
-            ? await repository.GrantCodeExistsExcludingAsync(command.Request.GrantCode, command.SchemeId.Value, cancellationToken)
-            : await repository.GrantCodeExistsAsync(command.Request.GrantCode, cancellationToken);
+            ? await repository.GrantCodeExistsExcludingAsync(request.GrantCode, command.SchemeId.Value, cancellationToken)
+            : await repository.GrantCodeExistsAsync(request.GrantCode, cancellationToken);
         if (duplicateScheme) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateSchemeCode);
         if (duplicateGrant) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateGrantCode);
-        IReadOnlyList<long> unknown = await courses.FindUnknownCourseIdsAsync(command.Request.CourseIds.Distinct().ToArray(), cancellationToken);
+        IReadOnlyList<long> unknown = await courses.FindUnknownCourseIdsAsync(request.CourseIds.Distinct().ToArray(), cancellationToken);
         if (unknown.Count > 0) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.UnknownCourses(unknown));
         try
         {
-            return Result<CreateFasSchemeResponse>.Success(await repository.SaveDraftAsync(command.SchemeId, command.Request, actorId, clock.UtcNow.UtcDateTime, cancellationToken));
+            return Result<CreateFasSchemeResponse>.Success(await repository.SaveDraftAsync(command.SchemeId, request, actorId, clock.UtcNow.UtcDateTime, cancellationToken));
         }
         catch (InvalidOperationException) when (command.SchemeId.HasValue)
         {
@@ -80,11 +82,12 @@ internal sealed class ActivateFasSchemeDraftHandler(
     public async Task<Result<CreateFasSchemeResponse>> Handle(ActivateFasSchemeDraftCommand command, CancellationToken cancellationToken)
     {
         if (currentUser.UserAccountId is not long actorId) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.Unauthenticated);
-        if (await repository.SchemeCodeExistsExcludingAsync(command.Request.SchemeCode, command.SchemeId, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateSchemeCode);
-        if (await repository.GrantCodeExistsExcludingAsync(command.Request.GrantCode, command.SchemeId, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateGrantCode);
-        IReadOnlyList<long> unknown = await courses.FindUnknownCourseIdsAsync(command.Request.CourseIds.Distinct().ToArray(), cancellationToken);
+        CreateFasSchemeRequest request = FasSchemeRequestDefaults.WithSystemGrantCode(command.Request);
+        if (await repository.SchemeCodeExistsExcludingAsync(request.SchemeCode, command.SchemeId, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateSchemeCode);
+        if (await repository.GrantCodeExistsExcludingAsync(request.GrantCode, command.SchemeId, cancellationToken)) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.DuplicateGrantCode);
+        IReadOnlyList<long> unknown = await courses.FindUnknownCourseIdsAsync(request.CourseIds.Distinct().ToArray(), cancellationToken);
         if (unknown.Count > 0) return Result<CreateFasSchemeResponse>.Failure(FasSchemeErrors.UnknownCourses(unknown));
-        return Result<CreateFasSchemeResponse>.Success(await repository.ActivateDraftAsync(command.SchemeId, command.Request, actorId, clock.UtcNow.UtcDateTime, cancellationToken));
+        return Result<CreateFasSchemeResponse>.Success(await repository.ActivateDraftAsync(command.SchemeId, request, actorId, clock.UtcNow.UtcDateTime, cancellationToken));
     }
 }
 

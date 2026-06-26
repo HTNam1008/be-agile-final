@@ -12,13 +12,14 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
     public CreateFasSchemeRequestValidator()
     {
         RuleFor(x => x.SchemeCode).NotEmpty().MaximumLength(50);
-        RuleFor(x => x.GrantCode).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.GrantCode).MaximumLength(100);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(255);
         RuleFor(x => x.Description).MaximumLength(2000);
         RuleFor(x => x.StartDate).NotEqual(default(DateOnly));
         RuleFor(x => x.EndDate).NotEqual(default(DateOnly));
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate);
-        RuleFor(x => x.CourseIds).NotNull().Must(x => x is not null && x.All(id => id > 0) && x.Distinct().Count() == x.Count).WithMessage("Course IDs must be positive and unique.");
+        RuleFor(x => x.CourseIds).NotNull().NotEmpty().WithMessage("At least one eligible course is required.");
+        RuleFor(x => x.CourseIds).Must(x => x is not null && x.All(id => id > 0) && x.Distinct().Count() == x.Count).WithMessage("Course IDs must be positive and unique.");
         RuleFor(x => x.SubsidyType).Must(x => x is "FIXED" or "PERCENTAGE");
         RuleFor(x => x.CriteriaTemplate).NotNull().NotEmpty();
         RuleFor(x => x.Tiers).NotNull().NotEmpty();
@@ -51,7 +52,8 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
                 continue;
             }
             if (string.IsNullOrWhiteSpace(tier.Label) || tier.Label.Length > 255) context.AddFailure("Tiers", "Each tier requires a label of at most 255 characters.");
-            if (tier.SubsidyValue < 0 || request.SubsidyType == "PERCENTAGE" && tier.SubsidyValue > 100) context.AddFailure("Tiers", "Tier subsidy value is outside the allowed range.");
+            if (request.SubsidyType == "PERCENTAGE" && (tier.SubsidyValue < 1 || tier.SubsidyValue > 100)) context.AddFailure("Tiers", "Percentage subsidy value must be from 1 to 100.");
+            else if (request.SubsidyType == "FIXED" && tier.SubsidyValue < 0) context.AddFailure("Tiers", "Fixed subsidy value cannot be below 0.");
             if (tier.GrantCode is not null || tier.SubsidyType is not null) context.AddFailure("Tiers", "grantCode and subsidyType are scheme-level fields.");
             if (tier.CriteriaValues is null)
             {
