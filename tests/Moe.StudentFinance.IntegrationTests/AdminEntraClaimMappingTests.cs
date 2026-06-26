@@ -70,6 +70,22 @@ public sealed class AdminEntraClaimMappingTests
     }
 
     [Fact]
+    public async Task Auth_session_uses_bearer_when_stale_session_cookie_is_present()
+    {
+        await using WebApplication app = await CreateAuthSessionAppAsync();
+        using HttpClient client = app.GetTestClient();
+        string token = CreateAdminToken();
+
+        using HttpRequestMessage request = CreateBearerRequest(HttpMethod.Post, "/api/admin/v1/auth/session", token);
+        request.Headers.Add("Cookie", $"{AuthenticationCookies.AdminSession}=stale-invalid-token");
+
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith($"{AuthenticationCookies.AdminSession}=", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Auth_me_accepts_session_cookie_without_bearer_header()
     {
         await using WebApplication app = await CreateAuthSessionAppAsync();

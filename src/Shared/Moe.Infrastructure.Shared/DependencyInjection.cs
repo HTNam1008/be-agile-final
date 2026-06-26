@@ -252,6 +252,12 @@ public static class DependencyInjection
         {
             OnMessageReceived = context =>
             {
+                if (authenticationScheme == AuthenticationSchemes.AdminEntra
+                    && IsAdminSessionEstablishmentRequest(context.Request))
+                {
+                    return Task.CompletedTask;
+                }
+
                 if (string.IsNullOrWhiteSpace(context.Token)
                     && !string.IsNullOrWhiteSpace(bearerCookieName)
                     && context.Request.Cookies.TryGetValue(bearerCookieName, out string? cookieToken))
@@ -259,7 +265,6 @@ public static class DependencyInjection
                     context.Token = cookieToken;
                 }
                 else if (authenticationScheme == AuthenticationSchemes.AdminEntra
-                    && !IsAdminSessionEstablishmentRequest(context.Request)
                     && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     context.NoResult();

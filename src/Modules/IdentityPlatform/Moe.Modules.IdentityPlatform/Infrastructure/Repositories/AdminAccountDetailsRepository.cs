@@ -199,6 +199,6 @@ internal sealed class AdminAccountDetailsRepository(MoeDbContext dbContext) : IA
         string OrganizationName,
         string AcademicYear,
         string LevelCode,
-        string ClassCode,
+        string? ClassCode,
         DateTime UpdatedAtUtc);
 }
