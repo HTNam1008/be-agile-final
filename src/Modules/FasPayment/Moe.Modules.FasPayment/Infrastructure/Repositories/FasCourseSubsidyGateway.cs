@@ -27,12 +27,23 @@ internal sealed class FasCourseSubsidyGateway(MoeDbContext dbContext) : IFasCour
                 on item.FasApplicationId equals application.Id
             join scheme in dbContext.Set<FasScheme>().AsNoTracking()
                 on item.FasSchemeId equals scheme.Id
+            join activeScheme in dbContext.Set<FasActiveScheme>().AsNoTracking()
+                on item.Id equals activeScheme.FasApplicationSchemeId
             where application.StudentPersonId == personId
                   && selectedIds.Contains(item.Id)
                   && item.StatusCode == "APPROVED"
+                  && item.IsActive
+                  && activeScheme.StudentPersonId == personId
+                  && activeScheme.StatusCode == "ACTIVE"
                   && (item.ValidFrom ?? enrolledDate) <= enrolledDate
                   && (item.ValidTo ?? enrolledDate) >= enrolledDate
+                  && activeScheme.ActiveFrom <= enrolledDate
+                  && activeScheme.ActiveTo >= enrolledDate
                   && scheme.StatusCode == "ACTIVE"
+                  && !dbContext.Set<FasVoucherRedemption>().Any(redemption =>
+                      redemption.FasApplicationSchemeId == item.Id &&
+                      redemption.StatusCode != "CANCELLED" &&
+                      redemption.CourseId != courseId)
                   && (
                       !dbContext.Set<FasSchemeCourse>().Any(schemeCourse =>
                           schemeCourse.FasSchemeId == item.FasSchemeId)
@@ -85,18 +96,15 @@ internal sealed class FasCourseSubsidyGateway(MoeDbContext dbContext) : IFasCour
             return;
         }
 
-        FasVoucherRedemption[] existingForSelected = await dbContext.Set<FasVoucherRedemption>()
-            .Where(x => selectedIds.Contains(x.FasApplicationSchemeId) && x.StatusCode == "PENDING")
-            .ToArrayAsync(cancellationToken);
-
-        foreach (FasVoucherRedemption redemption in existingForSelected)
+        bool hasConflictingRedemption = await dbContext.Set<FasVoucherRedemption>()
+            .AnyAsync(
+                x => selectedIds.Contains(x.FasApplicationSchemeId)
+                     && x.StatusCode != "CANCELLED"
+                     && x.CourseEnrollmentId != courseEnrollmentId,
+                cancellationToken);
+        if (hasConflictingRedemption)
         {
-            redemption.Cancel();
-        }
-
-        if (existingForSelected.Length > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            throw new InvalidOperationException("One or more selected FAS vouchers are already reserved or redeemed.");
         }
 
         decimal[] allocations = AllocateEvenly(totalSubsidyAmount, selectedIds.Length);
@@ -112,6 +120,27 @@ internal sealed class FasCourseSubsidyGateway(MoeDbContext dbContext) : IFasCour
                     allocations[index],
                     utcNow),
                 cancellationToken);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task CancelPendingRedemptionsForEnrollmentAsync(
+        long courseEnrollmentId,
+        DateTime cancelledAtUtc,
+        CancellationToken cancellationToken)
+    {
+        FasVoucherRedemption[] redemptions = await dbContext.Set<FasVoucherRedemption>()
+            .Where(x => x.CourseEnrollmentId == courseEnrollmentId && x.StatusCode == "PENDING")
+            .ToArrayAsync(cancellationToken);
+        if (redemptions.Length == 0)
+        {
+            return;
+        }
+
+        foreach (FasVoucherRedemption redemption in redemptions)
+        {
+            redemption.Cancel();
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

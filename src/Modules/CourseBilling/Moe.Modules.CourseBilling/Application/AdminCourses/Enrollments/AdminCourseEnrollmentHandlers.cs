@@ -1,6 +1,7 @@
 using Moe.Application.Abstractions.Messaging;
 using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.Application.AdminCourses.Enrollments;
@@ -25,7 +26,9 @@ internal sealed class ListAdminCourseEnrollmentsQueryHandler(AdminCourseAccess a
     }
 }
 
-internal sealed class RemoveAdminCourseEnrollmentCommandHandler(AdminCourseAccess access)
+internal sealed class RemoveAdminCourseEnrollmentCommandHandler(
+    AdminCourseAccess access,
+    IFasCourseSubsidyGateway fasSubsidies)
     : ICommandHandler<RemoveAdminCourseEnrollmentCommand, AdminCourseEnrollmentDto>
 {
     public async Task<Result<AdminCourseEnrollmentDto>> Handle(
@@ -54,6 +57,11 @@ internal sealed class RemoveAdminCourseEnrollmentCommandHandler(AdminCourseAcces
         {
             return Result<AdminCourseEnrollmentDto>.Failure(cancellation.Error);
         }
+
+        await fasSubsidies.CancelPendingRedemptionsForEnrollmentAsync(
+            enrollment.Id,
+            access.UtcNow(),
+            cancellationToken);
 
         return Result<AdminCourseEnrollmentDto>.Success(new AdminCourseEnrollmentDto(
             enrollment.Id,
