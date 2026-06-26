@@ -61,7 +61,8 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
                 course.EndDate,
                 enrollment.EnrollmentStatusCode);
 
-        return await query.ToArrayAsync(cancellationToken);
+        StudentDashboardCourseSummary[] courses = await query.ToArrayAsync(cancellationToken);
+        return await AttachCalculatedCourseFeesAsync(courses, cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<StudentDashboardCourseSummary>> ListPublishedCoursesAsync(
@@ -112,7 +113,49 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
                 course.EndDate,
                 "AVAILABLE");
 
-        return await query.ToArrayAsync(cancellationToken);
+        StudentDashboardCourseSummary[] courses = await query.ToArrayAsync(cancellationToken);
+        return await AttachCalculatedCourseFeesAsync(courses, cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<StudentDashboardCourseSummary>> AttachCalculatedCourseFeesAsync(
+        IReadOnlyCollection<StudentDashboardCourseSummary> courses,
+        CancellationToken cancellationToken)
+    {
+        long[] courseIds = courses.Select(x => x.CourseId).Distinct().ToArray();
+        if (courseIds.Length == 0)
+        {
+            return courses;
+        }
+
+        List<CourseFeeProjection> feeProjections = await (
+                from fee in dbContext.Set<CourseFee>().AsNoTracking()
+                join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                    on fee.FeeComponentId equals component.Id
+                where courseIds.Contains(fee.CourseId)
+                    && fee.IsActive
+                    && component.IsActive
+                select new CourseFeeProjection(
+                    fee.CourseId,
+                    fee.Id,
+                    component.Id,
+                    component.ComponentName,
+                    fee.FeeValue,
+                    component.CalculationTypeCode,
+                    component.IsTaxComponent))
+            .ToListAsync(cancellationToken);
+
+        Dictionary<long, decimal> feeTotals = feeProjections
+            .GroupBy(x => x.CourseId)
+            .ToDictionary(
+                group => group.Key,
+                group => CourseFeeAmountCalculator.Calculate(group.Select(x => x.ToBillingLine()).ToArray()).Sum(x => x.Amount));
+
+        return courses
+            .Select(course => course with
+            {
+                TotalFee = feeTotals.GetValueOrDefault(course.CourseId)
+            })
+            .ToArray();
     }
 
     private static string? Normalize(string? value)

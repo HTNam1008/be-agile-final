@@ -109,14 +109,18 @@ public sealed class AdminStudentEnrolledCourseReaderTests : IAsyncLifetime
             description: null,
             startDate: new DateOnly(2026, 7, 1),
             endDate: new DateOnly(2026, 8, 1),
+            enrollmentOpenAtUtc: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
             enrollmentCloseAtUtc: new DateTime(2026, 6, 30, 16, 0, 0, DateTimeKind.Utc),
             actorLoginAccountId: 42,
             utcNow: new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc));
 
     private static CourseEnrollment CreateEnrollment(long personId, long courseId, DateTime enrolledAtUtc)
         => CourseEnrollment.EnrollByAdmin(
-            personId,
-            courseId,
+            personId: personId,
+            courseId: courseId,
+            coursePaymentPlanId: 100,
             adminLoginAccountId: 42,
-            enrolledAtUtc).Value;
+            enrolledAtUtc: enrolledAtUtc,
+            beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
+            afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
 }

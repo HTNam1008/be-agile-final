@@ -34,7 +34,10 @@ public sealed class StudentFasApplicationsController(StudentFasApplicationServic
     public async Task<object> Replace(long id, long documentId, [FromForm] IFormFile file, CancellationToken ct) { await using var stream = file.OpenReadStream(); return await service.ReplaceDocument(id, documentId, file.FileName, file.ContentType, file.Length, stream, ct); }
     [HttpGet("documents/{documentId:long}/download")] public async Task<IActionResult> Download(long documentId, CancellationToken ct) { var d = await service.DownloadDocument(documentId, ct); return File(d.Stream, d.Mime, d.Name); }
     [HttpGet("applications/{id:long}/review-validation")] public Task<object> Review(long id, CancellationToken ct) => service.ReviewValidation(id, ct);
+    [HttpGet("applications/{id:long}/review")] public Task<object> ApplicationReview(long id, CancellationToken ct) => service.ApplicationReview(id, ct);
     [HttpPut("applications/{id:long}/declarations")] public Task<object> Declarations(long id, SaveDeclarationsRequest request, CancellationToken ct) => service.SaveDeclarations(id, request, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
     [HttpPost("applications/{id:long}/submit")] public Task<object> Submit(long id, CancellationToken ct) => service.Submit(id, ct);
+    [HttpPost("applications/{id:long}/withdraw")] public Task<object> Withdraw(long id, CancellationToken ct) => service.Withdraw(id, ct);
+    [HttpPost("application-schemes/{id:long}/withdraw")] public Task<object> WithdrawScheme(long id, CancellationToken ct) => service.WithdrawScheme(id, ct);
     [HttpPost("application-schemes/{id:long}/activate")] public Task<object> Activate(long id, CancellationToken ct) => service.Activate(id, ct);
 }

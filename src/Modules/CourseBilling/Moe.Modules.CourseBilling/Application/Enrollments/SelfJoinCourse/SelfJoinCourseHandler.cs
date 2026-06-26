@@ -2,7 +2,9 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
+using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.SharedKernel.Results;
@@ -12,6 +14,7 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICoursePaymentPlanGateway paymentPlans,
+    IFasCourseSubsidyGateway fasSubsidies,
     ICurrentUser currentUser,
     IStudentAccessControl studentAccess,
     IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
@@ -105,6 +108,19 @@ internal sealed class SelfJoinCourseHandler(
         DateOnly firstDueDate = installment
             ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
             : enrolledDate;
+        IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
+            await fasSubsidies.ListEligibleSubsidiesAsync(
+                personId.Value,
+                command.CourseId,
+                enrolledDate,
+                command.FasApplicationSchemeIds,
+                cancellationToken);
+        int requestedFasCount = command.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;
+        if (selectedFasSubsidies.Count != requestedFasCount)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.FasVoucherUnavailable);
+        }
+
         CourseEnrollmentBillingResult billingResult = await enrollments.AddEnrollmentAndIssueBillsAsync(
             enrollmentResult.Value,
             CreateBillNumber(utcNow),
@@ -113,7 +129,28 @@ internal sealed class SelfJoinCourseHandler(
             plan.InstallmentCount,
             plan.IntervalMonths,
             feeLines,
+            selectedFasSubsidies,
             cancellationToken);
+        await fasSubsidies.RecordPendingRedemptionsAsync(
+            personId.Value,
+            command.CourseId,
+            billingResult.Enrollment.Id,
+            billingResult.Bills.OrderBy(x => x.Bill.SequenceNumber).First().Bill.Id,
+            billingResult.Bills.Sum(x => x.Bill.SubsidyAmount),
+            selectedFasSubsidies,
+            utcNow,
+            cancellationToken);
+        long[] paidBillIds = billingResult.Bills
+            .Where(x => x.Bill.BillStatusCode == BillStatusCodes.Paid)
+            .Select(x => x.Bill.Id)
+            .ToArray();
+        if (paidBillIds.Length > 0)
+        {
+            await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
+                paidBillIds,
+                utcNow,
+                cancellationToken);
+        }
 
         return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
     }

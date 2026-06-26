@@ -139,6 +139,7 @@ internal sealed class AdminEnrollPersonHandler(
             plan.InstallmentCount,
             plan.IntervalMonths,
             feeLines,
+            [],
             cancellationToken);
 
         return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
