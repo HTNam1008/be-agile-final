@@ -16,4 +16,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Infrastructure\Knowledge\FasChunks\*.md" />
+  </ItemGroup>
 </Project>

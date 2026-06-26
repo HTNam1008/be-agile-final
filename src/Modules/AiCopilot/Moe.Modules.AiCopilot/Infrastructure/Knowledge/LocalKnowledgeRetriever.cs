@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 
@@ -17,6 +18,8 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             "Withdrawal policy is not represented by a live transactional tool in this prototype. Direct users to the Education Account page and Admin Center for authoritative eligibility, limits, and timelines.", "/portal/account", [], false),
     ];
 
+    private static readonly KnowledgeDocument[] FasChunks = LoadFasChunksFromAssembly();
+
     private static readonly Dictionary<string, double> StatusRank = new(StringComparer.OrdinalIgnoreCase)
     {
         ["OFFICIAL"] = 3.0, ["GUIDE"] = 2.0, ["FAQ"] = 1.0, ["PROTOTYPE"] = 0.0
@@ -24,11 +27,9 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private readonly KnowledgeDocument[] _documents;
 
-    public LocalKnowledgeRetriever() : this([]) { }
-
-    public LocalKnowledgeRetriever(IReadOnlyList<KnowledgeDocument> additionalDocs)
+    public LocalKnowledgeRetriever()
     {
-        _documents = [.. StaticDocs, .. additionalDocs];
+        _documents = [.. StaticDocs, .. FasChunks];
     }
 
     public IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4)
@@ -77,24 +78,30 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private static HashSet<string> Tokenize(string value) => Regex.Matches(value.ToLowerInvariant(), "[a-z0-9]+")
         .Select(match => match.Value).Where(term => term.Length > 2).ToHashSet(StringComparer.Ordinal);
 
-    // ── BA FAS chunk loader ──
+    // ── Embedded resource loader ──
 
-    public static IReadOnlyList<KnowledgeDocument> LoadFasChunks(string directoryPath)
+    private static KnowledgeDocument[] LoadFasChunksFromAssembly()
     {
-        if (!Directory.Exists(directoryPath))
-            return [];
+        Assembly assembly = typeof(LocalKnowledgeRetriever).Assembly;
+        string[] resourceNames = assembly.GetManifestResourceNames()
+            .Where(n => n.Contains("FasChunks") && n.EndsWith(".md"))
+            .OrderBy(n => n)
+            .ToArray();
 
         var chunks = new List<KnowledgeDocument>();
-        foreach (string file in Directory.GetFiles(directoryPath, "chunk-*.md"))
+        foreach (string resourceName in resourceNames)
         {
             try
             {
-                string raw = File.ReadAllText(file);
+                using Stream stream = assembly.GetManifestResourceStream(resourceName)
+                    ?? throw new InvalidOperationException($"Missing embedded resource: {resourceName}");
+                using var reader = new StreamReader(stream);
+                string raw = reader.ReadToEnd();
                 var (frontmatter, body) = SplitFrontmatter(raw);
                 var meta = ParseFrontmatter(frontmatter);
 
                 string chunkId = MapChunkId(meta.GetValueOrDefault("chunk_id", ""));
-                string title = meta.GetValueOrDefault("title", Path.GetFileNameWithoutExtension(file));
+                string title = meta.GetValueOrDefault("title", resourceName);
                 string confidence = meta.GetValueOrDefault("confidence", "medium");
                 string status = confidence switch
                 {
@@ -105,8 +112,6 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
                 string effectiveDateStr = meta.GetValueOrDefault("effective_date", meta.GetValueOrDefault("last_reviewed", ""));
                 DateOnly effectiveDate = DateOnly.TryParse(effectiveDateStr, out var d) ? d : DateOnly.FromDateTime(DateTime.UtcNow);
                 bool alwaysInclude = string.Equals(meta.GetValueOrDefault("always_include", "false"), "true", StringComparison.OrdinalIgnoreCase);
-                string domain = "FAS";
-                string url = "/portal/fas";
 
                 string[] synonyms = [];
                 if (meta.TryGetValue("synonyms", out string? synStr))
@@ -116,28 +121,15 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
                 string content = body.Trim();
 
-                chunks.Add(new KnowledgeDocument(chunkId, title, title, domain, status, "1.0", effectiveDate,
-                    content, url, synonyms, alwaysInclude));
+                chunks.Add(new KnowledgeDocument(chunkId, title, title, "FAS", status, "1.0", effectiveDate,
+                    content, "/portal/fas", synonyms, alwaysInclude));
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[KnowledgeLoader] Skipping malformed chunk {Path.GetFileName(file)}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[KnowledgeLoader] Skipping malformed resource {resourceName}: {ex.Message}");
             }
         }
-        return chunks;
-    }
-
-    public static string? FindDefaultFasDirectory()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            string candidate = Path.Combine(dir.FullName, "FAQs-Knowledge base for AI", "FAS");
-            if (Directory.Exists(candidate))
-                return candidate;
-            dir = dir.Parent;
-        }
-        return null;
+        return chunks.ToArray();
     }
 
     private static (string frontmatter, string body) SplitFrontmatter(string raw)
