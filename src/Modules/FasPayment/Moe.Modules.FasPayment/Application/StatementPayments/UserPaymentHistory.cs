@@ -34,6 +34,8 @@ internal sealed class ListUserPaymentHistoryHandler(
             await payments.ListPaymentRefundsForPaymentsAsync(paymentIds, cancellationToken);
         IReadOnlyCollection<EnrollmentRefundPart> enrollmentRefundParts =
             await payments.ListEnrollmentRefundPartsForPaymentsAsync(paymentIds, cancellationToken);
+        IReadOnlyCollection<UserFasSettlement> fasSettlements =
+            await payments.ListRedeemedFasSettlementsForPersonAsync(personId, cancellationToken);
 
         ILookup<long, PaymentPart> partsByPayment = parts.ToLookup(part => part.PaymentId);
         ILookup<long, PaymentRefund> paymentRefundsByPayment = paymentRefunds.ToLookup(refund => refund.PaymentId);
@@ -42,8 +44,7 @@ internal sealed class ListUserPaymentHistoryHandler(
                 .Where(part => part.PaymentId is not null)
                 .ToLookup(part => part.PaymentId!.Value);
 
-        return Result<IReadOnlyCollection<UserPaymentHistoryResponse>>.Success(
-            history.Select(payment => new UserPaymentHistoryResponse(
+        UserPaymentHistoryResponse[] paymentRows = history.Select(payment => new UserPaymentHistoryResponse(
                 payment.Id,
                 payment.PaymentNumber,
                 payment.BillingStatementId,
@@ -75,9 +76,52 @@ internal sealed class ListUserPaymentHistoryHandler(
                     .ToArray(),
                 BuildRefundResponses(
                     paymentRefundsByPayment[payment.Id],
-                    enrollmentRefundPartsByPayment[payment.Id])))
-            .ToArray());
+                    enrollmentRefundPartsByPayment[payment.Id]),
+                []))
+            .ToArray();
+
+        UserPaymentHistoryResponse[] fasRows = fasSettlements
+            .Select(settlement => new UserPaymentHistoryResponse(
+                -settlement.FasVoucherRedemptionId,
+                $"FAS-{settlement.FasVoucherRedemptionId:D8}",
+                null,
+                0m,
+                0m,
+                0m,
+                0m,
+                PaymentStatusCodes.Successful,
+                $"FAS-{settlement.FasApplicationSchemeId}",
+                settlement.RedeemedAtUtc ?? settlement.CreatedAtUtc,
+                settlement.RedeemedAtUtc ?? settlement.CreatedAtUtc,
+                null,
+                [],
+                [],
+                [ToFasSettlementResponse(settlement)]))
+            .ToArray();
+
+        return Result<IReadOnlyCollection<UserPaymentHistoryResponse>>.Success(
+            paymentRows
+                .Concat(fasRows)
+                .OrderByDescending(row => row.CompletedAtUtc ?? row.FailedAtUtc ?? row.InitiatedAtUtc)
+                .Take(150)
+                .ToArray());
     }
+
+    private static UserPaymentHistoryFasSettlementResponse ToFasSettlementResponse(UserFasSettlement settlement)
+        => new(
+            settlement.FasVoucherRedemptionId,
+            settlement.FasApplicationSchemeId,
+            settlement.CourseId,
+            settlement.CourseEnrollmentId,
+            settlement.BillId,
+            settlement.BillNumber,
+            settlement.CourseCode,
+            settlement.CourseName,
+            settlement.SchemeName,
+            settlement.AppliedAmount,
+            settlement.StatusCode,
+            settlement.CreatedAtUtc,
+            settlement.RedeemedAtUtc);
 
     private static IReadOnlyCollection<UserPaymentHistoryRefundResponse> BuildRefundResponses(
         IEnumerable<PaymentRefund> paymentRefunds,

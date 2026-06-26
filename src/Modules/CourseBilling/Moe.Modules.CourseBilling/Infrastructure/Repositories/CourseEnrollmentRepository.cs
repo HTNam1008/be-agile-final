@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.SharedKernel.Results;
@@ -106,7 +107,9 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
                     feeComponent.ComponentName,
                     feeComponent.CalculationTypeCode,
                     feeComponent.IsTaxComponent,
-                    courseFee.FeeValue))
+                    courseFee.FeeValue,
+                    feeComponent.ComponentCode,
+                    feeComponent.ComponentTypeCode))
             .ToArrayAsync(cancellationToken);
     }
 
@@ -250,6 +253,61 @@ internal sealed class CourseEnrollmentRepository(MoeDbContext dbContext) : ICour
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             return new CourseEnrollmentBillingResult(enrollment, generated);
         });
+    }
+
+    public CourseEnrollmentBillingPreviewResult PreviewPaymentPlanBills(
+        CourseBillingPlan plan,
+        bool installment,
+        DateOnly firstDueDate,
+        IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies)
+    {
+        FasBillingCalculation calculation = FasBillingCalculator.Calculate(feeLines, fasSubsidies);
+        Dictionary<long, CourseFeeBillingLine> feeByCourseFeeId = feeLines.ToDictionary(x => x.CourseFeeId);
+        List<PreviewGeneratedBillResult> bills = [];
+        for (int sequence = 1; sequence <= plan.InstallmentCount; sequence++)
+        {
+            IReadOnlyList<CourseFeeBillingAmount> amounts =
+                CourseFeeAmountCalculator.AllocateInstallment(calculation.Amounts, sequence, plan.InstallmentCount);
+            decimal grossAmount = amounts.Sum(x => x.Amount);
+            decimal subsidyAmount = CourseFeeAmountCalculator.AllocateAmount(
+                calculation.SubsidyAmount,
+                sequence,
+                plan.InstallmentCount);
+            DateOnly dueDate = firstDueDate.AddMonths((sequence - 1) * plan.IntervalMonths);
+            PreviewGeneratedBillLineResult[] lines = amounts
+                .Where(x => x.Amount > 0m)
+                .Select(amount =>
+                {
+                    CourseFeeBillingLine fee = feeByCourseFeeId[amount.CourseFeeId];
+                    return new PreviewGeneratedBillLineResult(
+                        amount.FeeComponentId,
+                        amount.CourseFeeId,
+                        fee.FeeComponentCode,
+                        amount.FeeComponentName,
+                        fee.FeeComponentTypeCode,
+                        fee.CalculationTypeCode,
+                        $"{amount.FeeComponentName} installment {sequence} of {plan.InstallmentCount}",
+                        amount.Amount,
+                        0m,
+                        amount.Amount);
+                })
+                .ToArray();
+            bills.Add(new PreviewGeneratedBillResult(
+                sequence,
+                dueDate,
+                grossAmount,
+                subsidyAmount,
+                Math.Max(0m, grossAmount - subsidyAmount),
+                installment,
+                lines));
+        }
+
+        return new CourseEnrollmentBillingPreviewResult(
+            bills.Sum(x => x.GrossAmount),
+            bills.Sum(x => x.SubsidyAmount),
+            bills.Sum(x => x.NetPayableAmount),
+            bills);
     }
 
     private bool IsInMemoryDatabase()

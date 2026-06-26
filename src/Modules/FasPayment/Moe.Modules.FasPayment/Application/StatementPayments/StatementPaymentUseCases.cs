@@ -19,6 +19,7 @@ internal sealed record PreviewStatementPaymentQuery(
 internal sealed record PayBillingStatementCommand(long StatementId, PayBillingStatementRequest Request) : ICommand<PayBillingStatementResponse>;
 internal sealed record CancelBillingStatementPaymentCommand(long StatementId, long PaymentId) : ICommand;
 internal sealed record DeferBillingStatementCommand(long StatementId, DeferBillingStatementRequest Request) : ICommand;
+internal sealed record GetPendingEnrollmentPaymentQuery(long CourseEnrollmentId) : IQuery<PendingEnrollmentPaymentResponse?>;
 
 internal sealed class PayBillingStatementRequestValidator : AbstractValidator<PayBillingStatementRequest>
 {
@@ -32,6 +33,40 @@ internal sealed class PayBillingStatementRequestValidator : AbstractValidator<Pa
         RuleForEach(x => x.BillIds)
             .GreaterThan(0)
             .When(x => x.BillIds is not null);
+    }
+}
+
+internal sealed class GetPendingEnrollmentPaymentHandler(
+    IPaymentCheckoutRepository payments,
+    ICurrentUser currentUser) : IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>
+{
+    public async Task<Result<PendingEnrollmentPaymentResponse?>> Handle(
+        GetPendingEnrollmentPaymentQuery query,
+        CancellationToken ct)
+    {
+        if (!currentUser.TryGetStudent(out long personId))
+            return Result<PendingEnrollmentPaymentResponse?>.Failure(PaymentApplicationErrors.StudentRequired);
+
+        Payment? payment = await payments.FindActiveStatementPaymentForEnrollmentAsync(
+            query.CourseEnrollmentId,
+            personId,
+            ct);
+        if (payment is null || payment.BillingStatementId is not long statementId)
+            return Result<PendingEnrollmentPaymentResponse?>.Success(null);
+
+        IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, ct);
+        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
+        return Result<PendingEnrollmentPaymentResponse?>.Success(new(
+            query.CourseEnrollmentId,
+            statementId,
+            payment.Id,
+            payment.PaymentStatusCode,
+            payment.EducationAccountAmount,
+            payment.OnlinePaymentAmount,
+            checkout?.CheckoutUrl,
+            checkout?.Id,
+            checkout?.ExpiresAtUtc,
+            allocations.Select(x => x.BillId).Distinct().ToArray()));
     }
 }
 
