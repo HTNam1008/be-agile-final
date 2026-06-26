@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Moe.Modules.AiCopilot.Application.Knowledge;
@@ -22,7 +23,10 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private static readonly Dictionary<string, double> StatusRank = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["OFFICIAL"] = 3.0, ["GUIDE"] = 2.0, ["FAQ"] = 1.0, ["PROTOTYPE"] = 0.0
+        ["OFFICIAL"] = 3.0,
+        ["GUIDE"] = 2.0,
+        ["FAQ"] = 1.0,
+        ["PROTOTYPE"] = 0.0
     };
 
     private readonly KnowledgeDocument[] _documents;
@@ -126,7 +130,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[KnowledgeLoader] Skipping malformed resource {resourceName}: {ex.Message}");
+                Debug.WriteLine($"[KnowledgeLoader] Skipping malformed resource {resourceName}: {ex.Message}");
             }
         }
         return chunks.ToArray();

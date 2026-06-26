@@ -6,8 +6,9 @@ using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.AiCopilot.Application.Finance;
 using Moe.Modules.AiCopilot.Application.Knowledge;
-using Moe.Modules.AiCopilot.Application.Security;
+using Moe.Modules.AiCopilot.Application.Orchestration;
 using Moe.Modules.AiCopilot.Application.Reviews;
+using Moe.Modules.AiCopilot.Application.Security;
 using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 using Moe.Modules.AiCopilot.Infrastructure.Persistence;
 
@@ -26,7 +27,7 @@ public sealed class AiCopilotModule : IModule
             string deploymentName = configuration["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName is required for AI requests.");
             return Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(deploymentName, endpoint, apiKey).Build();
         });
-        services.AddScoped<Moe.Modules.AiCopilot.Application.Orchestration.AiOrchestratorService>();
+        services.AddScoped<AiOrchestratorService>();
         services.AddScoped<AiFinanceReader>();
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
