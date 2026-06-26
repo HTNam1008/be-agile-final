@@ -107,3 +107,109 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
                 x.Bill.OutstandingAmount, x.Bill.BillStatusCode)).ToArray()));
     }
 }
+
+public sealed record PreviewPaymentPlanBillQuery(
+    long EnrollmentId,
+    long PaymentPlanId,
+    IReadOnlyCollection<long>? FasApplicationSchemeIds = null)
+    : IQuery<PaymentPlanBillPreviewResponse>;
+
+internal sealed class PreviewPaymentPlanBillHandler(
+    ICourseEnrollmentRepository enrollments,
+    ICoursePaymentPlanGateway plans,
+    IFasCourseSubsidyGateway fasSubsidies,
+    ICurrentUser currentUser,
+    IClock clock) : IQueryHandler<PreviewPaymentPlanBillQuery, PaymentPlanBillPreviewResponse>
+{
+    public async Task<Result<PaymentPlanBillPreviewResponse>> Handle(
+        PreviewPaymentPlanBillQuery query,
+        CancellationToken ct)
+    {
+        long personId = currentUser.PersonId ?? 0;
+        if (!currentUser.IsAuthenticated || personId <= 0)
+            return Result<PaymentPlanBillPreviewResponse>.Failure(CourseBillingErrors.StudentIdentityRequired);
+
+        CourseEnrollment? enrollment = await enrollments.FindEnrollmentAsync(query.EnrollmentId, personId, ct);
+        if (enrollment is null)
+            return Result<PaymentPlanBillPreviewResponse>.Failure(CourseBillingErrors.CourseNotFound);
+        if (enrollment.EnrollmentStatusCode is not (
+            CourseEnrollmentStatusCodes.PendingPlanSelection or
+            CourseEnrollmentStatusCodes.PendingPayment or
+            CourseEnrollmentStatusCodes.PaymentPastDue))
+        {
+            return Result<PaymentPlanBillPreviewResponse>.Failure(CourseBillingErrors.PaymentPlanChangeNotAllowed);
+        }
+
+        CourseBillingPlan? plan = await plans.FindPlanAsync(query.PaymentPlanId, ct);
+        if (plan is null || !plan.IsActive || plan.CourseId != enrollment.CourseId)
+            return Result<PaymentPlanBillPreviewResponse>.Failure(CourseBillingErrors.PaymentPlanNotFound);
+
+        IReadOnlyCollection<CourseFeeBillingLine> fees =
+            await enrollments.ListActiveCourseFeesAsync(enrollment.CourseId, ct);
+        if (fees.Count == 0)
+            return Result<PaymentPlanBillPreviewResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
+
+        DateTime now = clock.UtcNow.UtcDateTime;
+        bool installment = plan.PlanTypeCode == "INSTALLMENT";
+        DateOnly dueDate = installment
+            ? new DateOnly(now.Year, now.Month, 1).AddMonths(1)
+            : DateOnly.FromDateTime(now);
+        IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
+            await fasSubsidies.ListEligibleSubsidiesAsync(
+                personId,
+                enrollment.CourseId,
+                DateOnly.FromDateTime(now),
+                query.FasApplicationSchemeIds,
+                ct);
+        int requestedFasCount = query.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;
+        if (selectedFasSubsidies.Count != requestedFasCount)
+        {
+            return Result<PaymentPlanBillPreviewResponse>.Failure(CourseBillingErrors.FasVoucherUnavailable);
+        }
+
+        CourseEnrollmentBillingPreviewResult preview = enrollments.PreviewPaymentPlanBills(
+            plan,
+            installment,
+            dueDate,
+            fees,
+            selectedFasSubsidies);
+        PaymentPlanPreviewBillResponse[] bills = preview.Bills.Select(x => new PaymentPlanPreviewBillResponse(
+            0,
+            $"PREVIEW-{x.SequenceNumber:D2}",
+            x.SequenceNumber,
+            x.CurrentDueDate,
+            x.CurrentDueDate,
+            x.GrossAmount,
+            x.SubsidyAmount,
+            x.NetPayableAmount,
+            x.NetPayableAmount,
+            "PREVIEW",
+            plan.PlanTypeCode,
+            x.IsInstallment,
+            x.IsInstallment,
+            x.IsInstallment ? null : "Full payment bills cannot be deferred.",
+            x.Lines.Select(line => new PaymentPlanPreviewBillLineResponse(
+                0,
+                line.FeeComponentId,
+                line.CourseFeeId,
+                line.ComponentCode,
+                line.ComponentName,
+                line.ComponentTypeCode,
+                line.CalculationTypeCode,
+                line.Description,
+                1m,
+                line.GrossAmount,
+                line.GrossAmount,
+                line.SubsidyAmount,
+                line.NetAmount)).ToArray())).ToArray();
+        return Result<PaymentPlanBillPreviewResponse>.Success(new(
+            enrollment.Id,
+            plan.CoursePaymentPlanId,
+            plan.PlanTypeCode,
+            plan.InstallmentCount,
+            preview.GrossAmount,
+            preview.SubsidyAmount,
+            preview.NetPayableAmount,
+            bills));
+    }
+}
