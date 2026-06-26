@@ -85,10 +85,11 @@ internal sealed class AdminStudentListReader(
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId
                 && x.LevelCode == normalizedLevel
+                && x.ClassCode != null
                 && x.SchoolingStatusCode == "ACTIVE"
                 && x.StartDate <= today
                 && (x.EndDate == null || x.EndDate >= today))
-            .Select(x => x.ClassCode)
+            .Select(x => x.ClassCode!)
             .Distinct()
             .OrderBy(x => x)
             .ToArrayAsync(cancellationToken);
