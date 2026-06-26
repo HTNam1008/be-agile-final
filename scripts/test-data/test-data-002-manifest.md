@@ -13,6 +13,7 @@
 
 - Excel fixture: `scripts/test-data/test-data-002-auto-lifecycle-bulk-import.xlsx`
 - Self-cleaning seed script: `scripts/test-data/test-data-002-seed.sql`
+- Cleanup-only script: `scripts/test-data/test-data-002-cleanup.sql`
 
 File-count note: TEST-DATA-001 uses separate `sprint2-part1-seed.sql` and `sprint2-part1-cleanup.sql` files. TEST-DATA-002 intentionally follows the newer prompt clarification instead: one seed SQL file that deletes this fixture's prior rows before inserting the baseline direct-seed rows.
 
@@ -123,7 +124,13 @@ Suggested filters:
 
 ## Cleanup / Reset
 
-Run the same self-cleaning seed script again:
+To remove TEST-DATA-002 rows without recreating the baseline:
+
+```powershell
+sqlcmd -S localhost -d StudentFinance -E -C -i scripts/test-data/test-data-002-cleanup.sql
+```
+
+To reset and recreate the direct-seeded baseline, run the same self-cleaning seed script again:
 
 ```powershell
 sqlcmd -S localhost -d StudentFinance -E -C -i scripts/test-data/test-data-002-seed.sql
