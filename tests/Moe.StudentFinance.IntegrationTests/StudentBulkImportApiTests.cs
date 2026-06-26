@@ -110,6 +110,32 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     }
 
     [Fact]
+    public async Task BulkImport_WithHigherEducationLevel_CreatesStudent()
+    {
+        string suffix = UniqueSuffix();
+        StudentImportRow row = ValidRow(suffix, "BACHELOR") with
+        {
+            LevelCode = "BACHELOR",
+            ClassCode = ""
+        };
+
+        using HttpResponseMessage response = await PostWorkbookAsync([row]);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        BulkImportResponse result = await ReadBulkImportResponseAsync(response);
+        Assert.Equal(1, result.TotalRows);
+        Assert.Equal(1, result.SucceededCount);
+
+        long personId = result.Results.Single().PersonId!.Value;
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+
+        SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
+        Assert.Equal("BACHELOR", enrollment.LevelCode);
+        Assert.Null(enrollment.ClassCode);
+    }
+
+    [Fact]
     public async Task BulkImport_WithMixedRows_ReturnsRowLevelFailuresAndKeepsSuccessfulRows()
     {
         string suffix = UniqueSuffix();

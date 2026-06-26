@@ -38,9 +38,21 @@ public sealed class GetStudentManagementReferenceDataHandlerTests
         response.StudentListFilters.Levels.Select(x => x.Value)
             .Should().Equal(
                 "PRI_1", "PRI_2", "PRI_3", "PRI_4", "PRI_5", "PRI_6",
-                "SEC_1", "SEC_2", "SEC_3", "SEC_4", "SEC_5");
+                "SEC_1", "SEC_2", "SEC_3", "SEC_4", "SEC_5",
+                "BACHELOR", "MASTER", "PHD");
         response.StudentListFilters.Levels.Select(x => x.Value)
             .Should().NotContain(["UNI_Y1", "UNI_Y2", "UNI_Y3", "UNI_Y4"]);
+        response.StudentListFilters.Levels
+            .Should().ContainEquivalentOf(new ReferenceOption("PRI_1", "Primary 1"));
+        response.StudentListFilters.Levels
+            .Should().ContainEquivalentOf(new ReferenceOption("SEC_5", "Secondary 5"));
+        response.StudentListFilters.Levels
+            .Should().ContainEquivalentOf(new ReferenceOption("BACHELOR", "Bachelor"));
+        response.StudentListFilters.Levels
+            .Should().ContainEquivalentOf(new ReferenceOption("MASTER", "Master"));
+        response.StudentListFilters.Levels
+            .Should().ContainEquivalentOf(new ReferenceOption("PHD", "PhD"));
+        response.StudentProfile.Levels.Should().BeEquivalentTo(response.StudentListFilters.Levels);
 
         string serialized = JsonSerializer.Serialize(response);
         serialized.Should().NotContain("ResidencyFilters");
