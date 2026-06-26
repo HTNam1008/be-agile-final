@@ -161,7 +161,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
 
         Assert.Equal(1, checkout.RequiredInstallmentCount);
         Assert.False(checkout.IsInstallment);
-        Assert.Equal(30m, checkout.Amount);
+        Assert.Equal(32.7m, checkout.Amount);
     }
 
     [Fact]
@@ -258,17 +258,17 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
 
         JsonElement preview = await PreviewPaymentAsync(student, statement.StatementId);
         Assert.Equal(150m, preview.GetProperty("educationAccountCurrentBalance").GetDecimal());
-        Assert.Equal(100m, preview.GetProperty("educationAccountAmount").GetDecimal());
+        Assert.Equal(109m, preview.GetProperty("educationAccountAmount").GetDecimal());
         Assert.Equal(0m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
         Assert.Equal("EDUCATION_ACCOUNT_ONLY", preview.GetProperty("recommendedFundingOptionCode").GetString());
         JsonElement educationOnly = preview.GetProperty("fundingOptions").EnumerateArray()
             .Single(x => x.GetProperty("fundingOptionCode").GetString() == "EDUCATION_ACCOUNT_ONLY");
         Assert.True(educationOnly.GetProperty("isAvailable").GetBoolean());
-        Assert.Equal(100m, educationOnly.GetProperty("educationAccountAmount").GetDecimal());
+        Assert.Equal(109m, educationOnly.GetProperty("educationAccountAmount").GetDecimal());
         JsonElement onlineOnly = preview.GetProperty("fundingOptions").EnumerateArray()
             .Single(x => x.GetProperty("fundingOptionCode").GetString() == "ONLINE_ONLY");
         Assert.True(onlineOnly.GetProperty("isAvailable").GetBoolean());
-        Assert.Equal(100m, onlineOnly.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal(109m, onlineOnly.GetProperty("onlinePaymentAmount").GetDecimal());
 
         using HttpResponseMessage pay = await PayStatementAsync(student, statement.StatementId);
         await AssertStatusAsync(HttpStatusCode.Created, pay);
@@ -285,9 +285,9 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Bill bill = await db.Set<Bill>().SingleAsync(x => x.CourseEnrollmentId == statement.EnrollmentId);
         CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == statement.EnrollmentId);
 
-        Assert.Equal(50m, account.CachedBalance);
-        Assert.Equal(-100m, transaction.Amount);
-        Assert.Equal(50m, transaction.BalanceAfter);
+        Assert.Equal(41m, account.CachedBalance);
+        Assert.Equal(-109m, transaction.Amount);
+        Assert.Equal(41m, transaction.BalanceAfter);
         Assert.Equal("PAID", bill.BillStatusCode);
         Assert.Equal(0m, bill.OutstandingAmount);
         Assert.Equal("PAID_IN_FULL", enrollment.EnrollmentStatusCode);
@@ -318,8 +318,8 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         await AssertStatusAsync(HttpStatusCode.OK, cancel);
         JsonElement cancellation = await ReadDataAsync(cancel);
         Assert.Equal("REFUNDED", cancellation.GetProperty("enrollmentStatusCode").GetString());
-        Assert.Equal(100m, cancellation.GetProperty("refundAmount").GetDecimal());
-        Assert.Equal(100m, cancellation.GetProperty("educationAccountRefundAmount").GetDecimal());
+        Assert.Equal(109m, cancellation.GetProperty("refundAmount").GetDecimal());
+        Assert.Equal(109m, cancellation.GetProperty("educationAccountRefundAmount").GetDecimal());
         Assert.Equal(0m, cancellation.GetProperty("onlineRefundAmount").GetDecimal());
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -334,8 +334,8 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             .SingleAsync(x => x.Id == statement.EnrollmentId);
 
         Assert.Equal(150m, account.CachedBalance);
-        Assert.Equal([-100m, 100m], transactions.Select(x => x.Amount).ToArray());
-        Assert.Equal([50m, 150m], transactions.Select(x => x.BalanceAfter).ToArray());
+        Assert.Equal([-109m, 109m], transactions.Select(x => x.Amount).ToArray());
+        Assert.Equal([41m, 150m], transactions.Select(x => x.BalanceAfter).ToArray());
         Assert.Equal("REFUNDED", enrollment.EnrollmentStatusCode);
     }
 
@@ -402,7 +402,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         JsonElement payment = await ReadDataAsync(pay);
 
         Assert.Equal(0m, payment.GetProperty("educationAccountAmount").GetDecimal());
-        Assert.Equal(100m, payment.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal(109m, payment.GetProperty("onlinePaymentAmount").GetDecimal());
         Assert.Equal(JsonValueKind.String, payment.GetProperty("checkoutUrl").ValueKind);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -435,7 +435,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         long checkoutId = ReadCheckoutId(payment.GetProperty("checkoutUrl").GetString()!);
         long paymentId = payment.GetProperty("paymentId").GetInt64();
 
-        await PostWebhookAsync("success", checkoutId, 10000, $"evt_success_{Guid.NewGuid():N}");
+        await PostWebhookAsync("success", checkoutId, 10900, $"evt_success_{Guid.NewGuid():N}");
 
         using HttpResponseMessage cancel = await SendStudentAsync(
             student,
@@ -444,7 +444,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             new { idempotencyKey = $"cancel-online-{Guid.NewGuid():N}" });
         await AssertStatusAsync(HttpStatusCode.OK, cancel);
 
-        await PostWebhookAsync("refund", checkoutId, 10000, $"evt_refund_{Guid.NewGuid():N}");
+        await PostWebhookAsync("refund", checkoutId, 10900, $"evt_refund_{Guid.NewGuid():N}");
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -488,13 +488,13 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
 
         JsonElement preview = await PreviewPaymentAsync(student, statement.StatementId);
         Assert.Equal(40m, preview.GetProperty("educationAccountAmount").GetDecimal());
-        Assert.Equal(60m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal(69m, preview.GetProperty("onlinePaymentAmount").GetDecimal());
         Assert.Equal("EDUCATION_ACCOUNT_THEN_ONLINE", preview.GetProperty("recommendedFundingOptionCode").GetString());
         JsonElement splitOption = preview.GetProperty("fundingOptions").EnumerateArray()
             .Single(x => x.GetProperty("fundingOptionCode").GetString() == "EDUCATION_ACCOUNT_THEN_ONLINE");
         Assert.True(splitOption.GetProperty("isAvailable").GetBoolean());
         Assert.Equal(40m, splitOption.GetProperty("educationAccountAmount").GetDecimal());
-        Assert.Equal(60m, splitOption.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal(69m, splitOption.GetProperty("onlinePaymentAmount").GetDecimal());
 
         using HttpResponseMessage firstPay = await PayStatementAsync(student, statement.StatementId);
         await AssertStatusAsync(HttpStatusCode.Created, firstPay);
@@ -511,9 +511,9 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.True(resumedPayment.GetProperty("resumed").GetBoolean());
 
         await Task.WhenAll(
-            PostWebhookAsync("success", checkoutId, 6000, "evt_split_success"),
-            PostWebhookAsync("success", checkoutId, 6000, "evt_split_success"));
-        await PostWebhookAsync("failure", checkoutId, 6000, "evt_split_late_failure");
+            PostWebhookAsync("success", checkoutId, 6900, "evt_split_success"),
+            PostWebhookAsync("success", checkoutId, 6900, "evt_split_success"));
+        await PostWebhookAsync("failure", checkoutId, 6900, "evt_split_late_failure");
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -537,7 +537,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal("CAPTURED", hold.HoldStatusCode);
         Assert.Equal("SUCCESSFUL", payment.PaymentStatusCode);
         Assert.Equal(40m, payment.EducationAccountAmount);
-        Assert.Equal(60m, payment.OnlinePaymentAmount);
+        Assert.Equal(69m, payment.OnlinePaymentAmount);
         Assert.Equal(["CAPTURED", "SUCCESSFUL"], parts.Select(x => x.PartStatusCode).ToArray());
         Assert.Equal("PAID", bill.BillStatusCode);
     }
@@ -687,7 +687,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         JsonElement retry = await ReadDataAsync(retryResponse);
         Assert.NotEqual(firstPay.GetProperty("paymentId").GetInt64(), retry.GetProperty("paymentId").GetInt64());
         Assert.Equal(10m, retry.GetProperty("educationAccountAmount").GetDecimal());
-        Assert.Equal(20m, retry.GetProperty("onlinePaymentAmount").GetDecimal());
+        Assert.Equal(22.7m, retry.GetProperty("onlinePaymentAmount").GetDecimal());
 
         long retryCheckoutId = ReadCheckoutId(retry.GetProperty("checkoutUrl").GetString()!);
         await PostWebhookAsync("failure", retryCheckoutId, 2000, $"evt_retry_fail_{Guid.NewGuid():N}");
@@ -718,7 +718,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal(1, bill.DeferralCount);
         Assert.Equal(firstDueMonth.AddMonths(1), bill.CurrentDueDate);
         Assert.Equal("DEFERRED", bill.BillStatusCode);
-        Assert.Equal(30m, bill.OutstandingAmount);
+        Assert.Equal(32.7m, bill.OutstandingAmount);
     }
 
     [Fact]

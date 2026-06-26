@@ -16,9 +16,10 @@ public sealed class AiReviewsController(AiReviewService reviews) : ControllerBas
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string? domain, [FromQuery] string? reason,
-        [FromQuery] string? severity, [FromQuery] string? status, [FromQuery] DateTime? fromUtc,
+        [FromQuery] string? severity, [FromQuery] string? status, [FromQuery] string? search,
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toUtc, CancellationToken cancellationToken)
-        => Ok(await reviews.List(domain, reason, severity, status, fromUtc, toUtc, cancellationToken));
+        => Ok(await reviews.List(domain, reason, severity, status, search, page, pageSize, fromUtc, toUtc, cancellationToken));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
