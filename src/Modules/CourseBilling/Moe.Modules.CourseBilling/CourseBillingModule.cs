@@ -99,6 +99,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>, AdminEnrollPersonHandler>();
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
         services.AddScoped<ICommandHandler<ChangeEnrollmentPaymentPlanCommand, CourseEnrollmentResponse>, ChangeEnrollmentPaymentPlanHandler>();
+        services.AddScoped<IQueryHandler<PreviewPaymentPlanBillQuery, PaymentPlanBillPreviewResponse>, PreviewPaymentPlanBillHandler>();
         services.AddScoped<IQueryHandler<GetStudentCourseContentQuery, StudentCourseContentResponse>, GetStudentCourseContentHandler>();
         services.AddScoped<IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>, DownloadStudentCourseMaterialHandler>();
         services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();

@@ -46,6 +46,18 @@ public sealed class CourseEnrollmentsController(
                 request.FasApplicationSchemeIds),
             cancellationToken));
 
+    [HttpPost("{enrollmentId:long}/payment-plan-preview")]
+    public async Task<IActionResult> PreviewPaymentPlanBill(
+        long enrollmentId,
+        [FromBody] PreviewPaymentPlanBillRequest request,
+        CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await queries.Send(
+            new PreviewPaymentPlanBillQuery(
+                enrollmentId,
+                request.CoursePaymentPlanId,
+                request.FasApplicationSchemeIds),
+            cancellationToken));
+
     [HttpGet("{enrollmentId:long}/content")]
     public async Task<IActionResult> GetContent(
         long enrollmentId,

@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Moe.Modules.CourseBilling.Domain.Billing;
+using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.StudentFinance.Persistence;
@@ -128,6 +131,23 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
             .OrderByDescending(payment => payment.InitiatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<Payment?> FindActiveStatementPaymentForEnrollmentAsync(
+        long courseEnrollmentId,
+        long personId,
+        CancellationToken cancellationToken)
+        => (
+            from payment in dbContext.Set<Payment>()
+            join allocation in dbContext.Set<PaymentAllocation>() on payment.Id equals allocation.PaymentId
+            join bill in dbContext.Set<Bill>() on allocation.BillId equals bill.Id
+            where bill.CourseEnrollmentId == courseEnrollmentId
+                && payment.PayerPersonId == personId
+                && payment.BillingStatementId != null
+                && (payment.PaymentStatusCode == PaymentStatusCodes.Initiated ||
+                    payment.PaymentStatusCode == PaymentStatusCodes.PendingOnlinePayment)
+            orderby payment.InitiatedAtUtc descending
+            select payment)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task<IReadOnlyCollection<Payment>> ListActiveStatementPaymentsAsync(
         long billingStatementId,
         long personId,
@@ -162,6 +182,46 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
             .AsNoTracking()
             .Where(payment => payment.PayerPersonId == personId)
             .OrderByDescending(payment => payment.InitiatedAtUtc)
+            .Take(100)
+            .ToArrayAsync(cancellationToken);
+
+    public async Task<IReadOnlyCollection<UserFasSettlement>> ListRedeemedFasSettlementsForPersonAsync(
+        long personId,
+        CancellationToken cancellationToken)
+        => await (
+            from redemption in dbContext.Set<FasVoucherRedemption>().AsNoTracking()
+            join bill in dbContext.Set<Bill>().AsNoTracking()
+                on redemption.BillId equals bill.Id into billJoin
+            from bill in billJoin.DefaultIfEmpty()
+            join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+                on redemption.CourseEnrollmentId equals enrollment.Id into enrollmentJoin
+            from enrollment in enrollmentJoin.DefaultIfEmpty()
+            join course in dbContext.Set<Course>().AsNoTracking()
+                on redemption.CourseId equals course.Id into courseJoin
+            from course in courseJoin.DefaultIfEmpty()
+            join applicationScheme in dbContext.Set<FasApplicationScheme>().AsNoTracking()
+                on redemption.FasApplicationSchemeId equals applicationScheme.Id into applicationSchemeJoin
+            from applicationScheme in applicationSchemeJoin.DefaultIfEmpty()
+            join scheme in dbContext.Set<FasScheme>().AsNoTracking()
+                on applicationScheme.FasSchemeId equals scheme.Id into schemeJoin
+            from scheme in schemeJoin.DefaultIfEmpty()
+            where redemption.StudentPersonId == personId &&
+                redemption.StatusCode == "REDEEMED"
+            orderby redemption.RedeemedAtUtc descending, redemption.CreatedAtUtc descending
+            select new UserFasSettlement(
+                redemption.Id,
+                redemption.FasApplicationSchemeId,
+                redemption.CourseId,
+                redemption.CourseEnrollmentId,
+                redemption.BillId,
+                bill == null ? null : bill.BillNumber,
+                course == null ? null : course.CourseCode,
+                course == null ? null : course.CourseName,
+                scheme == null ? null : scheme.Name,
+                redemption.AppliedAmount,
+                redemption.StatusCode,
+                redemption.CreatedAtUtc,
+                redemption.RedeemedAtUtc))
             .Take(100)
             .ToArrayAsync(cancellationToken);
 
