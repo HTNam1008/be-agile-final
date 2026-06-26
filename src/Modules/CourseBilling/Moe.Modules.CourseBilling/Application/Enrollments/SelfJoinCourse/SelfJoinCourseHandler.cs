@@ -115,6 +115,12 @@ internal sealed class SelfJoinCourseHandler(
                 enrolledDate,
                 command.FasApplicationSchemeIds,
                 cancellationToken);
+        int requestedFasCount = command.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;
+        if (selectedFasSubsidies.Count != requestedFasCount)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.FasVoucherUnavailable);
+        }
+
         CourseEnrollmentBillingResult billingResult = await enrollments.AddEnrollmentAndIssueBillsAsync(
             enrollmentResult.Value,
             CreateBillNumber(utcNow),

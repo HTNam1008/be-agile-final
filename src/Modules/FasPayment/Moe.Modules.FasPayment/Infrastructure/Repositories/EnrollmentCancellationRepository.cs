@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.FasPayment.Application;
+using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -46,6 +47,14 @@ internal sealed class EnrollmentCancellationRepository(MoeDbContext dbContext)
             enrollment.MarkRefunded(utcNow);
         else
             enrollment.Cancel(utcNow);
+
+        List<FasVoucherRedemption> pendingRedemptions = await dbContext.Set<FasVoucherRedemption>()
+            .Where(x => x.CourseEnrollmentId == enrollment.Id && x.StatusCode == "PENDING")
+            .ToListAsync(cancellationToken);
+        foreach (FasVoucherRedemption redemption in pendingRedemptions)
+        {
+            redemption.Cancel();
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return Result<string>.Success(enrollment.EnrollmentStatusCode);
