@@ -145,6 +145,7 @@ internal sealed class AdminStudentListReader(
             row.Enrollment?.StudentNumber,
             MaskNric(row.Person.IdentityNumberMasked),
             row.Person.OfficialFullName,
+            row.Person.NationalityCode,
             row.Enrollment?.LevelCode,
             row.Enrollment?.ClassCode,
             row.Account?.AccountStatusCode ?? NoAccount,
@@ -207,6 +208,7 @@ internal sealed class AdminStudentListReader(
 
     private static string[] NormalizeCodes(IReadOnlyCollection<string> values)
         => values
+            .SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Select(NormalizeNullable)
             .Where(x => x is not null)
             .Select(x => x!)
