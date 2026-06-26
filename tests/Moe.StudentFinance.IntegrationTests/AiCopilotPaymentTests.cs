@@ -132,7 +132,7 @@ public sealed class AiCopilotPaymentTests(CustomWebApplicationFactory factory) :
         JsonElement response = await Chat("What is my account summary?", personId: 2101);
 
         string text = response.GetProperty("text").GetString()!;
-        Assert.Contains("no outstanding charges", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("nothing is due", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

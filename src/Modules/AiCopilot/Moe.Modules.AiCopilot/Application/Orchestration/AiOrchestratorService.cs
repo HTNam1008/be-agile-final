@@ -73,7 +73,7 @@ public sealed class AiOrchestratorService(
         {
             Guid reviewId = await CreateReview(conversation, personId, "MODEL_OR_TOOL_FAILURE", sanitizedRequest.PageContext, sanitizedRequest.Message, now, ct);
             logger.LogError(ex, "AI conversation {ConversationId} failed after {ElapsedMs} ms", conversation.Id, stopwatch.ElapsedMilliseconds);
-            const string text = "I could not complete that request reliably. You can continue in the portal, review the help links, or contact the Admin Center.";
+            const string text = "I could not complete that request reliably. I've stopped making guesses here — the portal pages and Admin Center remain the official ways to proceed.";
             var fallbackResponse = new AiChatResponse(conversation.Id, 0, text, "FALLBACK", new(false, []), [], FallbackActions(reviewId), null, reviewId);
             var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", text, now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(fallbackResponse));
             db.Add(fallback); await db.SaveChangesAsync(ct);
@@ -108,11 +108,13 @@ public sealed class AiOrchestratorService(
         AiFinanceSnapshot snapshot = await finance.GetSnapshotAsync(ct);
         IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, "PAYMENT");
         string intent = request.Message.ToUpperInvariant();
+        var sg = CultureInfo.GetCultureInfo("en-SG");
+        string ccy(decimal v) => v.ToString("C", sg);
         if (intent.Contains("HISTORY") || intent.Contains("PAID") || intent.Contains("REFUND"))
         {
             string historyText = snapshot.RecentPayments.Count == 0
-                ? "I could not find recent payment records for your account yet. Your Bills & payments page will still show any current outstanding charges. Refunds depend on the payment type and conditions of the original transaction."
-                : $"I found {snapshot.RecentPayments.Count} recent payment record(s) for you. Refunds are processed based on the original payment method and may take 5-14 business days. Contact your school or Admin Center for refund eligibility.";
+                ? "I could not find recent payment records for your account yet. Refunds depend on the payment type and conditions of the original transaction. You can check the Bills & payments page for current outstanding charges."
+                : $"You have {snapshot.RecentPayments.Count} recent payment record{(snapshot.RecentPayments.Count == 1 ? "" : "s")}. Refunds are processed based on the original payment method and may take 5-14 business days. Contact your school or Admin Center for refund eligibility.";
             return new(c.Id, 0, historyText, "PAYMENT", Grounding(sources),
                 [new("PAYMENT_HISTORY", snapshot.RecentPayments)],
                 [new("NAVIGATE", "Open Bills & payments page", "/portal/bills")], null);
@@ -126,16 +128,12 @@ public sealed class AiOrchestratorService(
         if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
         {
             string billText = snapshot.BillCount == 0
-                ? "I do not see any outstanding course bills right now. Your Bills & payments page will still show historical bills and payments."
-                : $"I found {snapshot.BillCount} outstanding course bill(s) recorded by MOE, totalling {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}.";
+                ? "You have no outstanding course bills right now. Check the Bills & payments page for your payment history."
+                : $"You have {snapshot.BillCount} outstanding course bill{(snapshot.BillCount == 1 ? "" : "s")} totalling {ccy(snapshot.TotalOutstanding)}. View and pay these on the Bills & payments page.";
             return new(c.Id, 0, billText, "PAYMENT", Grounding(sources),
                 [new("OUTSTANDING_BILLS", snapshot.Bills)], [new("NAVIGATE", "Open Bills & payments page", "/portal/bills")], null);
         }
-        string paymentOptions = PaymentOptionsText(snapshot);
-        string warning = snapshot.TotalOutstanding > 0
-            ? $" {paymentOptions}"
-            : " You have no outstanding charges.";
-        string text = $"Here is what I found for your Education Account: {snapshot.AvailableBalance.ToString("C", CultureInfo.GetCultureInfo("en-SG"))} is available, current outstanding charges total {snapshot.TotalOutstanding.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}, and your net available amount is {snapshot.NetAvailable.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}.{warning}";
+        string text = $"Your Education Account balance is {ccy(snapshot.AvailableBalance)}, with {ccy(snapshot.TotalOutstanding)} in outstanding charges. That leaves {ccy(snapshot.NetAvailable)} available to use.\n\n{PaymentOptionsText(snapshot)}\n\nYou can see the full breakdown on the Bills & payments or Education Account page.";
         AiCard card = new("FINANCE_SUMMARY", snapshot);
         AiAction[] actions = [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")];
         return new(c.Id, 0, text, "PAYMENT", Grounding(sources), [card], actions, null);
@@ -153,13 +151,13 @@ public sealed class AiOrchestratorService(
             : null;
         FasInterviewData state;
         try { state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct); }
-        catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly or contact Admin Center for help.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
+        catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
         if (!isNewInterview && state.Status == "COMPLETE")
         {
             AiInterviewState completedInterview = ToInterviewState(state, null);
             string completedText = state.IsWelfareHomeResident == true
-                ? "You are marked as living in an approved welfare home for this FAS check. That means the form can skip household income and household-size questions. Use Apply answers to form, then review the remaining particulars and documents before you submit anything."
-                : "I already have the confirmed details for this FAS check. Use Apply answers to form to copy them into the application, or edit the form manually if anything is wrong.";
+                ? "You are marked as living in an approved welfare home. The FAS form will skip household income and household-size questions. Use 'Apply answers to form' to copy your confirmed details, then review the remaining particulars and documents before submitting."
+                : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
             List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
             c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
             return new(c.Id, 0, completedText, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
@@ -195,22 +193,22 @@ public sealed class AiOrchestratorService(
                     state.HouseholdMemberCount!.Value, 0, state.ParentNationalities), ct);
                 JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
                 bool hasSchemes = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array && schemes.GetArrayLength() > 0;
-                if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "I couldn't find an eligible FAS scheme based on your details. The FAS application form and Admin Center are still the official paths. You can review your answers in the form and contact Admin Center if you need help."; }
+                if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "Based on your details, I could not find an eligible FAS scheme. The FAS application form and Admin Center remain the official paths. Review your answers or contact Admin Center for help."; }
                 else
                 {
                     state.Status = "COMPLETE";
                     recommendedSchemes = ExtractRecommendationMatches(root);
                     AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
                     recommendation = BuildFasRecommendation(root, completeInterview);
-                    text = "I have enough confirmed information to evaluate the active FAS schemes. Review the recommendation and apply the confirmed answers to the form when ready.";
+                    text = "I have enough information to evaluate the active FAS schemes. Review the recommendation below and use 'Apply answers to form' when ready.";
                 }
             }
-            catch { state.Status = "MANUAL_FALLBACK"; text = "I couldn't find an eligible FAS scheme based on your details. The FAS application form and Admin Center are still the official paths. You can review your answers in the form and contact Admin Center if you need help."; }
+            catch { state.Status = "MANUAL_FALLBACK"; text = "Based on your details, I could not find an eligible FAS scheme. The FAS application form and Admin Center remain the official paths. Review your answers or contact Admin Center for help."; }
         }
         else if (next is null)
         {
             state.Status = "COMPLETE";
-            text = "Got it. I have your welfare-home status and parent or guardian nationality. The FAS form can skip household income and household-size questions, so apply these answers to the form, then review the remaining particulars and documents before anything is submitted.";
+            text = "I have your welfare-home status and parent or guardian nationality. The FAS form will skip household income and household-size questions. Use 'Apply answers to form', then review the remaining particulars before submitting.";
         }
         else { state.Status = "COLLECTING"; text = next; }
 
@@ -626,16 +624,17 @@ public sealed class AiOrchestratorService(
 
     private static string PaymentOptionsText(AiFinanceSnapshot snapshot)
     {
-        if (snapshot.TotalOutstanding <= 0m) return "There is nothing due right now.";
-        string settle = " Consider settling your outstanding charges before proceeding with new course enrolments or withdrawals.";
+        if (snapshot.TotalOutstanding <= 0m) return "Nothing is due right now.";
+        var info = CultureInfo.GetCultureInfo("en-SG");
+        string f(decimal v) => v.ToString("C", info);
         if (snapshot.AvailableBalance >= snapshot.TotalOutstanding)
-            return $"Your Education Account balance covers the outstanding amount; review the bill details before paying.{settle}";
+            return "Your Education Account balance covers the outstanding amount. Review the bill details before paying, and settle any charges before enrolling in new courses.";
         if (snapshot.AvailableBalance > 0m)
         {
             decimal remainder = snapshot.TotalOutstanding - snapshot.AvailableBalance;
-            return $"Your Education Account can cover part of the outstanding amount, but is short by {remainder.ToString("C", CultureInfo.GetCultureInfo("en-SG"))}. You may use split payment or another available online payment method for the remainder when the bill supports it.{settle}";
+            return $"Your Education Account covers part of the outstanding amount but is short by {f(remainder)}. Use split payment or another online method for the remainder where supported.";
         }
-        return $"Your Education Account does not have available funds to cover the outstanding amount. Use another available online payment method when the bill supports it.{settle}";
+        return "Your Education Account does not have available funds for this amount. Use another online payment method where supported.";
     }
 
     private static string SerializeResponse(AiChatResponse response)
