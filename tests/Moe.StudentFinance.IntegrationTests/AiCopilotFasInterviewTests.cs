@@ -36,7 +36,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         JsonElement completed = await SendFasMessage("Singaporean", conversationId);
 
         Assert.Equal("MANUAL_FALLBACK", completed.GetProperty("interviewState").GetProperty("status").GetString());
-        Assert.Contains("could not find a matching FAS scheme", completed.GetProperty("text").GetString());
+        Assert.Contains("couldn't find an eligible FAS scheme", completed.GetProperty("text").GetString());
         Assert.DoesNotContain(completed.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
     }
 

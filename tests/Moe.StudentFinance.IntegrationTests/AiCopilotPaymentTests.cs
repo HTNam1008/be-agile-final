@@ -104,6 +104,37 @@ public sealed class AiCopilotPaymentTests(CustomWebApplicationFactory factory) :
         Assert.Equal("SGD", currency, ignoreCase: true);
     }
 
+    [Fact]
+    public async Task General_payment_query_catches_all_and_returns_finance_summary()
+    {
+        JsonElement response = await Chat("How much money do I have for school?", personId: 2101);
+
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("cards").EnumerateArray(),
+            x => x.GetProperty("type").GetString() == "FINANCE_SUMMARY");
+        string text = response.GetProperty("text").GetString()!;
+        Assert.Contains("available", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Withdraw_query_returns_payment_mode_with_navigate_actions()
+    {
+        JsonElement response = await Chat("I want to withdraw from a course", personId: 2101);
+
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        JsonElement[] actions = response.GetProperty("actions").EnumerateArray().ToArray();
+        Assert.Contains(actions, x => x.GetProperty("type").GetString() == "NAVIGATE");
+    }
+
+    [Fact]
+    public async Task General_payment_query_mentions_no_outstanding_charges_when_none_seeded()
+    {
+        JsonElement response = await Chat("What is my account summary?", personId: 2101);
+
+        string text = response.GetProperty("text").GetString()!;
+        Assert.Contains("no outstanding charges", text, StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
