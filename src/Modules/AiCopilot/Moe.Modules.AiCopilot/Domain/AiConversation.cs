@@ -49,16 +49,16 @@ internal sealed class AiMessage
 
     public static AiMessage Create(Guid conversationId, string role, string content, DateTime now,
         string? citationsJson = null, string? toolSummaryJson = null, int? latencyMs = null, string? responseJson = null) => new()
-    {
-        ConversationId = conversationId,
-        RoleCode = role,
-        ContentRedacted = content,
-        CitationsJson = citationsJson,
-        ToolSummaryJson = toolSummaryJson,
-        ResponseJson = responseJson,
-        LatencyMs = latencyMs,
-        CreatedAtUtc = now
-    };
+        {
+            ConversationId = conversationId,
+            RoleCode = role,
+            ContentRedacted = content,
+            CitationsJson = citationsJson,
+            ToolSummaryJson = toolSummaryJson,
+            ResponseJson = responseJson,
+            LatencyMs = latencyMs,
+            CreatedAtUtc = now
+        };
 }
 
 internal sealed class AiReviewRecord
@@ -79,10 +79,16 @@ internal sealed class AiReviewRecord
 
     public static AiReviewRecord Create(Guid conversationId, long personId, string reason, string domain,
         string? route, string transcript, DateTime now) => new()
-    {
-        Id = Guid.NewGuid(), ConversationId = conversationId, PersonId = personId, ReasonCode = reason,
-        DomainCode = domain, Route = route, TranscriptRedacted = transcript, CreatedAtUtc = now
-    };
+        {
+            Id = Guid.NewGuid(),
+            ConversationId = conversationId,
+            PersonId = personId,
+            ReasonCode = reason,
+            DomainCode = domain,
+            Route = route,
+            TranscriptRedacted = transcript,
+            CreatedAtUtc = now
+        };
 
     public void Resolve(long actorId, DateTime now)
     { StatusCode = "RESOLVED"; ResolvedByUserAccountId = actorId; ResolvedAtUtc = now; }

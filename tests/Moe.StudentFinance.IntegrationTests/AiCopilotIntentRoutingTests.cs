@@ -24,10 +24,19 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
-    public async Task Financial_assistance_keyword_routes_to_fas()
+    public async Task Financial_assistance_definition_stays_general()
     {
         JsonElement response = await Chat("Tell me about financial assistance", personId: 2101);
-        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
+        Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Fas_definition_question_does_not_start_interview()
+    {
+        JsonElement response = await Chat("What is FAS?", personId: 2101);
+        Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
+        Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]

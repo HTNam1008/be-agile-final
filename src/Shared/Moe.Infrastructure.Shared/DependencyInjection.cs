@@ -36,7 +36,11 @@ public static class DependencyInjection
         services.AddHealthChecks();
 
         services.AddOptions<PortalOptions>().BindConfiguration(PortalOptions.SectionName).ValidateOnStart();
-        services.AddOptions<AuthenticationOptions>().BindConfiguration(AuthenticationOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<AuthenticationOptions>()
+            .BindConfiguration(AuthenticationOptions.SectionName)
+            .ValidateDataAnnotations()
+            .Validate(HasValidEServiceSingpassRedirects, "Authentication:EServiceSingpass:RedirectUri must point at the API callback, not the frontend dev server.")
+            .ValidateOnStart();
         services.AddOptions<Configuration.AuthorizationOptions>().BindConfiguration(Configuration.AuthorizationOptions.SectionName).ValidateOnStart();
         services.AddOptions<UatOptions>().BindConfiguration(UatOptions.SectionName).ValidateOnStart();
 
@@ -160,6 +164,28 @@ public static class DependencyInjection
         app.UseAuthentication();
         app.UseAuthorization();
         return app;
+    }
+
+    private static bool HasValidEServiceSingpassRedirects(AuthenticationOptions options)
+    {
+        string redirectUri = options.EServiceSingpass.RedirectUri;
+
+        if (string.IsNullOrWhiteSpace(redirectUri))
+        {
+            return true;
+        }
+
+        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out Uri? callback))
+        {
+            return false;
+        }
+
+        if (!string.Equals(callback.AbsolutePath, "/api/eservice/v1/auth/callback", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return callback.Port is not 5173 and not 3000;
     }
 
     private static void Bind(JwtBearerOptions target, JwtSchemeOptions source, string authenticationScheme, string? bearerCookieName = null)
