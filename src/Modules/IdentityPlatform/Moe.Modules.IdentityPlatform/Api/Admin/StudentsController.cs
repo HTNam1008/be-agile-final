@@ -36,7 +36,7 @@ public sealed class StudentsController(
             new ListAdminStudentsQuery(
                 request.OrganizationId,
                 request.Search,
-                request.LevelCode ?? [],
+                string.IsNullOrWhiteSpace(request.LevelCode) ? [] : [request.LevelCode],
                 request.ClassCode,
                 request.AccountStatus,
                 request.EnrollmentStatus,
