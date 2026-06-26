@@ -3,10 +3,9 @@ namespace Moe.Modules.IdentityPlatform.IGateway.Students;
 public sealed record AdminStudentListCriteria(
     long? OrganizationId,
     string? Search,
-    string? LevelCode,
+    IReadOnlyCollection<string> LevelCodes,
     string? ClassCode,
     AdminStudentAccountStatusFilter AccountStatus,
-    AdminStudentResidencyFilter Residency,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
     int PageSize)
@@ -15,13 +14,21 @@ public sealed record AdminStudentListCriteria(
         long? organizationId = null,
         string? search = null,
         string? levelCode = null,
+        IReadOnlyCollection<string>? levelCodes = null,
         string? classCode = null,
         AdminStudentAccountStatusFilter accountStatus = AdminStudentAccountStatusFilter.All,
-        AdminStudentResidencyFilter residency = AdminStudentResidencyFilter.All,
         AdminStudentEnrollmentStatusFilter enrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
         int page = 1,
         int pageSize = 20)
-        => new(organizationId, search, levelCode, classCode, accountStatus, residency, enrollmentStatus, page, pageSize);
+        => new(
+            organizationId,
+            search,
+            levelCodes ?? (string.IsNullOrWhiteSpace(levelCode) ? [] : [levelCode]),
+            classCode,
+            accountStatus,
+            enrollmentStatus,
+            page,
+            pageSize);
 }
 
 public enum AdminStudentAccountStatusFilter
@@ -31,14 +38,6 @@ public enum AdminStudentAccountStatusFilter
     PendingClosure,
     Closed,
     NoAccount
-}
-
-public enum AdminStudentResidencyFilter
-{
-    All,
-    SingaporeCitizen,
-    PermanentResident,
-    Foreigner
 }
 
 public enum AdminStudentEnrollmentStatusFilter
@@ -63,6 +62,6 @@ public sealed record AdminStudentListItem(
     string? ClassCode,
     string? AccountStatusCode,
     decimal? Balance,
-    string CitizenshipStatusCode,
     string EnrollmentStatusCode,
-    long? OrganizationId);
+    long? OrganizationId,
+    string? SchoolName);

@@ -6,10 +6,9 @@ namespace Moe.Modules.IdentityPlatform.Application.AdminStudentList;
 internal sealed record ListAdminStudentsQuery(
     long? OrganizationId,
     string? Search,
-    string? LevelCode,
+    IReadOnlyCollection<string> LevelCodes,
     string? ClassCode,
     AdminStudentAccountStatusFilter AccountStatus,
-    AdminStudentResidencyFilter Residency,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
     int PageSize) : IQuery<AdminStudentListPage>;

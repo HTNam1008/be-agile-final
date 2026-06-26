@@ -34,10 +34,9 @@ public sealed class StudentsController(
             new ListAdminStudentsQuery(
                 request.OrganizationId,
                 request.Search,
-                request.LevelCode,
+                request.LevelCode ?? [],
                 request.ClassCode,
                 request.AccountStatus,
-                request.Residency,
                 request.EnrollmentStatus,
                 request.Page,
                 request.PageSize),
