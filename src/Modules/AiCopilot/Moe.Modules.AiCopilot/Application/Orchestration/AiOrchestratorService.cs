@@ -225,13 +225,14 @@ public sealed class AiOrchestratorService(
     private async Task<AiChatResponse> HandleGeneral(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
         IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, request.PageContext?.Domain);
-        var history = new ChatHistory($"""
-            You are the MOE Student Finance Copilot. Use MOE records and policy documents to answer. Your answers may be incomplete — direct users to portal pages as their source of truth.
-            Never invent personal data, policy, eligibility, amounts, status, or timelines. Label PROTOTYPE sources.
-            If sources are insufficient, say so and direct the user to Admin Center. Cite source IDs in square brackets.
-            Sources:
-            {string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"))}
-            """);
+        string sourceText = string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"));
+        var history = new ChatHistory(
+            "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
+            "Keep the answer under 120 words. Lead with the direct answer. Ask at most one next question.\n" +
+            "Use no more than three bullets. Do not include source IDs, bracket citations, or raw document codes in the answer text; the UI renders sources separately.\n" +
+            "Never invent personal data, policy, eligibility, amounts, status, or timelines. If the question is outside student finance or FAS, say what you can help with instead.\n" +
+            "Label prototype uncertainty in plain language only when it affects the answer.\n" +
+            $"Sources:\n{sourceText}");
         history.AddUserMessage(request.Message);
         Kernel kernel = services.GetRequiredService<Kernel>();
         ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
@@ -268,9 +269,18 @@ public sealed class AiOrchestratorService(
     private static string DetermineMode(string message, string current, string? domain)
     {
         string value = $"{domain} {message}".ToUpperInvariant();
-        if (current == "FAS_INTERVIEW" || value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE") || value.Contains("ELIGIB")) return "FAS_INTERVIEW";
+        if (current == "FAS_INTERVIEW") return "FAS_INTERVIEW";
+        if (IsFasInterviewRequest(value)) return "FAS_INTERVIEW";
         if (value.Contains("PAY") || value.Contains("BILL") || value.Contains("BALANCE") || value.Contains("OUTSTANDING") || value.Contains("REFUND") || value.Contains("WITHDRAW")) return "PAYMENT";
         return "GENERAL";
+    }
+
+    private static bool IsFasInterviewRequest(string value)
+    {
+        bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE");
+        bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP ME APPLY)\b", RegexOptions.IgnoreCase);
+        bool eligibilityWithoutFas = value.Contains("ELIGIB") || value.Contains("QUALIF");
+        return eligibilityWithoutFas || (mentionsFas && asksForInterview);
     }
 
     private static readonly HashSet<string> AllowedFieldKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -326,7 +336,7 @@ public sealed class AiOrchestratorService(
         string? field = s.ClarificationField ?? NextMissingField(s, preferredField);
         if (field is null) return FasExtractionResult.Accepted();
 
-        if (field != "isWelfareHomeResident" && LooksLikeWelfareHomeCorrection(message))
+        if (field != "isWelfareHomeResident" && LooksLikeWelfareHomeCorrection(message, s.IsWelfareHomeResident))
         {
             FasExtractionResult welfareCorrection = ExtractWelfareHome(message);
             if (welfareCorrection.Status == "ACCEPTED")
@@ -338,6 +348,22 @@ public sealed class AiOrchestratorService(
                 ApplyAcceptedValue(s, "isWelfareHomeResident", welfareCorrection.Value);
                 return welfareCorrection;
             }
+        }
+
+        if (LooksLikeFieldHelpRequest(message))
+        {
+            int helpAttempts = s.ClarificationAttempts.GetValueOrDefault(field);
+            if (helpAttempts >= 1)
+            {
+                s.ClarificationField = null;
+                s.ValidationMessage = HelpForField(field);
+                return FasExtractionResult.ManualFallback("I couldn't safely prefill that field. The FAS form is still the source of truth; please complete it manually.");
+            }
+
+            s.ClarificationAttempts[field] = helpAttempts + 1;
+            s.ClarificationField = field;
+            s.ValidationMessage = HelpForField(field);
+            return FasExtractionResult.Clarify(HelpForField(field));
         }
 
         FasExtractionResult result = field switch
@@ -379,7 +405,7 @@ public sealed class AiOrchestratorService(
             "isWelfareHomeResident" => "Are you currently residing in an approved welfare home? Please answer yes or no.",
             "monthlyHouseholdIncome" => "What is your total monthly household income in SGD?",
             "householdMemberCount" => "How many people are in your household?",
-            "parentNationalities" => "What is your parent or guardian's nationality?",
+            "parentNationalities" => "What is your parent or guardian's nationality? For example: Singapore Citizen, Permanent Resident, or Foreigner.",
             _ => null
         };
     }
@@ -503,10 +529,34 @@ public sealed class AiOrchestratorService(
         return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
     }
 
-    private static bool LooksLikeWelfareHomeCorrection(string message)
+    private static bool LooksLikeWelfareHomeCorrection(string message, bool? currentWelfareHome)
     {
-        return Regex.IsMatch(message, @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b", RegexOptions.IgnoreCase);
+        if (Regex.IsMatch(message, @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b", RegexOptions.IgnoreCase))
+        {
+            return true;
+        }
+
+        if (!currentWelfareHome.HasValue)
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(message, @"\b(wait|actually|sorry|correction|meant)\b.{0,20}\b(yes|y|no|n)\b", RegexOptions.IgnoreCase);
     }
+
+    private static bool LooksLikeFieldHelpRequest(string message)
+    {
+        return Regex.IsMatch(message, @"\b(what are|what is|options|option|choose|choices|example|examples|not sure|don't know|do not know|idk|help)\b", RegexOptions.IgnoreCase);
+    }
+
+    private static string HelpForField(string field) => field switch
+    {
+        "isWelfareHomeResident" => "An approved welfare home is a formally recognised residential home. Reply yes or no: yes if you live in one, otherwise no.",
+        "monthlyHouseholdIncome" => "Use the total monthly income for everyone in your household, in SGD. Example: 3500.",
+        "householdMemberCount" => "Count everyone in your household, including yourself. Reply with one whole number, for example 4.",
+        "parentNationalities" => "Common options are Singapore Citizen, Permanent Resident, Foreigner, or the specific nationality/country on their records. Reply with the closest value.",
+        _ => "Tell me the value shown on your records, or leave it for manual entry on the form."
+    };
 
     private static FasExtractionResult ExtractIncome(string message)
     {
