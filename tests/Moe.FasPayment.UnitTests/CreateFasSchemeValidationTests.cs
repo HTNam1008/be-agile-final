@@ -13,7 +13,8 @@ public sealed class CreateFasSchemeValidationTests
     public void Valid_wizard_payload_passes() => _validator.Validate(FasSchemeTestData.ValidRequest()).IsValid.Should().BeTrue();
 
     [Theory]
-    [InlineData("PERCENTAGE", 0, true)]
+    [InlineData("PERCENTAGE", 0, false)]
+    [InlineData("PERCENTAGE", 1, true)]
     [InlineData("PERCENTAGE", 100, true)]
     [InlineData("PERCENTAGE", 100.01, false)]
     [InlineData("FIXED", 0, true)]
@@ -39,6 +40,7 @@ public sealed class CreateFasSchemeValidationTests
     [Fact]
     public void Duplicate_or_nonpositive_courses_fail()
     {
+        _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] }).IsValid.Should().BeFalse();
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [1, 1] }).IsValid.Should().BeFalse();
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [0] }).IsValid.Should().BeFalse();
     }

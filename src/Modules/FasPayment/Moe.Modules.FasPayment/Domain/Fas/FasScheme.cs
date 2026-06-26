@@ -52,10 +52,27 @@ internal sealed class FasScheme : Entity<long>
         UpdatedAtUtc = utcNow;
     }
 
+    public void UpdateEditable(string schemeCode, string grantCode, string name, string? description,
+        DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
+    {
+        if (StatusCode == FasSchemeStatusCodes.Active && StartDate <= DateOnly.FromDateTime(utcNow))
+            throw new InvalidOperationException("Only an active scheme that has not started can be updated.");
+        if (StatusCode is not (FasSchemeStatusCodes.Draft or FasSchemeStatusCodes.Active))
+            throw new InvalidOperationException("Only a draft or not-started active scheme can be updated.");
+
+        ApplyUpdate(schemeCode, grantCode, name, description, startDate, endDate, actorId, utcNow);
+    }
+
     public void UpdateDraft(string schemeCode, string grantCode, string name, string? description,
         DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
     {
         if (StatusCode != FasSchemeStatusCodes.Draft) throw new InvalidOperationException("Only a draft scheme can be updated.");
+        ApplyUpdate(schemeCode, grantCode, name, description, startDate, endDate, actorId, utcNow);
+    }
+
+    private void ApplyUpdate(string schemeCode, string grantCode, string name, string? description,
+        DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
+    {
         if (string.IsNullOrWhiteSpace(schemeCode)) throw new ArgumentException("Scheme code is required.", nameof(schemeCode));
         if (string.IsNullOrWhiteSpace(grantCode)) throw new ArgumentException("Grant code is required.", nameof(grantCode));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
