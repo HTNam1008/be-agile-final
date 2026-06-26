@@ -180,7 +180,7 @@ public class E2EDbSeeder : IHostedService
         {
             object lineResult = billLineType.GetMethod("FromCourseFee")!.Invoke(
                 null,
-                [9003L, 9201L, 9301L, "Robotics programme fee after subsidy", 300m])!;
+                [9003L, 9201L, 9301L, "Robotics programme fee after subsidy", 300m, 0m])!;
             object line = UnwrapResult(lineResult);
             SetId(line, 9004);
             db.Add(line);
