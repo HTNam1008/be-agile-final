@@ -28,13 +28,7 @@ public sealed class AiCopilotModule : IModule
         });
         services.AddScoped<Moe.Modules.AiCopilot.Application.Orchestration.AiOrchestratorService>();
         services.AddScoped<AiFinanceReader>();
-        string? fasKnowledgeDir = configuration["KnowledgeBase:FasDirectory"];
-        if (string.IsNullOrEmpty(fasKnowledgeDir))
-            fasKnowledgeDir = LocalKnowledgeRetriever.FindDefaultFasDirectory();
-        var fasChunks = fasKnowledgeDir != null
-            ? LocalKnowledgeRetriever.LoadFasChunks(fasKnowledgeDir)
-            : [];
-        services.AddSingleton<IKnowledgeRetriever>(_ => new LocalKnowledgeRetriever(fasChunks));
+        services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
