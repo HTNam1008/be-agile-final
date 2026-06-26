@@ -17,22 +17,12 @@ public sealed class EducationAccountLifecycleTriggerApiTests(CustomWebApplicatio
     private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
-    public async Task RunNow_WithoutLifecycleManualTriggerPermission_ReturnsForbidden()
-    {
-        using HttpResponseMessage response = await _client.PostAsync(
-            "/api/admin/v1/education-account-lifecycle/run-now",
-            content: null);
-
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task RunNow_WithOnlyStandardManageAccountsPermission_ReturnsForbidden()
+    public async Task RunNow_WithUnsupportedRole_ReturnsForbidden()
     {
         using HttpRequestMessage request = new(
             HttpMethod.Post,
             "/api/admin/v1/education-account-lifecycle/run-now");
-        request.Headers.Add("X-Test-Only-Manage-Accounts", "true");
+        request.Headers.Add("X-Test-Role", "STUDENT");
 
         using HttpResponseMessage response = await _client.SendAsync(request);
 
@@ -40,13 +30,12 @@ public sealed class EducationAccountLifecycleTriggerApiTests(CustomWebApplicatio
     }
 
     [Fact]
-    public async Task RunNow_WithLifecycleManualTriggerPermission_RunsLifecycleSynchronously()
+    public async Task RunNow_WithAdminRoleWithoutLifecycleManualTriggerPermission_RunsLifecycleSynchronously()
     {
         (long openingPersonId, long closingAccountId) = await SeedLifecycleCandidatesAsync();
         using HttpRequestMessage request = new(
             HttpMethod.Post,
             "/api/admin/v1/education-account-lifecycle/run-now");
-        request.Headers.Add("X-Test-Lifecycle-Manual-Trigger", "true");
 
         using HttpResponseMessage response = await _client.SendAsync(request);
 
