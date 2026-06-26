@@ -58,6 +58,7 @@ public sealed record AdminStudentListItem(
     string? StudentNumber,
     string? MaskedNric,
     string FullName,
+    string NationalityCode,
     string? LevelCode,
     string? ClassCode,
     string? AccountStatusCode,
