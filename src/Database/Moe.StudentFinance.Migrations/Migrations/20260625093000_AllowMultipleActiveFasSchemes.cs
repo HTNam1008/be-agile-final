@@ -1,10 +1,14 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Moe.StudentFinance.Persistence;
 
 #nullable disable
 
 namespace Moe.StudentFinance.Migrations.Migrations;
 
 /// <inheritdoc />
+[DbContext(typeof(MoeDbContext))]
+[Migration("20260625093000_AllowMultipleActiveFasSchemes")]
 public partial class AllowMultipleActiveFasSchemes : Migration
 {
     /// <inheritdoc />
