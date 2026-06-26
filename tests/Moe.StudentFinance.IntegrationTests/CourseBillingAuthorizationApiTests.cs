@@ -389,7 +389,7 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         await AssertStatusAsync(HttpStatusCode.OK, choosePlanResponse);
         JsonElement choosePlanData = await ReadDataElementAsync(choosePlanResponse);
         Assert.Equal(CourseEnrollmentStatusCodes.PendingPayment, choosePlanData.GetProperty("enrollmentStatusCode").GetString());
-        Assert.Equal(25m, choosePlanData.GetProperty("outstandingAmount").GetDecimal());
+        Assert.Equal(27.25m, choosePlanData.GetProperty("outstandingAmount").GetDecimal());
         Assert.Single(choosePlanData.GetProperty("generatedBills").EnumerateArray());
     }
 

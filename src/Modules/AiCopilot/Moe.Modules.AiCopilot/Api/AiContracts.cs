@@ -15,6 +15,26 @@ public sealed record AiAction(string Type, string Label, string? Route = null, o
 public sealed record AiCard(string Type, object Data);
 public sealed record AiGrounding(bool IsGrounded, IReadOnlyCollection<KnowledgeCitation> Citations);
 public sealed record AiInterviewField(string Name, object? Value, string Provenance, bool Confirmed);
+public sealed record FasRecommendationCard(
+    decimal? PerCapitaIncome,
+    string? RecommendedSchemeName,
+    string? RecommendedTierLabel,
+    string? SubsidyType,
+    decimal? SubsidyValue,
+    IReadOnlyCollection<FasRecommendationMatch> MatchedSchemes,
+    IReadOnlyCollection<AiInterviewField> ConfirmedFacts,
+    IReadOnlyCollection<string> MissingFacts,
+    string Warning);
+public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+public sealed record FasPatchParticulars(string? Email, IReadOnlyCollection<string>? ParentNationalities);
+public sealed record FasPatchIncome(
+    bool? IsWelfareHomeResident, string? EmploymentStatusCode,
+    decimal? MonthlyHouseholdIncome, int? HouseholdMemberCount, decimal? OtherMonthlyIncome);
+public sealed record FasPatchSchemes(IReadOnlyCollection<long>? RecommendedSchemeIds, IReadOnlyCollection<string>? RecommendedSchemeNames);
+public sealed record FasPatchMetaField(string Confidence, string Provenance, string? Explanation);
+public sealed record FasFormPatch(
+    FasPatchParticulars? Particulars, FasPatchIncome? Income, FasPatchSchemes? Schemes,
+    IReadOnlyDictionary<string, FasPatchMetaField>? Meta);
 public sealed record AiInterviewState(string Status, string? NextQuestion,
     IReadOnlyCollection<AiInterviewField> Fields, IReadOnlyCollection<string> MissingFields, object? FormPatch);
 public sealed record AiChatResponse(Guid ConversationId, long MessageId, string Text, string Mode,
@@ -22,7 +42,7 @@ public sealed record AiChatResponse(Guid ConversationId, long MessageId, string 
     AiInterviewState? InterviewState, Guid? ReviewRecordId = null);
 public sealed record AiConversationResponse(Guid ConversationId, string Mode, string Status,
     IReadOnlyCollection<AiConversationMessageResponse> Messages, AiInterviewState? InterviewState);
-public sealed record AiConversationMessageResponse(long MessageId, string Role, string Content, DateTime CreatedAtUtc);
+public sealed record AiConversationMessageResponse(long MessageId, string Role, string Content, DateTime CreatedAtUtc, object? ResponseData = null);
 public sealed record CreateAdminCenterCaseRequest(Guid ReviewRecordId,
-    [property: Required, StringLength(2000, MinimumLength = 5)] string Description,
-    [property: RegularExpression("PORTAL|EMAIL|PHONE")] string ContactPreference = "PORTAL");
+    [Required, StringLength(2000, MinimumLength = 5)] string Description,
+    [RegularExpression("PORTAL|EMAIL|PHONE")] string ContactPreference = "PORTAL");

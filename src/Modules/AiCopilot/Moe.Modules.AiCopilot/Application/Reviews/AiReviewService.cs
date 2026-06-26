@@ -15,17 +15,23 @@ public sealed record AiReviewDetail(Guid Id, Guid ConversationId, string Reason,
 public sealed class AiReviewService(MoeDbContext db, ICurrentUser currentUser)
 {
     public async Task<IReadOnlyList<AiReviewListItem>> List(string? domain, string? reason, string? severity,
-        string? status, DateTime? fromUtc, DateTime? toUtc, CancellationToken cancellationToken)
+        string? status, string? search, int? page, int? pageSize, DateTime? fromUtc, DateTime? toUtc, CancellationToken cancellationToken)
     {
         IQueryable<AiReviewRecord> query = db.Set<AiReviewRecord>().AsNoTracking();
         if (!string.IsNullOrWhiteSpace(domain)) query = query.Where(x => x.DomainCode == domain);
         if (!string.IsNullOrWhiteSpace(reason)) query = query.Where(x => x.ReasonCode == reason);
         if (!string.IsNullOrWhiteSpace(severity)) query = query.Where(x => x.SeverityCode == severity);
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.StatusCode == status);
+        if (!string.IsNullOrWhiteSpace(search) && Guid.TryParse(search, out Guid searchId))
+            query = query.Where(x => x.ConversationId == searchId);
         if (fromUtc.HasValue) query = query.Where(x => x.CreatedAtUtc >= fromUtc.Value);
         if (toUtc.HasValue) query = query.Where(x => x.CreatedAtUtc < toUtc.Value);
 
-        return await query.OrderByDescending(x => x.CreatedAtUtc).Take(200)
+        int p = Math.Max(1, page ?? 1);
+        int ps = Math.Clamp(pageSize ?? 20, 1, 200);
+
+        return await query.OrderByDescending(x => x.CreatedAtUtc)
+            .Skip((p - 1) * ps).Take(ps)
             .Select(x => new AiReviewListItem(x.Id, x.ConversationId, x.ReasonCode, x.DomainCode,
                 x.SeverityCode, x.StatusCode, x.Route, x.CreatedAtUtc,
                 db.Set<AdminCenterCase>().Any(c => c.ReviewRecordId == x.Id)))

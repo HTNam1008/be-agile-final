@@ -13,4 +13,10 @@
     <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
     <ProjectReference Include="..\..\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Infrastructure\Knowledge\FasChunks\*.md" />
+  </ItemGroup>
 </Project>
