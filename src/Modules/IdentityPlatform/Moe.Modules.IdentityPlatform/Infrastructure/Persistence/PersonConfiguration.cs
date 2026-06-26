@@ -16,7 +16,7 @@ public sealed class PersonConfiguration : IEntityTypeConfiguration<Person>
         builder.Property(x => x.IdentityNumberMasked).HasMaxLength(30);
         builder.Property(x => x.OfficialFullName).HasColumnName("FullName").HasMaxLength(200).IsRequired();
         builder.Property(x => x.NationalityCode).HasMaxLength(30).IsUnicode(false).IsRequired();
-        builder.Property(x => x.CitizenshipStatusCode).HasColumnName("ResidencyStatusCode").HasMaxLength(30).IsUnicode(false).IsRequired();
+        builder.Property(x => x.CitizenshipStatusCode).HasColumnName("ResidencyStatusCode").HasMaxLength(30).IsUnicode(false);
         builder.Property(x => x.OfficialEmail).HasMaxLength(320);
         builder.Property(x => x.PreferredEmail).HasMaxLength(320);
         builder.Property(x => x.OfficialMobile).HasMaxLength(50);

@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +24,7 @@ public sealed class StudentsController(
     IQueryDispatcher queries) : ControllerBase
 {
     private const long BulkImportMaxFileSizeBytes = 5 * 1024 * 1024;
+    private const string BulkImportTemplateContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ViewAccountDetails)]
@@ -34,10 +36,9 @@ public sealed class StudentsController(
             new ListAdminStudentsQuery(
                 request.OrganizationId,
                 request.Search,
-                request.LevelCode,
+                request.LevelCode ?? [],
                 request.ClassCode,
                 request.AccountStatus,
-                request.Residency,
                 request.EnrollmentStatus,
                 request.Page,
                 request.PageSize),
@@ -194,6 +195,35 @@ public sealed class StudentsController(
         return result.IsFailure
             ? ApiResponseFactory.Failure(result.Error, GetFailureStatusCode(result.Error.Code), HttpContext.TraceIdentifier)
             : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
+    [HttpGet("bulk-import/template")]
+    public IActionResult DownloadBulkImportTemplate()
+    {
+        using XLWorkbook workbook = new();
+        IXLWorksheet sheet = workbook.Worksheets.Add("Students");
+
+        for (int i = 0; i < BulkImportStudentWorkbookColumns.Headers.Count; i++)
+        {
+            string header = BulkImportStudentWorkbookColumns.Headers[i];
+            sheet.Cell(1, i + 1).Value = header;
+            sheet.Cell(2, i + 1).Value = BulkImportStudentWorkbookColumns.NullableHeaders.Contains(header)
+                ? "Nullable - DELETE THIS ROW BEFORE IMPORT"
+                : "Required - DELETE THIS ROW BEFORE IMPORT";
+        }
+
+        sheet.Row(1).Style.Font.Bold = true;
+        sheet.Row(2).Style.Font.Italic = true;
+        sheet.Row(2).Style.Fill.BackgroundColor = XLColor.LightYellow;
+        sheet.Columns().AdjustToContents();
+
+        using MemoryStream stream = new();
+        workbook.SaveAs(stream);
+
+        return File(
+            stream.ToArray(),
+            BulkImportTemplateContentType,
+            "student-bulk-import-template.xlsx");
     }
 
     private static int GetFailureStatusCode(string errorCode)

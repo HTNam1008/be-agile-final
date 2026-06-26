@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.StudentFinance.Persistence;
@@ -16,7 +17,60 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     : IClassFixture<CustomWebApplicationFactory>
 {
     private const string Endpoint = "/api/admin/v1/students/bulk-import";
+    private const string TemplateEndpoint = "/api/admin/v1/students/bulk-import/template";
     private readonly HttpClient _client = factory.CreateClient();
+
+    [Fact]
+    public async Task BulkImportTemplate_ReturnsValidWorkbookWithCurrentHeaders()
+    {
+        using HttpResponseMessage response = await _client.GetAsync(TemplateEndpoint);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        Assert.Equal(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains(
+            "student-bulk-import-template",
+            response.Content.Headers.ContentDisposition?.FileNameStar
+                ?? response.Content.Headers.ContentDisposition?.FileName
+                ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+
+        await using Stream stream = await response.Content.ReadAsStreamAsync();
+        using XLWorkbook workbook = new(stream);
+        IXLWorksheet sheet = workbook.Worksheets.Single();
+
+        string[] headers = Enumerable.Range(1, BulkImportStudentWorkbookColumns.Headers.Count)
+            .Select(index => sheet.Cell(1, index).GetString())
+            .ToArray();
+
+        Assert.Equal(BulkImportStudentWorkbookColumns.Headers, headers);
+        Assert.Equal(2, sheet.LastRowUsed()?.RowNumber());
+
+        for (int i = 0; i < BulkImportStudentWorkbookColumns.Headers.Count; i++)
+        {
+            string header = BulkImportStudentWorkbookColumns.Headers[i];
+            string note = sheet.Cell(2, i + 1).GetString();
+            string expectedPrefix = BulkImportStudentWorkbookColumns.NullableHeaders.Contains(header)
+                ? "Nullable"
+                : "Required";
+
+            Assert.StartsWith(expectedPrefix, note);
+            Assert.Contains("DELETE THIS ROW BEFORE IMPORT", note);
+        }
+    }
+
+    [Fact]
+    public async Task BulkImportTemplate_WhenAnonymous_ReturnsUnauthorized()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Get, TemplateEndpoint);
+        request.Headers.Add("X-Test-Unauthenticated", "true");
+
+        using HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 
     [Fact]
     public async Task BulkImport_WithValidWorkbook_CreatesStudentsWithoutEducationAccountsOrImportAudit()
@@ -25,7 +79,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         StudentImportRow[] rows =
         [
             ValidRow(suffix, "001"),
-            ValidRow(suffix, "002")
+            ValidRow(suffix, "002") with { CitizenshipStatusCode = "" }
         ];
 
         using HttpResponseMessage response = await PostWorkbookAsync(rows);
@@ -45,6 +99,14 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         Assert.Equal(2, await db.Set<SchoolEnrollment>().CountAsync(x => personIds.Contains(x.PersonId)));
         Assert.False(await db.Set<EducationAccount>().AnyAsync(x => personIds.Contains(x.PersonId)));
         Assert.False(AnyAuditLogContaining(db, suffix));
+
+        long blankCitizenshipPersonId = result.Results.Single(x => x.RowNumber == 3).PersonId!.Value;
+        Person blankCitizenshipPerson = await db.Set<Person>().SingleAsync(x => x.Id == blankCitizenshipPersonId);
+        Assert.Null(blankCitizenshipPerson.CitizenshipStatusCode);
+
+        long populatedCitizenshipPersonId = result.Results.Single(x => x.RowNumber == 2).PersonId!.Value;
+        Person populatedCitizenshipPerson = await db.Set<Person>().SingleAsync(x => x.Id == populatedCitizenshipPersonId);
+        Assert.Equal("CITIZEN", populatedCitizenshipPerson.CitizenshipStatusCode);
     }
 
     [Fact]
@@ -160,28 +222,10 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     {
         using XLWorkbook workbook = new();
         IXLWorksheet sheet = workbook.Worksheets.Add("Students");
-        string[] headers =
-        [
-            "SchoolName",
-            "OrganizationId",
-            "IdentityNumber",
-            "FullName",
-            "DateOfBirth",
-            "NationalityCode",
-            "CitizenshipStatusCode",
-            "StudentNumber",
-            "AcademicYear",
-            "LevelCode",
-            "ClassCode",
-            "StartDate",
-            "Email",
-            "Mobile",
-            "Address"
-        ];
 
-        for (int i = 0; i < headers.Length; i++)
+        for (int i = 0; i < BulkImportStudentWorkbookColumns.Headers.Count; i++)
         {
-            sheet.Cell(1, i + 1).Value = headers[i];
+            sheet.Cell(1, i + 1).Value = BulkImportStudentWorkbookColumns.Headers[i];
         }
 
         int rowNumber = 2;

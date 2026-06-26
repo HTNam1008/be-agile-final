@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -24,20 +25,32 @@ internal sealed class AdminStudentListReader(
         int page = Math.Max(criteria.Page, 1);
         int pageSize = Math.Clamp(criteria.PageSize, 1, 100);
 
-        List<SchoolEnrollment> enrollments = await dbContext.Set<SchoolEnrollment>()
+        string[] normalizedLevelCodes = NormalizeCodes(criteria.LevelCodes);
+        string? normalizedClassCode = NormalizeNullable(criteria.ClassCode);
+
+        IQueryable<SchoolEnrollment> enrollmentQuery = dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()
             .Where(x => hasGlobalAccess || scopedOrganizationIds.Contains(x.OrganizationId))
-            .Where(x => criteria.OrganizationId == null || x.OrganizationId == criteria.OrganizationId.Value)
-            .ToListAsync(cancellationToken);
+            .Where(x => criteria.OrganizationId == null || x.OrganizationId == criteria.OrganizationId.Value);
+
+        if (normalizedLevelCodes.Length > 0)
+        {
+            enrollmentQuery = enrollmentQuery.Where(x => normalizedLevelCodes.Contains(x.LevelCode));
+        }
+
+        if (normalizedClassCode is not null)
+        {
+            enrollmentQuery = enrollmentQuery.Where(x => x.ClassCode == normalizedClassCode);
+        }
+
+        List<SchoolEnrollment> enrollments = await enrollmentQuery.ToListAsync(cancellationToken);
 
         IQueryable<Person> peopleQuery = dbContext.Set<Person>().AsNoTracking();
-        peopleQuery = peopleQuery.Where(person => dbContext.Set<SchoolEnrollment>()
-            .AsNoTracking()
-            .Any(enrollment => enrollment.PersonId == person.Id
-                && (hasGlobalAccess || scopedOrganizationIds.Contains(enrollment.OrganizationId))
-                && (criteria.OrganizationId == null || enrollment.OrganizationId == criteria.OrganizationId.Value)));
+        peopleQuery = peopleQuery.Where(person => enrollmentQuery.Any(enrollment => enrollment.PersonId == person.Id));
 
         List<Person> people = await peopleQuery.ToListAsync(cancellationToken);
+        IReadOnlyDictionary<long, string> schoolNameByOrganizationId =
+            await GetSchoolNamesByOrganizationIdAsync(enrollments, cancellationToken);
 
         var enrollmentByPersonId = enrollments
             .GroupBy(x => x.PersonId)
@@ -57,7 +70,10 @@ internal sealed class AdminStudentListReader(
             enrollmentByPersonId.TryGetValue(person.Id, out SchoolEnrollment? enrollment);
             accountByPersonId.TryGetValue(person.Id, out EducationAccountLookupSummary? account);
             bool enrolled = enrollment is not null && IsActiveCurrent(enrollment, today);
-            return new Row(person, enrollment, account, enrolled);
+            string? schoolName = enrollment is null
+                ? null
+                : schoolNameByOrganizationId.GetValueOrDefault(enrollment.OrganizationId);
+            return new Row(person, enrollment, account, enrolled, schoolName);
         });
 
         rows = ApplyFilters(rows, criteria);
@@ -104,26 +120,6 @@ internal sealed class AdminStudentListReader(
                 || LastFourSearchValue(x.Person.IdentityNumberMasked).Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(criteria.LevelCode))
-        {
-            string levelCode = criteria.LevelCode.Trim().ToUpperInvariant();
-            rows = rows.Where(x => x.Enrollment?.LevelCode == levelCode);
-        }
-
-        if (!string.IsNullOrWhiteSpace(criteria.ClassCode))
-        {
-            string classCode = criteria.ClassCode.Trim().ToUpperInvariant();
-            rows = rows.Where(x => x.Enrollment?.ClassCode == classCode);
-        }
-
-        rows = criteria.Residency switch
-        {
-            AdminStudentResidencyFilter.SingaporeCitizen => rows.Where(x => x.Person.CitizenshipStatusCode == ResidencyStatusCodes.Citizen),
-            AdminStudentResidencyFilter.PermanentResident => rows.Where(x => x.Person.CitizenshipStatusCode == ResidencyStatusCodes.PermanentResident),
-            AdminStudentResidencyFilter.Foreigner => rows.Where(x => x.Person.CitizenshipStatusCode == ResidencyStatusCodes.ValidPassHolder),
-            _ => rows
-        };
-
         rows = criteria.EnrollmentStatus switch
         {
             AdminStudentEnrollmentStatusFilter.Enrolled => rows.Where(x => x.IsEnrolled),
@@ -153,9 +149,29 @@ internal sealed class AdminStudentListReader(
             row.Enrollment?.ClassCode,
             row.Account?.AccountStatusCode ?? NoAccount,
             row.Account?.CurrentBalance,
-            row.Person.CitizenshipStatusCode,
             row.IsEnrolled ? row.Enrollment!.SchoolingStatusCode : NotEnrolled,
-            row.Enrollment?.OrganizationId);
+            row.Enrollment?.OrganizationId,
+            row.SchoolName);
+
+    private async Task<IReadOnlyDictionary<long, string>> GetSchoolNamesByOrganizationIdAsync(
+        IReadOnlyCollection<SchoolEnrollment> enrollments,
+        CancellationToken cancellationToken)
+    {
+        long[] organizationIds = enrollments
+            .Select(x => x.OrganizationId)
+            .Distinct()
+            .ToArray();
+
+        if (organizationIds.Length == 0)
+        {
+            return new Dictionary<long, string>();
+        }
+
+        return await dbContext.Set<OrganizationUnit>()
+            .AsNoTracking()
+            .Where(x => organizationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.UnitName, cancellationToken);
+    }
 
     private static bool IsActiveCurrent(SchoolEnrollment enrollment, DateOnly today)
         => enrollment.SchoolingStatusCode == "ACTIVE"
@@ -189,9 +205,24 @@ internal sealed class AdminStudentListReader(
         return $"{value[0]}****{value[^4..]}";
     }
 
+    private static string[] NormalizeCodes(IReadOnlyCollection<string> values)
+        => values
+            .Select(NormalizeNullable)
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string? NormalizeNullable(string? value)
+    {
+        string? trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed.ToUpperInvariant();
+    }
+
     private sealed record Row(
         Person Person,
         SchoolEnrollment? Enrollment,
         EducationAccountLookupSummary? Account,
-        bool IsEnrolled);
+        bool IsEnrolled,
+        string? SchoolName);
 }
