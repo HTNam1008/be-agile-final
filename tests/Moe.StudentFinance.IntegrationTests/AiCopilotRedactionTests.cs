@@ -73,4 +73,29 @@ public sealed class AiCopilotRedactionTests
         string result = Redactor.Redact(input);
         Assert.Equal(4000, result.Length);
     }
+
+    [Fact]
+    public void Redact_singapore_postal_code()
+    {
+        string result = Redactor.Redact("My address is Blk 123, #04-56, Singapore 123456.");
+        Assert.DoesNotContain("Singapore 123456", result);
+        Assert.Contains("[ADDRESS]", result);
+    }
+
+    [Fact]
+    public void Redact_bill_reference()
+    {
+        string result = Redactor.Redact("Your bill number is BILL-20260626-A1B2C3D4E5F6A7B8.");
+        Assert.DoesNotContain("BILL-20260626-A1B2C3D4E5F6A7B8", result);
+        Assert.Contains("[PAYMENT_REF]", result);
+    }
+
+    [Fact]
+    public void Redact_sensitive_data_combined_with_new_patterns()
+    {
+        string result = Redactor.Redact("User S1234567A lives at Singapore 123456 and has bill BILL-20260626-A1B2C3D4E5F6A7B8.");
+        Assert.Contains("[IDENTITY]", result);
+        Assert.Contains("[ADDRESS]", result);
+        Assert.Contains("[PAYMENT_REF]", result);
+    }
 }
