@@ -547,7 +547,28 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             .Select(scheme => scheme.Id)
             .ToListAsync(ct);
     }
-    private async Task EnsureNoDuplicateApplications(long person, IReadOnlyCollection<long> schemeIds, long? currentApplicationId, CancellationToken ct) { var duplicates = await (from i in db.Set<FasApplicationScheme>().AsNoTracking() join a in db.Set<FasApplication>().AsNoTracking() on i.FasApplicationId equals a.Id where a.StudentPersonId == person && (!currentApplicationId.HasValue || a.Id != currentApplicationId.Value) && a.StatusCode != "WITHDRAWN" && schemeIds.Contains(i.FasSchemeId) && i.StatusCode != "CANCELLED" && i.StatusCode != "EXPIRED" && i.StatusCode != "REDEEMED" select i.FasSchemeId).Distinct().ToListAsync(ct); if (duplicates.Count > 0) throw new InvalidOperationException($"FAS.DUPLICATE_SCHEME_APPLICATION:{string.Join(',', duplicates)}"); }
+    private async Task EnsureNoDuplicateApplications(long person, IReadOnlyCollection<long> schemeIds, long? currentApplicationId, CancellationToken ct)
+    {
+        var pendingSchemes = await (
+                from item in db.Set<FasApplicationScheme>().AsNoTracking()
+                join application in db.Set<FasApplication>().AsNoTracking() on item.FasApplicationId equals application.Id
+                join scheme in db.Set<FasScheme>().AsNoTracking() on item.FasSchemeId equals scheme.Id
+                where application.StudentPersonId == person
+                      && (!currentApplicationId.HasValue || application.Id != currentApplicationId.Value)
+                      && application.StatusCode != "WITHDRAWN"
+                      && schemeIds.Contains(item.FasSchemeId)
+                      && item.StatusCode == "PENDING"
+                select new { item.FasSchemeId, scheme.Name })
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (pendingSchemes.Count > 0)
+        {
+            var pendingSchemeLabels = pendingSchemes
+                .Select(x => $"{x.FasSchemeId}:{x.Name.Replace("|", " ").Replace(",", " ")}");
+            throw new InvalidOperationException($"FAS.PENDING_SCHEME_APPLICATION:{string.Join('|', pendingSchemeLabels)}");
+        }
+    }
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
     private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != "DRAFT") throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
     private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != "SUBMITTED") throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
