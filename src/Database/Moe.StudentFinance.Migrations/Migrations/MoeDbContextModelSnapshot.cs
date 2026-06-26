@@ -6659,7 +6659,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("CitizenshipStatusCode")
-                        .IsRequired()
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)")

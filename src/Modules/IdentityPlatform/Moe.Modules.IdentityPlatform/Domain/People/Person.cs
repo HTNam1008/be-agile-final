@@ -6,7 +6,7 @@ public sealed class Person : AggregateRoot<long>
 {
     private Person() : base(0) { }
 
-    public Person(long id, string externalReference, string fullName, DateOnly dateOfBirth, string nationalityCode, string citizenshipStatusCode) : base(id)
+    public Person(long id, string externalReference, string fullName, DateOnly dateOfBirth, string nationalityCode, string? citizenshipStatusCode) : base(id)
     {
         ExternalPersonReference = externalReference;
         OfficialFullName = fullName;
@@ -23,7 +23,7 @@ public sealed class Person : AggregateRoot<long>
         string fullName,
         DateOnly dateOfBirth,
         string nationalityCode,
-        string citizenshipStatusCode,
+        string? citizenshipStatusCode,
         string? email,
         string? mobile,
         string? address,
@@ -35,7 +35,7 @@ public sealed class Person : AggregateRoot<long>
             fullName.Trim(),
             dateOfBirth,
             nationalityCode.Trim().ToUpperInvariant(),
-            citizenshipStatusCode.Trim().ToUpperInvariant());
+            NormalizeNullableUpper(citizenshipStatusCode));
 
         person.IdentityNumberMasked = identityNumberMasked.Trim().ToUpperInvariant();
         person.OfficialEmail = NormalizeNullable(email);
@@ -56,7 +56,7 @@ public sealed class Person : AggregateRoot<long>
     public string OfficialFullName { get; private set; } = string.Empty;
     public DateOnly DateOfBirth { get; private set; }
     public string NationalityCode { get; private set; } = string.Empty;
-    public string CitizenshipStatusCode { get; private set; } = string.Empty;
+    public string? CitizenshipStatusCode { get; private set; }
     public string? OfficialEmail { get; private set; }
     public string? PreferredEmail { get; private set; }
     public string? OfficialMobile { get; private set; }
@@ -91,6 +91,12 @@ public sealed class Person : AggregateRoot<long>
     {
         string? trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static string? NormalizeNullableUpper(string? value)
+    {
+        string? trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed.ToUpperInvariant();
     }
 }
 
