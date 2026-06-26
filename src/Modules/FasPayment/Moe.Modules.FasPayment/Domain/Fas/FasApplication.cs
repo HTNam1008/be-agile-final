@@ -115,6 +115,17 @@ internal sealed class FasApplication : Entity<long>
     public void SubmitDraft(long actorId, DateTime now)
     { EnsureDraft(); StatusCode = "SUBMITTED"; SubmittedAtUtc = now; SubmittedDate = DateOnly.FromDateTime(now); LockedAtUtc = now; Touch(actorId, now); }
 
+    public void Withdraw(long actorId, DateTime now)
+    {
+        if (StatusCode != "SUBMITTED")
+        {
+            throw new DomainException("Only a pending submitted application can be withdrawn.");
+        }
+
+        StatusCode = "WITHDRAWN";
+        Touch(actorId, now);
+    }
+
     public void Approve() { if (StatusCode is not (FasApplicationStatuses.PendingReview or "SUBMITTED")) throw new DomainException($"Cannot approve application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Approved; UpdatedAt = DateTime.UtcNow; }
     public void Reject() { if (StatusCode is not (FasApplicationStatuses.PendingReview or "SUBMITTED")) throw new DomainException($"Cannot reject application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Rejected; UpdatedAt = DateTime.UtcNow; }
     private void EnsureDraft() { if (StatusCode != "DRAFT") throw new DomainException("Only a draft application can be changed."); }

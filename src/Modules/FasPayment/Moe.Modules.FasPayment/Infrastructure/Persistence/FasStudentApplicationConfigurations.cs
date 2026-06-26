@@ -8,8 +8,8 @@ internal sealed class FasApplicationSchemeConfiguration : IEntityTypeConfigurati
 {
     public void Configure(EntityTypeBuilder<FasApplicationScheme> b)
     {
-        b.ToTable("FASApplicationScheme", "fas", t => { t.HasCheckConstraint("CK_FASApplicationScheme_Status", "[StatusCode] IN ('DRAFT','PENDING','APPROVED','REJECTED','CANCELLED','EXPIRED')"); t.HasCheckConstraint("CK_FASApplicationScheme_RejectionNotes", "[StatusCode] <> 'REJECTED' OR LEN(LTRIM(RTRIM([RejectionNotes]))) > 0"); t.HasCheckConstraint("CK_FASApplicationScheme_Validity", "[ValidFrom] IS NULL OR [ValidTo] IS NULL OR [ValidTo] >= [ValidFrom]"); });
-        b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASApplicationSchemeId").UseIdentityColumn(); b.HasIndex(x => new { x.FasApplicationId, x.FasSchemeId }).IsUnique(); b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false); b.Property(x => x.RejectionNotes).HasMaxLength(2000); b.Property(x => x.ApprovedAmount).HasPrecision(18, 2); b.HasOne<FasApplication>().WithMany().HasForeignKey(x => x.FasApplicationId).OnDelete(DeleteBehavior.Cascade); b.HasOne<FasScheme>().WithMany().HasForeignKey(x => x.FasSchemeId).OnDelete(DeleteBehavior.Restrict);
+        b.ToTable("FASApplicationScheme", "fas", t => { t.HasCheckConstraint("CK_FASApplicationScheme_Status", "[StatusCode] IN ('DRAFT','PENDING','APPROVED','REJECTED','CANCELLED','EXPIRED','REDEEMED')"); t.HasCheckConstraint("CK_FASApplicationScheme_RejectionNotes", "[StatusCode] <> 'REJECTED' OR LEN(LTRIM(RTRIM([RejectionNotes]))) > 0"); t.HasCheckConstraint("CK_FASApplicationScheme_Validity", "[ValidFrom] IS NULL OR [ValidTo] IS NULL OR [ValidTo] >= [ValidFrom]"); });
+        b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASApplicationSchemeId").UseIdentityColumn(); b.HasIndex(x => new { x.FasApplicationId, x.FasSchemeId }).IsUnique(); b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false); b.Property(x => x.RejectionNotes).HasMaxLength(2000); b.Property(x => x.ApprovedAmount).HasPrecision(18, 2); b.Property(x => x.RedeemedAtUtc).HasColumnName("RedeemedAt"); b.HasOne<FasApplication>().WithMany().HasForeignKey(x => x.FasApplicationId).OnDelete(DeleteBehavior.Cascade); b.HasOne<FasScheme>().WithMany().HasForeignKey(x => x.FasSchemeId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 internal sealed class FasDocumentConfiguration : IEntityTypeConfiguration<FasDocument>
@@ -22,4 +22,23 @@ internal sealed class FasDocumentConfiguration : IEntityTypeConfiguration<FasDoc
 }
 internal sealed class FasDeclarationConfiguration : IEntityTypeConfiguration<FasDeclaration> { public void Configure(EntityTypeBuilder<FasDeclaration> b) { b.ToTable("FASDeclaration", "fas", t => t.HasCheckConstraint("CK_FASDeclaration_Type", "[DeclarationTypeCode] IN ('TRUE_AND_ACCURATE','ACCEPT_TERMS')")); b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASDeclarationId").UseIdentityColumn(); b.Property(x => x.DeclarationTypeCode).HasMaxLength(50).IsUnicode(false); b.HasIndex(x => new { x.FasApplicationId, x.DeclarationTypeCode }).IsUnique(); b.HasOne<FasApplication>().WithMany().HasForeignKey(x => x.FasApplicationId).OnDelete(DeleteBehavior.Cascade); } }
 internal sealed class FasStatusHistoryConfiguration : IEntityTypeConfiguration<FasStatusHistory> { public void Configure(EntityTypeBuilder<FasStatusHistory> b) { b.ToTable("FASStatusHistory", "fas"); b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASStatusHistoryId").UseIdentityColumn(); b.Property(x => x.NewStatusCode).HasMaxLength(30).IsUnicode(false); b.Property(x => x.OldStatusCode).HasMaxLength(30).IsUnicode(false); b.Property(x => x.ChangedByRole).HasMaxLength(30).IsUnicode(false); b.HasIndex(x => x.FasApplicationId); b.HasIndex(x => x.FasApplicationSchemeId); } }
-internal sealed class FasActiveSchemeConfiguration : IEntityTypeConfiguration<FasActiveScheme> { public void Configure(EntityTypeBuilder<FasActiveScheme> b) { b.ToTable("FASActiveScheme", "fas", t => { t.HasCheckConstraint("CK_FASActiveScheme_Status", "[StatusCode] IN ('ACTIVE','EXPIRED','DEACTIVATED')"); t.HasCheckConstraint("CK_FASActiveScheme_Validity", "[ActiveTo] >= [ActiveFrom]"); }); b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASActiveSchemeId").UseIdentityColumn(); b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false); b.Property(x => x.DeactivatedReason).HasMaxLength(500); b.HasIndex(x => x.StudentPersonId).IsUnique().HasFilter("[StatusCode] = 'ACTIVE'"); b.HasIndex(x => x.FasApplicationSchemeId).IsUnique(); b.HasOne<FasApplicationScheme>().WithMany().HasForeignKey(x => x.FasApplicationSchemeId).OnDelete(DeleteBehavior.Restrict); b.HasOne<FasScheme>().WithMany().HasForeignKey(x => x.FasSchemeId).OnDelete(DeleteBehavior.Restrict); } }
+internal sealed class FasActiveSchemeConfiguration : IEntityTypeConfiguration<FasActiveScheme> { public void Configure(EntityTypeBuilder<FasActiveScheme> b) { b.ToTable("FASActiveScheme", "fas", t => { t.HasCheckConstraint("CK_FASActiveScheme_Status", "[StatusCode] IN ('ACTIVE','EXPIRED','DEACTIVATED')"); t.HasCheckConstraint("CK_FASActiveScheme_Validity", "[ActiveTo] >= [ActiveFrom]"); }); b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASActiveSchemeId").UseIdentityColumn(); b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false); b.Property(x => x.DeactivatedReason).HasMaxLength(500); b.HasIndex(x => x.StudentPersonId); b.HasIndex(x => x.FasApplicationSchemeId).IsUnique(); b.HasOne<FasApplicationScheme>().WithMany().HasForeignKey(x => x.FasApplicationSchemeId).OnDelete(DeleteBehavior.Restrict); b.HasOne<FasScheme>().WithMany().HasForeignKey(x => x.FasSchemeId).OnDelete(DeleteBehavior.Restrict); } }
+
+internal sealed class FasVoucherRedemptionConfiguration : IEntityTypeConfiguration<FasVoucherRedemption>
+{
+    public void Configure(EntityTypeBuilder<FasVoucherRedemption> b)
+    {
+        b.ToTable("FASVoucherRedemption", "fas", t => t.HasCheckConstraint("CK_FASVoucherRedemption_Status", "[StatusCode] IN ('PENDING','REDEEMED','CANCELLED')"));
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Id).HasColumnName("FASVoucherRedemptionId").UseIdentityColumn();
+        b.Property(x => x.AppliedAmount).HasPrecision(19, 2);
+        b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
+        b.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
+        b.Property(x => x.RedeemedAtUtc).HasColumnName("RedeemedAt");
+        b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasIndex(x => x.BillId);
+        b.HasIndex(x => x.CourseEnrollmentId);
+        b.HasIndex(x => x.FasApplicationSchemeId).IsUnique().HasFilter("[StatusCode] <> 'CANCELLED'");
+        b.HasOne<FasApplicationScheme>().WithMany().HasForeignKey(x => x.FasApplicationSchemeId).OnDelete(DeleteBehavior.Restrict);
+    }
+}

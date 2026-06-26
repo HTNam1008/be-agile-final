@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.FasPayment.Application.StatementPayments;
@@ -17,8 +18,13 @@ namespace Moe.Modules.FasPayment.Api.EService;
 public sealed class StatementPaymentsController(ICommandDispatcher commands, IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost("payment-preview")]
-    public async Task<IActionResult> Preview(long statementId, CancellationToken ct)
-        => this.ToPaymentResponse(await queries.Send(new PreviewStatementPaymentQuery(statementId), ct));
+    public async Task<IActionResult> Preview(
+        long statementId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PreviewStatementPaymentRequest? request,
+        CancellationToken ct)
+        => this.ToPaymentResponse(await queries.Send(
+            new PreviewStatementPaymentQuery(statementId, request?.BillIds),
+            ct));
 
     [HttpPost("payments")]
     public async Task<IActionResult> Pay(long statementId, [FromBody] PayBillingStatementRequest request, CancellationToken ct)

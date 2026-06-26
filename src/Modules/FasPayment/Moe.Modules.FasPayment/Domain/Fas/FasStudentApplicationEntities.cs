@@ -19,15 +19,25 @@ internal sealed class FasApplicationScheme : Entity<long>
     public DateOnly? ValidTo { get; private set; }
     public bool IsActive { get; private set; }
     public DateTime? ActivatedAtUtc { get; private set; }
+    public DateTime? RedeemedAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public long CreatedByLoginAccountId { get; private set; }
     public static FasApplicationScheme CreateDraft(long applicationId, long schemeId, long actorId, DateTime now) =>
         new() { FasApplicationId = applicationId, FasSchemeId = schemeId, CreatedByLoginAccountId = actorId, CreatedAtUtc = now };
     public void Submit() { if (StatusCode != "DRAFT") throw new DomainException("Only draft scheme selections can be submitted."); StatusCode = "PENDING"; }
+    public void Withdraw() { if (StatusCode != "PENDING") throw new DomainException("Only pending scheme selections can be withdrawn."); StatusCode = "CANCELLED"; IsActive = false; }
     public void Approve(long actorId, decimal amount, string? components, DateOnly from, DateOnly to, DateTime now) { if (StatusCode != "PENDING" || to < from) throw new DomainException("Invalid approval transition."); StatusCode = "APPROVED"; ApprovedAmount = amount; ApprovedComponentsJson = components; ValidFrom = from; ValidTo = to; ApprovedByLoginAccountId = actorId; ApprovedAtUtc = now; }
     public void Reject(long actorId, string notes, DateTime now) { if (StatusCode != "PENDING" || string.IsNullOrWhiteSpace(notes)) throw new DomainException("Rejection notes are required."); StatusCode = "REJECTED"; RejectionNotes = notes.Trim(); RejectedByLoginAccountId = actorId; RejectedAtUtc = now; }
     public void Activate(DateTime now) { if (StatusCode != "APPROVED") throw new DomainException("Only approved schemes can be activated."); IsActive = true; ActivatedAtUtc = now; }
     public void Deactivate() => IsActive = false;
+    public void Redeem(DateTime now)
+    {
+        if (StatusCode == "REDEEMED") return;
+        if (StatusCode != "APPROVED") throw new DomainException("Only approved schemes can be redeemed.");
+        StatusCode = "REDEEMED";
+        IsActive = false;
+        RedeemedAtUtc = now;
+    }
 }
 
 internal sealed class FasDocument : Entity<long>
@@ -99,4 +109,59 @@ internal sealed class FasActiveScheme : Entity<long>
     public string? DeactivatedReason { get; private set; }
     public static FasActiveScheme Activate(long studentId, long itemId, long schemeId, DateOnly from, DateOnly to, long actorId, DateTime now) { if (to < from) throw new ArgumentException("Active period is invalid."); return new() { StudentPersonId = studentId, FasApplicationSchemeId = itemId, FasSchemeId = schemeId, ActiveFrom = from, ActiveTo = to, ActivatedByLoginAccountId = actorId, ActivatedAtUtc = now }; }
     public void Deactivate(long actorId, DateTime now, string reason) { StatusCode = "DEACTIVATED"; DeactivatedByLoginAccountId = actorId; DeactivatedAtUtc = now; DeactivatedReason = reason; }
+}
+
+internal sealed class FasVoucherRedemption : Entity<long>
+{
+    private FasVoucherRedemption() : base(0) { }
+    public long StudentPersonId { get; private set; }
+    public long FasApplicationSchemeId { get; private set; }
+    public long CourseId { get; private set; }
+    public long CourseEnrollmentId { get; private set; }
+    public long BillId { get; private set; }
+    public decimal AppliedAmount { get; private set; }
+    public string StatusCode { get; private set; } = "PENDING";
+    public DateTime CreatedAtUtc { get; private set; }
+    public DateTime? RedeemedAtUtc { get; private set; }
+    public byte[] RowVersion { get; private set; } = [];
+
+    public static FasVoucherRedemption Pending(
+        long studentPersonId,
+        long fasApplicationSchemeId,
+        long courseId,
+        long courseEnrollmentId,
+        long billId,
+        decimal appliedAmount,
+        DateTime utcNow)
+    {
+        if (studentPersonId <= 0 || fasApplicationSchemeId <= 0 || courseId <= 0 ||
+            courseEnrollmentId <= 0 || billId <= 0)
+        {
+            throw new DomainException("FAS redemption target is invalid.");
+        }
+
+        return new()
+        {
+            StudentPersonId = studentPersonId,
+            FasApplicationSchemeId = fasApplicationSchemeId,
+            CourseId = courseId,
+            CourseEnrollmentId = courseEnrollmentId,
+            BillId = billId,
+            AppliedAmount = decimal.Round(Math.Max(0m, appliedAmount), 2, MidpointRounding.AwayFromZero),
+            CreatedAtUtc = utcNow
+        };
+    }
+
+    public void Redeem(DateTime utcNow)
+    {
+        if (StatusCode == "REDEEMED") return;
+        StatusCode = "REDEEMED";
+        RedeemedAtUtc = utcNow;
+    }
+
+    public void Cancel()
+    {
+        if (StatusCode == "REDEEMED") return;
+        StatusCode = "CANCELLED";
+    }
 }

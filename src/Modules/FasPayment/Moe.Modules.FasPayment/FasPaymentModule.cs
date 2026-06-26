@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Api;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
@@ -38,6 +39,7 @@ public sealed class FasPaymentModule : IModule
     {
         services.AddSingleton<IModelConfigurationContributor, FasPaymentModelConfiguration>();
         services.AddScoped<IFasSchemeRepository, FasSchemeRepository>();
+        services.AddScoped<IFasCourseSubsidyGateway, FasCourseSubsidyGateway>();
         services.AddScoped<ICommandHandler<CreateFasSchemeCommand, CreateFasSchemeResponse>, CreateFasSchemeHandler>();
         services.AddScoped<ICommandHandler<SaveFasSchemeDraftCommand, CreateFasSchemeResponse>, SaveFasSchemeDraftHandler>();
         services.AddScoped<ICommandHandler<ActivateFasSchemeDraftCommand, CreateFasSchemeResponse>, ActivateFasSchemeDraftHandler>();

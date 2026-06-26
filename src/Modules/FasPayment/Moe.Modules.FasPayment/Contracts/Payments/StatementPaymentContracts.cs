@@ -20,6 +20,9 @@ public sealed record StatementFundingOptionResponse(
     decimal OnlinePaymentAmount,
     string? UnavailableReason);
 
+public sealed record PreviewStatementPaymentRequest(
+    IReadOnlyCollection<long>? BillIds = null);
+
 public static class PaymentFundingOptionCodes
 {
     public const string EducationAccountOnly = "EDUCATION_ACCOUNT_ONLY";
@@ -29,7 +32,8 @@ public static class PaymentFundingOptionCodes
 
 public sealed record PayBillingStatementRequest(
     string IdempotencyKey,
-    string FundingOptionCode = PaymentFundingOptionCodes.EducationAccountThenOnline);
+    string FundingOptionCode = PaymentFundingOptionCodes.EducationAccountThenOnline,
+    IReadOnlyCollection<long>? BillIds = null);
 
 public sealed record PayBillingStatementResponse(
     long PaymentId,
