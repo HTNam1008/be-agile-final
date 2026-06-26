@@ -383,6 +383,62 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         });
     }
 
+    public async Task<object> WithdrawScheme(long applicationSchemeId, CancellationToken ct)
+    {
+        var (person, actor) = Identity();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var target = await (from item in db.Set<FasApplicationScheme>()
+                                join app in db.Set<FasApplication>() on item.FasApplicationId equals app.Id
+                                where item.Id == applicationSchemeId && app.StudentPersonId == person
+                                select new { Application = app, Scheme = item })
+                .SingleOrDefaultAsync(ct)
+                ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
+
+            if (target.Application.StatusCode != "SUBMITTED" || target.Scheme.StatusCode != "PENDING")
+            {
+                throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
+            }
+
+            DateTime now = DateTime.UtcNow;
+            target.Scheme.Withdraw();
+            db.Add(FasStatusHistory.Create(
+                target.Application.Id,
+                target.Scheme.Id,
+                "PENDING",
+                "CANCELLED",
+                "Scheme withdrawn by student",
+                actor,
+                "STUDENT",
+                now));
+
+            bool hasRemainingActiveScheme = await db.Set<FasApplicationScheme>()
+                .AnyAsync(
+                    x => x.FasApplicationId == target.Application.Id &&
+                         x.Id != target.Scheme.Id &&
+                         x.StatusCode != "CANCELLED",
+                    ct);
+            if (!hasRemainingActiveScheme)
+            {
+                target.Application.Withdraw(actor, now);
+                db.Add(FasStatusHistory.Create(
+                    target.Application.Id,
+                    null,
+                    "SUBMITTED",
+                    "WITHDRAWN",
+                    "All schemes withdrawn by student",
+                    actor,
+                    "STUDENT",
+                    now));
+            }
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return await ApplicationReview(target.Application.Id, ct);
+        });
+    }
+
 
     public async Task<object> MyApplications(CancellationToken ct)
     {

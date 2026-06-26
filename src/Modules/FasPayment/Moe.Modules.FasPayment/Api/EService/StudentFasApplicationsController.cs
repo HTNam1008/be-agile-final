@@ -38,5 +38,6 @@ public sealed class StudentFasApplicationsController(StudentFasApplicationServic
     [HttpPut("applications/{id:long}/declarations")] public Task<object> Declarations(long id, SaveDeclarationsRequest request, CancellationToken ct) => service.SaveDeclarations(id, request, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
     [HttpPost("applications/{id:long}/submit")] public Task<object> Submit(long id, CancellationToken ct) => service.Submit(id, ct);
     [HttpPost("applications/{id:long}/withdraw")] public Task<object> Withdraw(long id, CancellationToken ct) => service.Withdraw(id, ct);
+    [HttpPost("application-schemes/{id:long}/withdraw")] public Task<object> WithdrawScheme(long id, CancellationToken ct) => service.WithdrawScheme(id, ct);
     [HttpPost("application-schemes/{id:long}/activate")] public Task<object> Activate(long id, CancellationToken ct) => service.Activate(id, ct);
 }
