@@ -149,6 +149,67 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         Assert.Equal(JsonValueKind.Null, root.GetProperty("entity").ValueKind);
     }
 
+    [Fact]
+    public async Task Unknown_domain_normalized_to_general()
+    {
+        JsonElement response = await ChatWithContext("What is my balance?", 2101, new
+        {
+            domain = "INVENTORY",
+            surface = "PORTAL",
+            path = "/portal/account"
+        });
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task Path_with_dots_stripped_by_sanitizer()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
+        request.Headers.Add("X-Test-PersonId", "2101");
+        request.Content = JsonContent.Create(new
+        {
+            message = "What is my balance?",
+            pageContext = new { domain = "PAYMENT", surface = "PORTAL", path = "/portal/account/../../secrets" }
+        });
+        using HttpResponseMessage response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement root = doc.RootElement.Clone();
+        JsonElement data = root.TryGetProperty("data", out JsonElement d) ? d : root;
+
+        Guid conversationId = data.GetProperty("conversationId").GetGuid();
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        AiConversation stored = db.Set<AiConversation>().Single(x => x.Id == conversationId);
+        JsonDocument storedJson = JsonDocument.Parse(stored.PageContextJson!);
+        Assert.Equal(JsonValueKind.Null, storedJson.RootElement.GetProperty("path").ValueKind);
+    }
+
+    [Fact]
+    public async Task Fas_fieldKey_with_payment_domain_is_ignored()
+    {
+        JsonElement response = await ChatWithContext("I want to apply for FAS", 2101, new
+        {
+            domain = "PAYMENT",
+            surface = "PORTAL",
+            path = "/portal/bills",
+            entity = new { fieldKey = "monthlyHouseholdIncome" }
+        });
+        // FieldKey should be ignored in non-FAS domain; request still processes as FAS due to keywords
+        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.True(response.TryGetProperty("interviewState", out _));
+    }
+
+    [Fact]
+    public async Task Null_page_context_does_not_crash()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
+        request.Headers.Add("X-Test-PersonId", "2101");
+        request.Content = JsonContent.Create(new { message = "What is my balance?" });
+        using HttpResponseMessage response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)
         => await ChatWithContext(message, personId, new { domain = "PAYMENT", surface = "PORTAL", path = "/portal/account" }, conversationId);
 

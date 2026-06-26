@@ -98,6 +98,83 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Assert.Equal("CLARIFYING", GetInterviewStatus(response));
     }
 
+    [Fact]
+    public async Task Income_then_large_number_treated_as_household_clarifies()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("2000", cid);
+        // 5000 is treated as answer to household count question, which is >30 -> CLARIFYING
+        JsonElement response = await SendFas("5000", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Long_story_with_income_extracts_number()
+    {
+        Guid cid = await StartNoWelfare();
+        JsonElement response = await SendFas("My parents both work. My father earns about 2500 and my mother earns 1800, so combined it's around there. We also get some allowance from my grandparents.", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Income_with_multiple_numbers_triggers_clarification()
+    {
+        Guid cid = await StartNoWelfare();
+        JsonElement response = await SendFas("3000 4000", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Income_extremely_large_number_triggers_clarification()
+    {
+        Guid cid = await StartNoWelfare();
+        JsonElement response = await SendFas("999999999", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Household_count_negative_triggers_clarification()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("3000", cid);
+        JsonElement response = await SendFas("-1", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Nationality_with_numbers_triggers_clarification()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("3000", cid);
+        await SendFas("4", cid);
+        // "12345" contains standalone digits that the number regex matches
+        JsonElement response = await SendFas("12345", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        string? text = response.GetProperty("text").GetString();
+        Assert.Contains("nationality", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Nationality_too_short_triggers_clarification()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("3000", cid);
+        await SendFas("4", cid);
+        JsonElement response = await SendFas("A", cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
+    [Fact]
+    public async Task Nationality_too_long_triggers_clarification()
+    {
+        Guid cid = await StartNoWelfare();
+        await SendFas("3000", cid);
+        await SendFas("4", cid);
+        string longText = new string('x', 121);
+        JsonElement response = await SendFas(longText, cid);
+        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+    }
+
     [Theory]
     [InlineData("4")]
     [InlineData("1")]

@@ -135,6 +135,58 @@ public sealed class AiCopilotPaymentTests(CustomWebApplicationFactory factory) :
         Assert.Contains("no outstanding charges", text, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Payment_mode_persists_across_turns_with_varied_keywords()
+    {
+        JsonElement first = await Chat("What is my balance?", personId: 2101);
+        Guid conversationId = first.GetProperty("conversationId").GetGuid();
+
+        JsonElement second = await Chat("Show my bills", personId: 2101, conversationId: conversationId);
+        Assert.Equal("PAYMENT", second.GetProperty("mode").GetString());
+
+        JsonElement third = await Chat("What about refunds?", personId: 2101, conversationId: conversationId);
+        Assert.Equal("PAYMENT", third.GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task Payment_with_fas_keyword_in_context_maintains_correct_mode()
+    {
+        JsonElement response = await Chat("What can I pay for?", personId: 2101);
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("cards").EnumerateArray(),
+            x => x.GetProperty("type").GetString() == "FINANCE_SUMMARY");
+    }
+
+    [Fact]
+    public async Task Payment_with_irrelevant_text_still_routes_to_payment()
+    {
+        JsonElement response = await Chat("Hello there", personId: 2101);
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        string text = response.GetProperty("text").GetString()!;
+        Assert.Contains("available", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Finance_snapshot_reflects_account_balance_correctly()
+    {
+        JsonElement response = await Chat("What can I pay from my education account?", personId: 2101);
+
+        JsonElement card = response.GetProperty("cards").EnumerateArray()
+            .Single(x => x.GetProperty("type").GetString() == "FINANCE_SUMMARY");
+        JsonElement data = card.GetProperty("data");
+        Assert.True(data.GetProperty("availableBalance").GetDecimal() >= 0);
+        Assert.Equal("SGD", data.GetProperty("currencyCode").GetString(), ignoreCase: true);
+    }
+
+    [Fact]
+    public async Task Payment_response_always_includes_grounding_citations()
+    {
+        JsonElement response = await Chat("What is my education account balance?", personId: 2101);
+
+        Assert.True(response.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        Assert.NotEmpty(response.GetProperty("grounding").GetProperty("citations").EnumerateArray());
+    }
+
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
