@@ -22,6 +22,15 @@ public sealed class StudentManagementReferenceDataApiTests(CustomWebApplicationF
         JsonElement levels = GetProperty(GetProperty(data, "studentProfile"), "levels");
         Assert.Contains(levels.EnumerateArray(), option => GetProperty(option, "value").GetString() == "PRI_1");
         Assert.Contains(levels.EnumerateArray(), option => GetProperty(option, "value").GetString() == "SEC_5");
+        Assert.Contains(levels.EnumerateArray(), option =>
+            GetProperty(option, "value").GetString() == "BACHELOR"
+            && GetProperty(option, "label").GetString() == "Bachelor");
+        Assert.Contains(levels.EnumerateArray(), option =>
+            GetProperty(option, "value").GetString() == "MASTER"
+            && GetProperty(option, "label").GetString() == "Master");
+        Assert.Contains(levels.EnumerateArray(), option =>
+            GetProperty(option, "value").GetString() == "PHD"
+            && GetProperty(option, "label").GetString() == "PhD");
         Assert.DoesNotContain(levels.EnumerateArray(), option => GetProperty(option, "value").GetString() == "UNI_Y1");
 
         JsonElement openReasons = GetProperty(GetProperty(data, "educationAccount"), "openReasons");

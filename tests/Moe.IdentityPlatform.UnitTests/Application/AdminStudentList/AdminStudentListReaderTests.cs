@@ -182,6 +182,26 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
+    public async Task ListAsync_FilterByHigherEducationLevels_Composes()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1037, "Bachelor Match", "S1234037P", "CITIZEN", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1038, "Master Match", "S1234038Q", "CITIZEN", 10, "MASTER", "PG");
+        SeedStudent(dbContext, 1039, "Phd Other", "S1234039R", "CITIZEN", 10, "PHD", "DR");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(levelCodes: ["BACHELOR,MASTER"], page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1037L, 1038L]);
+    }
+
+    [Fact]
     public async Task ListAsync_FilterByNoAccount_ReturnsStudentsWithoutAccountOnly()
     {
         using MoeDbContext dbContext = CreateDbContext();
@@ -327,6 +347,23 @@ public sealed class AdminStudentListReaderTests
             CancellationToken.None);
 
         classes.Should().BeEquivalentTo("1A", "1B");
+    }
+
+    [Fact]
+    public async Task ListClassesAsync_ForHigherEducationLevelWithoutClassSubdivision_ReturnsEmpty()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1040, "Bachelor No Class", "S1234040S", "CITIZEN", 10, "BACHELOR", "");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        IReadOnlyList<string> classes = await reader.ListClassesAsync(
+            organizationId: 10,
+            levelCode: "BACHELOR",
+            Today,
+            CancellationToken.None);
+
+        classes.Should().BeEmpty();
     }
 
     private static readonly DateOnly Today = new(2026, 6, 22);
