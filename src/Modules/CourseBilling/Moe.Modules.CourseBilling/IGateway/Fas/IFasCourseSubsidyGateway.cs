@@ -23,6 +23,11 @@ internal interface IFasCourseSubsidyGateway
         IReadOnlyCollection<long> billIds,
         DateTime redeemedAtUtc,
         CancellationToken cancellationToken);
+
+    Task CancelPendingRedemptionsForEnrollmentAsync(
+        long courseEnrollmentId,
+        DateTime cancelledAtUtc,
+        CancellationToken cancellationToken);
 }
 
 internal sealed record CourseFasSubsidy(

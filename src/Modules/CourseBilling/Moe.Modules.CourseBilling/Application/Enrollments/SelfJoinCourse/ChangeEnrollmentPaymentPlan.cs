@@ -60,6 +60,12 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
                 DateOnly.FromDateTime(now),
                 command.FasApplicationSchemeIds,
                 ct);
+        int requestedFasCount = command.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;
+        if (selectedFasSubsidies.Count != requestedFasCount)
+        {
+            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.FasVoucherUnavailable);
+        }
+
         CourseEnrollmentBillingResult? result =
             await enrollments.ChangePaymentPlanAndReissueBillsAsync(
                 enrollment, plan.CoursePaymentPlanId, installment,

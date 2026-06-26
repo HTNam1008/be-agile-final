@@ -268,6 +268,7 @@ public static class CourseBillingErrors
     public static readonly Error InvalidPaymentPlan = new("COURSE.INVALID_PAYMENT_PLAN", "A valid course payment plan is required.");
     public static readonly Error PaymentPlanNotFound = new("COURSE.PAYMENT_PLAN_NOT_FOUND", "The selected course payment plan was not found.");
     public static readonly Error PaymentPlanChangeNotAllowed = new("COURSE.PAYMENT_PLAN_CHANGE_NOT_ALLOWED", "The payment plan cannot be changed after a payment has been applied.");
+    public static readonly Error FasVoucherUnavailable = new("COURSE.FAS_VOUCHER_UNAVAILABLE", "One or more selected FAS vouchers are no longer available for this course.");
     public static readonly Error InvalidStatementPeriod = new("BILL.INVALID_STATEMENT_PERIOD", "The billing statement period is invalid.");
     public static readonly Error PersonNotFound = new("COURSE.PERSON_NOT_FOUND", "The person was not found.");
     public static readonly Error CourseNotFound = new("COURSE.NOT_FOUND", "The course was not found.");
