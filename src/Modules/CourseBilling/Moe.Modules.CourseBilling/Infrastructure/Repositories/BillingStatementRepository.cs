@@ -2,12 +2,15 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
-internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBillingStatementRepository
+internal sealed class BillingStatementRepository(
+    MoeDbContext dbContext,
+    ICoursePaymentPlanGateway paymentPlans) : IBillingStatementRepository
 {
     public async Task<BillingStatementResponse> GetOrCreateAsync(
         long personId,
@@ -31,7 +34,7 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        var bills = await (
+        var candidateBills = await (
             from bill in dbContext.Set<Bill>()
             join enrollment in dbContext.Set<CourseEnrollment>()
                 on bill.CourseEnrollmentId equals enrollment.Id
@@ -49,11 +52,34 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
             {
                 Bill = bill,
                 Course = course,
-                Enrollment = enrollment,
-                IsInstallment = dbContext.Set<Bill>()
-                    .Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1
+                Enrollment = enrollment
             })
             .ToListAsync(cancellationToken);
+
+        Dictionary<long, string> planTypesById = await LoadPlanTypesAsync(
+            candidateBills
+                .Select(row => row.Enrollment.CoursePaymentPlanId)
+                .OfType<long>()
+                .Distinct()
+                .ToArray(),
+            cancellationToken);
+        var bills = candidateBills
+            .Select(row =>
+            {
+                string planTypeCode = row.Enrollment.CoursePaymentPlanId is long planId &&
+                    planTypesById.TryGetValue(planId, out string? value)
+                        ? value
+                        : string.Empty;
+                return new
+                {
+                    row.Bill,
+                    row.Course,
+                    row.Enrollment,
+                    PlanTypeCode = planTypeCode,
+                    IsInstallment = planTypeCode == "INSTALLMENT"
+                };
+            })
+            .ToList();
 
         List<BillingStatementItem> existingItems = await dbContext.Set<BillingStatementItem>()
             .Where(x => x.BillingStatementId == statement.Id)
@@ -149,11 +175,28 @@ internal sealed class BillingStatementRepository(MoeDbContext dbContext) : IBill
                     row.Bill.NetPayableAmount,
                     row.Bill.OutstandingAmount,
                     row.Bill.BillStatusCode,
+                    row.PlanTypeCode,
                     row.IsInstallment,
                     row.IsInstallment,
                     row.IsInstallment ? null : "Full payment bills cannot be deferred.",
                     linesByBillId.GetValueOrDefault(row.Bill.Id, []));
             }).ToArray());
+    }
+
+    private async Task<Dictionary<long, string>> LoadPlanTypesAsync(
+        IReadOnlyCollection<long> coursePaymentPlanIds,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<long, string> result = new();
+        foreach (long coursePaymentPlanId in coursePaymentPlanIds)
+        {
+            CourseBillingPlan? plan = await paymentPlans.FindPlanAsync(coursePaymentPlanId, cancellationToken);
+            if (plan is not null)
+            {
+                result[coursePaymentPlanId] = plan.PlanTypeCode;
+            }
+        }
+        return result;
     }
 }
 

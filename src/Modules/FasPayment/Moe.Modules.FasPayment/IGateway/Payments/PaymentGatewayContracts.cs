@@ -30,6 +30,10 @@ internal interface IPaymentCheckoutRepository
         long billingStatementId,
         long personId,
         CancellationToken cancellationToken);
+    Task<Payment?> FindActiveStatementPaymentForEnrollmentAsync(
+        long courseEnrollmentId,
+        long personId,
+        CancellationToken cancellationToken);
     Task<IReadOnlyCollection<Payment>> ListActiveStatementPaymentsAsync(
         long billingStatementId,
         long personId,
@@ -41,6 +45,9 @@ internal interface IPaymentCheckoutRepository
     Task<Payment?> FindPaymentByChargeAsync(string providerChargeId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<Payment>> ListPaymentsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyCollection<Payment>> ListPaymentsForPersonAsync(
+        long personId,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<UserFasSettlement>> ListRedeemedFasSettlementsForPersonAsync(
         long personId,
         CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentPart>> ListPaymentPartsForPaymentsAsync(
@@ -82,6 +89,21 @@ internal interface IPaymentPersistenceTracker
     string DescribeConflict(Exception exception);
     void ClearTrackedChanges();
 }
+
+internal sealed record UserFasSettlement(
+    long FasVoucherRedemptionId,
+    long FasApplicationSchemeId,
+    long CourseId,
+    long CourseEnrollmentId,
+    long BillId,
+    string? BillNumber,
+    string? CourseCode,
+    string? CourseName,
+    string? SchemeName,
+    decimal AppliedAmount,
+    string StatusCode,
+    DateTime CreatedAtUtc,
+    DateTime? RedeemedAtUtc);
 
 internal interface ILegacyCoursePaymentGateway
 {
