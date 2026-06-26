@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -138,23 +139,24 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
-    public async Task ListAsync_FilterByLevelAndClass_Composes()
+    public async Task ListAsync_FilterByMultipleLevelsAndClass_Composes()
     {
         using MoeDbContext dbContext = CreateDbContext();
         SeedStudent(dbContext, 1014, "Level Class Match", "S1234014P", "CITIZEN", 10, "SEC_2", "2A");
         SeedStudent(dbContext, 1015, "Level Only", "S1234015Q", "CITIZEN", 10, "SEC_2", "2B");
+        SeedStudent(dbContext, 1031, "Second Level Match", "S1234031H", "CITIZEN", 10, "SEC_3", "2A");
+        SeedStudent(dbContext, 1032, "Wrong Level", "S1234032J", "CITIZEN", 10, "SEC_4", "2A");
         await dbContext.SaveChangesAsync();
         AdminStudentListReader reader = CreateReader(dbContext);
 
         AdminStudentListPage page = await reader.ListAsync(
-            AdminStudentListCriteria.Default(levelCode: "SEC_2", classCode: "2A", page: 1, pageSize: 20),
+            AdminStudentListCriteria.Default(levelCodes: ["SEC_2", "SEC_3"], classCode: "2A", page: 1, pageSize: 20),
             scopedOrganizationIds: [10],
             hasGlobalAccess: false,
             Today,
             CancellationToken.None);
 
-        page.Items.Should().ContainSingle();
-        page.Items.Single().PersonId.Should().Be(1014);
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1014L, 1031L]);
     }
 
     [Fact]
@@ -204,22 +206,22 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
-    public async Task ListAsync_FilterByPermanentResident_ReturnsEmptyWhenNoPrDataExists()
+    public async Task ListAsync_ReturnsSchoolNameFromEnrollmentOrganization()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        SeedStudent(dbContext, 1020, "Citizen Only", "S1234020W", "CITIZEN", 10, "SEC_1", "1A");
+        SeedStudent(dbContext, 1020, "School Named", "S1234020W", "PR", 10, "SEC_1", "1A");
         await dbContext.SaveChangesAsync();
         AdminStudentListReader reader = CreateReader(dbContext);
 
         AdminStudentListPage page = await reader.ListAsync(
-            AdminStudentListCriteria.Default(residency: AdminStudentResidencyFilter.PermanentResident, page: 1, pageSize: 20),
+            AdminStudentListCriteria.Default(page: 1, pageSize: 20),
             scopedOrganizationIds: [10],
             hasGlobalAccess: false,
             Today,
             CancellationToken.None);
 
-        page.TotalCount.Should().Be(0);
-        page.Items.Should().BeEmpty();
+        page.Items.Should().ContainSingle();
+        page.Items.Single().SchoolName.Should().Be("School 10");
     }
 
     [Fact]
@@ -338,6 +340,7 @@ public sealed class AdminStudentListReaderTests
         string status = "ACTIVE",
         DateOnly? endDate = null)
     {
+        EnsureSchool(dbContext, organizationId);
         SeedPersonOnly(dbContext, personId, fullName, nricMasked, residencyCode);
 
         SchoolEnrollment enrollment = new(
@@ -354,6 +357,22 @@ public sealed class AdminStudentListReaderTests
         SetProperty(enrollment, nameof(SchoolEnrollment.SchoolingStatusCode), status);
         SetProperty(enrollment, nameof(SchoolEnrollment.EndDate), endDate);
         dbContext.Set<SchoolEnrollment>().Add(enrollment);
+    }
+
+    private static void EnsureSchool(MoeDbContext dbContext, long organizationId)
+    {
+        if (dbContext.Set<OrganizationUnit>().Local.Any(x => x.Id == organizationId))
+        {
+            return;
+        }
+
+        OrganizationUnit school = new(
+            $"SCH-{organizationId}",
+            $"School {organizationId}",
+            "SCHOOL",
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        SetId(school, organizationId);
+        dbContext.Set<OrganizationUnit>().Add(school);
     }
 
     private static void SeedPersonOnly(

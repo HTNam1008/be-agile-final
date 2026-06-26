@@ -16,7 +16,7 @@ public sealed record StudentProfileResponse(
     int Age,
     bool IsAccountHolder,
     string NationalityCode,
-    string CitizenshipStatusCode,
+    string? CitizenshipStatusCode,
     string? OfficialEmail,
     string? PreferredEmail,
     string? OfficialMobile,

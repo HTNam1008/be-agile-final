@@ -5,5 +5,5 @@ public sealed record PersonSummary(
     string DisplayName,
     DateOnly DateOfBirth,
     string NationalityCode,
-    string CitizenshipStatusCode,
+    string? CitizenshipStatusCode,
     long? OrganizationId);

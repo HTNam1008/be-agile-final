@@ -31,8 +31,8 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
             .MaximumLength(30);
 
         RuleFor(x => x.CitizenshipStatusCode)
-            .NotEmpty()
-            .MaximumLength(30);
+            .MaximumLength(30)
+            .When(x => !string.IsNullOrWhiteSpace(x.CitizenshipStatusCode));
 
         RuleFor(x => x.StudentNumber)
             .NotEmpty()

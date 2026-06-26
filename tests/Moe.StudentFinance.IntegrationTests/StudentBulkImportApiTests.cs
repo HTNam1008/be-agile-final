@@ -25,7 +25,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         StudentImportRow[] rows =
         [
             ValidRow(suffix, "001"),
-            ValidRow(suffix, "002")
+            ValidRow(suffix, "002") with { CitizenshipStatusCode = "" }
         ];
 
         using HttpResponseMessage response = await PostWorkbookAsync(rows);
@@ -45,6 +45,10 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         Assert.Equal(2, await db.Set<SchoolEnrollment>().CountAsync(x => personIds.Contains(x.PersonId)));
         Assert.False(await db.Set<EducationAccount>().AnyAsync(x => personIds.Contains(x.PersonId)));
         Assert.False(AnyAuditLogContaining(db, suffix));
+
+        long blankCitizenshipPersonId = result.Results.Single(x => x.RowNumber == 3).PersonId!.Value;
+        Person blankCitizenshipPerson = await db.Set<Person>().SingleAsync(x => x.Id == blankCitizenshipPersonId);
+        Assert.Null(blankCitizenshipPerson.CitizenshipStatusCode);
     }
 
     [Fact]

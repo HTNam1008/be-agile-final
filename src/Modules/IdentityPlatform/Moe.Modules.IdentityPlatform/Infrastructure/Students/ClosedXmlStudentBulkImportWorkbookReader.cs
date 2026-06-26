@@ -35,7 +35,7 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
                 Text(row, columns, "FullName") ?? string.Empty,
                 Date(row, columns, "DateOfBirth") ?? DateOnly.MinValue,
                 Text(row, columns, "NationalityCode") ?? string.Empty,
-                Text(row, columns, "CitizenshipStatusCode") ?? string.Empty,
+                Text(row, columns, "CitizenshipStatusCode"),
                 Text(row, columns, "StudentNumber") ?? string.Empty,
                 Text(row, columns, "AcademicYear") ?? string.Empty,
                 Text(row, columns, "LevelCode") ?? string.Empty,
