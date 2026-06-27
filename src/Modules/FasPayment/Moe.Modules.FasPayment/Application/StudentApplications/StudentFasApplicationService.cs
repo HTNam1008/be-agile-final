@@ -395,7 +395,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 .SingleOrDefaultAsync(ct)
                 ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
 
-            if (target.Application.StatusCode != FasApplicationStatuses.Submitted || target.Scheme.StatusCode != "PENDING")
+            if ((target.Application.StatusCode != FasApplicationStatuses.Submitted && target.Application.StatusCode != FasApplicationStatuses.PendingReview) || target.Scheme.StatusCode != "PENDING")
             {
                 throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
             }
@@ -458,7 +458,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                           submittedDate = a.SubmittedAtUtc,
                           status = i.StatusCode,
                           canReview = true,
-                          canWithdraw = a.StatusCode == FasApplicationStatuses.Submitted && i.StatusCode == "PENDING",
+                          canWithdraw = (a.StatusCode == FasApplicationStatuses.Submitted || a.StatusCode == FasApplicationStatuses.PendingReview) && i.StatusCode == "PENDING",
                           i.RejectionNotes,
                           i.ApprovedAmount,
                           i.ApprovedComponentsJson,
@@ -510,7 +510,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             app.Id,
             applicationReference = app.ApplicationNo,
             app.StatusCode,
-            canWithdraw = app.StatusCode == FasApplicationStatuses.Submitted && schemes.Count > 0 && schemes.All(x => x.StatusCode == "PENDING"),
+            canWithdraw = (app.StatusCode == FasApplicationStatuses.Submitted || app.StatusCode == FasApplicationStatuses.PendingReview) && schemes.Count > 0 && schemes.All(x => x.StatusCode == "PENDING"),
             app.StudentName,
             app.NricFinMasked,
             app.DateOfBirth,
@@ -571,7 +571,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
     }
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
     private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Draft) throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
-    private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
+    private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted && a.StatusCode != FasApplicationStatuses.PendingReview) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
     private sealed record ProfileRow(long PersonId, string Name, string? NricFinMasked, DateOnly DateOfBirth, string NationalityCode, string? Mobile, string? Address, string? Email, long SchoolOrganizationId, string SchoolName, string StudentNumber);
 
     private async Task<string> ResolveAccountType(long personId, CancellationToken ct)

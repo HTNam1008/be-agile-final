@@ -117,7 +117,7 @@ internal sealed class FasApplication : Entity<long>
 
     public void Withdraw(long actorId, DateTime now)
     {
-        if (StatusCode != FasApplicationStatuses.Submitted)
+        if (StatusCode != FasApplicationStatuses.Submitted && StatusCode != FasApplicationStatuses.PendingReview)
         {
             throw new DomainException("Only a pending submitted application can be withdrawn.");
         }
