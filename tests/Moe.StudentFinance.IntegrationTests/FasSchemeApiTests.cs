@@ -23,7 +23,7 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         await AssertStatus(HttpStatusCode.OK, listed);
         string listBody = await listed.Content.ReadAsStringAsync();
         Assert.Contains($"FAS-{suffix}", listBody);
-        Assert.Contains($"GRANT-{suffix}", listBody);
+        Assert.Contains($"GRANT-FAS-{suffix}", listBody);
 
         using HttpResponseMessage detail = await _client.GetAsync($"/api/admin/v1/fas/schemes/{id}");
         await AssertStatus(HttpStatusCode.OK, detail);
@@ -51,16 +51,18 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     [Fact]
-    public async Task Active_scheme_cannot_be_edited_as_draft()
+    public async Task Future_active_scheme_can_be_edited_before_it_starts()
     {
         string suffix = NewSuffix();
         using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", PercentageRequest(suffix));
         await AssertStatus(HttpStatusCode.Created, created);
         long id = await ReadLong(created, "schemeId");
 
-        using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: "Should not save"));
-        await AssertStatus(HttpStatusCode.NotFound, updated);
-        Assert.Contains("FAS.SCHEME_NOT_FOUND", await updated.Content.ReadAsStringAsync());
+        using HttpResponseMessage updated = await _client.PutAsJsonAsync($"/api/admin/v1/fas/schemes/{id}", PercentageRequest(suffix, name: "Saved before start"));
+        await AssertStatus(HttpStatusCode.OK, updated);
+        using HttpResponseMessage detail = await _client.GetAsync($"/api/admin/v1/fas/schemes/{id}");
+        await AssertStatus(HttpStatusCode.OK, detail);
+        Assert.Contains("Saved before start", await detail.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -72,8 +74,8 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             schemeCode = $"CATEGORICAL-{suffix}",
             grantCode = $"CATEGORICAL-GRANT-{suffix}",
             name = $"Categorical {suffix}",
-            startDate = new DateOnly(2026, 1, 1),
-            endDate = new DateOnly(2026, 12, 31),
+            startDate = FutureStartDate(),
+            endDate = FutureEndDate(),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
@@ -149,6 +151,23 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Deleted_scheme_is_hidden_from_default_admin_dashboard_list()
+    {
+        string suffix = NewSuffix();
+        using HttpResponseMessage created = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", PercentageRequest(suffix));
+        await AssertStatus(HttpStatusCode.Created, created);
+        long id = await ReadLong(created, "schemeId");
+
+        using HttpResponseMessage deleted = await _client.DeleteAsync($"/api/admin/v1/fas/schemes/{id}");
+        await AssertStatus(HttpStatusCode.OK, deleted);
+
+        using HttpResponseMessage listed = await _client.GetAsync($"/api/admin/v1/fas/schemes?search={suffix}");
+        await AssertStatus(HttpStatusCode.OK, listed);
+        string listBody = await listed.Content.ReadAsStringAsync();
+        Assert.DoesNotContain($"FAS-{suffix}", listBody);
+    }
+
+    [Fact]
     public async Task Duplicate_scheme_and_grant_codes_have_stable_422_errors()
     {
         string suffix = NewSuffix();
@@ -163,7 +182,7 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
 
         using HttpResponseMessage duplicateGrant = await _client.PostAsJsonAsync(
             "/api/admin/v1/fas/schemes",
-            PercentageRequest($"OTHER-{suffix}", grantCode: $"GRANT-{suffix}"));
+            PercentageRequest(suffix, schemeCode: $"FAS_{suffix}"));
         await AssertStatus(HttpStatusCode.UnprocessableEntity, duplicateGrant);
         Assert.Contains("FAS.DUPLICATE_GRANT_CODE", await duplicateGrant.Content.ReadAsStringAsync());
     }
@@ -228,14 +247,14 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         return await ReadLong(response, "courseId");
     }
 
-    private static object PercentageRequest(string suffix, string? grantCode = null, string? name = null) => new
+    private static object PercentageRequest(string suffix, string? grantCode = null, string? name = null, string? schemeCode = null) => new
     {
-        schemeCode = $"FAS-{suffix}",
+        schemeCode = schemeCode ?? $"FAS-{suffix}",
         grantCode = grantCode ?? $"GRANT-{suffix}",
         name = name ?? $"FAS {suffix}",
         description = "Integration scheme",
-        startDate = new DateOnly(2026, 1, 1),
-        endDate = new DateOnly(2026, 12, 31),
+        startDate = FutureStartDate(),
+        endDate = FutureEndDate(),
         courseIds = Array.Empty<long>(),
         subsidyType = "PERCENTAGE",
         criteriaTemplate = new object[]
@@ -264,8 +283,8 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         schemeCode = $"FIXED-{suffix}",
         grantCode = $"FIXED-GRANT-{suffix}",
         name = $"Fixed FAS {suffix}",
-        startDate = new DateOnly(2026, 1, 1),
-        endDate = new DateOnly(2026, 12, 31),
+        startDate = FutureStartDate(),
+        endDate = FutureEndDate(),
         courseIds,
         subsidyType = "FIXED",
         criteriaTemplate = new object[] { new { criteriaType = "AGE", connectorToNext = (string?)null, displayOrder = 1 } },
@@ -294,4 +313,6 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     private static string NewSuffix() => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+    private static DateOnly FutureStartDate() => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+    private static DateOnly FutureEndDate() => DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1));
 }

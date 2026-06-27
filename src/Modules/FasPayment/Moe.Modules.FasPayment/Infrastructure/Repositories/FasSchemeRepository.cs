@@ -155,14 +155,52 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         else if (transition == "DISABLE") scheme.Disable(actorId, utcNow);
         else scheme.Delete(actorId, utcNow);
 
+        if (transition is "DISABLE" or "DELETE")
+        {
+            await CancelUnavailableApplicationSelectionsAsync(
+                scheme.Id,
+                actorId,
+                utcNow,
+                transition == "DISABLE" ? "FAS scheme disabled by admin" : "FAS scheme deleted by admin",
+                cancellationToken);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return new CreateFasSchemeResponse(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.StatusCode);
+    }
+
+    private async Task CancelUnavailableApplicationSelectionsAsync(
+        long schemeId,
+        long actorId,
+        DateTime utcNow,
+        string note,
+        CancellationToken cancellationToken)
+    {
+        var selections = await dbContext.Set<FasApplicationScheme>()
+            .Where(x => x.FasSchemeId == schemeId && (x.StatusCode == "DRAFT" || x.StatusCode == "PENDING"))
+            .ToListAsync(cancellationToken);
+
+        foreach (FasApplicationScheme selection in selections)
+        {
+            string oldStatus = selection.StatusCode;
+            selection.CancelAsUnavailable();
+            dbContext.Add(FasStatusHistory.Create(
+                selection.FasApplicationId,
+                selection.Id,
+                oldStatus,
+                "CANCELLED",
+                note,
+                actorId,
+                "ADMIN",
+                utcNow));
+        }
     }
 
     public async Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken)
     {
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
         if (!string.IsNullOrWhiteSpace(status)) { string normalized = status.Trim().ToUpperInvariant(); query = query.Where(x => x.StatusCode == normalized); }
+        else query = query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
         if (!string.IsNullOrWhiteSpace(search)) { string value = search.Trim(); query = query.Where(x => x.SchemeCode.Contains(value) || x.GrantCode.Contains(value) || x.Name.Contains(value)); }
         var schemes = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
         long[] ids = schemes.Select(x => x.Id).ToArray();
