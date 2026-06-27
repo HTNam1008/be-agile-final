@@ -445,8 +445,8 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
             grantCode = $"AI-FAS-GRANT-{suffix}",
             name = $"AI FAS {suffix}",
             description = "AI copilot integration scheme",
-            startDate = new DateOnly(2026, 1, 1),
-            endDate = new DateOnly(2026, 12, 31),
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
