@@ -3,7 +3,6 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
-using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.SharedKernel.Results;
 
@@ -11,7 +10,6 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 
 internal sealed class AdminEnrollPersonHandler(
     ICourseEnrollmentRepository enrollments,
-    ICoursePaymentPlanGateway paymentPlans,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
@@ -77,99 +75,21 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.DuplicateEnrollment);
         }
 
-        CourseBillingPlan? plan = null;
-        if (command.CoursePaymentPlanId is long coursePaymentPlanId)
-        {
-            plan = await paymentPlans.FindPlanAsync(
-                coursePaymentPlanId,
-                cancellationToken);
-            if (plan is null || !plan.IsActive || plan.CourseId != command.CourseId)
-                return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.PaymentPlanNotFound);
-        }
-
-        Result<CourseEnrollment> enrollmentResult = plan is null
-            ? CourseEnrollment.EnrollByAdminPendingPlanSelection(
-                personId.Value,
-                command.CourseId,
-                actorId.Value,
-                utcNow,
-                course.BeforeStartRefundPercentage,
-                course.AfterStartRefundPercentage)
-            : CourseEnrollment.EnrollByAdmin(
-                personId.Value,
-                command.CourseId,
-                plan.CoursePaymentPlanId,
-                actorId.Value,
-                utcNow,
-                course.BeforeStartRefundPercentage,
-                course.AfterStartRefundPercentage);
+        Result<CourseEnrollment> enrollmentResult = CourseEnrollment.EnrollByAdminPendingPlanSelection(
+            personId.Value,
+            command.CourseId,
+            actorId.Value,
+            utcNow,
+            course.BeforeStartRefundPercentage,
+            course.AfterStartRefundPercentage);
 
         if (enrollmentResult.IsFailure)
         {
             return Result<CourseEnrollmentResponse>.Failure(enrollmentResult.Error);
         }
 
-        if (course.IsDraft || plan is null)
-        {
-            await enrollments.AddEnrollmentAsync(enrollmentResult.Value, cancellationToken);
-            return Result<CourseEnrollmentResponse>.Success(ToPendingResponse(enrollmentResult.Value));
-        }
-
-        IReadOnlyCollection<CourseFeeBillingLine> feeLines = await enrollments.ListActiveCourseFeesAsync(
-            command.CourseId,
-            cancellationToken);
-
-        if (feeLines.Count == 0)
-        {
-            return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
-        }
-
-        bool installment = plan.PlanTypeCode == "INSTALLMENT";
-        if (installment)
-            enrollmentResult.Value.ActivateInstallmentEnrollment();
-        DateOnly enrolledDate = DateOnly.FromDateTime(utcNow);
-        DateOnly firstDueDate = installment
-            ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
-            : enrolledDate;
-        CourseEnrollmentBillingResult billingResult = await enrollments.AddEnrollmentAndIssueBillsAsync(
-            enrollmentResult.Value,
-            CreateBillNumber(utcNow),
-            utcNow,
-            firstDueDate,
-            plan.InstallmentCount,
-            plan.IntervalMonths,
-            feeLines,
-            [],
-            cancellationToken);
-
-        return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
-    }
-
-    private static CourseEnrollmentResponse ToResponse(CourseEnrollmentBillingResult result)
-    {
-        GeneratedBillResult first = result.Bills.OrderBy(x => x.Bill.SequenceNumber).First();
-        return new(
-            result.Enrollment.Id,
-            result.Enrollment.PersonId,
-            result.Enrollment.CourseId,
-            result.Enrollment.EnrollmentSourceCode,
-            result.Enrollment.EnrolledByLoginAccountId,
-            result.Enrollment.EnrollmentStatusCode,
-            first.Bill.Id,
-            first.Bill.BillNumber,
-            first.Bill.BillStatusCode,
-            result.Bills.Sum(x => x.BillLineCount),
-            result.Bills.Sum(x => x.Bill.GrossAmount),
-            result.Bills.Sum(x => x.Bill.NetPayableAmount),
-            result.Bills.Sum(x => x.Bill.OutstandingAmount),
-            result.Bills.Select(x => new GeneratedEnrollmentBillResponse(
-                x.Bill.Id,
-                x.Bill.BillNumber,
-                x.Bill.SequenceNumber,
-                x.Bill.CurrentDueDate,
-                x.Bill.NetPayableAmount,
-                x.Bill.OutstandingAmount,
-                x.Bill.BillStatusCode)).ToArray());
+        await enrollments.AddEnrollmentAsync(enrollmentResult.Value, cancellationToken);
+        return Result<CourseEnrollmentResponse>.Success(ToPendingResponse(enrollmentResult.Value));
     }
 
     private static CourseEnrollmentResponse ToPendingResponse(CourseEnrollment enrollment)
@@ -188,7 +108,4 @@ internal sealed class AdminEnrollPersonHandler(
             0m,
             0m,
             []);
-
-    private static string CreateBillNumber(DateTime utcNow)
-        => $"BILL-{utcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..30].ToUpperInvariant();
 }
