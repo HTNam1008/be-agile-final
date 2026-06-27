@@ -169,56 +169,109 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
 
     public async Task<object> CreateOrResumeDraft(CreateDraftRequest request, CancellationToken ct)
     {
-        if (request.SchemeIds.Count != request.SchemeIds.Distinct().Count()) throw new InvalidOperationException("FAS.DUPLICATE_SCHEME_SELECTION");
-        var ids = request.SchemeIds.Distinct().ToArray(); if (ids.Length == 0) throw new ArgumentException("FAS.SCHEME_REQUIRED");
-        var p = await Profile(ct); var (personId, actorId) = Identity(); var now = DateTime.UtcNow;
+        long[] ids = ValidateSelectedSchemeIds(request.SchemeIds);
+        var p = await Profile(ct);
+        var (personId, actorId) = Identity();
+        DateTime now = DateTime.UtcNow;
+
         var valid = await OpenApplicableSchemeIds(p.SchoolOrganizationId, ids, ct);
         if (valid.Count != ids.Length) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
+
         var app = await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.StudentPersonId == personId && x.StatusCode == "DRAFT", ct);
         await EnsureNoDuplicateApplications(personId, ids, app?.Id, ct);
-        var created = app == null;
+
+        bool created = app == null;
         if (app == null)
         {
-            var accountType = await ResolveAccountType(personId, ct);
+            string accountType = await ResolveAccountType(personId, ct);
             app = FasApplication.CreateDraft($"FAS-{now:yyyyMMddHHmmss}-{personId}", personId, ids[0], p.StudentNumber,
                 p.Name, p.NricFinMasked, p.DateOfBirth, p.NationalityCode, p.Mobile, p.Address, p.Email,
                 p.SchoolOrganizationId, p.SchoolName, accountType, actorId, now);
-            db.Add(app); await db.SaveChangesAsync(ct);
+
+            db.Add(app);
+            await db.SaveChangesAsync(ct);
             db.Add(FasStatusHistory.Create(app.Id, null, null, "DRAFT", "Application draft created", actorId, "STUDENT", now));
         }
-        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct); await db.SaveChangesAsync(ct);
-        foreach (var item in added) db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
+
+        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        await db.SaveChangesAsync(ct);
+
+        foreach (var item in added)
+        {
+            db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
+        }
+
         if (created || added.Count > 0) await db.SaveChangesAsync(ct);
         return await ApplicationReview(app.Id, ct);
     }
 
     public async Task<object> ReplaceSchemes(long appId, ReplaceSchemesRequest request, CancellationToken ct)
     {
-        var (personId, actorId) = Identity(); var app = await OwnedDraft(appId, personId, ct); var profile = await Profile(ct);
-        if (request.SchemeIds.Count != request.SchemeIds.Distinct().Count()) throw new InvalidOperationException("FAS.DUPLICATE_SCHEME_SELECTION");
-        var ids = request.SchemeIds.Distinct().ToArray(); if (ids.Length == 0) throw new ArgumentException("FAS.SCHEME_REQUIRED");
+        var (personId, actorId) = Identity();
+        var app = await OwnedDraft(appId, personId, ct);
+        var profile = await Profile(ct);
+        long[] ids = ValidateSelectedSchemeIds(request.SchemeIds);
+
         var valid = await OpenApplicableSchemeIds(profile.SchoolOrganizationId, ids, ct);
         if (valid.Count != ids.Length) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
-        await EnsureNoDuplicateApplications(personId, ids, app.Id, ct); var now = DateTime.UtcNow; var added = await ReplaceSchemesCore(app, ids, actorId, now, ct); await db.SaveChangesAsync(ct); foreach (var item in added) db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now)); if (added.Count > 0) await db.SaveChangesAsync(ct); return await ApplicationReview(app.Id, ct);
+
+        await EnsureNoDuplicateApplications(personId, ids, app.Id, ct);
+        DateTime now = DateTime.UtcNow;
+        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        await db.SaveChangesAsync(ct);
+
+        foreach (var item in added)
+        {
+            db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
+        }
+
+        if (added.Count > 0) await db.SaveChangesAsync(ct);
+        return await ApplicationReview(app.Id, ct);
     }
 
     private async Task<List<FasApplicationScheme>> ReplaceSchemesCore(FasApplication app, long[] ids, long actor, DateTime now, CancellationToken ct)
     {
         var old = await db.Set<FasApplicationScheme>().Where(x => x.FasApplicationId == app.Id && x.StatusCode == "DRAFT").ToListAsync(ct);
         db.RemoveRange(old.Where(x => !ids.Contains(x.FasSchemeId)));
-        var added = ids.Where(id => old.All(x => x.FasSchemeId != id)).Select(id => FasApplicationScheme.CreateDraft(app.Id, id, actor, now)).ToList(); db.AddRange(added);
+        var added = ids
+            .Where(id => old.All(x => x.FasSchemeId != id))
+            .Select(id => FasApplicationScheme.CreateDraft(app.Id, id, actor, now))
+            .ToList();
+
+        db.AddRange(added);
         app.ReplacePrimaryScheme(ids[0], actor, now);
         return added;
     }
 
     public async Task<object> UpdateParticulars(long id, UpdateParticularsRequest r, CancellationToken ct)
-    { var (person, actor) = Identity(); var app = await OwnedDraft(id, person, ct); var now = DateTime.UtcNow; app.UpdateEmail(r.Email, actor, now); app.UpdateParentNationalities(r.ParentNationalities, actor, now); await db.SaveChangesAsync(ct); return await ApplicationReview(id, ct); }
+    {
+        var (person, actor) = Identity();
+        var app = await OwnedDraft(id, person, ct);
+        DateTime now = DateTime.UtcNow;
+
+        app.UpdateEmail(r.Email, actor, now);
+        app.UpdateParentNationalities(r.ParentNationalities, actor, now);
+        await db.SaveChangesAsync(ct);
+
+        return await ApplicationReview(id, ct);
+    }
+
     public async Task<object> UpdateIncome(long id, UpdateIncomeRequest r, CancellationToken ct)
-    { var (person, actor) = Identity(); var app = await OwnedDraft(id, person, ct); app.UpdateIncome(r.IsWelfareHomeResident, r.EmploymentStatusCode, r.MonthlyHouseholdIncome, r.HouseholdMemberCount, r.OtherMonthlyIncome, actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); return await RequiredDocuments(id, ct); }
+    {
+        var (person, actor) = Identity();
+        var app = await OwnedDraft(id, person, ct);
+
+        app.UpdateIncome(r.IsWelfareHomeResident, r.EmploymentStatusCode, r.MonthlyHouseholdIncome, r.HouseholdMemberCount, r.OtherMonthlyIncome, actor, DateTime.UtcNow);
+        await db.SaveChangesAsync(ct);
+
+        return await RequiredDocuments(id, ct);
+    }
 
     public async Task<object> RequiredDocuments(long id, CancellationToken ct)
     {
-        var (person, _) = Identity(); var app = await Owned(id, person, ct); return await BuildChecklist(app, ct);
+        var (person, _) = Identity();
+        var app = await Owned(id, person, ct);
+        return await BuildChecklist(app, ct);
     }
 
     private async Task<List<ChecklistItem>> BuildChecklist(FasApplication app, CancellationToken ct)
@@ -281,41 +334,157 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         var total = await q.CountAsync(ct); var items = await q.OrderByDescending(x => x.a.SubmittedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).Select(x => new { applicationId = x.a.Id, applicationSchemeId = x.i.Id, applicationReference = x.a.ApplicationNo, studentName = x.a.StudentName, studentId = x.a.StudentId, schemeId = x.s.Id, schemeName = x.s.Name, submittedAt = x.a.SubmittedAtUtc, status = x.i.StatusCode }).ToListAsync(ct); return new { items, page, pageSize, total, totalPages = (int)Math.Ceiling(total / (double)pageSize) };
     }
 
-    public async Task<object> AdminApplication(long id,CancellationToken ct)
+    public async Task<object> AdminApplication(long id, CancellationToken ct)
     {
-        var app=await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id,ct)
-            ??throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
-        var items=await(from i in db.Set<FasApplicationScheme>().AsNoTracking()
-            join s in db.Set<FasScheme>().AsNoTracking()on i.FasSchemeId equals s.Id
-            where i.FasApplicationId==id
-            select new{i.Id,i.FasSchemeId,s.Name,s.StartDate,s.EndDate,i.StatusCode,i.ApprovedAmount,i.ApprovedComponentsJson,i.RejectionNotes,i.ValidFrom,i.ValidTo,i.IsActive}).ToListAsync(ct);
-        var schemeIds=items.Select(x=>x.FasSchemeId).Distinct().ToArray();
-        var tiers=await db.Set<FasTier>().AsNoTracking().Where(x=>schemeIds.Contains(x.FasSchemeId)).OrderBy(x=>x.DisplayOrder).ToListAsync(ct);
-        var tierIds=tiers.Select(x=>x.Id).ToArray();
-        var criteria=await db.Set<FasTierCriteria>().AsNoTracking().Where(x=>tierIds.Contains(x.FasTierId)).OrderBy(x=>x.DisplayOrder).ToListAsync(ct);
-        var criteriaIds=criteria.Select(x=>x.Id).ToArray();
-        var categorical=await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x=>criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
-        var schemes=items.Select(item=>new{
-            item.Id,item.FasSchemeId,item.Name,item.StatusCode,item.ApprovedAmount,item.ApprovedComponentsJson,item.RejectionNotes,item.ValidFrom,item.ValidTo,item.IsActive,
-            tiers=tiers.Where(t=>t.FasSchemeId==item.FasSchemeId).Select(t=>new{tierId=t.Id,t.Label,t.SubsidyType,t.SubsidyValue,t.DisplayOrder}).ToArray(),
-            recommendedTierId=tiers.Where(t=>t.FasSchemeId==item.FasSchemeId).OrderBy(t=>t.DisplayOrder)
-                .Where(t=>TierMatches(t.Id,app,criteria,categorical)).Select(t=>(long?)t.Id).FirstOrDefault()
+        var app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
+        var items = await (
+                from i in db.Set<FasApplicationScheme>().AsNoTracking()
+                join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
+                where i.FasApplicationId == id
+                select new
+                {
+                    i.Id,
+                    i.FasSchemeId,
+                    s.Name,
+                    s.StartDate,
+                    s.EndDate,
+                    i.StatusCode,
+                    i.ApprovedAmount,
+                    i.ApprovedComponentsJson,
+                    i.RejectionNotes,
+                    i.ValidFrom,
+                    i.ValidTo,
+                    i.IsActive
+                })
+            .ToListAsync(ct);
+
+        var schemeIds = items.Select(x => x.FasSchemeId).Distinct().ToArray();
+        var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        var tierIds = tiers.Select(x => x.Id).ToArray();
+        var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        var criteriaIds = criteria.Select(x => x.Id).ToArray();
+        var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+        var schemes = items.Select(item => new
+        {
+            item.Id,
+            item.FasSchemeId,
+            item.Name,
+            item.StatusCode,
+            item.ApprovedAmount,
+            item.ApprovedComponentsJson,
+            item.RejectionNotes,
+            item.ValidFrom,
+            item.ValidTo,
+            item.IsActive,
+            tiers = tiers
+                .Where(t => t.FasSchemeId == item.FasSchemeId)
+                .Select(t => new { tierId = t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder })
+                .ToArray(),
+            recommendedTierId = tiers
+                .Where(t => t.FasSchemeId == item.FasSchemeId)
+                .OrderBy(t => t.DisplayOrder)
+                .Where(t => TierMatches(t.Id, app, criteria, categorical))
+                .Select(t => (long?)t.Id)
+                .FirstOrDefault()
         }).ToArray();
-        var documents=await db.Set<FasDocument>().AsNoTracking().Where(x=>x.FasApplicationId==id&&x.UploadStatusCode!="REMOVED").Select(x=>new{x.Id,x.ChecklistItemCode,x.FileName,x.MimeType,x.FileSizeBytes,x.UploadStatusCode}).ToListAsync(ct);
-        var declarations=await db.Set<FasDeclaration>().AsNoTracking().Where(x=>x.FasApplicationId==id).Select(x=>new{x.DeclarationTypeCode,x.IsAccepted,x.AcceptedAtUtc,x.DeclarationTextSnapshot}).ToListAsync(ct);
-        var history=await db.Set<FasStatusHistory>().AsNoTracking().Where(x=>x.FasApplicationId==id).OrderBy(x=>x.ChangedAtUtc).Select(x=>new{x.FasApplicationSchemeId,x.OldStatusCode,x.NewStatusCode,x.Notes,x.ChangedAtUtc,x.ChangedByRole}).ToListAsync(ct);
-        return new{app.Id,applicationReference=app.ApplicationNo,app.StudentName,app.StudentId,app.NricFinMasked,app.DateOfBirth,app.NationalityCode,app.Mobile,app.Address,app.Email,currentSchool=new{id=app.SchoolOrganizationId,name=app.SchoolName,app.StudentNumber},income=new{app.IsWelfareHomeResident,app.EmploymentStatusCode,app.MonthlyHouseholdIncome,app.HouseholdMemberCount,app.OtherMonthlyIncome,app.PerCapitaIncome},app.StatusCode,app.SubmittedAtUtc,schemes,documents,declarations,history};
+
+        var documents = await db.Set<FasDocument>()
+            .AsNoTracking()
+            .Where(x => x.FasApplicationId == id && x.UploadStatusCode != "REMOVED")
+            .Select(x => new { x.Id, x.ChecklistItemCode, x.FileName, x.MimeType, x.FileSizeBytes, x.UploadStatusCode })
+            .ToListAsync(ct);
+
+        var declarations = await db.Set<FasDeclaration>()
+            .AsNoTracking()
+            .Where(x => x.FasApplicationId == id)
+            .Select(x => new { x.DeclarationTypeCode, x.IsAccepted, x.AcceptedAtUtc, x.DeclarationTextSnapshot })
+            .ToListAsync(ct);
+
+        var history = await db.Set<FasStatusHistory>()
+            .AsNoTracking()
+            .Where(x => x.FasApplicationId == id)
+            .OrderBy(x => x.ChangedAtUtc)
+            .Select(x => new { x.FasApplicationSchemeId, x.OldStatusCode, x.NewStatusCode, x.Notes, x.ChangedAtUtc, x.ChangedByRole })
+            .ToListAsync(ct);
+
+        return new
+        {
+            app.Id,
+            applicationReference = app.ApplicationNo,
+            app.StudentName,
+            app.StudentId,
+            app.NricFinMasked,
+            app.DateOfBirth,
+            app.NationalityCode,
+            app.Mobile,
+            app.Address,
+            app.Email,
+            currentSchool = new { id = app.SchoolOrganizationId, name = app.SchoolName, app.StudentNumber },
+            income = new { app.IsWelfareHomeResident, app.EmploymentStatusCode, app.MonthlyHouseholdIncome, app.HouseholdMemberCount, app.OtherMonthlyIncome, app.PerCapitaIncome },
+            app.StatusCode,
+            app.SubmittedAtUtc,
+            schemes,
+            documents,
+            declarations,
+            history
+        };
     }
 
-    public async Task<object> ApproveScheme(long id,AdminApproveSchemeRequest r,CancellationToken ct)
-    {var actor=Actor();return await db.Database.CreateExecutionStrategy().ExecuteAsync(async()=>{await using var tx=await db.Database.BeginTransactionAsync(ct);var item=await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");var tier=await db.Set<FasTier>().AsNoTracking().SingleOrDefaultAsync(x=>x.Id==r.TierId&&x.FasSchemeId==item.FasSchemeId,ct)??throw new ArgumentException("FAS.INVALID_TIER");var scheme=await db.Set<FasScheme>().AsNoTracking().SingleAsync(x=>x.Id==item.FasSchemeId,ct);var today=DateOnly.FromDateTime(DateTime.UtcNow);if(scheme.StatusCode!="ACTIVE"||scheme.EndDate<today)throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");var now=DateTime.UtcNow;var components=JsonSerializer.Serialize(new{tierId=tier.Id,tier.Label,tier.SubsidyType,tier.SubsidyValue});item.Approve(actor,tier.SubsidyValue,components,scheme.StartDate,scheme.EndDate,now);db.Add(FasStatusHistory.Create(item.FasApplicationId,item.Id,"PENDING","APPROVED",r.Remarks,actor,"ADMIN",now));await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return new{applicationSchemeId=item.Id,status=item.StatusCode,selectedTierId=tier.Id,item.ApprovedAmount,item.ValidFrom,item.ValidTo};});}
-    public async Task<object> RejectScheme(long id,AdminRejectSchemeRequest r,CancellationToken ct)
-    {var actor=Actor();return await db.Database.CreateExecutionStrategy().ExecuteAsync(async()=>{await using var tx=await db.Database.BeginTransactionAsync(ct);var item=await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");item.Reject(actor,r.Notes,DateTime.UtcNow);db.Add(FasStatusHistory.Create(item.FasApplicationId,item.Id,"PENDING","REJECTED",r.Notes,actor,"ADMIN",DateTime.UtcNow));await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return new{applicationSchemeId=item.Id,status=item.StatusCode,item.RejectionNotes};});}
+    public async Task<object> ApproveScheme(long id, AdminApproveSchemeRequest r, CancellationToken ct)
+    {
+        long actor = Actor();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var item = await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x => x.Id == id, ct)
+                ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
+            var tier = await db.Set<FasTier>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == r.TierId && x.FasSchemeId == item.FasSchemeId, ct)
+                ?? throw new ArgumentException("FAS.INVALID_TIER");
+            var scheme = await db.Set<FasScheme>().AsNoTracking().SingleAsync(x => x.Id == item.FasSchemeId, ct);
+
+            DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (scheme.StatusCode != "ACTIVE" || scheme.EndDate < today) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
+
+            DateTime now = DateTime.UtcNow;
+            string components = JsonSerializer.Serialize(new { tierId = tier.Id, tier.Label, tier.SubsidyType, tier.SubsidyValue });
+            item.Approve(actor, tier.SubsidyValue, components, scheme.StartDate, scheme.EndDate, now);
+            db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "APPROVED", r.Remarks, actor, "ADMIN", now));
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            return new { applicationSchemeId = item.Id, status = item.StatusCode, selectedTierId = tier.Id, item.ApprovedAmount, item.ValidFrom, item.ValidTo };
+        });
+    }
+
+    public async Task<object> RejectScheme(long id, AdminRejectSchemeRequest r, CancellationToken ct)
+    {
+        long actor = Actor();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var item = await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x => x.Id == id, ct)
+                ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
+            DateTime now = DateTime.UtcNow;
+
+            item.Reject(actor, r.Notes, now);
+            db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "REJECTED", r.Notes, actor, "ADMIN", now));
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            return new { applicationSchemeId = item.Id, status = item.StatusCode, item.RejectionNotes };
+        });
+    }
 
     public async Task<object> ReviewValidation(long id, CancellationToken ct)
     {
-        var review = await ApplicationReview(id, ct); var (person, _) = Identity(); var app = await Owned(id, person, ct);
+        var review = await ApplicationReview(id, ct);
+        var (person, _) = Identity();
+        var app = await Owned(id, person, ct);
         var missing = new List<string>();
+
         if (string.IsNullOrWhiteSpace(app.StudentName)) missing.Add("particulars.name");
         if (string.IsNullOrWhiteSpace(app.NricFinMasked)) missing.Add("particulars.nricFin");
         if (app.DateOfBirth == null) missing.Add("particulars.dateOfBirth");
@@ -328,6 +497,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         if (app.IsWelfareHomeResident == null || (app.IsWelfareHomeResident == false && (app.MonthlyHouseholdIncome == null || app.HouseholdMemberCount == null || string.IsNullOrWhiteSpace(app.EmploymentStatusCode)))) missing.Add("income");
         var docsOk = await DocumentsComplete(id, ct); if (!docsOk) missing.Add("documents");
         if (await db.Set<FasDeclaration>().CountAsync(x => x.FasApplicationId == id && x.IsAccepted, ct) < 2) missing.Add("declarations");
+
         return new { application = review, missingItems = missing, canSubmit = missing.Count == 0 };
     }
 
@@ -336,15 +506,32 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         var (person, actor) = Identity();
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            await using var tx = await db.Database.BeginTransactionAsync(ct); var app = await OwnedDraft(id, person, ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var app = await OwnedDraft(id, person, ct);
             var items = await db.Set<FasApplicationScheme>().Where(x => x.FasApplicationId == id && x.StatusCode == "DRAFT").ToListAsync(ct);
             if (items.Count == 0) throw new InvalidOperationException("FAS.SCHEME_REQUIRED");
-            if (app.SchoolOrganizationId == null) throw new InvalidOperationException("FAS.SUBMISSION_INCOMPLETE"); var openSchemes = await OpenApplicableSchemeIds(app.SchoolOrganizationId.Value, items.Select(i => i.FasSchemeId).ToArray(), ct); if (openSchemes.Count != items.Select(i => i.FasSchemeId).Distinct().Count()) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
+
+            if (app.SchoolOrganizationId == null) throw new InvalidOperationException("FAS.SUBMISSION_INCOMPLETE");
+            var schemeIds = items.Select(i => i.FasSchemeId).ToArray();
+            var openSchemes = await OpenApplicableSchemeIds(app.SchoolOrganizationId.Value, schemeIds, ct);
+            if (openSchemes.Count != schemeIds.Distinct().Count()) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
+
             await EnsureNoDuplicateApplications(person, items.Select(x => x.FasSchemeId).ToArray(), id, ct);
             if (string.IsNullOrWhiteSpace(app.StudentName) || string.IsNullOrWhiteSpace(app.NricFinMasked) || app.DateOfBirth == null || string.IsNullOrWhiteSpace(app.NationalityCode) || string.IsNullOrWhiteSpace(app.ParentNationalitiesJson) || string.IsNullOrWhiteSpace(app.Mobile) || string.IsNullOrWhiteSpace(app.Address) || app.SchoolOrganizationId == null || string.IsNullOrWhiteSpace(app.StudentNumber) || string.IsNullOrWhiteSpace(app.Email) || app.IsWelfareHomeResident == null || (app.IsWelfareHomeResident == false && (app.MonthlyHouseholdIncome == null || app.HouseholdMemberCount == null || string.IsNullOrWhiteSpace(app.EmploymentStatusCode))) || !await DocumentsComplete(id, ct) || await db.Set<FasDeclaration>().CountAsync(x => x.FasApplicationId == id && x.IsAccepted, ct) < 2)
                 throw new InvalidOperationException("FAS.SUBMISSION_INCOMPLETE");
-            var now = DateTime.UtcNow; app.SubmitDraft(actor, now); db.Add(FasStatusHistory.Create(id, null, "DRAFT", "SUBMITTED", "Application submitted", actor, "STUDENT", now)); foreach (var item in items) { item.Submit(); db.Add(FasStatusHistory.Create(id, item.Id, "DRAFT", "PENDING", "Submitted for review", actor, "STUDENT", now)); }
-            await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return await ApplicationReview(id, ct);
+
+            DateTime now = DateTime.UtcNow;
+            app.SubmitDraft(actor, now);
+            db.Add(FasStatusHistory.Create(id, null, "DRAFT", "SUBMITTED", "Application submitted", actor, "STUDENT", now));
+            foreach (var item in items)
+            {
+                item.Submit();
+                db.Add(FasStatusHistory.Create(id, item.Id, "DRAFT", "PENDING", "Submitted for review", actor, "STUDENT", now));
+            }
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return await ApplicationReview(id, ct);
         });
     }
 
@@ -495,30 +682,45 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         }).ToList();
     }
     public async Task<object> Summary(CancellationToken ct)
-    { var (person, _) = Identity(); var draft = await db.Set<FasApplication>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "DRAFT").Select(x => (long?)x.Id).FirstOrDefaultAsync(ct); var active = await db.Set<FasActiveScheme>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "ACTIVE").Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo }).FirstOrDefaultAsync(ct); return new { canApply = true, blockingReason = (string?)null, activeScheme = active, resumableDraftId = draft }; }
+    {
+        var (person, _) = Identity();
+        long? draft = await db.Set<FasApplication>()
+            .AsNoTracking()
+            .Where(x => x.StudentPersonId == person && x.StatusCode == "DRAFT")
+            .Select(x => (long?)x.Id)
+            .FirstOrDefaultAsync(ct);
+
+        var active = await db.Set<FasActiveScheme>()
+            .AsNoTracking()
+            .Where(x => x.StudentPersonId == person && x.StatusCode == "ACTIVE")
+            .Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo })
+            .FirstOrDefaultAsync(ct);
+
+        return new { canApply = true, blockingReason = (string?)null, activeScheme = active, resumableDraftId = draft };
+    }
 
     public async Task<object> ApplicationReview(long id, CancellationToken ct)
     {
         var (person, _) = Identity();
         var app = await Owned(id, person, ct);
         var schemeRows = await (from i in db.Set<FasApplicationScheme>().AsNoTracking()
-                             join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
-                             where i.FasApplicationId == id
-                             select new
-                             {
-                                 i.Id,
-                                 i.FasSchemeId,
-                                 s.Name,
-                                 itemStatus = i.StatusCode,
-                                 schemeStatus = s.StatusCode,
-                                 i.ApprovedAmount,
-                                 i.ApprovedComponentsJson,
-                                 i.RejectionNotes,
-                                 i.ValidFrom,
-                                 i.ValidTo,
-                                 i.IsActive,
-                                 i.RedeemedAtUtc
-                             }).ToListAsync(ct);
+                                join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
+                                where i.FasApplicationId == id
+                                select new
+                                {
+                                    i.Id,
+                                    i.FasSchemeId,
+                                    s.Name,
+                                    itemStatus = i.StatusCode,
+                                    schemeStatus = s.StatusCode,
+                                    i.ApprovedAmount,
+                                    i.ApprovedComponentsJson,
+                                    i.RejectionNotes,
+                                    i.ValidFrom,
+                                    i.ValidTo,
+                                    i.IsActive,
+                                    i.RedeemedAtUtc
+                                }).ToListAsync(ct);
         var schemes = schemeRows.Select(x => new
         {
             x.Id,
@@ -572,7 +774,20 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         };
     }
 
-    private async Task<bool> DocumentsComplete(long id, CancellationToken ct) { var app = await db.Set<FasApplication>().SingleAsync(x => x.Id == id, ct); return (await BuildChecklist(app, ct)).All(x => x.IsComplete); }
+    private async Task<bool> DocumentsComplete(long id, CancellationToken ct)
+    {
+        var app = await db.Set<FasApplication>().SingleAsync(x => x.Id == id, ct);
+        return (await BuildChecklist(app, ct)).All(x => x.IsComplete);
+    }
+
+    private static long[] ValidateSelectedSchemeIds(IReadOnlyCollection<long> schemeIds)
+    {
+        if (schemeIds.Count != schemeIds.Distinct().Count()) throw new InvalidOperationException("FAS.DUPLICATE_SCHEME_SELECTION");
+        long[] ids = schemeIds.Distinct().ToArray();
+        if (ids.Length == 0) throw new ArgumentException("FAS.SCHEME_REQUIRED");
+        return ids;
+    }
+
     private async Task<List<long>> OpenApplicableSchemeIds(long schoolId, IReadOnlyCollection<long> schemeIds, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -645,29 +860,43 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             .AnyAsync(x => x.PersonId == personId, ct);
         return hasEducationAccount ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
     }
-    private static bool TierMatches(long tierId,FasApplication app,IReadOnlyCollection<FasTierCriteria> allCriteria,IReadOnlyCollection<FasTierCriteriaNationality> allValues)
+    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues)
     {
-        var criteria=allCriteria.Where(x=>x.FasTierId==tierId).OrderBy(x=>x.DisplayOrder).ToArray();
-        if(criteria.Length==0)return true;
-        var age=app.DateOfBirth.HasValue?DateOnly.FromDateTime(DateTime.UtcNow).Year-app.DateOfBirth.Value.Year:(int?)null;
-        if(age.HasValue&&app.DateOfBirth!.Value.AddYears(age.Value)>DateOnly.FromDateTime(DateTime.UtcNow))age--;
-        var parents=ParseParentNationalities(app.ParentNationalitiesJson);
+        var criteria = allCriteria
+            .Where(x => x.FasTierId == tierId)
+            .OrderBy(x => x.DisplayOrder)
+            .ToArray();
+        if (criteria.Length == 0) return true;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        int? age = app.DateOfBirth.HasValue ? today.Year - app.DateOfBirth.Value.Year : null;
+        if (age.HasValue && app.DateOfBirth!.Value.AddYears(age.Value) > today) age--;
+
+        var parents = ParseParentNationalities(app.ParentNationalitiesJson);
         bool Match(FasTierCriteria c)
         {
-            var values=allValues.Where(x=>x.FasTierCriteriaId==c.Id).Select(x=>x.Nationality).ToArray();
+            var values = allValues.Where(x => x.FasTierCriteriaId == c.Id).Select(x => x.Nationality).ToArray();
             return c.CriteriaType switch
             {
-                "AGE"=>age.HasValue&&age.Value>=c.NumberFrom&&age.Value<=c.NumberTo,
-                "GDP" or "GHI"=>app.MonthlyHouseholdIncome.HasValue&&app.MonthlyHouseholdIncome.Value>=c.NumberFrom&&app.MonthlyHouseholdIncome.Value<=c.NumberTo,
-                "PCI"=>app.PerCapitaIncome.HasValue&&app.PerCapitaIncome.Value>=c.NumberFrom&&app.PerCapitaIncome.Value<=c.NumberTo,
-                "NATIONALITY"=>values.Contains(app.NationalityCode??string.Empty,StringComparer.OrdinalIgnoreCase)||app.NationalityCode=="SG"&&values.Contains("Singapore Citizen",StringComparer.OrdinalIgnoreCase),
-                "PARENT_NATIONALITY"=>parents.Any(p=>values.Contains(p,StringComparer.OrdinalIgnoreCase)),
-                "ACCOUNT_TYPE"=>values.Contains(app.AccountTypeCode,StringComparer.OrdinalIgnoreCase),
-                _=>false
+                "AGE" => age.HasValue && age.Value >= c.NumberFrom && age.Value <= c.NumberTo,
+                "GDP" or "GHI" => app.MonthlyHouseholdIncome.HasValue && app.MonthlyHouseholdIncome.Value >= c.NumberFrom && app.MonthlyHouseholdIncome.Value <= c.NumberTo,
+                "PCI" => app.PerCapitaIncome.HasValue && app.PerCapitaIncome.Value >= c.NumberFrom && app.PerCapitaIncome.Value <= c.NumberTo,
+                "NATIONALITY" => values.Contains(app.NationalityCode ?? string.Empty, StringComparer.OrdinalIgnoreCase) ||
+                                 app.NationalityCode == "SG" && values.Contains("Singapore Citizen", StringComparer.OrdinalIgnoreCase),
+                "PARENT_NATIONALITY" => parents.Any(p => values.Contains(p, StringComparer.OrdinalIgnoreCase)),
+                "ACCOUNT_TYPE" => values.Contains(app.AccountTypeCode, StringComparer.OrdinalIgnoreCase),
+                _ => false
             };
         }
-        var result=Match(criteria[0]);
-        for(var index=1;index<criteria.Length;index++)result=criteria[index-1].ConnectorToNext=="OR"?result||Match(criteria[index]):result&&Match(criteria[index]);
+
+        bool result = Match(criteria[0]);
+        for (var index = 1; index < criteria.Length; index++)
+        {
+            result = criteria[index - 1].ConnectorToNext == "OR"
+                ? result || Match(criteria[index])
+                : result && Match(criteria[index]);
+        }
+
         return result;
     }
     private static string[] ParseParentNationalities(string? json) => string.IsNullOrWhiteSpace(json) ? Array.Empty<string>() : JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
