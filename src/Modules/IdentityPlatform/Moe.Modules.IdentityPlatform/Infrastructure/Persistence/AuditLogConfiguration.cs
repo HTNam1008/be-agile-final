@@ -12,6 +12,7 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("AuditLogId").UseIdentityColumn();
         builder.HasIndex(x => new { x.AuditScopeCode, x.OccurredAtUtc });
+        builder.HasIndex(x => new { x.OrganizationId, x.OccurredAtUtc }).HasDatabaseName("IX_AuditLog_OrganizationId_OccurredAt");
         builder.HasIndex(x => x.CorrelationId);
         builder.Property(x => x.AuditScopeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.ActorTypeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
