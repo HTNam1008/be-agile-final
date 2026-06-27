@@ -17,7 +17,6 @@ using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Application.Applications.Reject;
 using Moe.Modules.FasPayment.Application.Checkout;
 using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
-using Moe.Modules.FasPayment.Application.LegacyPayments;
 using Moe.Modules.FasPayment.Application.PaymentPlans;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Application.StudentApplications;
@@ -74,7 +73,6 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IEnrollmentRefundProcessor, EnrollmentRefundProcessor>();
         services.AddScoped<IPaymentPersistenceTracker, PaymentPersistenceTracker>();
         services.AddScoped<IStripePaymentGateway, StripePaymentGateway>();
-        services.AddScoped<ILegacyCoursePaymentGateway, LegacyCoursePaymentGateway>();
         services.AddSingleton<IStripeWebhookCoordinator, StripeWebhookCoordinator>();
         services.AddScoped<ICoursePaymentPlanGateway, CoursePaymentPlanGateway>();
         services.AddScoped<ICommandHandler<CreateCoursePaymentPlanCommand, CoursePaymentPlanResponse>, CreateCoursePaymentPlanHandler>();
@@ -82,8 +80,6 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<CreateStripeCheckoutCommand, StripeCheckoutResponse>, CreateStripeCheckoutHandler>();
         services.AddScoped<IQueryHandler<GetPaymentCheckoutStatusQuery, PaymentCheckoutStatusResponse>, GetPaymentCheckoutStatusHandler>();
         services.AddScoped<ICommandHandler<ProcessStripeWebhookCommand>, ProcessStripeWebhookHandler>();
-        services.AddScoped<IQueryHandler<GetOutstandingBillsQuery, OutstandingBillsResponse>, GetOutstandingBillsHandler>();
-        services.AddScoped<ICommandHandler<PayOutstandingBillCommand, PayBillResponse>, PayOutstandingBillHandler>();
         services.AddScoped<IQueryHandler<ListAdminPaymentsQuery, IReadOnlyCollection<AdminPaymentResponse>>, ListAdminPaymentsHandler>();
         services.AddScoped<IQueryHandler<ListPaymentWebhookEventsQuery, IReadOnlyCollection<PaymentWebhookEventResponse>>, ListPaymentWebhookEventsHandler>();
         services.AddScoped<ICommandHandler<CreatePaymentRefundCommand, PaymentRefundResponse>, CreatePaymentRefundHandler>();
@@ -97,7 +93,6 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>, CancelEnrollmentHandler>();
         services.AddScoped<IValidator<CreateCoursePaymentPlanRequest>, CreateCoursePaymentPlanRequestValidator>();
         services.AddScoped<IValidator<CreateStripeCheckoutRequest>, CreateStripeCheckoutRequestValidator>();
-        services.AddScoped<IValidator<PayBillRequest>, PayBillRequestValidator>();
         services.AddScoped<IValidator<CreatePaymentRefundRequest>, CreatePaymentRefundRequestValidator>();
         services.AddScoped<IValidator<PayBillingStatementRequest>, PayBillingStatementRequestValidator>();
         services.AddScoped<IValidator<CancelEnrollmentRequest>, CancelEnrollmentRequestValidator>();

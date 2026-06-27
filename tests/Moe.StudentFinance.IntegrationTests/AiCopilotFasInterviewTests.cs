@@ -97,6 +97,26 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     private async Task CreateSchemeWithPciCap(decimal maxPci)
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        using HttpRequestMessage courseRequest = new(HttpMethod.Post, "/api/admin/v1/courses");
+        courseRequest.Headers.Add("X-Test-Role", "HQ_ADMIN");
+        courseRequest.Content = JsonContent.Create(new
+        {
+            organizationId = 1,
+            courseCode = $"FAS-{suffix}",
+            courseName = $"FAS Course {suffix}",
+            description = "FAS integration course",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            enrollmentOpenAt = DateTime.UtcNow.AddMinutes(-5),
+            enrollmentCloseAt = DateTime.UtcNow.AddDays(14)
+        });
+        using HttpResponseMessage courseResponse = await _client.SendAsync(courseRequest);
+        if (courseResponse.StatusCode != HttpStatusCode.Created)
+            Assert.Fail($"Course creation failed: {courseResponse.StatusCode}");
+        
+        using JsonDocument json = JsonDocument.Parse(await courseResponse.Content.ReadAsStringAsync());
+        long courseId = json.RootElement.GetProperty("data").GetProperty("courseId").GetInt64();
+
         using HttpResponseMessage response = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", new
         {
             schemeCode = $"AI-FAS-NO-{suffix}",
@@ -138,6 +158,26 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     private async Task CreateEligibleScheme()
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        using HttpRequestMessage courseRequest = new(HttpMethod.Post, "/api/admin/v1/courses");
+        courseRequest.Headers.Add("X-Test-Role", "HQ_ADMIN");
+        courseRequest.Content = JsonContent.Create(new
+        {
+            organizationId = 1,
+            courseCode = $"FAS-{suffix}",
+            courseName = $"FAS Course {suffix}",
+            description = "FAS integration course",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            enrollmentOpenAt = DateTime.UtcNow.AddMinutes(-5),
+            enrollmentCloseAt = DateTime.UtcNow.AddDays(14)
+        });
+        using HttpResponseMessage courseResponse = await _client.SendAsync(courseRequest);
+        if (courseResponse.StatusCode != HttpStatusCode.Created)
+            Assert.Fail($"Course creation failed: {courseResponse.StatusCode}");
+        
+        using JsonDocument json = JsonDocument.Parse(await courseResponse.Content.ReadAsStringAsync());
+        long courseId = json.RootElement.GetProperty("data").GetProperty("courseId").GetInt64();
+
         using HttpResponseMessage response = await _client.PostAsJsonAsync("/api/admin/v1/fas/schemes", new
         {
             schemeCode = $"AI-FAS-{suffix}",

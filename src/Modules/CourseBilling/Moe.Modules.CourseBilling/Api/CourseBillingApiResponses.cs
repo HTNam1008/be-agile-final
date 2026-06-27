@@ -41,6 +41,7 @@ internal static class CourseBillingApiResponses
             "COURSE.FEE_COMPONENT_DUPLICATE_CODE" => ApiResponseCodes.Conflict,
             "COURSE.FEE_COMPONENT_IN_USE" => ApiResponseCodes.Conflict,
             "COURSE.DISABLED" => ApiResponseCodes.Conflict,
+            "COURSE.NOT_DISABLED" => ApiResponseCodes.Conflict,
             "COURSE.NOT_PUBLISHED" => ApiResponseCodes.Conflict,
             "COURSE.ENROLLMENT_WINDOW_CLOSED" => ApiResponseCodes.Conflict,
             "COURSE.CONTENT_NOT_OPEN" => ApiResponseCodes.Conflict,

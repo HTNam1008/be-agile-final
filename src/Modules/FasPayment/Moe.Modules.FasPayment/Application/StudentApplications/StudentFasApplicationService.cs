@@ -184,7 +184,7 @@ public sealed class StudentFasApplicationService(
         var valid = await OpenApplicableSchemeIds(p.SchoolOrganizationId, ids, ct);
         if (valid.Count != ids.Length) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
 
-        var app = await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.StudentPersonId == personId && x.StatusCode == "DRAFT", ct);
+        var app = await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.StudentPersonId == personId && x.StatusCode == FasApplicationStatuses.Draft, ct);
         await EnsureNoDuplicateApplications(personId, ids, app?.Id, ct);
 
         bool created = app == null;
@@ -197,7 +197,7 @@ public sealed class StudentFasApplicationService(
 
             db.Add(app);
             await db.SaveChangesAsync(ct);
-            db.Add(FasStatusHistory.Create(app.Id, null, null, "DRAFT", "Application draft created", actorId, "STUDENT", now));
+            db.Add(FasStatusHistory.Create(app.Id, null, null, FasApplicationStatuses.Draft, "Application draft created", actorId, "STUDENT", now));
         }
 
         var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
@@ -559,7 +559,7 @@ public sealed class StudentFasApplicationService(
 
             DateTime now = DateTime.UtcNow;
             app.SubmitDraft(actor, now);
-            db.Add(FasStatusHistory.Create(id, null, "DRAFT", "SUBMITTED", "Application submitted", actor, "STUDENT", now));
+            db.Add(FasStatusHistory.Create(id, null, FasApplicationStatuses.Draft, FasApplicationStatuses.Submitted, "Application submitted", actor, "STUDENT", now));
             foreach (var item in items)
             {
                 item.Submit();
@@ -570,9 +570,9 @@ public sealed class StudentFasApplicationService(
                 AuditActionCodes.FasApplicationSubmitted,
                 app,
                 "FAS application submitted by student",
-                "SUBMITTED",
+                FasApplicationStatuses.Submitted,
                 ct,
-                beforeStatus: "DRAFT",
+                beforeStatus: FasApplicationStatuses.Draft,
                 count: items.Count);
 
             await db.SaveChangesAsync(ct);
@@ -597,9 +597,10 @@ public sealed class StudentFasApplicationService(
                 throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
             }
 
+            string previousStatus = app.StatusCode;
             var now = DateTime.UtcNow;
             app.Withdraw(actor, now);
-            db.Add(FasStatusHistory.Create(id, null, "SUBMITTED", "WITHDRAWN", "Application withdrawn by student", actor, "STUDENT", now));
+            db.Add(FasStatusHistory.Create(id, null, previousStatus, FasApplicationStatuses.Withdrawn, "Application withdrawn by student", actor, "STUDENT", now));
 
             foreach (var item in items)
             {
@@ -611,9 +612,9 @@ public sealed class StudentFasApplicationService(
                 AuditActionCodes.FasApplicationWithdrawn,
                 app,
                 "FAS application withdrawn by student",
-                "WITHDRAWN",
+                FasApplicationStatuses.Withdrawn,
                 ct,
-                beforeStatus: "SUBMITTED",
+                beforeStatus: previousStatus,
                 count: items.Count);
 
             await db.SaveChangesAsync(ct);
@@ -635,7 +636,7 @@ public sealed class StudentFasApplicationService(
                 .SingleOrDefaultAsync(ct)
                 ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
 
-            if (target.Application.StatusCode != "SUBMITTED" || target.Scheme.StatusCode != "PENDING")
+            if ((target.Application.StatusCode != FasApplicationStatuses.Submitted && target.Application.StatusCode != FasApplicationStatuses.PendingReview) || target.Scheme.StatusCode != "PENDING")
             {
                 throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
             }
@@ -660,12 +661,13 @@ public sealed class StudentFasApplicationService(
                     ct);
             if (!hasRemainingActiveScheme)
             {
+                string previousApplicationStatus = target.Application.StatusCode;
                 target.Application.Withdraw(actor, now);
                 db.Add(FasStatusHistory.Create(
                     target.Application.Id,
                     null,
-                    "SUBMITTED",
-                    "WITHDRAWN",
+                    previousApplicationStatus,
+                    FasApplicationStatuses.Withdrawn,
                     "All schemes withdrawn by student",
                     actor,
                     "STUDENT",
@@ -734,7 +736,9 @@ public sealed class StudentFasApplicationService(
             availabilityStatus = SchemeAvailabilityStatus(x.schemeStatus),
             availabilityMessage = SchemeAvailabilityMessage(x.schemeStatus),
             x.canReview,
-            canWithdraw = x.applicationStatus == "SUBMITTED" && x.itemStatus == "PENDING" && SchemeIsAvailable(x.schemeStatus),
+            canWithdraw = (x.applicationStatus == FasApplicationStatuses.Submitted || x.applicationStatus == FasApplicationStatuses.PendingReview) &&
+                          x.itemStatus == "PENDING" &&
+                          SchemeIsAvailable(x.schemeStatus),
             x.RejectionNotes,
             x.ApprovedAmount,
             x.ApprovedComponentsJson,
@@ -750,7 +754,7 @@ public sealed class StudentFasApplicationService(
         var (person, _) = Identity();
         long? draft = await db.Set<FasApplication>()
             .AsNoTracking()
-            .Where(x => x.StudentPersonId == person && x.StatusCode == "DRAFT")
+            .Where(x => x.StudentPersonId == person && x.StatusCode == FasApplicationStatuses.Draft)
             .Select(x => (long?)x.Id)
             .FirstOrDefaultAsync(ct);
 
@@ -819,7 +823,9 @@ public sealed class StudentFasApplicationService(
             app.Id,
             applicationReference = app.ApplicationNo,
             app.StatusCode,
-            canWithdraw = app.StatusCode == "SUBMITTED" && schemes.Count > 0 && schemes.All(x => x.StatusCode == "PENDING"),
+            canWithdraw = (app.StatusCode == FasApplicationStatuses.Submitted || app.StatusCode == FasApplicationStatuses.PendingReview) &&
+                          schemeRows.Count > 0 &&
+                          schemeRows.All(x => x.itemStatus == "PENDING" && SchemeIsAvailable(x.schemeStatus)),
             app.StudentName,
             app.NricFinMasked,
             app.DateOfBirth,
@@ -964,7 +970,7 @@ public sealed class StudentFasApplicationService(
                 join scheme in db.Set<FasScheme>().AsNoTracking() on item.FasSchemeId equals scheme.Id
                 where application.StudentPersonId == person
                       && (!currentApplicationId.HasValue || application.Id != currentApplicationId.Value)
-                      && application.StatusCode != "WITHDRAWN"
+                      && application.StatusCode != FasApplicationStatuses.Withdrawn
                       && schemeIds.Contains(item.FasSchemeId)
                       && item.StatusCode == "PENDING"
                 select new { item.FasSchemeId, scheme.Name })
@@ -979,8 +985,8 @@ public sealed class StudentFasApplicationService(
         }
     }
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
-    private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != "DRAFT") throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
-    private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != "SUBMITTED") throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
+    private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Draft) throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
+    private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted && a.StatusCode != FasApplicationStatuses.PendingReview) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
     private sealed record ProfileRow(long PersonId, string Name, string? NricFinMasked, DateOnly DateOfBirth, string NationalityCode, string? Mobile, string? Address, string? Email, long SchoolOrganizationId, string SchoolName, string StudentNumber);
 
     private async Task<string> ResolveAccountType(long personId, CancellationToken ct)

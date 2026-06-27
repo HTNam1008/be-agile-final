@@ -123,6 +123,9 @@ internal sealed class Course : Entity<long>
 
     public void Enable(long actorLoginAccountId, DateTime utcNow)
     {
+        if (!IsDisabled)
+            throw new InvalidOperationException(CourseErrors.CourseNotDisabled.Message);
+
         Publish(actorLoginAccountId, utcNow);
     }
 

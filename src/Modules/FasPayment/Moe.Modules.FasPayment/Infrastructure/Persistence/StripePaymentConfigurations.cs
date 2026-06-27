@@ -29,12 +29,16 @@ internal sealed class PaymentCheckoutSessionConfiguration : IEntityTypeConfigura
         builder.ToTable("PaymentCheckoutSession", "payment");
         builder.HasKey(checkout => checkout.Id);
         builder.Property(checkout => checkout.Id).HasColumnName("PaymentCheckoutSessionId").UseIdentityColumn();
+        builder.HasDiscriminator(checkout => checkout.CheckoutSessionTypeCode)
+            .HasValue<BillPaymentCheckoutSession>(PaymentCheckoutSessionTypeCodes.Bill)
+            .HasValue<StatementPaymentCheckoutSession>(PaymentCheckoutSessionTypeCodes.Statement);
         builder.HasIndex(checkout => checkout.IdempotencyKey).IsUnique();
         builder.HasIndex(checkout => checkout.ProviderCheckoutSessionId).IsUnique().HasFilter("[ProviderCheckoutSessionId] IS NOT NULL");
         builder.HasIndex(checkout => checkout.ProviderPaymentIntentId).HasFilter("[ProviderPaymentIntentId] IS NOT NULL");
         builder.HasIndex(checkout => checkout.ProviderSubscriptionId).IsUnique().HasFilter("[ProviderSubscriptionId] IS NOT NULL");
         builder.HasIndex(checkout => new { checkout.BillId, checkout.PersonId });
         builder.HasIndex(checkout => checkout.PaymentId).IsUnique().HasFilter("[PaymentId] IS NOT NULL");
+        builder.Property(checkout => checkout.CheckoutSessionTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(checkout => checkout.Amount).HasPrecision(19, 2);
         builder.Property(checkout => checkout.CurrencyCode).HasMaxLength(3).IsUnicode(false).IsRequired();
         builder.Property(checkout => checkout.CheckoutStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();

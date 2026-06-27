@@ -40,4 +40,3 @@ public sealed record SchoolAuditDetails(
 }
 
 public sealed record SchoolAuditStatusTransition(string? From, string To);
-

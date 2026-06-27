@@ -47,7 +47,7 @@ public sealed class StudentDashboardCourseRepositoryTests : IAsyncLifetime
             enrollmentCloseAtUtc: new DateTime(2026, 6, 30, 16, 0, 0, DateTimeKind.Utc),
             actorLoginAccountId: 42,
             utcNow: new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc));
-        FeeComponent tuition = new("TUITION", "Tuition", "TUITION", FeeComponentCalculationTypes.Fixed, false, 0m, false, true);
+        FeeComponent tuition = new("TUITION", "Tuition", "BASE", FeeComponentCalculationTypes.Fixed, false, 0m, false, true);
         FeeComponent gst = new("GST", "GST", "TAX", FeeComponentCalculationTypes.Percentage, true, 9m, true, true);
         _dbContext.AddRange(course, tuition, gst);
         await _dbContext.SaveChangesAsync();

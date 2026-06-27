@@ -998,7 +998,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         {
             componentCode = code,
             componentName = code,
-            componentTypeCode = "TUITION",
+            componentTypeCode = "BASE",
             calculationTypeCode = "FIXED",
             isTaxComponent = false,
             isActive = true

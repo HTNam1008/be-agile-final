@@ -116,24 +116,30 @@ internal sealed class ProcessStripeWebhookHandler(
                 break;
             case PaymentWebhookKind.PaymentSucceeded:
             case PaymentWebhookKind.InvoicePaid:
-                if (checkout.PaymentId is long)
-                    await RecordStatementSuccessAsync(checkout, webhook, cancellationToken);
-                else
-                    await RecordSuccessAsync(checkout, webhook, cancellationToken);
+            {
+                if (checkout is StatementPaymentCheckoutSession statementCheckout)
+                    await RecordStatementSuccessAsync(statementCheckout, webhook, cancellationToken);
+                else if (checkout is BillPaymentCheckoutSession billCheckout)
+                    await RecordSuccessAsync(billCheckout, webhook, cancellationToken);
                 break;
+            }
             case PaymentWebhookKind.PaymentFailed:
             case PaymentWebhookKind.InvoicePaymentFailed:
-                if (checkout.PaymentId is long)
-                    await RecordStatementFailureAsync(checkout, webhook.CreatedAtUtc, cancellationToken);
-                else if (checkout.RecordPaymentFailure(webhook.CreatedAtUtc))
-                    await courses.ApplyPaymentFailureAsync(checkout.BillId, cancellationToken);
+            {
+                if (checkout is StatementPaymentCheckoutSession statementCheckout)
+                    await RecordStatementFailureAsync(statementCheckout, webhook.CreatedAtUtc, cancellationToken);
+                else if (checkout is BillPaymentCheckoutSession billCheckout && billCheckout.RecordPaymentFailure(webhook.CreatedAtUtc))
+                    await courses.ApplyPaymentFailureAsync(billCheckout.BillId, cancellationToken);
                 break;
+            }
             case PaymentWebhookKind.CheckoutExpired:
-                if (checkout.PaymentId is long)
-                    await RecordStatementExpirationAsync(checkout, webhook.CreatedAtUtc, cancellationToken);
-                else if (checkout.ExpireBeforePayment(webhook.CreatedAtUtc))
-                    await courses.ApplyPaymentFailureAsync(checkout.BillId, cancellationToken);
+            {
+                if (checkout is StatementPaymentCheckoutSession statementCheckout)
+                    await RecordStatementExpirationAsync(statementCheckout, webhook.CreatedAtUtc, cancellationToken);
+                else if (checkout is BillPaymentCheckoutSession billCheckout && billCheckout.ExpireBeforePayment(webhook.CreatedAtUtc))
+                    await courses.ApplyPaymentFailureAsync(billCheckout.BillId, cancellationToken);
                 break;
+            }
             case PaymentWebhookKind.SubscriptionDeleted:
                 if (checkout.CheckoutStatusCode != CheckoutStatusCodes.PaidInFull)
                     checkout.RecordPaymentFailure(webhook.CreatedAtUtc);
@@ -145,7 +151,7 @@ internal sealed class ProcessStripeWebhookHandler(
     }
 
     private async Task RecordStatementSuccessAsync(
-        PaymentCheckoutSession checkout,
+        StatementPaymentCheckoutSession checkout,
         ParsedPaymentWebhook webhook,
         CancellationToken cancellationToken)
     {
@@ -201,7 +207,7 @@ internal sealed class ProcessStripeWebhookHandler(
 
         foreach (Payment competingPayment in competingPayments)
         {
-            PaymentCheckoutSession? competingCheckout =
+            StatementPaymentCheckoutSession? competingCheckout =
                 await payments.FindCheckoutByPaymentAsync(competingPayment.Id, cancellationToken);
             if (!string.IsNullOrWhiteSpace(competingCheckout?.ProviderCheckoutSessionId))
             {
@@ -235,7 +241,7 @@ internal sealed class ProcessStripeWebhookHandler(
     }
 
     private async Task RecordStatementFailureAsync(
-        PaymentCheckoutSession checkout,
+        StatementPaymentCheckoutSession checkout,
         DateTime failedAtUtc,
         CancellationToken cancellationToken)
     {
@@ -257,7 +263,7 @@ internal sealed class ProcessStripeWebhookHandler(
     }
 
     private async Task RecordStatementExpirationAsync(
-        PaymentCheckoutSession checkout,
+        StatementPaymentCheckoutSession checkout,
         DateTime expiredAtUtc,
         CancellationToken cancellationToken)
     {
@@ -342,7 +348,7 @@ internal sealed class ProcessStripeWebhookHandler(
     }
 
     private async Task RecordSuccessAsync(
-        PaymentCheckoutSession checkout,
+        BillPaymentCheckoutSession checkout,
         ParsedPaymentWebhook webhook,
         CancellationToken cancellationToken)
     {

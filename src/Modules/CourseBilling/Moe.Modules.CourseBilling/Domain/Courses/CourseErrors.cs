@@ -7,6 +7,7 @@ internal static class CourseErrors
     public static readonly Error AdminRequired = new("COURSE.ADMIN_REQUIRED", "Only ADMIN can access this course management workflow.");
     public static readonly Error CourseNotFound = new("COURSE.NOT_FOUND", "Course was not found.");
     public static readonly Error CourseDisabled = new("COURSE.DISABLED", "Disabled courses cannot be modified.");
+    public static readonly Error CourseNotDisabled = new("COURSE.NOT_DISABLED", "Only disabled courses can be enabled.");
     public static readonly Error CourseNotDraft = new("COURSE.NOT_DRAFT", "Only draft courses can be published.");
     public static readonly Error DraftRequiredForRemoval = new("COURSE.DRAFT_REQUIRED_FOR_REMOVAL", "Only draft courses can be removed.");
     public static readonly Error CourseNotPublished = new("COURSE.NOT_PUBLISHED", "Course must be published before students can be assigned.");
@@ -20,7 +21,7 @@ internal static class CourseErrors
     public static readonly Error InvalidRefundPercentage = new("COURSE.INVALID_REFUND_PERCENTAGE", "Refund percentages must be between 0 and 100.");
     public static readonly Error FeeComponentNotFound = new("COURSE.FEE_COMPONENT_NOT_FOUND", "Fee component was not found or is inactive.");
     public static readonly Error DuplicateFeeComponentCode = new("COURSE.FEE_COMPONENT_DUPLICATE_CODE", "Fee component code already exists.");
-    public static readonly Error InvalidFeeComponentType = new("COURSE.INVALID_FEE_COMPONENT_TYPE", "Fee component type must be TUITION, MATERIAL or TAX.");
+    public static readonly Error InvalidFeeComponentType = new("COURSE.INVALID_FEE_COMPONENT_TYPE", "Fee component type must be BASE, ADDON or TAX.");
     public static readonly Error InvalidCalculationType = new("COURSE.INVALID_CALCULATION_TYPE", "Calculation type must be FIXED or PERCENTAGE.");
     public static readonly Error InvalidFeeDefaultValue = new("COURSE.INVALID_FEE_DEFAULT_VALUE", "Fee default value must be valid for its calculation type.");
     public static readonly Error FeeComponentManageForbidden = new("COURSE.FEE_COMPONENT_MANAGE_FORBIDDEN", "Only HQ administrators can manage course fee components.");

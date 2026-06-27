@@ -103,4 +103,3 @@ internal sealed class SchoolAuditLogReader(
         return new SchoolAuditLogReadResult(SchoolAuditLogReadStatus.Success, resultPage);
     }
 }
-

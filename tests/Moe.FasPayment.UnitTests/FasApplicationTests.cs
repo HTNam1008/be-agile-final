@@ -8,20 +8,20 @@ namespace Moe.FasPayment.UnitTests;
 public class FasApplicationTests
 {
     [Fact]
-    public void Submit_ShouldSetStatusToPendingReview()
+    public void SubmitDraft_ShouldSetStatusToSubmitted()
     {
         // Act
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
 
         // Assert
-        application.StatusCode.Should().Be("PENDING_REVIEW");
+        application.StatusCode.Should().Be(FasApplicationStatuses.Submitted);
     }
 
     [Fact]
-    public void Approve_WhenPendingReview_ShouldSetStatusToApproved()
+    public void Approve_WhenSubmitted_ShouldSetStatusToApproved()
     {
         // Arrange
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
 
         // Act
         application.Approve();
@@ -32,10 +32,10 @@ public class FasApplicationTests
     }
 
     [Fact]
-    public void Reject_WhenPendingReview_ShouldSetStatusToRejected()
+    public void Reject_WhenSubmitted_ShouldSetStatusToRejected()
     {
         // Arrange
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
 
         // Act
         application.Reject();
@@ -49,7 +49,7 @@ public class FasApplicationTests
     public void Approve_WhenAlreadyApproved_ShouldThrowException()
     {
         // Arrange
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
         application.Approve();
 
         // Act
@@ -63,7 +63,7 @@ public class FasApplicationTests
     public void Reject_WhenAlreadyApproved_ShouldThrowException()
     {
         // Arrange
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
         application.Approve();
 
         // Act
@@ -77,7 +77,7 @@ public class FasApplicationTests
     public void Reject_WhenAlreadyRejected_ShouldThrowException()
     {
         // Arrange
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
         application.Reject();
 
         // Act
@@ -91,7 +91,7 @@ public class FasApplicationTests
     public void Approve_WhenAlreadyRejected_ShouldThrowException()
     {
         // Arrange
-        var application = FasApplication.Submit("APP-001", 1, "STU-001", "John Doe", new DateOnly(2026, 1, 1));
+        var application = SubmittedApplication();
         application.Reject();
 
         // Act
@@ -113,5 +113,30 @@ public class FasApplicationTests
     {
         Action act = () => FasApplicationReviewDecision.CreateRejection(1, 1L, "", null, DateTime.UtcNow);
         act.Should().Throw<ArgumentException>();
+    }
+
+    private static FasApplication SubmittedApplication()
+    {
+        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var application = FasApplication.CreateDraft(
+            "APP-001",
+            1,
+            1,
+            "STU-001",
+            "John Doe",
+            "S****001A",
+            new DateOnly(2006, 1, 1),
+            "Singaporean",
+            "90000000",
+            "1 Test Road",
+            "john.doe@example.test",
+            1,
+            "Test School",
+            "PERSONAL_ACCOUNT",
+            1,
+            now);
+
+        application.SubmitDraft(1, now);
+        return application;
     }
 }

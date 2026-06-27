@@ -42,11 +42,11 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
             .ThenByDescending(plan => plan.Version)
             .ToArrayAsync(cancellationToken);
 
-    public Task<PaymentCheckoutSession?> FindOpenCheckoutAsync(
+    public Task<BillPaymentCheckoutSession?> FindOpenCheckoutAsync(
         long billId,
         long personId,
         CancellationToken cancellationToken)
-        => dbContext.Set<PaymentCheckoutSession>()
+        => dbContext.Set<BillPaymentCheckoutSession>()
             .SingleOrDefaultAsync(checkout =>
                 checkout.BillId == billId &&
                 checkout.PersonId == personId &&
@@ -163,10 +163,10 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
             .OrderByDescending(payment => payment.InitiatedAtUtc)
             .ToArrayAsync(cancellationToken);
 
-    public Task<PaymentCheckoutSession?> FindCheckoutByPaymentAsync(
+    public Task<StatementPaymentCheckoutSession?> FindCheckoutByPaymentAsync(
         long paymentId,
         CancellationToken cancellationToken)
-        => dbContext.Set<PaymentCheckoutSession>()
+        => dbContext.Set<StatementPaymentCheckoutSession>()
             .SingleOrDefaultAsync(checkout => checkout.PaymentId == paymentId, cancellationToken);
 
     public Task<Payment?> FindPaymentByChargeAsync(string providerChargeId, CancellationToken cancellationToken)
