@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
@@ -19,7 +20,8 @@ internal sealed class CreateStudentHandler(
     IOrganizationUnitRepository organizations,
     IStudentOnboardingRepository students,
     IUnitOfWork unitOfWork,
-    ITransactionalExecutor transactions)
+    ITransactionalExecutor transactions,
+    IAuditService audit)
     : ICommandHandler<CreateStudentCommand, CreateStudentResponse>
 {
     public async Task<Result<CreateStudentResponse>> Handle(
@@ -102,6 +104,17 @@ internal sealed class CreateStudentHandler(
             utcNow);
 
         await students.AddStudentIdentityAndEnrollmentAsync(identityNumber, enrollment, cancellationToken, saveChanges: false);
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.StudentCreated,
+                "Person",
+                personId,
+                school.OrganizationUnitId,
+                new SchoolAuditDetails(
+                    "Student created",
+                    EntityDisplayName: command.FullName.Trim())),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

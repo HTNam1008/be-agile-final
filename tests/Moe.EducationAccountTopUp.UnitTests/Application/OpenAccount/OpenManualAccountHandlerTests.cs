@@ -206,6 +206,7 @@ public sealed class OpenManualAccountHandlerTests
     private sealed class FakeAuditService : IAuditService
     {
         public List<AuditCall> Calls { get; } = [];
+        public List<SchoolAuditContext> SchoolCalls { get; } = [];
         public Exception? ExceptionToThrow { get; set; }
 
         public Task RecordAsync(
@@ -221,6 +222,14 @@ public sealed class OpenManualAccountHandlerTests
             }
 
             Calls.Add(new AuditCall(actionCode, entityTypeCode, entityId, detailsJson));
+            return Task.CompletedTask;
+        }
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+        {
+            SchoolCalls.Add(context);
             return Task.CompletedTask;
         }
     }

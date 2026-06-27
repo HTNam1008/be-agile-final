@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
@@ -12,7 +13,13 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Application.StudentApplications;
 
-public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser currentUser, IFasDocumentStorage storage, IFasDocumentScanner scanner, IOrganizationUnitRepository organizations)
+public sealed class StudentFasApplicationService(
+    MoeDbContext db,
+    ICurrentUser currentUser,
+    IFasDocumentStorage storage,
+    IFasDocumentScanner scanner,
+    IOrganizationUnitRepository organizations,
+    IAuditService audit)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
@@ -199,6 +206,16 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         foreach (var item in added)
         {
             db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
+        }
+
+        if (created)
+        {
+            await RecordFasApplicationAuditAsync(
+                AuditActionCodes.FasApplicationCreated,
+                app,
+                "FAS application created",
+                "DRAFT",
+                ct);
         }
 
         if (created || added.Count > 0) await db.SaveChangesAsync(ct);
@@ -451,6 +468,16 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             item.Approve(actor, tier.SubsidyValue, components, scheme.StartDate, scheme.EndDate, now);
             db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "APPROVED", r.Remarks, actor, "ADMIN", now));
 
+            var app = await db.Set<FasApplication>().AsNoTracking().SingleAsync(x => x.Id == item.FasApplicationId, ct);
+            await RecordFasApplicationSchemeAuditAsync(
+                AuditActionCodes.FasApplicationApproved,
+                app,
+                item,
+                "FAS application approved by admin",
+                "PENDING",
+                "APPROVED",
+                ct);
+
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
@@ -470,6 +497,16 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
 
             item.Reject(actor, r.Notes, now);
             db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "REJECTED", r.Notes, actor, "ADMIN", now));
+
+            var app = await db.Set<FasApplication>().AsNoTracking().SingleAsync(x => x.Id == item.FasApplicationId, ct);
+            await RecordFasApplicationSchemeAuditAsync(
+                AuditActionCodes.FasApplicationRejected,
+                app,
+                item,
+                "FAS application rejected by admin",
+                "PENDING",
+                "REJECTED",
+                ct);
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -529,6 +566,15 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 db.Add(FasStatusHistory.Create(id, item.Id, "DRAFT", "PENDING", "Submitted for review", actor, "STUDENT", now));
             }
 
+            await RecordFasApplicationAuditAsync(
+                AuditActionCodes.FasApplicationSubmitted,
+                app,
+                "FAS application submitted by student",
+                "SUBMITTED",
+                ct,
+                beforeStatus: "DRAFT",
+                count: items.Count);
+
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return await ApplicationReview(id, ct);
@@ -560,6 +606,15 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 item.Withdraw();
                 db.Add(FasStatusHistory.Create(id, item.Id, "PENDING", "CANCELLED", "Withdrawn by student", actor, "STUDENT", now));
             }
+
+            await RecordFasApplicationAuditAsync(
+                AuditActionCodes.FasApplicationWithdrawn,
+                app,
+                "FAS application withdrawn by student",
+                "WITHDRAWN",
+                ct,
+                beforeStatus: "SUBMITTED",
+                count: items.Count);
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -616,6 +671,15 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                     "STUDENT",
                     now));
             }
+
+            await RecordFasApplicationSchemeAuditAsync(
+                AuditActionCodes.FasSchemeSelectionWithdrawn,
+                target.Application,
+                target.Scheme,
+                "FAS scheme selection withdrawn by student",
+                "PENDING",
+                "CANCELLED",
+                ct);
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -825,6 +889,72 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
     private static string SchemeAvailabilityStatus(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? "AVAILABLE" : "NOT_AVAILABLE";
     private static string? SchemeAvailabilityMessage(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? null : "This FAS scheme is no longer available.";
     private static string StudentVisibleStatus(string itemStatus, string schemeStatus) => !SchemeIsAvailable(schemeStatus) && itemStatus is "DRAFT" or "PENDING" or "CANCELLED" ? "NOT_AVAILABLE" : itemStatus;
+
+    private async Task RecordFasApplicationAuditAsync(
+        string actionCode,
+        FasApplication app,
+        string summary,
+        string afterStatus,
+        CancellationToken ct,
+        string? beforeStatus = null,
+        int? count = null)
+    {
+        if (app.SchoolOrganizationId is not long schoolOrganizationId)
+        {
+            return;
+        }
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                actionCode,
+                "FasApplication",
+                app.Id,
+                schoolOrganizationId,
+                new SchoolAuditDetails(
+                    summary,
+                    EntityDisplayName: app.ApplicationNo,
+                    RelatedIds: new Dictionary<string, long>
+                    {
+                        ["studentPersonId"] = app.StudentPersonId,
+                        ["applicationId"] = app.Id
+                    },
+                    StatusTransition: new SchoolAuditStatusTransition(beforeStatus, afterStatus),
+                    Count: count)),
+            ct);
+    }
+
+    private async Task RecordFasApplicationSchemeAuditAsync(
+        string actionCode,
+        FasApplication app,
+        FasApplicationScheme item,
+        string summary,
+        string beforeStatus,
+        string afterStatus,
+        CancellationToken ct)
+    {
+        if (app.SchoolOrganizationId is not long schoolOrganizationId)
+        {
+            return;
+        }
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                actionCode,
+                "FasApplicationScheme",
+                item.Id,
+                schoolOrganizationId,
+                new SchoolAuditDetails(
+                    summary,
+                    EntityDisplayName: app.ApplicationNo,
+                    RelatedIds: new Dictionary<string, long>
+                    {
+                        ["studentPersonId"] = app.StudentPersonId,
+                        ["applicationId"] = app.Id,
+                        ["schemeId"] = item.FasSchemeId
+                    },
+                    StatusTransition: new SchoolAuditStatusTransition(beforeStatus, afterStatus))),
+            ct);
+    }
 
     private async Task EnsureNoDuplicateApplications(long person, IReadOnlyCollection<long> schemeIds, long? currentApplicationId, CancellationToken ct)
     {

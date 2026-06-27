@@ -10,6 +10,7 @@ using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Api;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Application.AdminPayments;
+using Moe.Modules.FasPayment.Application.Audit;
 using Moe.Modules.FasPayment.Application.Applications.Approve;
 using Moe.Modules.FasPayment.Application.Applications.GetApplicationDetail;
 using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
@@ -26,6 +27,7 @@ using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.Modules.FasPayment.IGateway.Repositories;
 using Moe.Modules.FasPayment.Infrastructure.Documents;
+using Moe.Modules.FasPayment.Infrastructure.Audit;
 using Moe.Modules.FasPayment.Infrastructure.Payments;
 using Moe.Modules.FasPayment.Infrastructure.Repositories;
 using Moe.Modules.FasPayment.Infrastructure.Stripe;
@@ -39,6 +41,7 @@ public sealed class FasPaymentModule : IModule
     {
         services.AddSingleton<IModelConfigurationContributor, FasPaymentModelConfiguration>();
         services.AddScoped<IFasSchemeRepository, FasSchemeRepository>();
+        services.AddScoped<IFasSchoolAuditResolver, FasSchoolAuditResolver>();
         services.AddScoped<IFasCourseSubsidyGateway, FasCourseSubsidyGateway>();
         services.AddScoped<ICommandHandler<CreateFasSchemeCommand, CreateFasSchemeResponse>, CreateFasSchemeHandler>();
         services.AddScoped<ICommandHandler<SaveFasSchemeDraftCommand, CreateFasSchemeResponse>, SaveFasSchemeDraftHandler>();
