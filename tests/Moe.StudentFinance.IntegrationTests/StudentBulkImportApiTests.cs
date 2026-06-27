@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Moe.Application.Abstractions.Audit;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Domain.People;
@@ -98,7 +99,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         Assert.Equal(2, await db.Set<Person>().CountAsync(x => personIds.Contains(x.Id)));
         Assert.Equal(2, await db.Set<SchoolEnrollment>().CountAsync(x => personIds.Contains(x.PersonId)));
         Assert.False(await db.Set<EducationAccount>().AnyAsync(x => personIds.Contains(x.PersonId)));
-        Assert.False(AnyAuditLogContaining(db, suffix));
+        Assert.False(AnyAuditLogDetailsContaining(db, suffix));
 
         long blankCitizenshipPersonId = result.Results.Single(x => x.RowNumber == 3).PersonId!.Value;
         Person blankCitizenshipPerson = await db.Set<Person>().SingleAsync(x => x.Id == blankCitizenshipPersonId);
@@ -314,15 +315,15 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
     }
 
-    private static bool AnyAuditLogContaining(MoeDbContext db, string value)
+    private static bool AnyAuditLogDetailsContaining(MoeDbContext db, string value)
     {
         Type entityType = typeof(Person).Assembly.GetType(
             "Moe.Modules.IdentityPlatform.Domain.Audit.AuditLog",
             throwOnError: true)!;
         IQueryable query = CreateQueryable(db, entityType);
         return query.Cast<object>().AsEnumerable().Any(x =>
-            ((string?)GetProperty(x, "ActionCode"))?.Contains("IMPORT", StringComparison.OrdinalIgnoreCase) == true
-            || ((string?)GetProperty(x, "ChangedFieldsJson"))?.Contains(value, StringComparison.OrdinalIgnoreCase) == true);
+            (string?)GetProperty(x, "ActionCode") == AuditActionCodes.StudentBulkImportCompleted
+            && ((string?)GetProperty(x, "ChangedFieldsJson"))?.Contains(value, StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private static IQueryable CreateQueryable(MoeDbContext db, Type entityType)

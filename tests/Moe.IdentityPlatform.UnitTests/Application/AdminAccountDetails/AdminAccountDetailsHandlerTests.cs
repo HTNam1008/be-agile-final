@@ -116,18 +116,18 @@ public sealed class AdminAccountDetailsHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _audit.Calls.Should().ContainSingle();
-        AuditCall call = _audit.Calls.Single();
+        _audit.SchoolCalls.Should().ContainSingle();
+        SchoolAuditContext call = _audit.SchoolCalls.Single();
         call.ActionCode.Should().Be("ACCOUNT_DETAILS_UPDATED_BY_ADMIN");
         call.EntityTypeCode.Should().Be("Person");
-        call.EntityId.Should().Be("5004");
-        using JsonDocument document = JsonDocument.Parse(call.DetailsJson!);
+        call.EntityId.Should().Be(5004);
+        call.SchoolOrganizationId.Should().Be(10);
+        using JsonDocument document = JsonDocument.Parse(call.Details!.ToJson(call.EntityId));
         JsonElement root = document.RootElement;
-        root.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo("personId", "updatedByUserId", "changedFields");
-        root.GetProperty("personId").GetInt64().Should().Be(5004);
-        root.GetProperty("updatedByUserId").GetInt64().Should().Be(42);
+        root.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo("summary", "entityId", "entityDisplayName", "changedFields");
+        root.GetProperty("entityId").GetInt64().Should().Be(5004);
         root.GetProperty("changedFields").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("classCode", "email");
-        call.DetailsJson.Should().NotContain("new@example.sg");
+        call.Details.ToJson(call.EntityId).Should().NotContain("new@example.sg");
         _unitOfWork.SaveCalls.Should().Be(1);
     }
 
@@ -254,7 +254,7 @@ public sealed class AdminAccountDetailsHandlerTests
         => new(_profiles, _accounts, _adminAccess, _clock);
 
     private UpdateAdminAccountDetailsHandler CreateUpdateHandler()
-        => new(_profiles, _accounts, _adminAccess, _currentUser, _clock, _unitOfWork, _audit);
+        => new(_profiles, _accounts, _adminAccess, _clock, _unitOfWork, _audit);
 
     private const string LongAddress =
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -375,6 +375,7 @@ public sealed class AdminAccountDetailsHandlerTests
     private sealed class FakeAuditService : IAuditService
     {
         public List<AuditCall> Calls { get; } = [];
+        public List<SchoolAuditContext> SchoolCalls { get; } = [];
         public Exception? ExceptionToThrow { get; set; }
 
         public Task RecordAsync(
@@ -390,6 +391,19 @@ public sealed class AdminAccountDetailsHandlerTests
             }
 
             Calls.Add(new AuditCall(actionCode, entityTypeCode, entityId, detailsJson));
+            return Task.CompletedTask;
+        }
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+        {
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
+            SchoolCalls.Add(context);
             return Task.CompletedTask;
         }
     }

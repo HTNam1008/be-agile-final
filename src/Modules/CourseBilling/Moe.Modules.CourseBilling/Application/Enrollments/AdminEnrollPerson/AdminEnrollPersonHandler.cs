@@ -1,5 +1,7 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
@@ -14,7 +16,9 @@ internal sealed class AdminEnrollPersonHandler(
     ICoursePaymentPlanGateway paymentPlans,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
-    IClock clock) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
+    IClock clock,
+    IAuditService audit,
+    IUnitOfWork unitOfWork) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         AdminEnrollPersonCommand command,
@@ -112,6 +116,7 @@ internal sealed class AdminEnrollPersonHandler(
         if (course.IsDraft || plan is null)
         {
             await enrollments.AddEnrollmentAsync(enrollmentResult.Value, cancellationToken);
+            await RecordEnrollmentAuditAsync(course, enrollmentResult.Value, cancellationToken);
             return Result<CourseEnrollmentResponse>.Success(ToPendingResponse(enrollmentResult.Value));
         }
 
@@ -142,7 +147,31 @@ internal sealed class AdminEnrollPersonHandler(
             [],
             cancellationToken);
 
+        await RecordEnrollmentAuditAsync(course, billingResult.Enrollment, cancellationToken);
         return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
+    }
+
+    private async Task RecordEnrollmentAuditAsync(
+        Course course,
+        CourseEnrollment enrollment,
+        CancellationToken cancellationToken)
+    {
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.CourseEnrollmentCreatedByAdmin,
+                "CourseEnrollment",
+                enrollment.Id,
+                course.OrganizationId,
+                new SchoolAuditDetails(
+                    "Student manually enrolled into course",
+                    EntityDisplayName: course.CourseName,
+                    RelatedIds: new Dictionary<string, long>
+                    {
+                        ["studentPersonId"] = enrollment.PersonId,
+                        ["courseId"] = course.Id
+                    })),
+            cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private static CourseEnrollmentResponse ToResponse(CourseEnrollmentBillingResult result)

@@ -103,8 +103,8 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             grantCode = $"AI-FAS-NO-GRANT-{suffix}",
             name = $"AI FAS No Match {suffix}",
             description = "AI copilot no-match scheme",
-            startDate = new DateOnly(2026, 1, 1),
-            endDate = new DateOnly(2026, 12, 31),
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
@@ -144,8 +144,8 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             grantCode = $"AI-FAS-GRANT-{suffix}",
             name = $"AI FAS {suffix}",
             description = "AI copilot integration scheme",
-            startDate = new DateOnly(2026, 1, 1),
-            endDate = new DateOnly(2026, 12, 31),
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]

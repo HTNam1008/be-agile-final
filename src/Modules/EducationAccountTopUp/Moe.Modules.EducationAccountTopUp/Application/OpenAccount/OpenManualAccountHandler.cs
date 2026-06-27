@@ -23,7 +23,8 @@ internal sealed class OpenManualAccountHandler(
         OpenManualAccountCommand command,
         CancellationToken cancellationToken)
     {
-        if (await people.FindAsync(command.PersonId, cancellationToken) is null)
+        PersonSummary? person = await people.FindAsync(command.PersonId, cancellationToken);
+        if (person is null)
         {
             return Result<OpenManualAccountResponse>.Failure(AccountErrors.InvalidPerson);
         }
@@ -67,6 +68,24 @@ internal sealed class OpenManualAccountHandler(
             accountResult.Value.Id.ToString(),
             detailsJson,
             cancellationToken);
+
+        if (person.OrganizationId is long schoolOrganizationId)
+        {
+            await auditService.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.EducationAccountCreatedManually,
+                    "EducationAccount",
+                    accountResult.Value.Id,
+                    schoolOrganizationId,
+                    new SchoolAuditDetails(
+                        "Education account opened manually",
+                        RelatedIds: new Dictionary<string, long>
+                        {
+                            ["studentPersonId"] = command.PersonId
+                        },
+                        ReasonCode: command.ReasonCode)),
+                cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

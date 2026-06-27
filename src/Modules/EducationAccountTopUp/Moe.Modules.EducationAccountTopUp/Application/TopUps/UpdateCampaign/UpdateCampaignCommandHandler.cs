@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
@@ -14,7 +15,8 @@ internal sealed class UpdateCampaignCommandHandler(
     IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
-    IClock clock) : ICommandHandler<UpdateCampaignCommand>
+    IClock clock,
+    IAuditService audit) : ICommandHandler<UpdateCampaignCommand>
 {
     public async Task<Result> Handle(UpdateCampaignCommand command, CancellationToken cancellationToken)
     {
@@ -69,7 +71,17 @@ internal sealed class UpdateCampaignCommandHandler(
             currentUserId: currentUser.UserAccountId ?? 0,
             nowUtc: clock.UtcNow.UtcDateTime);
 
-
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.TopUpCampaignUpdated,
+                "TopUpCampaign",
+                campaign.Id,
+                campaign.OrganizationId,
+                new SchoolAuditDetails(
+                    "Top-up campaign edited",
+                    EntityDisplayName: campaign.CampaignName,
+                    ChangedFields: ["campaignName", "description", "defaultTopUpAmount", "reason", "schedule"])),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

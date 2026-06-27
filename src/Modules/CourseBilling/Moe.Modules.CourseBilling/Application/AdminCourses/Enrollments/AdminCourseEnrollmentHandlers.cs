@@ -1,4 +1,6 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
@@ -28,7 +30,9 @@ internal sealed class ListAdminCourseEnrollmentsQueryHandler(AdminCourseAccess a
 
 internal sealed class RemoveAdminCourseEnrollmentCommandHandler(
     AdminCourseAccess access,
-    IFasCourseSubsidyGateway fasSubsidies)
+    IFasCourseSubsidyGateway fasSubsidies,
+    IAuditService audit,
+    IUnitOfWork unitOfWork)
     : ICommandHandler<RemoveAdminCourseEnrollmentCommand, AdminCourseEnrollmentDto>
 {
     public async Task<Result<AdminCourseEnrollmentDto>> Handle(
@@ -62,6 +66,23 @@ internal sealed class RemoveAdminCourseEnrollmentCommandHandler(
             enrollment.Id,
             access.UtcNow(),
             cancellationToken);
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.CourseEnrollmentRemovedByAdmin,
+                "CourseEnrollment",
+                enrollment.Id,
+                course.Value.OrganizationId,
+                new SchoolAuditDetails(
+                    "Student removed from course",
+                    EntityDisplayName: course.Value.CourseName,
+                    RelatedIds: new Dictionary<string, long>
+                    {
+                        ["studentPersonId"] = enrollment.PersonId,
+                        ["courseId"] = enrollment.CourseId
+                    })),
+            cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<AdminCourseEnrollmentDto>.Success(new AdminCourseEnrollmentDto(
             enrollment.Id,

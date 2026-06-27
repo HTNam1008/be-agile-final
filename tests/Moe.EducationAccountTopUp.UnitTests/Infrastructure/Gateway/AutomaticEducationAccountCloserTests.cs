@@ -215,6 +215,7 @@ public sealed class AutomaticEducationAccountCloserTests
     private sealed class FakeAuditService : IAuditService
     {
         public List<AuditCall> Calls { get; } = [];
+        public List<SchoolAuditContext> SchoolCalls { get; } = [];
 
         public Task RecordAsync(
             string actionCode,
@@ -224,6 +225,14 @@ public sealed class AutomaticEducationAccountCloserTests
             CancellationToken cancellationToken = default)
         {
             Calls.Add(new AuditCall(actionCode, entityTypeCode, entityId, detailsJson));
+            return Task.CompletedTask;
+        }
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+        {
+            SchoolCalls.Add(context);
             return Task.CompletedTask;
         }
     }
