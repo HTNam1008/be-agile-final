@@ -115,7 +115,8 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             "Moe.Modules.IdentityPlatform.Domain.Audit.AuditLog",
             x => (string)GetProperty(x, "ActionCode")! == AuditActionCodes.EducationAccountCreatedManually
                 && (string)GetProperty(x, "EntityTypeCode")! == "EducationAccount"
-                && (long?)GetProperty(x, "EntityId") == account.Id);
+                && (long?)GetProperty(x, "EntityId") == account.Id
+                && (string)GetProperty(x, "AuditScopeCode")! != "SCHOOL");
 
         Assert.Contains($"\"personId\":{personId}", (string)GetProperty(auditLog, "ChangedFieldsJson")!);
     }

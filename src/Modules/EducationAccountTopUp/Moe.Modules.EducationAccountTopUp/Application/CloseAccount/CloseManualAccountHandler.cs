@@ -78,6 +78,25 @@ internal sealed class CloseManualAccountHandler(
             detailsJson,
             cancellationToken);
 
+        if (person.OrganizationId is long schoolOrganizationId)
+        {
+            await auditService.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.EducationAccountClosedManually,
+                    "EducationAccount",
+                    account.Id,
+                    schoolOrganizationId,
+                    new SchoolAuditDetails(
+                        "Education account closed manually",
+                        RelatedIds: new Dictionary<string, long>
+                        {
+                            ["studentPersonId"] = account.PersonId
+                        },
+                        StatusTransition: new SchoolAuditStatusTransition(null, account.StatusCode),
+                        ReasonCode: command.ReasonCode)),
+                cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<CloseManualAccountResponse>.Success(new CloseManualAccountResponse(

@@ -37,6 +37,34 @@ internal sealed class AuditService(
         return Task.CompletedTask;
     }
 
+    public Task RecordSchoolActionAsync(
+        SchoolAuditContext context,
+        CancellationToken cancellationToken = default)
+    {
+        if (context.SchoolOrganizationId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(context), "School organization id is required for school audit.");
+        }
+
+        string actorTypeCode = ResolveActorTypeCode(currentUser);
+        DateTime occurredAtUtc = context.OccurredAtUtc ?? clock.UtcNow.UtcDateTime;
+
+        AuditLog auditLog = AuditLog.Record(
+            auditScopeCode: "SCHOOL",
+            organizationId: context.SchoolOrganizationId,
+            actorTypeCode: actorTypeCode,
+            actorLoginAccountId: currentUser.UserAccountId,
+            personId: currentUser.PersonId,
+            actionCode: context.ActionCode,
+            entityTypeCode: context.EntityTypeCode,
+            entityId: context.EntityId,
+            changedFieldsJson: context.Details?.ToJson(context.EntityId),
+            occurredAtUtc: occurredAtUtc);
+
+        dbContext.Set<AuditLog>().Add(auditLog);
+        return Task.CompletedTask;
+    }
+
     private static string ResolveActorTypeCode(ICurrentUser currentUser)
     {
         if (!currentUser.IsAuthenticated && currentUser.UserAccountId is null)

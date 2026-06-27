@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
@@ -11,7 +12,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 internal sealed class UpsertCampaignRulesCommandHandler(
     ITopUpCampaignRepository campaigns,
     IUnitOfWork unitOfWork,
-    IAdminAccessControl adminAccess) : ICommandHandler<UpsertCampaignRulesCommand>
+    IAdminAccessControl adminAccess,
+    IAuditService audit) : ICommandHandler<UpsertCampaignRulesCommand>
 {
     public async Task<Result> Handle(UpsertCampaignRulesCommand command, CancellationToken cancellationToken)
     {
@@ -50,6 +52,19 @@ internal sealed class UpsertCampaignRulesCommandHandler(
 
             await campaigns.AddRuleAsync(rule, cancellationToken);
         }
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.TopUpRulesUpdated,
+                "TopUpCampaign",
+                campaign.Id,
+                campaign.OrganizationId,
+                new SchoolAuditDetails(
+                    "Top-up rule edits",
+                    EntityDisplayName: campaign.CampaignName,
+                    RelatedIds: new Dictionary<string, long> { ["campaignId"] = campaign.Id },
+                    Count: command.Rules.Count)),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -8,4 +8,8 @@ public interface IAuditService
         string entityId,
         string? detailsJson = null,
         CancellationToken cancellationToken = default);
+
+    Task RecordSchoolActionAsync(
+        SchoolAuditContext context,
+        CancellationToken cancellationToken = default);
 }

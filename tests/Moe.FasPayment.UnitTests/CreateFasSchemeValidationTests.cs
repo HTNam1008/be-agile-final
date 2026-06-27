@@ -38,9 +38,17 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
-    public void Duplicate_or_nonpositive_courses_fail()
+    public void Start_date_before_today_fails()
     {
-        _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] }).IsValid.Should().BeFalse();
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+        DateOnly yesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        _validator.Validate(source with { StartDate = yesterday, EndDate = yesterday.AddDays(30) }).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Duplicate_or_nonpositive_courses_fail_while_global_scheme_is_allowed()
+    {
+        _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] }).IsValid.Should().BeTrue();
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [1, 1] }).IsValid.Should().BeFalse();
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [0] }).IsValid.Should().BeFalse();
     }
@@ -68,6 +76,8 @@ public sealed class CreateFasSchemeValidationTests
         CreateFasTierRequest tier = source.Tiers[0];
         _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, null, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
         _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 19, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, -1, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 13, 121, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -105,10 +115,21 @@ public sealed class CreateFasSchemeValidationTests
         _validator.Validate(source with { Tiers = [source.Tiers[0] with { GrantCode = "OLD", SubsidyType = "FIXED" }] }).IsValid.Should().BeFalse();
     }
 
+    [Fact]
+    public void Duplicate_template_types_and_tier_labels_fail()
+    {
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+        _validator.Validate(source with { CriteriaTemplate = [new("AGE", "AND", 1), new("AGE", null, 2)] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [source.Tiers[0], source.Tiers[0] with { DisplayOrder = 2 }] }).IsValid.Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(null, true)]
+    [InlineData("DRAFT", true)]
     [InlineData("ACTIVE", true)]
     [InlineData("RETIRED", true)]
+    [InlineData("DISABLED", true)]
+    [InlineData("DELETED", false)]
     [InlineData("PUBLISHED", false)]
     public void List_status_validation_is_explicit(string? status, bool valid)
         => new ListFasSchemesRequestValidator().Validate(new ListFasSchemesRequest(status, null)).IsValid.Should().Be(valid);
