@@ -86,7 +86,7 @@ internal static class PaymentSqlWriter
                 OUTPUT INSERTED.[PaymentId]
                 VALUES
                     (@BillId, @PayerPersonId, @PaymentNumber, @PaymentAmount, @SuccessfulAmount,
-                     'COMPLETED', @ReceiptNumber, @IdempotencyKey, @InitiatedAt, @CompletedAt);
+                     'SUCCESSFUL', @ReceiptNumber, @IdempotencyKey, @InitiatedAt, @CompletedAt);
                 """,
                 cancellationToken,
                 Param("@BillId", bill.BillId),
@@ -217,7 +217,7 @@ internal static class PaymentSqlWriter
                 receiptNumber,
                 paymentMethod,
                 paymentAmount,
-                "COMPLETED",
+                "SUCCESSFUL",
                 state.OutstandingAmount,
                 state.BillStatusCode,
                 balanceAfter));

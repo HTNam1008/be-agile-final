@@ -45,7 +45,6 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
             where billIds.Contains(allocation.BillId)
                 && allocation.AllocationStatusCode == "APPLIED"
                 && (payment.PaymentStatusCode == PaymentStatusCodes.Successful
-                    || payment.PaymentStatusCode == PaymentStatusCodes.Completed
                     || payment.PaymentStatusCode == PaymentStatusCodes.PartiallyRefunded)
             select new
             {
