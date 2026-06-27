@@ -61,4 +61,3 @@ public sealed class SchoolAuditLogsController(ISchoolAuditLogReader reader) : Co
     private IActionResult Failure(string code, string message, int statusCode)
         => ApiResponseFactory.Failure(new Error(code, message), statusCode, HttpContext.TraceIdentifier);
 }
-

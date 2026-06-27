@@ -3528,6 +3528,12 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<long?>("BillingStatementId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("CheckoutSessionTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
                     b.Property<string>("CheckoutStatusCode")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -3635,6 +3641,24 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasIndex("BillId", "PersonId");
 
                     b.ToTable("PaymentCheckoutSession", "payment");
+
+                    b.HasDiscriminator<string>("CheckoutSessionTypeCode").HasValue("PaymentCheckoutSession");
+
+                    b.UseTphMappingStrategy();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.BillPaymentCheckoutSession", b =>
+                {
+                    b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
+
+                    b.HasDiscriminator().HasValue("BILL");
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.StatementPaymentCheckoutSession", b =>
+                {
+                    b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
+
+                    b.HasDiscriminator().HasValue("STATEMENT");
                 });
 
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.PaymentPart", b =>
