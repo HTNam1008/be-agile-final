@@ -1,4 +1,3 @@
-using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.SharedKernel.Results;
 
@@ -10,7 +9,7 @@ internal interface IPaymentCheckoutRepository
     Task AddPlanAsync(CoursePaymentPlan plan, CancellationToken cancellationToken);
     Task<CoursePaymentPlan?> FindPlanAsync(long planId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<CoursePaymentPlan>> ListActivePlansAsync(long courseId, CancellationToken cancellationToken);
-    Task<PaymentCheckoutSession?> FindOpenCheckoutAsync(long billId, long personId, CancellationToken cancellationToken);
+    Task<BillPaymentCheckoutSession?> FindOpenCheckoutAsync(long billId, long personId, CancellationToken cancellationToken);
     Task<PaymentCheckoutSession?> FindCheckoutAsync(long checkoutId, long personId, CancellationToken cancellationToken);
     Task<PaymentCheckoutSession?> FindCheckoutAsync(long checkoutId, CancellationToken cancellationToken);
     Task<PaymentCheckoutSession?> FindCheckoutByProviderSessionAsync(string providerSessionId, CancellationToken cancellationToken);
@@ -39,7 +38,7 @@ internal interface IPaymentCheckoutRepository
         long personId,
         long excludingPaymentId,
         CancellationToken cancellationToken);
-    Task<PaymentCheckoutSession?> FindCheckoutByPaymentAsync(
+    Task<StatementPaymentCheckoutSession?> FindCheckoutByPaymentAsync(
         long paymentId,
         CancellationToken cancellationToken);
     Task<Payment?> FindPaymentByChargeAsync(string providerChargeId, CancellationToken cancellationToken);
@@ -105,15 +104,6 @@ internal sealed record UserFasSettlement(
     DateTime CreatedAtUtc,
     DateTime? RedeemedAtUtc);
 
-internal interface ILegacyCoursePaymentGateway
-{
-    Task<OutstandingBillsResponse> ReadOutstandingBillsAsync(long personId, CancellationToken cancellationToken);
-    Task<Result<PayBillResponse>> PayBillAsync(
-        long personId,
-        long? userAccountId,
-        PayBillRequest request,
-        CancellationToken cancellationToken);
-}
 
 internal sealed record StripeCheckoutGatewayRequest(
     string IdempotencyKey,

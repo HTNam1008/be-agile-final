@@ -13,6 +13,9 @@ public partial class ClearPaymentDataForStatusUnification : Migration
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.Sql("""
+            SET QUOTED_IDENTIFIER ON;
+            SET ANSI_NULLS ON;
+
             UPDATE [account].[AccountHold]
             SET [PaymentPartId] = NULL
             WHERE [PaymentPartId] IS NOT NULL;

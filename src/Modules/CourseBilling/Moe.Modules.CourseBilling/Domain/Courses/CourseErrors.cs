@@ -7,6 +7,7 @@ internal static class CourseErrors
     public static readonly Error AdminRequired = new("COURSE.ADMIN_REQUIRED", "Only ADMIN can access this course management workflow.");
     public static readonly Error CourseNotFound = new("COURSE.NOT_FOUND", "Course was not found.");
     public static readonly Error CourseDisabled = new("COURSE.DISABLED", "Disabled courses cannot be modified.");
+    public static readonly Error CourseNotDisabled = new("COURSE.NOT_DISABLED", "Only disabled courses can be enabled.");
     public static readonly Error CourseNotDraft = new("COURSE.NOT_DRAFT", "Only draft courses can be published.");
     public static readonly Error DraftRequiredForRemoval = new("COURSE.DRAFT_REQUIRED_FOR_REMOVAL", "Only draft courses can be removed.");
     public static readonly Error CourseNotPublished = new("COURSE.NOT_PUBLISHED", "Course must be published before students can be assigned.");
