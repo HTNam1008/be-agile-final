@@ -7,7 +7,7 @@ internal sealed record StudentProfileSummary(
     string OfficialFullName,
     DateOnly DateOfBirth,
     string NationalityCode,
-    string CitizenshipStatusCode,
+    string? CitizenshipStatusCode,
     string? OfficialEmail,
     string? PreferredEmail,
     string? OfficialMobile,

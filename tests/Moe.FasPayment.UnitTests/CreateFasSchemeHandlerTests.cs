@@ -24,7 +24,7 @@ public sealed class CreateFasSchemeHandlerTests
         _clock.SetupGet(x => x.UtcNow).Returns(Now);
         _courses.Setup(x => x.FindUnknownCourseIdsAsync(It.IsAny<IReadOnlyCollection<long>>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _repository.Setup(x => x.CreateAsync(It.IsAny<CreateFasSchemeRequest>(), It.IsAny<long>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CreateFasSchemeResponse(1, "MOE-FAS-2026", "FAS-2026", "ACTIVE"));
+            .ReturnsAsync(new CreateFasSchemeResponse(1, "MOE-FAS-2026", "GRANT-MOE-FAS-2026", "ACTIVE"));
     }
 
     [Fact]
@@ -36,7 +36,12 @@ public sealed class CreateFasSchemeHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _courses.Verify(x => x.FindUnknownCourseIdsAsync(It.Is<IReadOnlyCollection<long>>(ids => ids.SequenceEqual(new long[] { 5, 7 })), It.IsAny<CancellationToken>()));
-        _repository.Verify(x => x.CreateAsync(request, 77, Now.UtcDateTime, It.IsAny<CancellationToken>()));
+        _repository.Verify(x => x.GrantCodeExistsAsync("GRANT-MOE-FAS-2026", It.IsAny<CancellationToken>()));
+        _repository.Verify(x => x.CreateAsync(
+            It.Is<CreateFasSchemeRequest>(payload => payload.SchemeCode == request.SchemeCode && payload.GrantCode == "GRANT-MOE-FAS-2026"),
+            77,
+            Now.UtcDateTime,
+            It.IsAny<CancellationToken>()));
     }
 
     [Theory]

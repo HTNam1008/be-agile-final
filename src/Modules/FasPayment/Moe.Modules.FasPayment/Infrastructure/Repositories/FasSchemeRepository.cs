@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.IGateway.Repositories;
@@ -34,6 +35,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
 
     private async Task<CreateFasSchemeResponse> SaveAsync(long? schemeId, CreateFasSchemeRequest request, long actorId, DateTime utcNow, bool activate, CancellationToken cancellationToken)
     {
+        CreateFasSchemeRequest normalizedRequest = FasSchemeRequestDefaults.WithSystemGrantCode(request);
         IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
         try
         {
@@ -47,26 +49,26 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
                 if (schemeId.HasValue)
                 {
                     scheme = await dbContext.Set<FasScheme>().SingleAsync(x => x.Id == schemeId.Value, cancellationToken);
-                    scheme.UpdateDraft(request.SchemeCode, request.GrantCode, request.Name, request.Description, request.StartDate, request.EndDate, actorId, utcNow);
+                    scheme.UpdateEditable(normalizedRequest.SchemeCode, normalizedRequest.GrantCode, normalizedRequest.Name, normalizedRequest.Description, normalizedRequest.StartDate, normalizedRequest.EndDate, actorId, utcNow);
                     await RemoveSchemeChildrenAsync(scheme.Id, cancellationToken);
                 }
                 else
                 {
-                    scheme = FasScheme.CreateDraft(request.SchemeCode, request.GrantCode, request.Name, request.Description,
-                        request.StartDate, request.EndDate, actorId, utcNow);
+                    scheme = FasScheme.CreateDraft(normalizedRequest.SchemeCode, normalizedRequest.GrantCode, normalizedRequest.Name, normalizedRequest.Description,
+                        normalizedRequest.StartDate, normalizedRequest.EndDate, actorId, utcNow);
                     dbContext.Add(scheme);
                     await dbContext.SaveChangesAsync(cancellationToken);
                 }
 
-                foreach (long courseId in request.CourseIds.Distinct()) dbContext.Add(FasSchemeCourse.Create(scheme.Id, courseId, utcNow));
+                foreach (long courseId in normalizedRequest.CourseIds.Distinct()) dbContext.Add(FasSchemeCourse.Create(scheme.Id, courseId, utcNow));
                 await dbContext.SaveChangesAsync(cancellationToken);
 
-                foreach (CreateFasTierRequest tierRequest in request.Tiers.OrderBy(x => x.DisplayOrder))
+                foreach (CreateFasTierRequest tierRequest in normalizedRequest.Tiers.OrderBy(x => x.DisplayOrder))
                 {
-                    FasTier tier = FasTier.Create(scheme.Id, tierRequest.Label, request.SubsidyType, tierRequest.SubsidyValue, tierRequest.DisplayOrder, utcNow);
+                    FasTier tier = FasTier.Create(scheme.Id, tierRequest.Label, normalizedRequest.SubsidyType, tierRequest.SubsidyValue, tierRequest.DisplayOrder, utcNow);
                     dbContext.Add(tier);
                     await dbContext.SaveChangesAsync(cancellationToken);
-                    foreach (FasCriteriaTemplateItem template in request.CriteriaTemplate.OrderBy(x => x.DisplayOrder))
+                    foreach (FasCriteriaTemplateItem template in normalizedRequest.CriteriaTemplate.OrderBy(x => x.DisplayOrder))
                     {
                         FasTierCriteriaValue value = tierRequest.CriteriaValues.Single(x => x.DisplayOrder == template.DisplayOrder);
                         FasTierCriteria criteria = FasTierCriteria.Create(tier.Id, template.CriteriaType, value.NumberFrom, value.NumberTo,
@@ -82,7 +84,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
                     }
                 }
 
-                if (activate) scheme.Activate(actorId, utcNow);
+                if (activate && scheme.StatusCode == "DRAFT") scheme.Activate(actorId, utcNow);
                 await dbContext.SaveChangesAsync(cancellationToken);
                 if (transaction is not null) await transaction.CommitAsync(cancellationToken);
                 return new CreateFasSchemeResponse(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.StatusCode);
@@ -153,20 +155,64 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         else if (transition == "DISABLE") scheme.Disable(actorId, utcNow);
         else scheme.Delete(actorId, utcNow);
 
+        if (transition is "DISABLE" or "DELETE")
+        {
+            await CancelUnavailableApplicationSelectionsAsync(
+                scheme.Id,
+                actorId,
+                utcNow,
+                transition == "DISABLE" ? "FAS scheme disabled by admin" : "FAS scheme deleted by admin",
+                cancellationToken);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return new CreateFasSchemeResponse(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.StatusCode);
+    }
+
+    private async Task CancelUnavailableApplicationSelectionsAsync(
+        long schemeId,
+        long actorId,
+        DateTime utcNow,
+        string note,
+        CancellationToken cancellationToken)
+    {
+        var selections = await dbContext.Set<FasApplicationScheme>()
+            .Where(x => x.FasSchemeId == schemeId && (x.StatusCode == "DRAFT" || x.StatusCode == "PENDING"))
+            .ToListAsync(cancellationToken);
+
+        foreach (FasApplicationScheme selection in selections)
+        {
+            string oldStatus = selection.StatusCode;
+            selection.CancelAsUnavailable();
+            dbContext.Add(FasStatusHistory.Create(
+                selection.FasApplicationId,
+                selection.Id,
+                oldStatus,
+                "CANCELLED",
+                note,
+                actorId,
+                "ADMIN",
+                utcNow));
+        }
     }
 
     public async Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken)
     {
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
         if (!string.IsNullOrWhiteSpace(status)) { string normalized = status.Trim().ToUpperInvariant(); query = query.Where(x => x.StatusCode == normalized); }
+        else query = query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
         if (!string.IsNullOrWhiteSpace(search)) { string value = search.Trim(); query = query.Where(x => x.SchemeCode.Contains(value) || x.GrantCode.Contains(value) || x.Name.Contains(value)); }
         var schemes = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
         long[] ids = schemes.Select(x => x.Id).ToArray();
         var courses = await dbContext.Set<FasSchemeCourse>().AsNoTracking().Where(x => ids.Contains(x.FasSchemeId)).ToListAsync(cancellationToken);
+        var applicationCounts = await dbContext.Set<FasApplicationScheme>().AsNoTracking()
+            .Where(x => ids.Contains(x.FasSchemeId))
+            .GroupBy(x => x.FasSchemeId)
+            .Select(x => new { SchemeId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.SchemeId, x => x.Count, cancellationToken);
         return new FasSchemeListResponse(schemes.Select(x => new FasSchemeListItem(x.Id, x.SchemeCode, x.GrantCode, x.Name,
-            x.Description, x.StartDate, x.EndDate, x.StatusCode, courses.Where(c => c.FasSchemeId == x.Id).Select(c => c.CourseId).Order().ToArray())).ToArray());
+            x.Description, x.StartDate, x.EndDate, x.StatusCode, courses.Where(c => c.FasSchemeId == x.Id).Select(c => c.CourseId).Order().ToArray(),
+            applicationCounts.GetValueOrDefault(x.Id))).ToArray());
     }
 
     public async Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken)

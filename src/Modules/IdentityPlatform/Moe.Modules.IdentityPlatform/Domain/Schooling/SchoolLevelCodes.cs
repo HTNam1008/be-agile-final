@@ -13,6 +13,9 @@ public static class SchoolLevelCodes
     public const string Secondary3 = "SEC_3";
     public const string Secondary4 = "SEC_4";
     public const string Secondary5 = "SEC_5";
+    public const string Bachelor = "BACHELOR";
+    public const string Master = "MASTER";
+    public const string Phd = "PHD";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -26,6 +29,9 @@ public static class SchoolLevelCodes
         Secondary2,
         Secondary3,
         Secondary4,
-        Secondary5
+        Secondary5,
+        Bachelor,
+        Master,
+        Phd
     ];
 }

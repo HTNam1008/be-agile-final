@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -36,6 +37,7 @@ public sealed class AdminStudentListReaderTests
 
         page.TotalCount.Should().Be(2);
         page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1001L, 1002L]);
+        page.Items.Should().OnlyContain(x => x.NationalityCode == "SG");
     }
 
     [Fact]
@@ -138,23 +140,65 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
-    public async Task ListAsync_FilterByLevelAndClass_Composes()
+    public async Task ListAsync_FilterByMultipleLevelsAndClass_Composes()
     {
         using MoeDbContext dbContext = CreateDbContext();
         SeedStudent(dbContext, 1014, "Level Class Match", "S1234014P", "CITIZEN", 10, "SEC_2", "2A");
         SeedStudent(dbContext, 1015, "Level Only", "S1234015Q", "CITIZEN", 10, "SEC_2", "2B");
+        SeedStudent(dbContext, 1031, "Second Level Match", "S1234031H", "CITIZEN", 10, "SEC_3", "2A");
+        SeedStudent(dbContext, 1032, "Wrong Level", "S1234032J", "CITIZEN", 10, "SEC_4", "2A");
         await dbContext.SaveChangesAsync();
         AdminStudentListReader reader = CreateReader(dbContext);
 
         AdminStudentListPage page = await reader.ListAsync(
-            AdminStudentListCriteria.Default(levelCode: "SEC_2", classCode: "2A", page: 1, pageSize: 20),
+            AdminStudentListCriteria.Default(levelCodes: ["SEC_2", "SEC_3"], classCode: "2A", page: 1, pageSize: 20),
             scopedOrganizationIds: [10],
             hasGlobalAccess: false,
             Today,
             CancellationToken.None);
 
-        page.Items.Should().ContainSingle();
-        page.Items.Single().PersonId.Should().Be(1014);
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1014L, 1031L]);
+    }
+
+    [Fact]
+    public async Task ListAsync_FilterByCommaSeparatedLevelsAndClass_Composes()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1033, "Comma Level Match", "S1234033K", "CITIZEN", 10, "SEC_2", "2A");
+        SeedStudent(dbContext, 1034, "Comma Second Match", "S1234034L", "CITIZEN", 10, "SEC_3", "2A");
+        SeedStudent(dbContext, 1035, "Comma Wrong Class", "S1234035M", "CITIZEN", 10, "SEC_2", "2B");
+        SeedStudent(dbContext, 1036, "Comma Wrong Level", "S1234036N", "CITIZEN", 10, "SEC_4", "2A");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(levelCodes: ["SEC_2, SEC_3"], classCode: "2A", page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1033L, 1034L]);
+    }
+
+    [Fact]
+    public async Task ListAsync_FilterByHigherEducationLevels_Composes()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1037, "Bachelor Match", "S1234037P", "CITIZEN", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1038, "Master Match", "S1234038Q", "CITIZEN", 10, "MASTER", "PG");
+        SeedStudent(dbContext, 1039, "Phd Other", "S1234039R", "CITIZEN", 10, "PHD", "DR");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(levelCodes: ["BACHELOR,MASTER"], page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1037L, 1038L]);
     }
 
     [Fact]
@@ -204,22 +248,22 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
-    public async Task ListAsync_FilterByPermanentResident_ReturnsEmptyWhenNoPrDataExists()
+    public async Task ListAsync_ReturnsSchoolNameFromEnrollmentOrganization()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        SeedStudent(dbContext, 1020, "Citizen Only", "S1234020W", "CITIZEN", 10, "SEC_1", "1A");
+        SeedStudent(dbContext, 1020, "School Named", "S1234020W", "PR", 10, "SEC_1", "1A");
         await dbContext.SaveChangesAsync();
         AdminStudentListReader reader = CreateReader(dbContext);
 
         AdminStudentListPage page = await reader.ListAsync(
-            AdminStudentListCriteria.Default(residency: AdminStudentResidencyFilter.PermanentResident, page: 1, pageSize: 20),
+            AdminStudentListCriteria.Default(page: 1, pageSize: 20),
             scopedOrganizationIds: [10],
             hasGlobalAccess: false,
             Today,
             CancellationToken.None);
 
-        page.TotalCount.Should().Be(0);
-        page.Items.Should().BeEmpty();
+        page.Items.Should().ContainSingle();
+        page.Items.Single().SchoolName.Should().Be("School 10");
     }
 
     [Fact]
@@ -305,6 +349,23 @@ public sealed class AdminStudentListReaderTests
         classes.Should().BeEquivalentTo("1A", "1B");
     }
 
+    [Fact]
+    public async Task ListClassesAsync_ForHigherEducationLevelWithoutClassSubdivision_ReturnsEmpty()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1040, "Bachelor No Class", "S1234040S", "CITIZEN", 10, "BACHELOR", "");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        IReadOnlyList<string> classes = await reader.ListClassesAsync(
+            organizationId: 10,
+            levelCode: "BACHELOR",
+            Today,
+            CancellationToken.None);
+
+        classes.Should().BeEmpty();
+    }
+
     private static readonly DateOnly Today = new(2026, 6, 22);
 
     private static AdminStudentListReader CreateReader(
@@ -338,6 +399,7 @@ public sealed class AdminStudentListReaderTests
         string status = "ACTIVE",
         DateOnly? endDate = null)
     {
+        EnsureSchool(dbContext, organizationId);
         SeedPersonOnly(dbContext, personId, fullName, nricMasked, residencyCode);
 
         SchoolEnrollment enrollment = new(
@@ -354,6 +416,22 @@ public sealed class AdminStudentListReaderTests
         SetProperty(enrollment, nameof(SchoolEnrollment.SchoolingStatusCode), status);
         SetProperty(enrollment, nameof(SchoolEnrollment.EndDate), endDate);
         dbContext.Set<SchoolEnrollment>().Add(enrollment);
+    }
+
+    private static void EnsureSchool(MoeDbContext dbContext, long organizationId)
+    {
+        if (dbContext.Set<OrganizationUnit>().Local.Any(x => x.Id == organizationId))
+        {
+            return;
+        }
+
+        OrganizationUnit school = new(
+            $"SCH-{organizationId}",
+            $"School {organizationId}",
+            "SCHOOL",
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        SetId(school, organizationId);
+        dbContext.Set<OrganizationUnit>().Add(school);
     }
 
     private static void SeedPersonOnly(

@@ -64,7 +64,8 @@ public sealed record UserPaymentHistoryResponse(
     DateTime? CompletedAtUtc,
     DateTime? FailedAtUtc,
     IReadOnlyCollection<UserPaymentHistoryPartResponse> Parts,
-    IReadOnlyCollection<UserPaymentHistoryRefundResponse> Refunds);
+    IReadOnlyCollection<UserPaymentHistoryRefundResponse> Refunds,
+    IReadOnlyCollection<UserPaymentHistoryFasSettlementResponse> FasSettlements);
 
 public sealed record UserPaymentHistoryPartResponse(
     long PaymentPartId,
@@ -93,3 +94,18 @@ public sealed record UserPaymentHistoryRefundResponse(
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
     string? FailureReason);
+
+public sealed record UserPaymentHistoryFasSettlementResponse(
+    long FasVoucherRedemptionId,
+    long FasApplicationSchemeId,
+    long CourseId,
+    long CourseEnrollmentId,
+    long BillId,
+    string? BillNumber,
+    string? CourseCode,
+    string? CourseName,
+    string? SchemeName,
+    decimal AppliedAmount,
+    string StatusCode,
+    DateTime CreatedAtUtc,
+    DateTime? RedeemedAtUtc);
