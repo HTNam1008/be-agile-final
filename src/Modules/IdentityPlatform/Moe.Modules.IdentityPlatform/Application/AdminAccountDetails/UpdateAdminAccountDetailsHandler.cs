@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
@@ -14,7 +13,6 @@ internal sealed class UpdateAdminAccountDetailsHandler(
     IAdminAccountDetailsRepository accountDetails,
     IEducationAccountLookupGateway educationAccounts,
     IAdminAccessControl adminAccess,
-    ICurrentUser currentUser,
     IClock clock,
     IUnitOfWork unitOfWork,
     IAuditService audit) : ICommandHandler<UpdateAdminAccountDetailsCommand, AdminAccountDetailsResponse>
@@ -70,20 +68,20 @@ internal sealed class UpdateAdminAccountDetailsHandler(
             return Result<AdminAccountDetailsResponse>.Failure(IdentityErrors.EducationAccountNotFound);
         }
 
-        long? updatedByUserId = currentUser.UserAccountId;
-        string detailsJson = JsonSerializer.Serialize(new
+        if (currentProfile.SchoolOrganizationId is long schoolOrganizationId)
         {
-            personId = command.PersonId,
-            updatedByUserId,
-            changedFields = update.ChangedFields
-        });
-
-        await audit.RecordAsync(
-            AuditActionCodes.AccountDetailsUpdatedByAdmin,
-            "Person",
-            command.PersonId.ToString(),
-            detailsJson,
-            cancellationToken);
+            await audit.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.AccountDetailsUpdatedByAdmin,
+                    "Person",
+                    command.PersonId,
+                    schoolOrganizationId,
+                    new SchoolAuditDetails(
+                        "Student profile/account details updated by admin",
+                        EntityDisplayName: currentProfile.OfficialFullName,
+                        ChangedFields: update.ChangedFields)),
+                cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

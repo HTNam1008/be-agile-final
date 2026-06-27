@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
@@ -14,7 +15,8 @@ internal sealed class ChangeCampaignStatusCommandHandler(
     IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
-    IClock clock) : ICommandHandler<ChangeCampaignStatusCommand>
+    IClock clock,
+    IAuditService audit) : ICommandHandler<ChangeCampaignStatusCommand>
 {
     public async Task<Result> Handle(ChangeCampaignStatusCommand command, CancellationToken cancellationToken)
     {
@@ -54,6 +56,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             campaign.SetNextRunAt(null);
         }
 
+        string oldStatus = campaign.CampaignStatusCode;
         Result statusResult = campaign.ChangeStatus(
             newStatusCode,
             currentUser.UserAccountId ?? 0,
@@ -63,6 +66,18 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         {
             return statusResult;
         }
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.TopUpCampaignStatusChanged,
+                "TopUpCampaign",
+                campaign.Id,
+                campaign.OrganizationId,
+                new SchoolAuditDetails(
+                    "Top-up campaign status changed",
+                    EntityDisplayName: campaign.CampaignName,
+                    StatusTransition: new SchoolAuditStatusTransition(oldStatus, campaign.CampaignStatusCode))),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

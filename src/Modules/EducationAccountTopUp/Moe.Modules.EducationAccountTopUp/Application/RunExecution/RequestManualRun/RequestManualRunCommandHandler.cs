@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
@@ -16,7 +17,8 @@ public sealed class RequestManualRunCommandHandler(
     ITopUpRunDispatcher dispatcher,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
-    IClock clock) : ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>
+    IClock clock,
+    IAuditService audit) : ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>
 {
     public async Task<Result<RequestManualRunResponse>> Handle(
         RequestManualRunCommand command,
@@ -71,6 +73,20 @@ public sealed class RequestManualRunCommandHandler(
 
         await runs.AddAsync(run, cancellationToken);
         run.MarkManualRunRequested(requestedAtUtc);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.TopUpManualRunRequested,
+                "TopUpRun",
+                run.Id,
+                campaign.OrganizationId,
+                new SchoolAuditDetails(
+                    "Manual top-up run requested",
+                    EntityDisplayName: campaign.CampaignName,
+                    RelatedIds: new Dictionary<string, long> { ["campaignId"] = campaign.Id })),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await dispatcher.EnqueueAsync(run.Id, cancellationToken);
