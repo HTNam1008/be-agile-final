@@ -29,21 +29,21 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
 
             rows.Add(new BulkImportStudentWorkbookRow(
                 row.RowNumber(),
-                Text(row, columns, "SchoolName"),
-                Long(row, columns, "OrganizationId"),
-                Text(row, columns, "IdentityNumber") ?? string.Empty,
-                Text(row, columns, "FullName") ?? string.Empty,
-                Date(row, columns, "DateOfBirth") ?? DateOnly.MinValue,
-                Text(row, columns, "NationalityCode") ?? string.Empty,
-                Text(row, columns, "CitizenshipStatusCode") ?? string.Empty,
-                Text(row, columns, "StudentNumber") ?? string.Empty,
-                Text(row, columns, "AcademicYear") ?? string.Empty,
-                Text(row, columns, "LevelCode") ?? string.Empty,
-                Text(row, columns, "ClassCode") ?? string.Empty,
-                Date(row, columns, "StartDate"),
-                Text(row, columns, "Email"),
-                Text(row, columns, "Mobile"),
-                Text(row, columns, "Address")));
+                Text(row, columns, BulkImportStudentWorkbookColumns.SchoolName),
+                Long(row, columns, BulkImportStudentWorkbookColumns.OrganizationId),
+                Text(row, columns, BulkImportStudentWorkbookColumns.IdentityNumber) ?? string.Empty,
+                Text(row, columns, BulkImportStudentWorkbookColumns.FullName) ?? string.Empty,
+                Date(row, columns, BulkImportStudentWorkbookColumns.DateOfBirth) ?? DateOnly.MinValue,
+                Text(row, columns, BulkImportStudentWorkbookColumns.NationalityCode) ?? string.Empty,
+                Text(row, columns, BulkImportStudentWorkbookColumns.CitizenshipStatusCode),
+                Text(row, columns, BulkImportStudentWorkbookColumns.StudentNumber) ?? string.Empty,
+                Text(row, columns, BulkImportStudentWorkbookColumns.AcademicYear) ?? string.Empty,
+                Text(row, columns, BulkImportStudentWorkbookColumns.LevelCode) ?? string.Empty,
+                Text(row, columns, BulkImportStudentWorkbookColumns.ClassCode) ?? string.Empty,
+                Date(row, columns, BulkImportStudentWorkbookColumns.StartDate),
+                Text(row, columns, BulkImportStudentWorkbookColumns.Email),
+                Text(row, columns, BulkImportStudentWorkbookColumns.Mobile),
+                Text(row, columns, BulkImportStudentWorkbookColumns.Address)));
         }
 
         return Task.FromResult<IReadOnlyList<BulkImportStudentWorkbookRow>>(rows);

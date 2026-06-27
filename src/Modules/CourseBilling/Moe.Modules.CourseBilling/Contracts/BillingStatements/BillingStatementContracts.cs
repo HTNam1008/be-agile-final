@@ -27,6 +27,7 @@ public sealed record BillingStatementItemResponse(
     decimal NetPayableAmount,
     decimal OutstandingAmount,
     string BillStatusCode,
+    string PlanTypeCode,
     bool IsInstallment,
     bool CanDefer,
     string? DeferBlockedReason,

@@ -11,16 +11,18 @@ public sealed class FasSchemeDomainTests
     [Fact]
     public void CreateDraft_requires_codes_name_and_valid_dates()
     {
-        Action emptyGrant = () => FasScheme.CreateDraft("S", " ", "Name", null, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), 1, Now);
-        Action reversed = () => FasScheme.CreateDraft("S", "G", "Name", null, new DateOnly(2026, 12, 31), new DateOnly(2026, 1, 1), 1, Now);
+        Action emptyGrant = () => FasScheme.CreateDraft("S", " ", "Name", null, Today().AddDays(1), Today().AddMonths(6), 1, Now);
+        Action reversed = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddMonths(6), Today().AddDays(1), 1, Now);
+        Action pastStart = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(-1), Today().AddMonths(6), 1, Now);
         emptyGrant.Should().Throw<ArgumentException>();
         reversed.Should().Throw<ArgumentException>();
+        pastStart.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Scheme_follows_draft_active_retired_lifecycle()
     {
-        FasScheme scheme = FasScheme.CreateDraft("S", "G", "Name", null, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), 1, Now);
+        FasScheme scheme = FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(1), Today().AddMonths(6), 1, Now);
         scheme.Activate(2, Now.AddMinutes(1));
         scheme.StatusCode.Should().Be("ACTIVE");
         Action activateTwice = () => scheme.Activate(2, Now);
@@ -57,4 +59,6 @@ public sealed class FasSchemeDomainTests
         ((Action)(() => FasApplicationReviewDecision.CreateRejection(1, 2, " ", null, Now))).Should().Throw<ArgumentException>();
         FasApplicationReviewDecision.CreateApproval(1, 2, null, Now).Decision.Should().Be("APPROVED");
     }
+
+    private static DateOnly Today() => DateOnly.FromDateTime(Now);
 }

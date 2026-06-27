@@ -26,7 +26,7 @@ internal sealed class FasScheme : Entity<long>
         if (string.IsNullOrWhiteSpace(schemeCode)) throw new ArgumentException("Scheme code is required.", nameof(schemeCode));
         if (string.IsNullOrWhiteSpace(grantCode)) throw new ArgumentException("Grant code is required.", nameof(grantCode));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
-        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
+        ValidateDates(startDate, endDate, utcNow);
 
         return new FasScheme
         {
@@ -52,14 +52,31 @@ internal sealed class FasScheme : Entity<long>
         UpdatedAtUtc = utcNow;
     }
 
+    public void UpdateEditable(string schemeCode, string grantCode, string name, string? description,
+        DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
+    {
+        if (StatusCode == FasSchemeStatusCodes.Active && StartDate <= DateOnly.FromDateTime(utcNow))
+            throw new InvalidOperationException("Only an active scheme that has not started can be updated.");
+        if (StatusCode is not (FasSchemeStatusCodes.Draft or FasSchemeStatusCodes.Active))
+            throw new InvalidOperationException("Only a draft or not-started active scheme can be updated.");
+
+        ApplyUpdate(schemeCode, grantCode, name, description, startDate, endDate, actorId, utcNow);
+    }
+
     public void UpdateDraft(string schemeCode, string grantCode, string name, string? description,
         DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
     {
         if (StatusCode != FasSchemeStatusCodes.Draft) throw new InvalidOperationException("Only a draft scheme can be updated.");
+        ApplyUpdate(schemeCode, grantCode, name, description, startDate, endDate, actorId, utcNow);
+    }
+
+    private void ApplyUpdate(string schemeCode, string grantCode, string name, string? description,
+        DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
+    {
         if (string.IsNullOrWhiteSpace(schemeCode)) throw new ArgumentException("Scheme code is required.", nameof(schemeCode));
         if (string.IsNullOrWhiteSpace(grantCode)) throw new ArgumentException("Grant code is required.", nameof(grantCode));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
-        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
+        ValidateDates(startDate, endDate, utcNow);
         SchemeCode = schemeCode.Trim();
         GrantCode = grantCode.Trim();
         Name = name.Trim();
@@ -68,6 +85,13 @@ internal sealed class FasScheme : Entity<long>
         EndDate = endDate;
         UpdatedByLoginAccountId = actorId;
         UpdatedAtUtc = utcNow;
+    }
+
+    private static void ValidateDates(DateOnly startDate, DateOnly endDate, DateTime utcNow)
+    {
+        DateOnly today = DateOnly.FromDateTime(utcNow);
+        if (startDate < today) throw new ArgumentException("Start date cannot be before today.", nameof(startDate));
+        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
     }
 
     public void Retire(long actorId, DateTime utcNow)

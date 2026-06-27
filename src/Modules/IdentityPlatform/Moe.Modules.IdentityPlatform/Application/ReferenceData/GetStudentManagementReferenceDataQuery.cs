@@ -1,5 +1,4 @@
 using Moe.Application.Abstractions.Messaging;
-using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 using Moe.Modules.IdentityPlatform.IGateway.ReferenceData;
@@ -18,19 +17,15 @@ public sealed record StudentManagementReferenceDataResponse(
 
 public sealed record StudentListFilterReferenceData(
     IReadOnlyList<ReferenceOption> AccountStatuses,
-    IReadOnlyList<ReferenceDataOptionWithCode> ResidencyFilters,
     IReadOnlyList<ReferenceOption> EnrollmentStatuses,
     IReadOnlyList<ReferenceOption> Levels);
 
 public sealed record StudentProfileReferenceData(
-    IReadOnlyList<ReferenceOption> Levels,
-    IReadOnlyList<ReferenceOption> ResidencyCodes);
+    IReadOnlyList<ReferenceOption> Levels);
 
 public sealed record EducationAccountReferenceData(
     IReadOnlyList<ReferenceOption> CloseReasons,
     IReadOnlyList<ReferenceOption> OpenReasons);
-
-public sealed record ReferenceDataOptionWithCode(string Value, string Label, string Code);
 
 internal sealed class GetStudentManagementReferenceDataHandler(
     IEducationAccountReasonCodeGateway educationAccountReasons)
@@ -49,12 +44,6 @@ internal sealed class GetStudentManagementReferenceDataHandler(
                     Option(nameof(AdminStudentAccountStatusFilter.Closed), "Closed"),
                     Option(nameof(AdminStudentAccountStatusFilter.NoAccount), "No account")
                 ],
-                ResidencyFilters:
-                [
-                    new(nameof(AdminStudentResidencyFilter.SingaporeCitizen), "Singapore Citizen", ResidencyStatusCodes.Citizen),
-                    new(nameof(AdminStudentResidencyFilter.PermanentResident), "Permanent Resident", ResidencyStatusCodes.PermanentResident),
-                    new(nameof(AdminStudentResidencyFilter.Foreigner), "Foreigner", ResidencyStatusCodes.ValidPassHolder)
-                ],
                 EnrollmentStatuses:
                 [
                     Option(nameof(AdminStudentEnrollmentStatusFilter.Enrolled), "Enrolled"),
@@ -62,13 +51,7 @@ internal sealed class GetStudentManagementReferenceDataHandler(
                 ],
                 Levels: SchoolLevelCodes.All.Select(ToLevelOption).ToArray()),
             new StudentProfileReferenceData(
-                Levels: SchoolLevelCodes.All.Select(ToLevelOption).ToArray(),
-                ResidencyCodes:
-                [
-                    Option(ResidencyStatusCodes.Citizen, "Singapore Citizen"),
-                    Option(ResidencyStatusCodes.PermanentResident, "Permanent Resident"),
-                    Option(ResidencyStatusCodes.ValidPassHolder, "Valid Pass Holder")
-                ]),
+                Levels: SchoolLevelCodes.All.Select(ToLevelOption).ToArray()),
             new EducationAccountReferenceData(
                 educationAccountReasons.GetCloseReasonOptions(),
                 educationAccountReasons.GetOpenReasonOptions()));
@@ -92,6 +75,9 @@ internal sealed class GetStudentManagementReferenceDataHandler(
             SchoolLevelCodes.Secondary3 => Option(value, "Secondary 3"),
             SchoolLevelCodes.Secondary4 => Option(value, "Secondary 4"),
             SchoolLevelCodes.Secondary5 => Option(value, "Secondary 5"),
+            SchoolLevelCodes.Bachelor => Option(value, "Bachelor"),
+            SchoolLevelCodes.Master => Option(value, "Master"),
+            SchoolLevelCodes.Phd => Option(value, "PhD"),
             _ => Option(value, value)
         };
 }

@@ -8,7 +8,6 @@ public sealed record AdminStudentListRequest(
     string? LevelCode,
     string? ClassCode,
     AdminStudentAccountStatusFilter AccountStatus = AdminStudentAccountStatusFilter.All,
-    AdminStudentResidencyFilter Residency = AdminStudentResidencyFilter.All,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
     int Page = 1,
     int PageSize = 20);

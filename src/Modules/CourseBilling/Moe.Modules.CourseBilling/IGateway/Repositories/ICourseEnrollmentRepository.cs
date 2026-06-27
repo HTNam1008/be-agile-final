@@ -1,6 +1,7 @@
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
+using Moe.Modules.CourseBilling.IGateway.Payments;
 
 namespace Moe.Modules.CourseBilling.IGateway.Repositories;
 
@@ -60,6 +61,13 @@ internal interface ICourseEnrollmentRepository
         IReadOnlyCollection<CourseFeeBillingLine> feeLines,
         IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
         CancellationToken cancellationToken);
+
+    CourseEnrollmentBillingPreviewResult PreviewPaymentPlanBills(
+        CourseBillingPlan plan,
+        bool installment,
+        DateOnly firstDueDate,
+        IReadOnlyCollection<CourseFeeBillingLine> feeLines,
+        IReadOnlyCollection<CourseFasSubsidy> fasSubsidies);
 }
 
 internal sealed record CourseFeeBillingLine(
@@ -68,7 +76,9 @@ internal sealed record CourseFeeBillingLine(
     string FeeComponentName,
     string CalculationTypeCode,
     bool IsTaxComponent,
-    decimal FeeValue);
+    decimal FeeValue,
+    string FeeComponentCode = "",
+    string FeeComponentTypeCode = "");
 
 internal sealed record CourseEnrollmentBillingResult(
     CourseEnrollment Enrollment,
@@ -77,3 +87,30 @@ internal sealed record CourseEnrollmentBillingResult(
 internal sealed record GeneratedBillResult(
     Bill Bill,
     int BillLineCount);
+
+internal sealed record CourseEnrollmentBillingPreviewResult(
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetPayableAmount,
+    IReadOnlyCollection<PreviewGeneratedBillResult> Bills);
+
+internal sealed record PreviewGeneratedBillResult(
+    int SequenceNumber,
+    DateOnly CurrentDueDate,
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetPayableAmount,
+    bool IsInstallment,
+    IReadOnlyCollection<PreviewGeneratedBillLineResult> Lines);
+
+internal sealed record PreviewGeneratedBillLineResult(
+    long FeeComponentId,
+    long? CourseFeeId,
+    string ComponentCode,
+    string ComponentName,
+    string ComponentTypeCode,
+    string CalculationTypeCode,
+    string Description,
+    decimal GrossAmount,
+    decimal SubsidyAmount,
+    decimal NetAmount);

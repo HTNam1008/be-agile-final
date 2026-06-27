@@ -107,7 +107,8 @@ public class E2EHostingStartup : IHostingStartup
                     policy.AuthenticationSchemes.Clear();
                     policy.AddAuthenticationSchemes("Test");
                     policy.RequireAuthenticatedUser();
-                    policy.RequireClaim(ClaimNames.Permission, "LIFECYCLE_MANUAL_TRIGGER");
+                    policy.RequireClaim(ClaimNames.Portal, PortalCodes.Admin);
+                    policy.RequireClaim(ClaimNames.Role, "HQ_ADMIN", "SCHOOL_ADMIN");
                 });
             });
         });

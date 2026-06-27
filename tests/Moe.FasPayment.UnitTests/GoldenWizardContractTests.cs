@@ -11,7 +11,7 @@ public sealed class GoldenWizardContractTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Theory]
-    [InlineData("fas-wizard-percentage-global.json", "PERCENTAGE", 0, 2)]
+    [InlineData("fas-wizard-percentage-global.json", "PERCENTAGE", 1, 2)]
     [InlineData("fas-wizard-fixed-courses.json", "FIXED", 2, 1)]
     public void Golden_wizard_payload_is_a_valid_canonical_v4_request(
         string fixture,
@@ -19,7 +19,11 @@ public sealed class GoldenWizardContractTests
         int courseCount,
         int tierCount)
     {
-        CreateFasSchemeRequest request = Load(fixture);
+        CreateFasSchemeRequest request = Load(fixture) with
+        {
+            StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1))
+        };
 
         request.SubsidyType.Should().Be(subsidyType);
         request.CourseIds.Should().HaveCount(courseCount);

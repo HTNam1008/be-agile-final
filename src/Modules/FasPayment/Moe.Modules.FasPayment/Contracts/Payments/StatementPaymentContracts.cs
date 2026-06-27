@@ -45,6 +45,18 @@ public sealed record PayBillingStatementResponse(
     DateTime? CheckoutExpiresAtUtc,
     bool Resumed);
 
+public sealed record PendingEnrollmentPaymentResponse(
+    long CourseEnrollmentId,
+    long BillingStatementId,
+    long PaymentId,
+    string PaymentStatusCode,
+    decimal EducationAccountAmount,
+    decimal OnlinePaymentAmount,
+    string? CheckoutUrl,
+    long? PaymentCheckoutSessionId,
+    DateTime? CheckoutExpiresAtUtc,
+    IReadOnlyCollection<long> BillIds);
+
 public sealed record DeferBillingStatementRequest(
     long FailedPaymentId,
     IReadOnlyCollection<long>? BillIds = null);

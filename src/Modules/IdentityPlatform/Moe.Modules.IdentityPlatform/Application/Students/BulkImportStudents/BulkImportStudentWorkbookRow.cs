@@ -8,7 +8,7 @@ public sealed record BulkImportStudentWorkbookRow(
     string FullName,
     DateOnly DateOfBirth,
     string NationalityCode,
-    string CitizenshipStatusCode,
+    string? CitizenshipStatusCode,
     string StudentNumber,
     string AcademicYear,
     string LevelCode,
