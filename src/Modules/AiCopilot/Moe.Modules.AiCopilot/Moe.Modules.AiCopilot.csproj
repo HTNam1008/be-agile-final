@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
     <ProjectReference Include="..\..\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
+    <ProjectReference Include="..\..\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
