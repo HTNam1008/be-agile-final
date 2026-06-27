@@ -70,22 +70,6 @@ internal sealed class FasApplication : Entity<long>
         };
     }
 
-    // Compatibility factory used by the existing scheme-scoped admin flow.
-    public static FasApplication Submit(string applicationNo, long fasSchemeId, string studentId,
-        string studentName, DateOnly submittedDate) => new()
-        {
-            ApplicationNo = applicationNo,
-            FasSchemeId = fasSchemeId,
-            StudentId = studentId,
-            StudentNumber = studentId,
-            StudentName = studentName,
-            SubmittedDate = submittedDate,
-            SubmittedAtUtc = submittedDate.ToDateTime(TimeOnly.MinValue),
-            LockedAtUtc = DateTime.UtcNow,
-            StatusCode = FasApplicationStatuses.PendingReview,
-            CreatedAt = DateTime.UtcNow
-        };
-
     public void ReplacePrimaryScheme(long schemeId, long actorId, DateTime now)
     { EnsureDraft(); FasSchemeId = schemeId; Touch(actorId, now); }
 
