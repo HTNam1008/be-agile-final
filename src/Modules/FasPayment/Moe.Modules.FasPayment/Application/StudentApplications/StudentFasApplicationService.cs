@@ -176,7 +176,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         var p = await Profile(ct); var (personId, actorId) = Identity(); var now = DateTime.UtcNow;
         var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var valid = await db.Set<FasScheme>().Where(x => ids.Contains(x.Id) && x.StatusCode == "ACTIVE" && applicable.Contains(x.Id)).Select(x => x.Id).ToListAsync(ct);
         if (valid.Count != ids.Length) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
-        var app = await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.StudentPersonId == personId && x.StatusCode == "DRAFT", ct);
+        var app = await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.StudentPersonId == personId && x.StatusCode == FasApplicationStatuses.Draft, ct);
         await EnsureNoDuplicateApplications(personId, ids, app?.Id, ct);
         var created = app == null;
         if (app == null)
@@ -186,7 +186,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 p.Name, p.NricFinMasked, p.DateOfBirth, p.NationalityCode, p.Mobile, p.Address, p.Email,
                 p.SchoolOrganizationId, p.SchoolName, accountType, actorId, now);
             db.Add(app); await db.SaveChangesAsync(ct);
-            db.Add(FasStatusHistory.Create(app.Id, null, null, "DRAFT", "Application draft created", actorId, "STUDENT", now));
+            db.Add(FasStatusHistory.Create(app.Id, null, null, FasApplicationStatuses.Draft, "Application draft created", actorId, "STUDENT", now));
         }
         var added = await ReplaceSchemesCore(app, ids, actorId, now, ct); await db.SaveChangesAsync(ct);
         foreach (var item in added) db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
@@ -345,7 +345,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             await EnsureNoDuplicateApplications(person, items.Select(x => x.FasSchemeId).ToArray(), id, ct);
             if (string.IsNullOrWhiteSpace(app.StudentName) || string.IsNullOrWhiteSpace(app.NricFinMasked) || app.DateOfBirth == null || string.IsNullOrWhiteSpace(app.NationalityCode) || string.IsNullOrWhiteSpace(app.ParentNationalitiesJson) || string.IsNullOrWhiteSpace(app.Mobile) || string.IsNullOrWhiteSpace(app.Address) || app.SchoolOrganizationId == null || string.IsNullOrWhiteSpace(app.StudentNumber) || string.IsNullOrWhiteSpace(app.Email) || app.IsWelfareHomeResident == null || (app.IsWelfareHomeResident == false && (app.MonthlyHouseholdIncome == null || app.HouseholdMemberCount == null || string.IsNullOrWhiteSpace(app.EmploymentStatusCode))) || !await DocumentsComplete(id, ct) || await db.Set<FasDeclaration>().CountAsync(x => x.FasApplicationId == id && x.IsAccepted, ct) < 2)
                 throw new InvalidOperationException("FAS.SUBMISSION_INCOMPLETE");
-            var now = DateTime.UtcNow; app.SubmitDraft(actor, now); db.Add(FasStatusHistory.Create(id, null, "DRAFT", "SUBMITTED", "Application submitted", actor, "STUDENT", now)); foreach (var item in items) { item.Submit(); db.Add(FasStatusHistory.Create(id, item.Id, "DRAFT", "PENDING", "Submitted for review", actor, "STUDENT", now)); }
+            var now = DateTime.UtcNow; app.SubmitDraft(actor, now); db.Add(FasStatusHistory.Create(id, null, FasApplicationStatuses.Draft, FasApplicationStatuses.Submitted, "Application submitted", actor, "STUDENT", now)); foreach (var item in items) { item.Submit(); db.Add(FasStatusHistory.Create(id, item.Id, "DRAFT", "PENDING", "Submitted for review", actor, "STUDENT", now)); }
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return await ApplicationReview(id, ct);
         });
     }
@@ -368,7 +368,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
 
             var now = DateTime.UtcNow;
             app.Withdraw(actor, now);
-            db.Add(FasStatusHistory.Create(id, null, "SUBMITTED", "WITHDRAWN", "Application withdrawn by student", actor, "STUDENT", now));
+            db.Add(FasStatusHistory.Create(id, null, FasApplicationStatuses.Submitted, FasApplicationStatuses.Withdrawn, "Application withdrawn by student", actor, "STUDENT", now));
 
             foreach (var item in items)
             {
@@ -395,7 +395,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 .SingleOrDefaultAsync(ct)
                 ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
 
-            if (target.Application.StatusCode != "SUBMITTED" || target.Scheme.StatusCode != "PENDING")
+            if (target.Application.StatusCode != FasApplicationStatuses.Submitted || target.Scheme.StatusCode != "PENDING")
             {
                 throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
             }
@@ -424,8 +424,8 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 db.Add(FasStatusHistory.Create(
                     target.Application.Id,
                     null,
-                    "SUBMITTED",
-                    "WITHDRAWN",
+                    FasApplicationStatuses.Submitted,
+                    FasApplicationStatuses.Withdrawn,
                     "All schemes withdrawn by student",
                     actor,
                     "STUDENT",
@@ -458,7 +458,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                           submittedDate = a.SubmittedAtUtc,
                           status = i.StatusCode,
                           canReview = true,
-                          canWithdraw = a.StatusCode == "SUBMITTED" && i.StatusCode == "PENDING",
+                          canWithdraw = a.StatusCode == FasApplicationStatuses.Submitted && i.StatusCode == "PENDING",
                           i.RejectionNotes,
                           i.ApprovedAmount,
                           i.ApprovedComponentsJson,
@@ -471,7 +471,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                       }).ToListAsync(ct);
     }
     public async Task<object> Summary(CancellationToken ct)
-    { var (person, _) = Identity(); var draft = await db.Set<FasApplication>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "DRAFT").Select(x => (long?)x.Id).FirstOrDefaultAsync(ct); var active = await db.Set<FasActiveScheme>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "ACTIVE").Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo }).FirstOrDefaultAsync(ct); return new { canApply = true, blockingReason = (string?)null, activeScheme = active, resumableDraftId = draft }; }
+    { var (person, _) = Identity(); var draft = await db.Set<FasApplication>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == FasApplicationStatuses.Draft).Select(x => (long?)x.Id).FirstOrDefaultAsync(ct); var active = await db.Set<FasActiveScheme>().AsNoTracking().Where(x => x.StudentPersonId == person && x.StatusCode == "ACTIVE").Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo }).FirstOrDefaultAsync(ct); return new { canApply = true, blockingReason = (string?)null, activeScheme = active, resumableDraftId = draft }; }
 
     public async Task<object> ApplicationReview(long id, CancellationToken ct)
     {
@@ -510,7 +510,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
             app.Id,
             applicationReference = app.ApplicationNo,
             app.StatusCode,
-            canWithdraw = app.StatusCode == "SUBMITTED" && schemes.Count > 0 && schemes.All(x => x.StatusCode == "PENDING"),
+            canWithdraw = app.StatusCode == FasApplicationStatuses.Submitted && schemes.Count > 0 && schemes.All(x => x.StatusCode == "PENDING"),
             app.StudentName,
             app.NricFinMasked,
             app.DateOfBirth,
@@ -555,7 +555,7 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
                 join scheme in db.Set<FasScheme>().AsNoTracking() on item.FasSchemeId equals scheme.Id
                 where application.StudentPersonId == person
                       && (!currentApplicationId.HasValue || application.Id != currentApplicationId.Value)
-                      && application.StatusCode != "WITHDRAWN"
+                      && application.StatusCode != FasApplicationStatuses.Withdrawn
                       && schemeIds.Contains(item.FasSchemeId)
                       && item.StatusCode == "PENDING"
                 select new { item.FasSchemeId, scheme.Name })
@@ -570,8 +570,8 @@ public sealed class StudentFasApplicationService(MoeDbContext db, ICurrentUser c
         }
     }
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
-    private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != "DRAFT") throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
-    private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != "SUBMITTED") throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
+    private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Draft) throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
+    private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
     private sealed record ProfileRow(long PersonId, string Name, string? NricFinMasked, DateOnly DateOfBirth, string NationalityCode, string? Mobile, string? Address, string? Email, long SchoolOrganizationId, string SchoolName, string StudentNumber);
 
     private async Task<string> ResolveAccountType(long personId, CancellationToken ct)
