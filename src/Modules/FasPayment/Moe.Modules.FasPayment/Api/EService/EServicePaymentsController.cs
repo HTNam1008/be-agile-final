@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 
