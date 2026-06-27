@@ -129,6 +129,11 @@ internal sealed class AdminCourseAccess(
 
         if (enabled)
         {
+            if (!course.IsDisabled)
+            {
+                return Result<CourseDetailDto>.Failure(CourseErrors.CourseNotDisabled);
+            }
+
             course.Enable(actorId, UtcNow());
         }
         else

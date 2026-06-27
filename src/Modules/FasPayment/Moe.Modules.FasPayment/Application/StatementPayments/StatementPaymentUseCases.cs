@@ -55,7 +55,7 @@ internal sealed class GetPendingEnrollmentPaymentHandler(
             return Result<PendingEnrollmentPaymentResponse?>.Success(null);
 
         IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, ct);
-        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
+        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
         return Result<PendingEnrollmentPaymentResponse?>.Success(new(
             query.CourseEnrollmentId,
             statementId,
@@ -223,7 +223,7 @@ internal sealed class PayBillingStatementHandler(
                 ct);
             educationPart.AssignAccountHold(holdId);
         }
-        PaymentCheckoutSession checkout = PaymentCheckoutSession.CreateForStatement(
+        StatementPaymentCheckoutSession checkout = StatementPaymentCheckoutSession.Create(
             payment.Id, statement.BillingStatementId, personId, onlineAmount, now);
         await payments.AddCheckoutAsync(checkout, ct);
         try
@@ -273,7 +273,7 @@ internal sealed class PayBillingStatementHandler(
             return Result<PayBillingStatementResponse?>.Success(null);
 
         DateTime now = clock.UtcNow.UtcDateTime;
-        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(
+        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(
             activePayment.Id,
             cancellationToken);
         if (checkout?.CanResume(now) == true)
@@ -386,7 +386,7 @@ internal sealed class CancelBillingStatementPaymentHandler(
         if (payment.PaymentStatusCode is not (PaymentStatusCodes.Initiated or PaymentStatusCodes.PendingOnlinePayment))
             return Result.Success();
 
-        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
+        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
         if (!string.IsNullOrWhiteSpace(checkout?.ProviderCheckoutSessionId))
         {
             try

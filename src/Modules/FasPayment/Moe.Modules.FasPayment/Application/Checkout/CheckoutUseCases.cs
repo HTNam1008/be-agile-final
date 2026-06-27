@@ -53,7 +53,7 @@ internal sealed class CreateStripeCheckoutHandler(
         if (plan is null || !plan.IsActive || plan.CourseId != bill.CourseId)
             return Result<StripeCheckoutResponse>.Failure(PaymentDomainErrors.PaymentPlanNotFound);
 
-        PaymentCheckoutSession? checkout = await payments.FindOpenCheckoutAsync(
+        BillPaymentCheckoutSession? checkout = await payments.FindOpenCheckoutAsync(
             bill.BillId,
             personId,
             cancellationToken);
@@ -82,7 +82,7 @@ internal sealed class CreateStripeCheckoutHandler(
 
         if (checkout is null)
         {
-            Result<PaymentCheckoutSession> created = PaymentCheckoutSession.Create(
+            Result<BillPaymentCheckoutSession> created = BillPaymentCheckoutSession.Create(
                 bill.BillId,
                 bill.CourseEnrollmentId,
                 bill.CourseId,
