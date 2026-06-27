@@ -19,7 +19,11 @@ public sealed class GoldenWizardContractTests
         int courseCount,
         int tierCount)
     {
-        CreateFasSchemeRequest request = Load(fixture);
+        CreateFasSchemeRequest request = Load(fixture) with
+        {
+            StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1))
+        };
 
         request.SubsidyType.Should().Be(subsidyType);
         request.CourseIds.Should().HaveCount(courseCount);

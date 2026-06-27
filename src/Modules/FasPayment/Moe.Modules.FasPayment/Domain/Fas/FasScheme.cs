@@ -26,7 +26,7 @@ internal sealed class FasScheme : Entity<long>
         if (string.IsNullOrWhiteSpace(schemeCode)) throw new ArgumentException("Scheme code is required.", nameof(schemeCode));
         if (string.IsNullOrWhiteSpace(grantCode)) throw new ArgumentException("Grant code is required.", nameof(grantCode));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
-        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
+        ValidateDates(startDate, endDate, utcNow);
 
         return new FasScheme
         {
@@ -76,7 +76,7 @@ internal sealed class FasScheme : Entity<long>
         if (string.IsNullOrWhiteSpace(schemeCode)) throw new ArgumentException("Scheme code is required.", nameof(schemeCode));
         if (string.IsNullOrWhiteSpace(grantCode)) throw new ArgumentException("Grant code is required.", nameof(grantCode));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
-        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
+        ValidateDates(startDate, endDate, utcNow);
         SchemeCode = schemeCode.Trim();
         GrantCode = grantCode.Trim();
         Name = name.Trim();
@@ -85,6 +85,13 @@ internal sealed class FasScheme : Entity<long>
         EndDate = endDate;
         UpdatedByLoginAccountId = actorId;
         UpdatedAtUtc = utcNow;
+    }
+
+    private static void ValidateDates(DateOnly startDate, DateOnly endDate, DateTime utcNow)
+    {
+        DateOnly today = DateOnly.FromDateTime(utcNow);
+        if (startDate < today) throw new ArgumentException("Start date cannot be before today.", nameof(startDate));
+        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
     }
 
     public void Retire(long actorId, DateTime utcNow)
