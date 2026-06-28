@@ -391,6 +391,11 @@ public sealed class RunExecutionOrchestratorTests
                 x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
         }
 
+        public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
         {
             Add(run);

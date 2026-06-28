@@ -37,6 +37,14 @@ internal sealed class TopUpRunRepository(MoeDbContext dbContext) : ITopUpRunRepo
             .AnyAsync(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed, cancellationToken);
     }
 
+    public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<TopUpRun>()
+            .AnyAsync(
+                x => x.TopUpCampaignId == campaignId && (x.RunStatusCode == TopUpRunStatusCodes.Previewed || x.RunStatusCode == TopUpRunStatusCodes.Processing),
+                cancellationToken);
+    }
+
     public async Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpRun>().AddAsync(run, cancellationToken);

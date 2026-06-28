@@ -27,7 +27,7 @@ public sealed class DynamicTopUpContract : Entity<long>
 
     public int? DerivedTotalCycles =>
         DeliveryTypeCode == DeliveryType.FixedContract
-            ? (int)(MaxTotalAmount / AmountPerPayment) : null;
+            ? (int)Math.Ceiling(MaxTotalAmount / AmountPerPayment) : null;
 
     public bool IsCompleted => ContractStatus != ContractStatuses.Active;
 
@@ -73,15 +73,6 @@ public sealed class DynamicTopUpContract : Entity<long>
         UpdatedAtUtc = paidAtUtc;
 
         if (TotalReceived >= MaxTotalAmount)
-        {
-            ContractStatus = ContractStatuses.Completed;
-            NextPaymentDate = null;
-            return Result.Success();
-        }
-
-        if (DeliveryTypeCode == DeliveryType.FixedContract
-            && DerivedTotalCycles.HasValue
-            && CyclesCompleted >= DerivedTotalCycles.Value)
         {
             ContractStatus = ContractStatuses.Completed;
             NextPaymentDate = null;

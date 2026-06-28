@@ -212,6 +212,7 @@ public sealed class TopUpRunWorkerTests
         public Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult(_runs.Values.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
         public Task<bool> ExistsForScheduledOccurrenceAsync(long campaignId, DateTime scheduledFor, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
+        public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && (x.RunStatusCode == TopUpRunStatusCodes.Previewed || x.RunStatusCode == TopUpRunStatusCodes.Processing)));
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default) { Add(run); return Task.CompletedTask; }
     }
 
