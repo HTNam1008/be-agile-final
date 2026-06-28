@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
@@ -415,7 +416,14 @@ internal sealed class CancelBillingStatementPaymentHandler(
             ?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
         checkout?.CancelBeforePayment(now);
         payment.MarkCancelled(now);
-        await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
+        try
+        {
+            await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Success();
+        }
         return Result.Success();
     }
 }

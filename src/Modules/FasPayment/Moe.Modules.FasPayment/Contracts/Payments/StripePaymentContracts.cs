@@ -27,7 +27,19 @@ public sealed record PaymentCheckoutStatusResponse(
     long BillId,
     string CheckoutStatusCode,
     int PaidInstallmentCount,
-    int RequiredInstallmentCount);
+    int RequiredInstallmentCount,
+    string CheckoutSessionTypeCode,
+    long? PaymentId,
+    long? BillingStatementId,
+    decimal Amount,
+    string CurrencyCode,
+    string? PaymentStatusCode,
+    decimal? EducationAccountAmount,
+    decimal? OnlinePaymentAmount,
+    IReadOnlyCollection<long> BillIds,
+    string? CheckoutUrl,
+    DateTime? ExpiresAtUtc,
+    bool CanResume);
 
 public sealed record CreatePaymentRefundRequest(decimal Amount, string Reason);
 public sealed record PaymentRefundResponse(long PaymentRefundId, long PaymentId, decimal Amount, string RefundStatusCode);
