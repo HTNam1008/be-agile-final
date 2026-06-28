@@ -19,6 +19,7 @@ using Moe.Modules.CourseBilling.Application.AdminStudentCourses;
 using Moe.Modules.CourseBilling.Application.BillingStatements;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetStudentDashboard;
+using Moe.Modules.CourseBilling.Application.DeferExtensions;
 using Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 using Moe.Modules.CourseBilling.Application.Enrollments.CourseContent;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
@@ -27,6 +28,7 @@ using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.Contracts.BillingConfiguration;
+using Moe.Modules.CourseBilling.Contracts.DeferExtensions;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.IGateway.AdminStudentCourses;
 using Moe.Modules.CourseBilling.IGateway.Courses;
@@ -63,6 +65,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICourseReferenceDirectory, CourseReferenceDirectory>();
         services.AddScoped<IBillingStatementRepository, BillingStatementRepository>();
         services.AddScoped<IBillingPolicyRepository, BillingPolicyRepository>();
+        services.AddScoped<IDeferExtensionRequestRepository, DeferExtensionRequestRepository>();
         services.AddScoped<AdminCourseAccess>();
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
@@ -113,6 +116,10 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IQueryHandler<GetBillingStatementQuery, BillingStatementResponse>, GetBillingStatementHandler>();
         services.AddScoped<IQueryHandler<GetBillingConfigurationQuery, BillingConfigurationResponse>, GetBillingConfigurationHandler>();
         services.AddScoped<ICommandHandler<UpdateBillingConfigurationCommand, BillingConfigurationResponse>, UpdateBillingConfigurationHandler>();
+        services.AddScoped<ICommandHandler<CreateDeferExtensionRequestCommand, DeferExtensionRequestResponse>, CreateDeferExtensionRequestHandler>();
+        services.AddScoped<IQueryHandler<ListDeferExtensionRequestsQuery, PageResponse<DeferExtensionRequestResponse>>, ListDeferExtensionRequestsHandler>();
+        services.AddScoped<ICommandHandler<ApproveDeferExtensionRequestCommand, DeferExtensionRequestResponse>, ApproveDeferExtensionRequestHandler>();
+        services.AddScoped<ICommandHandler<RejectDeferExtensionRequestCommand, DeferExtensionRequestResponse>, RejectDeferExtensionRequestHandler>();
 
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();
         services.AddScoped<IValidator<SelfJoinCourseRequest>, SelfJoinCourseRequestValidator>();

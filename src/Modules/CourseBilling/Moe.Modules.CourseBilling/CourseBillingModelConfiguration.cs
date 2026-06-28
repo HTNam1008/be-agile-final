@@ -14,6 +14,7 @@ public sealed class CourseBillingModelConfiguration : IModelConfigurationContrib
         modelBuilder.ApplyConfiguration(new BillingStatementItemConfiguration());
         modelBuilder.ApplyConfiguration(new BillDeferralConfiguration());
         modelBuilder.ApplyConfiguration(new OrganizationBillingConfigurationConfiguration());
+        modelBuilder.ApplyConfiguration(new DeferExtensionRequestConfiguration());
         modelBuilder.ApplyConfiguration(new CourseConfiguration());
         modelBuilder.ApplyConfiguration(new CourseEnrollmentConfiguration());
         modelBuilder.ApplyConfiguration(new CourseFeeConfiguration());
