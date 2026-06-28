@@ -255,9 +255,10 @@ public sealed class TopUpRunWorkerTests
             }));
         }
 
-        public void CancelRun(long topUpRunId)
+        public bool CancelRun(long topUpRunId)
         {
             // Fake implementation for tests
+            return false;
         }
     }
 

@@ -93,14 +93,16 @@ public sealed class TopUpRunStateTests
     }
 
     [Fact]
-    public void Should_Reject_Invalid_Transition()
+    public void Should_Transition_From_Processing_To_Cancelled()
     {
         TopUpRun run = CreateProcessingRun();
 
         var result = run.Cancel(_utcNow);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(TopUpErrors.InvalidRunTransition);
+        result.IsSuccess.Should().BeTrue();
+        run.RunStatusCode.Should().Be(TopUpRunStatusCodes.Cancelled);
+        run.CompletedAtUtc.Should().Be(_utcNow);
+        run.DomainEvents.OfType<TopUpRunCancelledEvent>().Should().ContainSingle();
     }
 
     [Fact]
