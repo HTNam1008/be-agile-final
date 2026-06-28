@@ -85,6 +85,7 @@ public sealed class RunExecutionOrchestrator(
         int totalFailed = 0;
         int totalSkipped = 0;
         decimal totalAmount = 0m;
+        List<long> successfulAccountIds = [];
 
         foreach (RecipientInfo recipient in recipients)
         {
@@ -104,6 +105,7 @@ public sealed class RunExecutionOrchestrator(
                 case TopUpTransactionStatusCodes.Completed:
                     totalSucceeded++;
                     totalAmount += result.CreditedAmount;
+                    successfulAccountIds.Add(recipient.EducationAccountId);
                     break;
                 case TopUpTransactionStatusCodes.Failed:
                     totalFailed++;
@@ -175,7 +177,8 @@ public sealed class RunExecutionOrchestrator(
             TotalSucceeded = totalSucceeded,
             TotalFailed = totalFailed,
             TotalSkipped = totalSkipped,
-            TotalAmount = totalAmount
+            TotalAmount = totalAmount,
+            SuccessfulAccountIds = successfulAccountIds
         });
         }
         finally
