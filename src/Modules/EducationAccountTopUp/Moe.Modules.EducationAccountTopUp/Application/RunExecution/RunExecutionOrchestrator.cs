@@ -210,6 +210,73 @@ public sealed class RunExecutionOrchestrator(
         return false;
     }
 
+    public void RegisterCancellationToken(long topUpRunId, CancellationTokenSource cts)
+    {
+        _cancellationTokens.TryAdd(topUpRunId, cts);
+    }
+
+    public void UnregisterCancellationToken(long topUpRunId)
+    {
+        _cancellationTokens.TryRemove(topUpRunId, out _);
+    }
+
+    public async Task<Result<ChunkProcessingResult>> ProcessChunkAsync(
+        long topUpRunId,
+        IReadOnlyList<RecipientInfo> chunk,
+        ChunkProcessingAccumulator accumulator,
+        CancellationToken cancellationToken)
+    {
+        int chunkSucceeded = 0;
+        int chunkFailed = 0;
+        int chunkSkipped = 0;
+        decimal chunkAmount = 0m;
+        List<long> chunkSuccessfulAccountIds = [];
+
+        CancellationTokenSource? cts = null;
+        if (_cancellationTokens.TryGetValue(topUpRunId, out var existingCts))
+        {
+            cts = existingCts;
+        }
+
+        foreach (RecipientInfo recipient in chunk)
+        {
+            if (cts?.Token.IsCancellationRequested == true)
+            {
+                chunkSkipped++;
+                accumulator.TotalSkipped++;
+                continue;
+            }
+
+            RecipientProcessingResult result = await ProcessRecipientWithRetryAsync(
+                topUpRunId,
+                recipient,
+                cts?.Token ?? cancellationToken);
+
+            switch (result.Status)
+            {
+                case TopUpTransactionStatusCodes.Completed:
+                    chunkSucceeded++;
+                    chunkAmount += result.CreditedAmount;
+                    chunkSuccessfulAccountIds.Add(recipient.EducationAccountId);
+                    accumulator.TotalSucceeded++;
+                    accumulator.TotalAmount += result.CreditedAmount;
+                    accumulator.SuccessfulAccountIds.Add(recipient.EducationAccountId);
+                    break;
+                case TopUpTransactionStatusCodes.Failed:
+                    chunkFailed++;
+                    accumulator.TotalFailed++;
+                    break;
+                case TopUpTransactionStatusCodes.Skipped:
+                    chunkSkipped++;
+                    accumulator.TotalSkipped++;
+                    break;
+            }
+        }
+
+        return Result<ChunkProcessingResult>.Success(new ChunkProcessingResult(
+            chunkSucceeded, chunkFailed, chunkSkipped, chunkAmount, chunkSuccessfulAccountIds));
+    }
+
     private async Task<RecipientProcessingResult> ProcessRecipientWithRetryAsync(
         long topUpRunId,
         RecipientInfo recipient,

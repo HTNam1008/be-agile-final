@@ -67,6 +67,8 @@ public sealed class TopUpRunWorker(
         IRunExecutionOrchestrator orchestrator = services.GetRequiredService<IRunExecutionOrchestrator>();
         IRunReconciliationService reconciliation = services.GetRequiredService<IRunReconciliationService>();
         IPendingTransactionRecoveryService recovery = services.GetRequiredService<IPendingTransactionRecoveryService>();
+        IUnitOfWork unitOfWork = services.GetRequiredService<IUnitOfWork>();
+        var dbContext = services.GetService<Microsoft.EntityFrameworkCore.DbContext>();
 
         TopUpRun? run = await runs.GetByIdAsync(runId, cancellationToken);
         if (run is null)
@@ -106,36 +108,13 @@ public sealed class TopUpRunWorker(
             totalRecipients,
             ChunkSize);
 
-        List<RecipientInfo> recipients = [];
-        int offset = 0;
-
-        while (offset < totalRecipients)
-        {
-            IReadOnlyList<RecipientInfo> chunk = await recipientResolver.GetRecipientsChunkAsync(
-                run.TopUpCampaignId,
-                runId,
-                ChunkSize,
-                offset,
-                cancellationToken);
-
-            if (chunk.Count == 0)
-            {
-                break;
-            }
-
-            recipients.AddRange(chunk);
-            offset += chunk.Count;
-
-            logger.LogInformation(
-                "Top-up run {TopUpRunId} resolved {ResolvedCount}/{TotalRecipients} recipients",
-                runId,
-                offset,
-                totalRecipients);
-        }
-
-        Result<RunExecutionResult> execution = await orchestrator.ExecuteRunAsync(
-            runId,
-            recipients,
+        Result<RunExecutionResult> execution = await ExecuteRunStreamedAsync(
+            run,
+            totalRecipients,
+            recipientResolver,
+            orchestrator,
+            unitOfWork,
+            dbContext,
             cancellationToken);
 
         if (execution.IsSuccess)
@@ -174,6 +153,130 @@ public sealed class TopUpRunWorker(
                 "Top-up run {TopUpRunId} reconciliation failed: {ErrorCode}",
                 runId,
                 reconciliationResult.Error.Code);
+        }
+    }
+
+    private async Task<Result<RunExecutionResult>> ExecuteRunStreamedAsync(
+        TopUpRun run,
+        int totalRecipients,
+        IRecipientResolver recipientResolver,
+        IRunExecutionOrchestrator orchestrator,
+        IUnitOfWork unitOfWork,
+        Microsoft.EntityFrameworkCore.DbContext? dbContext,
+        CancellationToken ct)
+    {
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        orchestrator.RegisterCancellationToken(run.Id, linkedCts);
+
+        try
+        {
+            Result startProcessing = run.StartProcessing(clock.UtcNow.UtcDateTime);
+            if (startProcessing.IsFailure)
+            {
+                return Result<RunExecutionResult>.Failure(startProcessing.Error);
+            }
+
+            Result setSelected = run.SetTotalSelected(totalRecipients);
+            if (setSelected.IsFailure)
+            {
+                return Result<RunExecutionResult>.Failure(setSelected.Error);
+            }
+
+            await unitOfWork.SaveChangesAsync(ct);
+
+            int offset = 0;
+            var accumulator = new ChunkProcessingAccumulator();
+
+            while (offset < totalRecipients)
+            {
+                if (linkedCts.Token.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                IReadOnlyList<RecipientInfo> chunk = await recipientResolver.GetRecipientsChunkAsync(
+                    run.TopUpCampaignId,
+                    run.Id,
+                    ChunkSize,
+                    offset,
+                    ct);
+
+                if (chunk.Count == 0)
+                {
+                    break;
+                }
+
+                Result<ChunkProcessingResult> chunkResult = await orchestrator.ProcessChunkAsync(
+                    run.Id,
+                    chunk,
+                    accumulator,
+                    linkedCts.Token);
+
+                if (chunkResult.IsFailure)
+                {
+                    return Result<RunExecutionResult>.Failure(chunkResult.Error);
+                }
+
+                offset += chunk.Count;
+
+            await unitOfWork.SaveChangesAsync(ct);
+            dbContext?.ChangeTracker.Clear();
+
+                logger.LogInformation(
+                    "Top-up run {RunId} processed chunk {Offset}/{TotalRecipients}: succeeded={Succeeded}, failed={Failed}, skipped={Skipped}",
+                    run.Id,
+                    offset,
+                    totalRecipients,
+                    accumulator.TotalSucceeded,
+                    accumulator.TotalFailed,
+                    accumulator.TotalSkipped);
+            }
+
+            int totalProcessed = accumulator.TotalProcessed;
+
+            if (linkedCts.Token.IsCancellationRequested)
+            {
+                Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
+                if (cancelResult.IsFailure)
+                {
+                    return Result<RunExecutionResult>.Failure(cancelResult.Error);
+                }
+                run.ReconcileCounters(totalProcessed, accumulator.TotalSucceeded, accumulator.TotalFailed, accumulator.TotalSkipped, accumulator.TotalAmount);
+            }
+            else
+            {
+                Result finalize = run.Finalize(
+                    totalProcessed,
+                    accumulator.TotalSucceeded,
+                    accumulator.TotalFailed,
+                    accumulator.TotalSkipped,
+                    accumulator.TotalAmount,
+                    clock.UtcNow.UtcDateTime);
+
+                if (finalize.IsFailure)
+                {
+                    return Result<RunExecutionResult>.Failure(finalize.Error);
+                }
+            }
+
+            await unitOfWork.SaveChangesAsync(ct);
+
+            return Result<RunExecutionResult>.Success(new RunExecutionResult
+            {
+                TopUpRunId = run.Id,
+                TerminalStatus = run.RunStatusCode,
+                TotalSelected = totalRecipients,
+                TotalProcessed = totalProcessed,
+                TotalSucceeded = accumulator.TotalSucceeded,
+                TotalFailed = accumulator.TotalFailed,
+                TotalSkipped = accumulator.TotalSkipped,
+                TotalAmount = accumulator.TotalAmount,
+                SuccessfulAccountIds = accumulator.SuccessfulAccountIds
+            });
+        }
+        finally
+        {
+            orchestrator.UnregisterCancellationToken(run.Id);
         }
     }
 

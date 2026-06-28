@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
@@ -23,7 +24,7 @@ public sealed class TopUpRunWorkerTests
         TopUpRun run = fixture.AddRun();
         fixture.Resolver.SetRecipients(Recipients(1));
         TaskCompletionSource processed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.Orchestrator.OnExecute = () => processed.TrySetResult();
+        fixture.Orchestrator.OnProcessChunk = () => processed.TrySetResult();
         ChannelTopUpRunDispatcher dispatcher = new(NullLogger<ChannelTopUpRunDispatcher>.Instance);
         FakeClock clock = new(DateTimeOffset.UtcNow);
         TopUpRunWorker worker = new(dispatcher, fixture.ScopeFactory, NullLogger<TopUpRunWorker>.Instance, clock);
@@ -34,7 +35,7 @@ public sealed class TopUpRunWorkerTests
         await processed.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await worker.StopAsync(CancellationToken.None);
 
-        fixture.Orchestrator.Calls.Should().Be(1);
+        fixture.Orchestrator.ChunkCalls.Should().Be(1);
         fixture.Reconciliation.Calls.Should().Be(1);
     }
 
@@ -48,7 +49,7 @@ public sealed class TopUpRunWorkerTests
 
         await fixture.CreateWorker().ProcessRunAsync(run.Id);
 
-        fixture.Orchestrator.Calls.Should().Be(0);
+        fixture.Orchestrator.ChunkCalls.Should().Be(0);
         fixture.Reconciliation.Calls.Should().Be(0);
     }
 
@@ -59,7 +60,7 @@ public sealed class TopUpRunWorkerTests
 
         await fixture.CreateWorker().ProcessRunAsync(999);
 
-        fixture.Orchestrator.Calls.Should().Be(0);
+        fixture.Orchestrator.ChunkCalls.Should().Be(0);
         fixture.Reconciliation.Calls.Should().Be(0);
     }
 
@@ -72,8 +73,9 @@ public sealed class TopUpRunWorkerTests
 
         await fixture.CreateWorker().ProcessRunAsync(run.Id);
 
-        fixture.Orchestrator.Calls.Should().Be(1);
-        fixture.Orchestrator.LastRecipients.Should().BeEmpty();
+        fixture.Orchestrator.ChunkCalls.Should().Be(0);
+        run.RunStatusCode.Should().Be(TopUpRunStatusCodes.Failed);
+        run.TotalSucceeded.Should().Be(0);
     }
 
     [Fact]
@@ -86,7 +88,10 @@ public sealed class TopUpRunWorkerTests
         await fixture.CreateWorker().ProcessRunAsync(run.Id);
 
         fixture.Resolver.ChunkOffsets.Should().Equal(0, 500, 1000);
-        fixture.Orchestrator.LastRecipients.Should().HaveCount(1500);
+        fixture.Orchestrator.ChunkCalls.Should().Be(3);
+        var completedRun = await fixture.Runs.GetByIdAsync(run.Id);
+        completedRun!.TotalSucceeded.Should().Be(1500);
+        completedRun!.TotalAmount.Should().Be(150000m);
     }
 
     [Fact]
@@ -95,11 +100,11 @@ public sealed class TopUpRunWorkerTests
         WorkerFixture fixture = new();
         TopUpRun run = fixture.AddRun();
         fixture.Resolver.SetRecipients(Recipients(1));
-        fixture.Orchestrator.OnExecute = () => fixture.Reconciliation.Calls.Should().Be(0);
+        fixture.Orchestrator.OnProcessChunk = () => fixture.Reconciliation.Calls.Should().Be(0);
 
         await fixture.CreateWorker().ProcessRunAsync(run.Id);
 
-        fixture.Orchestrator.Calls.Should().Be(1);
+        fixture.Orchestrator.ChunkCalls.Should().Be(1);
         fixture.Reconciliation.Calls.Should().Be(1);
     }
 
@@ -138,6 +143,7 @@ public sealed class TopUpRunWorkerTests
         public FakeRunExecutionOrchestrator Orchestrator { get; } = new();
         public FakeRunReconciliationService Reconciliation { get; } = new();
         public FakePendingTransactionRecoveryService Recovery { get; } = new();
+        public FakeUnitOfWork UnitOfWork { get; } = new();
         public IServiceScopeFactory ScopeFactory => _provider.GetRequiredService<IServiceScopeFactory>();
 
         public WorkerFixture()
@@ -148,6 +154,7 @@ public sealed class TopUpRunWorkerTests
             services.AddSingleton<IRunExecutionOrchestrator>(Orchestrator);
             services.AddSingleton<IRunReconciliationService>(Reconciliation);
             services.AddSingleton<IPendingTransactionRecoveryService>(Recovery);
+            services.AddSingleton<IUnitOfWork>(UnitOfWork);
             _provider = services.BuildServiceProvider();
         }
 
@@ -234,15 +241,13 @@ public sealed class TopUpRunWorkerTests
 
     private sealed class FakeRunExecutionOrchestrator : IRunExecutionOrchestrator
     {
-        public int Calls { get; private set; }
-        public IReadOnlyList<RecipientInfo> LastRecipients { get; private set; } = [];
-        public Action? OnExecute { get; set; }
+        public int ChunkCalls { get; private set; }
+        public IReadOnlyList<RecipientInfo> LastChunkRecipients { get; private set; } = [];
+        public Action? OnProcessChunk { get; set; }
 
         public Task<Result<RunExecutionResult>> ExecuteRunAsync(long topUpRunId, IReadOnlyList<RecipientInfo> recipients, CancellationToken cancellationToken = default)
         {
-            Calls++;
-            LastRecipients = recipients;
-            OnExecute?.Invoke();
+            OnProcessChunk?.Invoke();
             return Task.FromResult(Result<RunExecutionResult>.Success(new RunExecutionResult
             {
                 TopUpRunId = topUpRunId,
@@ -257,9 +262,28 @@ public sealed class TopUpRunWorkerTests
             }));
         }
 
+        public Task<Result<ChunkProcessingResult>> ProcessChunkAsync(
+            long topUpRunId,
+            IReadOnlyList<RecipientInfo> chunk,
+            ChunkProcessingAccumulator accumulator,
+            CancellationToken cancellationToken = default)
+        {
+            ChunkCalls++;
+            LastChunkRecipients = chunk;
+            OnProcessChunk?.Invoke();
+            accumulator.TotalSucceeded += chunk.Count;
+            accumulator.TotalAmount += chunk.Sum(r => r.Amount);
+            foreach (var r in chunk) accumulator.SuccessfulAccountIds.Add(r.EducationAccountId);
+            return Task.FromResult(Result<ChunkProcessingResult>.Success(new ChunkProcessingResult(
+                chunk.Count, 0, 0, chunk.Sum(r => r.Amount),
+                chunk.Select(r => r.EducationAccountId).ToList())));
+        }
+
+        public void RegisterCancellationToken(long topUpRunId, CancellationTokenSource cts) { }
+        public void UnregisterCancellationToken(long topUpRunId) { }
+
         public bool CancelRun(long topUpRunId)
         {
-            // Fake implementation for tests
             return false;
         }
     }
@@ -326,5 +350,15 @@ public sealed class TopUpRunWorkerTests
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         { }
+    }
+
+    private sealed class FakeUnitOfWork : IUnitOfWork
+    {
+        public int SaveCalls { get; private set; }
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveCalls++;
+            return Task.FromResult(1);
+        }
     }
 }
