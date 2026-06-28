@@ -25,7 +25,8 @@ public sealed class TopUpRunWorkerTests
         TaskCompletionSource processed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Orchestrator.OnExecute = () => processed.TrySetResult();
         ChannelTopUpRunDispatcher dispatcher = new(NullLogger<ChannelTopUpRunDispatcher>.Instance);
-        TopUpRunWorker worker = new(dispatcher, fixture.ScopeFactory, NullLogger<TopUpRunWorker>.Instance);
+        FakeClock clock = new(DateTimeOffset.UtcNow);
+        TopUpRunWorker worker = new(dispatcher, fixture.ScopeFactory, NullLogger<TopUpRunWorker>.Instance, clock);
 
         await worker.StartAsync(CancellationToken.None);
         await dispatcher.EnqueueAsync(run.Id);
@@ -153,7 +154,8 @@ public sealed class TopUpRunWorkerTests
         public TopUpRunWorker CreateWorker(ILogger<TopUpRunWorker>? logger = null)
         {
             FakeTopUpRunQueueReader reader = new();
-            return new TopUpRunWorker(reader, ScopeFactory, logger ?? NullLogger<TopUpRunWorker>.Instance);
+            FakeClock clock = new(DateTimeOffset.UtcNow);
+            return new TopUpRunWorker(reader, ScopeFactory, logger ?? NullLogger<TopUpRunWorker>.Instance, clock);
         }
 
         public TopUpRun AddRun()
@@ -172,6 +174,8 @@ public sealed class TopUpRunWorkerTests
                 null,
                 null,
                 null,
+                "INSTANT",
+                100m,
                 99,
                 now);
             campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
@@ -279,6 +283,11 @@ public sealed class TopUpRunWorkerTests
     {
         public Task<int> RecoverPendingTransactionsAsync(long topUpRunId, string campaignReason, CancellationToken cancellationToken = default)
             => Task.FromResult(0);
+    }
+
+    private sealed class FakeClock(DateTimeOffset utcNow) : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = utcNow;
     }
 
     private sealed class TestLogger<T> : ILogger<T>

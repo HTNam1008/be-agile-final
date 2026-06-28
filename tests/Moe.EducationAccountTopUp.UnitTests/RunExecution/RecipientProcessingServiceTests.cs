@@ -69,7 +69,7 @@ public sealed class RecipientProcessingServiceTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(TopUpTransactionStatusCodes.Skipped);
         result.Value.Reason.Should().Be(TopUpErrors.RecipientNotEligible.Message);
-        _transactions.Items.Single().Amount.Should().Be(0m);
+        _transactions.Items.Single().Amount.Should().Be(500m);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class RecipientProcessingServiceTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(TopUpTransactionStatusCodes.Failed);
         result.Value.Reason.Should().Be("Credit rejected");
-        _transactions.Items.Single().Amount.Should().Be(0m);
+        _transactions.Items.Single().Amount.Should().Be(500m);
     }
 
     [Fact]

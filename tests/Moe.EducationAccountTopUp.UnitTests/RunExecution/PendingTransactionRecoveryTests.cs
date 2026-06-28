@@ -14,6 +14,7 @@ namespace Moe.EducationAccountTopUp.UnitTests.RunExecution;
 public sealed class PendingTransactionRecoveryTests
 {
     private readonly FakeTopUpTransactionRepository _transactions = new();
+    private readonly FakeTopUpRunRepository _runs = new();
     private readonly FakeAccountCreditGateway _accountGateway = new();
     private readonly FakeTopUpExecutionEventPublisher _events = new();
     private readonly FakeTopUpExecutionMetrics _metrics = new();
@@ -115,6 +116,7 @@ public sealed class PendingTransactionRecoveryTests
     {
         return new PendingTransactionRecoveryService(
             _transactions,
+            _runs,
             _accountGateway,
             _events,
             _metrics,
@@ -191,6 +193,18 @@ public sealed class PendingTransactionRecoveryTests
             TopUpReceivedReports.Add(report);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeTopUpRunRepository : ITopUpRunRepository
+    {
+        private TopUpRun? _run;
+
+        public void Seed(TopUpRun run) => _run = run;
+        public Task<TopUpRun?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult(_run);
+        public Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult<TopUpRun?>(null);
+        public Task<bool> ExistsForScheduledOccurrenceAsync(long campaignId, DateTime scheduledFor, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default) { _run = run; return Task.CompletedTask; }
     }
 
     private sealed class FakeTopUpExecutionMetrics : ITopUpExecutionMetrics

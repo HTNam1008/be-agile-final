@@ -25,7 +25,10 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             recipientModeCode = "FixedSelection",
             defaultTopUpAmount = 50.00m,
             reason = "E2E Testing",
-            scheduleTypeCode = "OneTimeScheduled"
+            scheduleTypeCode = "OneTimeScheduled",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"),
+            deliveryTypeCode = "FIXED_CONTRACT",
+            maxTotalAmount = 150.00m
         };
         var createResponse = await _client.PostAsJsonAsync("/api/admin/v1/top-up-campaigns", createPayload);
         if (!createResponse.IsSuccessStatusCode)
@@ -36,6 +39,17 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var campaignId = await createResponse.Content.ReadFromJsonAsync<long>();
         Assert.True(campaignId > 0);
 
+        var getResponse = await _client.GetAsync($"/api/admin/v1/top-up-campaigns/{campaignId}");
+        if (!getResponse.IsSuccessStatusCode)
+        {
+            var err = await getResponse.Content.ReadAsStringAsync();
+            throw new Exception($"GET failed: {getResponse.StatusCode} - {err}");
+        }
+        var getJson = await getResponse.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(getJson);
+        Assert.Equal("FIXED_CONTRACT", doc.RootElement.GetProperty("deliveryTypeCode").GetString());
+        Assert.Equal(150.00m, doc.RootElement.GetProperty("maxTotalAmount").GetDecimal());
+
         var updatePayload = new
         {
             campaignName = "Integration Test Fixed Updated",
@@ -43,10 +57,12 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             defaultTopUpAmount = 50.00m,
             reason = "E2E Testing",
             scheduleTypeCode = "Immediate",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1),
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1).ToString("yyyy-MM-dd"),
             endDate = (DateOnly?)null,
             frequencyCode = (string?)null,
             frequencyInterval = (int?)null,
+            deliveryTypeCode = "FIXED_CONTRACT",
+            maxTotalAmount = 150.00m,
             campaignVersion = 1
         };
         var updateResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}", updatePayload);
@@ -121,12 +137,25 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             recipientModeCode = "DynamicRules",
             defaultTopUpAmount = 75.00m,
             reason = "E2E Testing Dynamic",
-            scheduleTypeCode = "Immediate"
+            scheduleTypeCode = "Immediate",
+            deliveryTypeCode = "CONDITIONAL_RECURRING",
+            maxTotalAmount = 500.00m
         };
         var createResponse = await _client.PostAsJsonAsync("/api/admin/v1/top-up-campaigns", createPayload);
         createResponse.EnsureSuccessStatusCode();
         var campaignId = await createResponse.Content.ReadFromJsonAsync<long>();
         Assert.True(campaignId > 0);
+
+        var getResponse = await _client.GetAsync($"/api/admin/v1/top-up-campaigns/{campaignId}");
+        if (!getResponse.IsSuccessStatusCode)
+        {
+            var err = await getResponse.Content.ReadAsStringAsync();
+            throw new Exception($"GET failed: {getResponse.StatusCode} - {err}");
+        }
+        var getJson = await getResponse.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(getJson);
+        Assert.Equal("CONDITIONAL_RECURRING", doc.RootElement.GetProperty("deliveryTypeCode").GetString());
+        Assert.Equal(500.00m, doc.RootElement.GetProperty("maxTotalAmount").GetDecimal());
 
         // 2. Upsert Rules
         var rulesPayload = new

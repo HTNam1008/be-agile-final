@@ -202,6 +202,8 @@ public sealed class RunReconciliationServiceTests
             null,
             null,
             null,
+            "INSTANT",
+            100m,
             99,
             _clock.UtcNow.UtcDateTime);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, _clock.UtcNow.UtcDateTime);
