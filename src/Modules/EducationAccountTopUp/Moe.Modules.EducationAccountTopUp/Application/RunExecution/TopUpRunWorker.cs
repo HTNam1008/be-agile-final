@@ -198,10 +198,15 @@ public sealed class TopUpRunWorker(
         var dueContracts = await contractRepo.GetDueForPaymentAsync(nowUtc, ct);
         var campaignContracts = dueContracts.Where(c => c.TopUpCampaignId == run.TopUpCampaignId).ToList();
 
-        var recipients = campaignContracts.Select(c => new RecipientInfo
+        var payments = campaignContracts.Select(c => (
+            Contract: c,
+            ActualAmount: Math.Min(c.AmountPerPayment, c.MaxTotalAmount - c.TotalReceived)
+        )).ToList();
+
+        var recipients = payments.Select(p => new RecipientInfo
         {
-            EducationAccountId = c.EducationAccountId,
-            Amount = c.AmountPerPayment,
+            EducationAccountId = p.Contract.EducationAccountId,
+            Amount = p.ActualAmount,
             OrganizationUnitId = 0,
             CampaignReason = "Contract-driven top-up"
         }).ToList();
@@ -223,11 +228,12 @@ public sealed class TopUpRunWorker(
                 execution.Value.TotalSucceeded,
                 execution.Value.TotalFailed);
 
-            foreach (var contract in campaignContracts)
+            foreach (var payment in payments)
             {
+                var contract = payment.Contract;
                 if (execution.Value.SuccessfulAccountIds.Contains(contract.EducationAccountId))
                 {
-                    contract.RecordPayment(contract.AmountPerPayment, nowUtc);
+                    contract.RecordPayment(payment.ActualAmount, nowUtc);
 
                     if (contract.DeliveryTypeCode == DeliveryType.FixedContract && !contract.IsCompleted)
                     {
