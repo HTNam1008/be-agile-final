@@ -49,6 +49,7 @@ public sealed class TopUpRun : AggregateRoot<long>
     public decimal TotalAmount { get; private set; }
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? CancelRequestedAtUtc { get; private set; }
     public string IdempotencyKey { get; private set; } = string.Empty;
     public string? Note { get; private set; }
 
@@ -258,6 +259,18 @@ public sealed class TopUpRun : AggregateRoot<long>
             Raise(new ManualRunRequestedEvent(Id, TopUpCampaignId, requestedByUserId, occurredAtUtc));
         }
     }
+
+    public void RequestCancel(DateTime utcNow)
+    {
+        if (IsTerminal || CancelRequestedAtUtc.HasValue)
+        {
+            return;
+        }
+
+        CancelRequestedAtUtc = utcNow;
+    }
+
+    public bool IsCancelRequested => CancelRequestedAtUtc.HasValue;
 
     private Result ValidateTransition(string from, string to)
     {
