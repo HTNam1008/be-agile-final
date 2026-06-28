@@ -54,7 +54,6 @@ public sealed class TopUpTransactionResultsApiTests
         Assert.DoesNotContain(seeded.RawStudentNumber, json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"idempotencyKey\"", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"personId\"", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("\"educationAccountId\"", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

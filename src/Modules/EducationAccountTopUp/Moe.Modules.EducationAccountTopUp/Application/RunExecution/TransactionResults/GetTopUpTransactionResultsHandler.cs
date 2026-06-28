@@ -168,6 +168,7 @@ internal sealed class GetTopUpTransactionResultsHandler(
 
         return new TopUpTransactionResultItem(
             item.TransactionId,
+            item.EducationAccountId,
             account is null
                 ? "****"
                 : TopUpDisplayMasker.MaskAccountNumber(account.AccountNumber),
