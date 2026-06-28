@@ -53,6 +53,9 @@ public sealed class TopUpCampaign : Entity<long>
     public long? UpdatedByLoginAccountId { get; private set; }
     public DateTime? UpdatedAtUtc { get; private set; }
 
+    public string DeliveryTypeCode { get; private set; } = DeliveryType.Instant;
+    public decimal MaxTotalAmount { get; private set; }
+
     public bool IsExecutable => CampaignStatusCode == TopUpCampaignStatusCodes.Active;
 
     public static TopUpCampaign Create(
@@ -68,6 +71,8 @@ public sealed class TopUpCampaign : Entity<long>
         DateOnly? endDate,
         string? frequencyCode,
         int? frequencyInterval,
+        string deliveryTypeCode,
+        decimal maxTotalAmount,
         long currentUserId,
         DateTime nowUtc)
     {
@@ -85,6 +90,8 @@ public sealed class TopUpCampaign : Entity<long>
             EndDate = endDate,
             FrequencyCode = frequencyCode,
             FrequencyInterval = frequencyInterval,
+            DeliveryTypeCode = deliveryTypeCode,
+            MaxTotalAmount = maxTotalAmount,
             CampaignStatusCode = TopUpCampaignStatusCodes.Draft,
             CampaignVersion = 1,
             CreatedByLoginAccountId = currentUserId,
@@ -94,7 +101,7 @@ public sealed class TopUpCampaign : Entity<long>
         };
     }
 
-    public void Update(
+    public Result Update(
         string campaignName,
         string? description,
         decimal defaultTopUpAmount,
@@ -104,9 +111,14 @@ public sealed class TopUpCampaign : Entity<long>
         DateOnly? endDate,
         string? frequencyCode,
         int? frequencyInterval,
+        string deliveryTypeCode,
+        decimal maxTotalAmount,
         long currentUserId,
         DateTime nowUtc)
     {
+        if (CampaignStatusCode != TopUpCampaignStatusCodes.Draft)
+            return Result.Failure(TopUpErrors.CannotUpdateActiveCampaign);
+
         CampaignName = campaignName;
         Description = description;
         DefaultTopUpAmount = defaultTopUpAmount;
@@ -116,9 +128,28 @@ public sealed class TopUpCampaign : Entity<long>
         EndDate = endDate;
         FrequencyCode = frequencyCode;
         FrequencyInterval = frequencyInterval;
+        DeliveryTypeCode = deliveryTypeCode;
+        MaxTotalAmount = maxTotalAmount;
         UpdatedByLoginAccountId = currentUserId;
         UpdatedAtUtc = nowUtc;
         CampaignVersion++;
+        return Result.Success();
+    }
+
+    public Result ValidateConfiguration()
+    {
+        if (DeliveryTypeCode == DeliveryType.Instant)
+        {
+            if (MaxTotalAmount != DefaultTopUpAmount)
+                return Result.Failure(TopUpErrors.InstantRequiresExactMax);
+        }
+        else if (DeliveryTypeCode == DeliveryType.FixedContract || DeliveryTypeCode == DeliveryType.ConditionalRecurring)
+        {
+            if (MaxTotalAmount < DefaultTopUpAmount)
+                return Result.Failure(TopUpErrors.MaxTotalAmountBelowPerPayment);
+        }
+
+        return Result.Success();
     }
 
     public Result ChangeStatus(string newStatusCode, long currentUserId, DateTime nowUtc, bool isSystem = false)
@@ -136,6 +167,12 @@ public sealed class TopUpCampaign : Entity<long>
         if (!isValid)
         {
             return Result.Failure(TopUpErrors.InvalidStatusTransition);
+        }
+
+        if (newStatusCode == TopUpCampaignStatusCodes.Active)
+        {
+            var validation = ValidateConfiguration();
+            if (validation.IsFailure) return validation;
         }
 
         CampaignStatusCode = newStatusCode;
