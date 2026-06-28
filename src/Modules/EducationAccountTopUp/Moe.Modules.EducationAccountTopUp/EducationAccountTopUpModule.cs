@@ -10,7 +10,10 @@ using Moe.Modules.EducationAccountTopUp.Api.Admin;
 using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Application.History;
+using Moe.Modules.EducationAccountTopUp.Application.History.AccountTopUpTransactionHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
+using Moe.Modules.EducationAccountTopUp.Application.History.CampaignTransactionHistory;
+using Moe.Modules.EducationAccountTopUp.Application.History.ContractStatus;
 using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle.RunHistory;
@@ -31,6 +34,7 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertFixedRecipients;
 using Moe.Modules.EducationAccountTopUp.Application.TransactionHistory;
+using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.DTOs;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.AdminDashboard;
@@ -65,6 +69,7 @@ public sealed class EducationAccountTopUpModule : IModule
         // Gateways & Repositories
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
+        services.AddScoped<IDynamicTopUpContractRepository, DynamicTopUpContractRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
         services.AddScoped<IEducationAccountLifecycleRunRepository, EducationAccountLifecycleRunRepository>();
         services.AddScoped<ITopUpTransactionRepository, TopUpTransactionRepository>();
@@ -75,6 +80,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<IEducationAccountLifecycleHistoryReader, EducationAccountLifecycleHistoryReader>();
         services.AddScoped<IAccountTransactionHistoryReader, AccountTransactionHistoryReader>();
+        services.AddScoped<ITopUpTransactionReader, TopUpTransactionReader>();
+        services.AddScoped<IContractStatusReader, ContractStatusReader>();
         services.AddScoped<ITopUpRunSummaryReader, TopUpRunSummaryReader>();
         services.AddScoped<ITopUpTransactionResultsReader, TopUpTransactionResultsReader>();
         services.AddScoped<IEducationAccountProvisioningGateway, EducationAccountProvisioningGateway>();
@@ -105,6 +112,7 @@ public sealed class EducationAccountTopUpModule : IModule
         // Workers
         services.AddHostedService<TopUpRunWorker>();
         services.AddHostedService<TopUpSchedulerWorker>();
+        services.AddHostedService<TopUpAssessmentWorker>();
         services.AddSingleton<EducationAccountLifecycleWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
@@ -123,6 +131,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
         services.AddScoped<IQueryHandler<GetMyEducationAccountTransactionsQuery, MyEducationAccountTransactionsPage>, GetMyEducationAccountTransactionsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignsQuery, IReadOnlyList<CampaignListItem>>, GetCampaignsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetCampaignByIdQuery, CampaignListItem?>, GetCampaignByIdQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();
         services.AddScoped<IQueryHandler<GetFixedRecipientsQuery, IReadOnlyList<FixedRecipientDto>>, GetFixedRecipientsQueryHandler>();
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
@@ -130,6 +139,9 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetTopUpTransactionResultsQuery, PageResponse<TopUpTransactionResultItem>>, GetTopUpTransactionResultsHandler>();
         services.AddScoped<IQueryHandler<GetCampaignHistoryQuery, PageResponse<CampaignHistoryItem>>, GetCampaignHistoryHandler>();
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetCampaignTransactionHistoryQuery, PageResponse<CampaignTransactionHistoryItem>>, GetCampaignTransactionHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetAccountTopUpTransactionHistoryQuery, PageResponse<AccountTopUpTransactionHistoryItem>>, GetAccountTopUpTransactionHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetCampaignContractsQuery, PageResponse<CampaignContractItem>>, GetCampaignContractsHandler>();
         services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunsQuery, PageResponse<EducationAccountLifecycleRunListItem>>, GetEducationAccountLifecycleRunsHandler>();
         services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunDetailQuery, EducationAccountLifecycleRunDetail>, GetEducationAccountLifecycleRunDetailHandler>();
         services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
@@ -142,18 +154,16 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<UpsertFixedRecipientsRequest>, UpsertFixedRecipientsRequestValidator>();
         services.AddScoped<IValidator<CampaignHistoryRequest>, CampaignHistoryRequestValidator>();
         services.AddScoped<IValidator<RunHistoryRequest>, RunHistoryRequestValidator>();
+        services.AddScoped<IValidator<CampaignTransactionHistoryRequest>, CampaignTransactionHistoryRequestValidator>();
+        services.AddScoped<IValidator<AccountTransactionHistoryRequest>, AccountTransactionHistoryRequestValidator>();
         services.AddScoped<IValidator<TopUpTransactionResultsRequest>, TopUpTransactionResultsRequestValidator>();
-        services.AddScoped<IValidator<OpenManualAccountCommand>, OpenManualAccountValidator>();
-        services.AddScoped<IValidator<CloseManualAccountCommand>, CloseManualAccountValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsQuery>, SearchTopUpAccountsValidator>();
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
-        services.AddScoped<IValidator<CreateCampaignCommand>, CreateCampaignCommandValidator>();
-        services.AddScoped<IValidator<UpdateCampaignCommand>, UpdateCampaignCommandValidator>();
-        services.AddScoped<IValidator<ChangeCampaignStatusCommand>, ChangeCampaignStatusCommandValidator>();
-        services.AddScoped<IValidator<UpsertFixedRecipientsCommand>, UpsertFixedRecipientsCommandValidator>();
-        services.AddScoped<IValidator<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandValidator>();
+        services.AddScoped<IValidator<CreateCampaignRequest>, CreateCampaignRequestValidator>();
         services.AddScoped<IValidator<RequestManualRunRequest>, RequestManualRunRequestValidator>();
-        services.AddScoped<IValidator<RequestManualRunCommand>, RequestManualRunCommandValidator>();
+        services.AddScoped<IValidator<UpdateCampaignRequest>, UpdateCampaignRequestValidator>();
+        services.AddScoped<IValidator<ChangeCampaignStatusCommand>, ChangeCampaignStatusCommandValidator>();
+        services.AddScoped<IValidator<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandValidator>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }

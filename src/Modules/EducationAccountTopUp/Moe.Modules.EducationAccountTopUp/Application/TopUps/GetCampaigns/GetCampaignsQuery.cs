@@ -21,5 +21,7 @@ public sealed record CampaignListItem(
     DateTime? NextRunAt,
     string CampaignStatusCode,
     int CampaignVersion,
+    string DeliveryTypeCode,
+    decimal MaxTotalAmount,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

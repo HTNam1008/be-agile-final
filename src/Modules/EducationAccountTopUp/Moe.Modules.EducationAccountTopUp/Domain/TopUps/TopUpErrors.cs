@@ -63,6 +63,23 @@ public static class TopUpErrors
     public static readonly Error DateMismatch =
         new("TopUp.DateMismatch", "End date must be greater than or equal to start date.");
 
+    public static readonly Error CannotUpdateActiveCampaign =
+        new("TopUp.CannotUpdateActiveCampaign", "Campaign configuration cannot be modified after activation.");
+
+    public static readonly Error MaxTotalAmountBelowPerPayment =
+        new("TopUp.MaxTotalAmountBelowPerPayment", "MaxTotalAmount must be greater than or equal to DefaultTopUpAmount.");
+
+    public static readonly Error InstantRequiresExactMax =
+        new("TopUp.InstantRequiresExactMax", "Instant delivery campaigns must have MaxTotalAmount equal to DefaultTopUpAmount.");
+
+    // Contract Errors
+    public static readonly Error ContractAlreadyCompleted =
+        new("TopUp.ContractAlreadyCompleted", "Contract has already reached a terminal state.");
+    public static readonly Error ContractNotFound =
+        new("TopUp.ContractNotFound", "Dynamic top-up contract not found.");
+    public static readonly Error ContractNotActive =
+        new("TopUp.ContractNotActive", "Contract is not in active status.");
+
     // Run Errors
     public static readonly Error RunNotFound =
         new("TopUp.RunNotFound", "Top-up run not found.");

@@ -31,6 +31,16 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TopUpCampaign>> GetDueForAssessmentAsync(DateOnly today, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpCampaign>()
+            .Where(c => c.CampaignStatusCode == TopUpCampaignStatusCodes.Active
+                && c.RecipientModeCode == "DYNAMIC_RULES"
+                && c.StartDate <= today
+                && (c.EndDate == null || c.EndDate >= today))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpCampaign>().AddAsync(campaign, cancellationToken);
@@ -66,16 +76,28 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
         await dbContext.Set<TopUpCampaignRule>().AddAsync(rule, cancellationToken);
     }
 
+    public async Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpCampaignRecipient>()
+            .IgnoreQueryFilters()
+            .Where(x => x.TopUpCampaignId == campaignId && x.AmountOverride != null && x.DeletedAtUtc == null)
+            .ToDictionaryAsync(x => x.EducationAccountId, x => x.AmountOverride!.Value, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
     {
         return await dbContext.Set<TopUpCampaignRecipient>()
+            .IgnoreQueryFilters()
             .Where(x => x.TopUpCampaignId == campaignId)
             .ToListAsync(cancellationToken);
     }
 
-    public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, CancellationToken cancellationToken = default)
+    public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, long userId, DateTime nowUtc, CancellationToken cancellationToken = default)
     {
-        dbContext.Set<TopUpCampaignRecipient>().RemoveRange(recipients);
+        foreach (var recipient in recipients)
+        {
+            recipient.SoftDelete(userId, nowUtc);
+        }
         return Task.CompletedTask;
     }
 
