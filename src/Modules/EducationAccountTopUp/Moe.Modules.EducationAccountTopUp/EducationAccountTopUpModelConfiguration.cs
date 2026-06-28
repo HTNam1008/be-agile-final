@@ -20,5 +20,6 @@ public sealed class EducationAccountTopUpModelConfiguration : IModelConfiguratio
         modelBuilder.ApplyConfiguration(new TopUpCampaignRuleConfiguration());
         modelBuilder.ApplyConfiguration(new TopUpRunConfiguration());
         modelBuilder.ApplyConfiguration(new TopUpTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new DynamicTopUpContractConfiguration());
     }
 }
