@@ -130,19 +130,11 @@ public sealed class RunExecutionOrchestrator(
 
         DateTime completedAtUtc = run.CompletedAtUtc ?? clock.UtcNow.UtcDateTime;
 
-        TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, cancellationToken);
-        if (campaign is not null)
-        {
-            if (string.Equals(campaign.ScheduleTypeCode, "IMMEDIATE", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(campaign.ScheduleTypeCode, "ONETIME_SCHEDULED", StringComparison.OrdinalIgnoreCase))
-            {
-                campaign.ChangeStatus(TopUpCampaignStatusCodes.Completed, 0, completedAtUtc, true);
-            }
-            else if (string.Equals(campaign.ScheduleTypeCode, "RECURRING", StringComparison.OrdinalIgnoreCase) && campaign.NextRunAtUtc == null)
-            {
-                campaign.ChangeStatus(TopUpCampaignStatusCodes.Completed, 0, completedAtUtc, true);
-            }
-        }
+        await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(
+            run,
+            campaigns,
+            completedAtUtc,
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         TimeSpan duration = run.StartedAtUtc is DateTime startedAtUtc

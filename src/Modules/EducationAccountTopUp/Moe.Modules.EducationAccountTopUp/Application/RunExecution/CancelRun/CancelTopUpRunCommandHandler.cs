@@ -8,6 +8,7 @@ using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution.CancelRun;
 
 internal sealed class CancelTopUpRunCommandHandler(
+    ITopUpCampaignRepository campaigns,
     ITopUpRunRepository runs,
     IRunExecutionOrchestrator orchestrator,
     IUnitOfWork unitOfWork,
@@ -37,6 +38,7 @@ internal sealed class CancelTopUpRunCommandHandler(
                 // Force cancel it in the database directly.
                 Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
                 if (cancelResult.IsFailure) return cancelResult;
+                await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, clock.UtcNow.UtcDateTime, cancellationToken);
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
         }
@@ -48,6 +50,7 @@ internal sealed class CancelTopUpRunCommandHandler(
             {
                 return cancelResult;
             }
+            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, clock.UtcNow.UtcDateTime, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         else

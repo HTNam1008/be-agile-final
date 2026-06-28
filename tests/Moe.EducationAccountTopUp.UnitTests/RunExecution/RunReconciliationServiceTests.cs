@@ -12,6 +12,7 @@ namespace Moe.EducationAccountTopUp.UnitTests.RunExecution;
 
 public sealed class RunReconciliationServiceTests
 {
+    private readonly FakeTopUpCampaignRepository _campaigns = new();
     private readonly FakeTopUpRunRepository _runs = new();
     private readonly FakeTopUpTransactionRepository _transactions = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -156,6 +157,7 @@ public sealed class RunReconciliationServiceTests
     private RunReconciliationService CreateService()
     {
         return new RunReconciliationService(
+            _campaigns,
             _runs,
             _transactions,
             _unitOfWork,
@@ -316,6 +318,13 @@ public sealed class RunReconciliationServiceTests
             SaveCalls++;
             return Task.FromResult(1);
         }
+    }
+
+    private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository
+    {
+        public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult<TopUpCampaign?>(null);
+        public Task<TopUpCampaign?> GetByCodeAsync(string campaignCode, CancellationToken cancellationToken = default) => Task.FromResult<TopUpCampaign?>(null);
+        public Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeClock(DateTimeOffset utcNow) : IClock
