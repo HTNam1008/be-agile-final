@@ -45,7 +45,7 @@ public sealed class RequestManualRunCommandHandler(
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
         }
 
-        if (!campaign.ScheduleTypeCode.Equals("IMMEDIATE", StringComparison.OrdinalIgnoreCase))
+        if (!campaign.ScheduleTypeCode.Equals(ScheduleTypes.Immediate, StringComparison.OrdinalIgnoreCase))
         {
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
         }
