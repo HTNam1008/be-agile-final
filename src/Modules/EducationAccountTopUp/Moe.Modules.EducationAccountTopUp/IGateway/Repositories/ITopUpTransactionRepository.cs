@@ -19,6 +19,12 @@ public interface ITopUpTransactionRepository
         long topUpRunId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(
+        long topUpRunId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default);
+
     void Add(TopUpTransaction transaction);
 
     Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default);
