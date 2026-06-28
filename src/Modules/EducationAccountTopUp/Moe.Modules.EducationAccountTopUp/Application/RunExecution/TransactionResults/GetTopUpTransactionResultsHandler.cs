@@ -132,7 +132,7 @@ internal sealed class GetTopUpTransactionResultsHandler(
             AgeFrom: null,
             AgeTo: null,
             Page: 1,
-            PageSize: 1);
+            PageSize: 1000);
 
         IReadOnlyCollection<long> matchingPersonIds =
             await students.FindMatchingPersonIdsForTopUpAsync(

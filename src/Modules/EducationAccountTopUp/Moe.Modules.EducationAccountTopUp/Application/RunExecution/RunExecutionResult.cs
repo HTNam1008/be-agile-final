@@ -10,4 +10,5 @@ public sealed record RunExecutionResult
     public required int TotalFailed { get; init; }
     public required int TotalSkipped { get; init; }
     public required decimal TotalAmount { get; init; }
+    public required IReadOnlyCollection<long> SuccessfulAccountIds { get; init; }
 }

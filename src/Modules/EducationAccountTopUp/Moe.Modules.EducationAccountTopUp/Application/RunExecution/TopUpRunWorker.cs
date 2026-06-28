@@ -225,7 +225,10 @@ public sealed class TopUpRunWorker(
 
             foreach (var contract in campaignContracts)
             {
-                contract.RecordPayment(contract.AmountPerPayment, nowUtc);
+                if (execution.Value.SuccessfulAccountIds.Contains(contract.EducationAccountId))
+                {
+                    contract.RecordPayment(contract.AmountPerPayment, nowUtc);
+                }
 
                 if (contract.DeliveryTypeCode == DeliveryType.FixedContract && !contract.IsCompleted)
                 {

@@ -251,7 +251,8 @@ public sealed class TopUpRunWorkerTests
                 TotalSucceeded = recipients.Count,
                 TotalFailed = 0,
                 TotalSkipped = 0,
-                TotalAmount = recipients.Sum(x => x.Amount)
+                TotalAmount = recipients.Sum(r => r.Amount),
+                SuccessfulAccountIds = recipients.Select(r => r.EducationAccountId).ToList()
             }));
         }
 
