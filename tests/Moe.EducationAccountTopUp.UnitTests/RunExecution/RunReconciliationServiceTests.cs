@@ -273,17 +273,10 @@ public sealed class RunReconciliationServiceTests
             => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && x.ScheduledForUtc == scheduledFor));
 
         public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(false);
-        }
+            => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
 
         public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(false);
-        }
-
-        public Task<bool> HasAnyRunForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
-            => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
+            => Task.FromResult(_runs.Values.Any(x => x.TopUpCampaignId == campaignId && (x.RunStatusCode == TopUpRunStatusCodes.Previewed || x.RunStatusCode == TopUpRunStatusCodes.Processing)));
 
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
         {
