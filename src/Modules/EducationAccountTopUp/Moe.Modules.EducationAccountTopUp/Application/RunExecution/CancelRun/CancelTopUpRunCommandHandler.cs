@@ -10,6 +10,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution.CancelRun;
 internal sealed class CancelTopUpRunCommandHandler(
     ITopUpCampaignRepository campaigns,
     ITopUpRunRepository runs,
+    ITopUpTransactionRepository transactions,
     IRunExecutionOrchestrator orchestrator,
     IUnitOfWork unitOfWork,
     IClock clock) : ICommandHandler<CancelTopUpRunCommand>
@@ -38,6 +39,13 @@ internal sealed class CancelTopUpRunCommandHandler(
                 // Force cancel it in the database directly.
                 Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
                 if (cancelResult.IsFailure) return cancelResult;
+
+                var allTransactions = await transactions.GetByRunIdAsync(request.RunId, cancellationToken);
+                foreach (var tx in allTransactions.Where(t => t.TransactionStatusCode == TopUpTransactionStatusCodes.Pending))
+                {
+                    tx.Skip("Run cancelled manually during execution", clock.UtcNow.UtcDateTime);
+                }
+
                 await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, clock.UtcNow.UtcDateTime, cancellationToken);
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
