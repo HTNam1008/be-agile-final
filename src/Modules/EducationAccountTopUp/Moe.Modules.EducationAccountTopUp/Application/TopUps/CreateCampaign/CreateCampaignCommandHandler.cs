@@ -57,6 +57,8 @@ internal sealed class CreateCampaignCommandHandler(
             endDate: endDate,
             frequencyCode: frequencyCode,
             frequencyInterval: frequencyInterval,
+            deliveryTypeCode: request.DeliveryTypeCode,
+            maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
             nowUtc: clock.UtcNow.UtcDateTime);
 

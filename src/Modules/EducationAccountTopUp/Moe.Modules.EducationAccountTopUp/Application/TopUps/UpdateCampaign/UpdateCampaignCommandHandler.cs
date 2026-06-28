@@ -31,12 +31,6 @@ internal sealed class UpdateCampaignCommandHandler(
             return Result.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft
-            && campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
-        {
-            return Result.Failure(TopUpErrors.InvalidCampaignStatus);
-        }
-
         if (campaign.CampaignVersion != command.Request.CampaignVersion)
         {
             return Result.Failure(TopUpErrors.ConcurrencyException);
@@ -56,7 +50,7 @@ internal sealed class UpdateCampaignCommandHandler(
             endDate = request.EndDate;
         }
 
-        campaign.Update(
+        Result updateResult = campaign.Update(
             campaignName: request.CampaignName,
             description: request.Description,
             defaultTopUpAmount: request.DefaultTopUpAmount,
@@ -66,10 +60,13 @@ internal sealed class UpdateCampaignCommandHandler(
             endDate: endDate,
             frequencyCode: frequencyCode,
             frequencyInterval: frequencyInterval,
+            deliveryTypeCode: request.DeliveryTypeCode,
+            maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
             nowUtc: clock.UtcNow.UtcDateTime);
 
-
+        if (updateResult.IsFailure)
+            return updateResult;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
