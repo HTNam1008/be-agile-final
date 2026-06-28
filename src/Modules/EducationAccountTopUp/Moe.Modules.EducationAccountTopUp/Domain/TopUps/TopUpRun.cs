@@ -7,6 +7,8 @@ public sealed class TopUpRun : AggregateRoot<long>
 {
     private TopUpRun() : base(0) { }
 
+    public DateTime CreatedAtUtc { get; private set; }
+
     private TopUpRun(
         long id,
         long topUpCampaignId,
@@ -37,6 +39,8 @@ public sealed class TopUpRun : AggregateRoot<long>
     public long? TriggeredByLoginAccountId { get; private set; }
     public string RunStatusCode { get; private set; } = string.Empty;
     public string? RuleSnapshotJson { get; private set; }
+    public bool IsContractDriven { get; private set; }
+    public string? RunTypeCode { get; private set; }
     public int TotalSelected { get; private set; }
     public int TotalProcessed { get; private set; }
     public int TotalSucceeded { get; private set; }
@@ -96,6 +100,22 @@ public sealed class TopUpRun : AggregateRoot<long>
             idempotencyKey.Trim(),
             note: null,
             string.IsNullOrWhiteSpace(ruleSnapshotJson) ? null : ruleSnapshotJson);
+    }
+
+    public static TopUpRun CreateForContracts(long campaignId, DateTime utcNow)
+    {
+        return new TopUpRun
+        {
+            TopUpCampaignId = campaignId,
+            CampaignVersion = 0,
+            ScheduledForUtc = utcNow,
+            TriggerTypeCode = TopUpRunTriggerTypes.Scheduled,
+            RunStatusCode = TopUpRunStatusCodes.Previewed,
+            IdempotencyKey = $"contract-run-{campaignId}-{utcNow:yyyyMMddHHmmss}",
+            IsContractDriven = true,
+            RunTypeCode = "CONTRACT",
+            CreatedAtUtc = utcNow,
+        };
     }
 
     public static TopUpRun Rehydrate(
@@ -220,6 +240,15 @@ public sealed class TopUpRun : AggregateRoot<long>
 
         RuleSnapshotJson = ruleJson;
         return Result.Success();
+    }
+
+    public void ReconcileCounters(int totalProcessed, int totalSucceeded, int totalFailed, int totalSkipped, decimal totalAmount)
+    {
+        TotalProcessed = totalProcessed;
+        TotalSucceeded = totalSucceeded;
+        TotalFailed = totalFailed;
+        TotalSkipped = totalSkipped;
+        TotalAmount = totalAmount;
     }
 
     public void MarkManualRunRequested(DateTime occurredAtUtc)
