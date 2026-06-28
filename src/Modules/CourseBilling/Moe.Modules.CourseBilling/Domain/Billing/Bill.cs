@@ -175,4 +175,5 @@ public static class BillingErrors
     public static readonly Error InvalidDeferral = new("BILL.INVALID_DEFERRAL", "The bill cannot be deferred.");
     public static readonly Error DeferralLimitReached = new("BILL.DEFERRAL_LIMIT_REACHED", "The bill has reached the maximum deferral count.");
     public static readonly Error InvalidBillingConfiguration = new("BILL.INVALID_BILLING_CONFIGURATION", "The billing configuration is invalid.");
+    public static readonly Error InvalidDeferExtensionRequest = new("BILL.DEFER_EXTENSION_INVALID", "The defer extension request is invalid.");
 }

@@ -281,6 +281,10 @@ public static class CourseBillingErrors
     public static readonly Error OrganizationOutsideScope = new("AUTH.ORGANIZATION_OUTSIDE_SCOPE", "The requested organization is outside the current admin's scope.");
     public static readonly Error SchoolAdminRequired = new("COURSE.SCHOOL_ADMIN_REQUIRED", "A school administrator is required.");
     public static readonly Error OrganizationRequired = new("COURSE.ORGANIZATION_REQUIRED", "Select an organization to manage billing configuration.");
+    public static readonly Error BillNotFound = new("BILL.NOT_FOUND", "The bill was not found.");
+    public static readonly Error DeferExtensionNotAllowed = new("BILL.DEFER_EXTENSION_NOT_ALLOWED", "The bill is not eligible for a defer extension request.");
+    public static readonly Error DeferExtensionDuplicatePending = new("BILL.DEFER_EXTENSION_DUPLICATE_PENDING", "A pending defer extension request already exists for this bill.");
+    public static readonly Error DeferExtensionRequestNotFound = new("BILL.DEFER_EXTENSION_REQUEST_NOT_FOUND", "The defer extension request was not found.");
     public static readonly Error CourseContentNotOpen = new("COURSE.CONTENT_NOT_OPEN", "Course content is available from the course start date.");
     public static readonly Error CourseContentLocked = new("COURSE.CONTENT_LOCKED", "Course content is locked for this enrollment status.");
 }

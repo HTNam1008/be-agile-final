@@ -404,6 +404,58 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.ToTable("OrganizationBillingConfiguration", "billing");
                 });
 
+            modelBuilder.Entity("Moe.Modules.CourseBilling.Domain.Billing.DeferExtensionRequest", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("DeferExtensionRequestId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("BillId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CourseEnrollmentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("DeadlineAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("OrganizationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("PersonId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("RequestedByLoginAccountId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long?>("ReviewedByLoginAccountId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StatusCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BillId", "StatusCode")
+                        .HasFilter("[StatusCode] = 'PENDING'");
+
+                    b.HasIndex("OrganizationId", "StatusCode", "RequestedAtUtc");
+
+                    b.ToTable("DeferExtensionRequest", "billing");
+                });
+
             modelBuilder.Entity("Moe.Modules.CourseBilling.Domain.Billing.BillLine", b =>
                 {
                     b.Property<long>("Id")
