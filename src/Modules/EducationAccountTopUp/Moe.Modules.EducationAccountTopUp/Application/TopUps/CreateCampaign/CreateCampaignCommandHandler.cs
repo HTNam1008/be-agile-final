@@ -37,7 +37,9 @@ internal sealed class CreateCampaignCommandHandler(
         int? frequencyInterval = null;
         DateOnly? endDate = null;
 
-        if (scheduleTypeCode == ScheduleTypeCode.Recurring)
+        if (scheduleTypeCode == ScheduleTypeCode.Recurring || 
+            request.DeliveryTypeCode == DeliveryType.FixedContract || 
+            request.DeliveryTypeCode == DeliveryType.ConditionalRecurring)
         {
             frequencyCode = request.FrequencyCode;
             frequencyInterval = request.FrequencyInterval;

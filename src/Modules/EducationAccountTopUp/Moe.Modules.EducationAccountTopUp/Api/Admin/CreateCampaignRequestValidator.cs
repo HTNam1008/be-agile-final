@@ -27,25 +27,30 @@ public sealed class CreateCampaignRequestValidator : AbstractValidator<CreateCam
 
         RuleFor(x => x.MaxTotalAmount).GreaterThan(0);
 
-        When(x => !string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.Immediate.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+        bool IsRecurringOrContract(CreateCampaignRequest req) =>
+            string.Equals(req.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase) ||
+            req.DeliveryTypeCode == DeliveryType.FixedContract ||
+            req.DeliveryTypeCode == DeliveryType.ConditionalRecurring;
+
+        When(x => !string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.Immediate.ToString(), StringComparison.OrdinalIgnoreCase) || IsRecurringOrContract(x), () =>
         {
             RuleFor(x => x.StartDate)
                 .Must(startDate => startDate >= DateOnly.FromDateTime(DateTime.UtcNow))
-                .WithMessage("StartDate must be today or in the future for scheduled campaigns.");
+                .WithMessage("StartDate must be today or in the future for scheduled or contract campaigns.");
 
-            When(x => string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.OneTimeScheduled.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+            When(x => string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.OneTimeScheduled.ToString(), StringComparison.OrdinalIgnoreCase) && !IsRecurringOrContract(x), () =>
             {
                 RuleFor(x => x.EndDate).Null().WithMessage("EndDate is not applicable for OneTimeScheduled campaigns.");
             });
 
-            When(x => string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+            When(IsRecurringOrContract, () =>
             {
                 RuleFor(x => x.FrequencyCode)
                     .NotEmpty()
                     .IsEnumName(typeof(FrequencyCode), caseSensitive: false);
                 RuleFor(x => x.FrequencyInterval).GreaterThan(0);
                 RuleFor(x => x.EndDate)
-                    .NotNull().WithMessage("EndDate is required for Recurring campaigns.")
+                    .NotNull().WithMessage("EndDate is required for Recurring or Contract campaigns.")
                     .Must((request, endDate) => endDate >= request.StartDate)
                     .WithMessage("EndDate must be greater than or equal to StartDate.");
             });
