@@ -91,13 +91,7 @@ public sealed class TopUpAssessmentWorker(
                         }
                         else
                         {
-                            DateTime nextPaymentDate = campaign.DeliveryTypeCode == DeliveryType.Instant
-                                ? nowUtc
-                                : RecurrenceCalculator.CalculateNextRun(
-                                    campaign.FrequencyCode ?? "MONTHLY",
-                                    campaign.FrequencyInterval ?? 1,
-                                    nowUtc,
-                                    campaign.EndDate) ?? nowUtc;
+                            DateTime nextPaymentDate = nowUtc;
 
                             var contract = DynamicTopUpContract.Create(
                                 campaign.Id, accountId,
