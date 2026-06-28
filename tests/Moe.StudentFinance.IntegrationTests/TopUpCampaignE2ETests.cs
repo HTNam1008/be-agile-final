@@ -27,6 +27,9 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             reason = "E2E Testing",
             scheduleTypeCode = "OneTimeScheduled",
             startDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(3).ToString("yyyy-MM-dd"),
+            frequencyCode = "Monthly",
+            frequencyInterval = 1,
             deliveryTypeCode = "FIXED_CONTRACT",
             maxTotalAmount = 150.00m
         };
@@ -58,9 +61,9 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             reason = "E2E Testing",
             scheduleTypeCode = "Immediate",
             startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1).ToString("yyyy-MM-dd"),
-            endDate = (DateOnly?)null,
-            frequencyCode = (string?)null,
-            frequencyInterval = (int?)null,
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(3).ToString("yyyy-MM-dd"),
+            frequencyCode = "Monthly",
+            frequencyInterval = 1,
             deliveryTypeCode = "FIXED_CONTRACT",
             maxTotalAmount = 150.00m,
             campaignVersion = 1
@@ -138,6 +141,10 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             defaultTopUpAmount = 75.00m,
             reason = "E2E Testing Dynamic",
             scheduleTypeCode = "Immediate",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(12).ToString("yyyy-MM-dd"),
+            frequencyCode = "Quarterly",
+            frequencyInterval = 1,
             deliveryTypeCode = "CONDITIONAL_RECURRING",
             maxTotalAmount = 500.00m
         };
