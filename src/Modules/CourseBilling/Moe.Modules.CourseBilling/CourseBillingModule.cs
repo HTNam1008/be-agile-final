@@ -14,6 +14,7 @@ using Moe.Modules.CourseBilling.Application.AdminCourses.Enrollments;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Fees;
 using Moe.Modules.CourseBilling.Application.AdminCourses.Materials;
 using Moe.Modules.CourseBilling.Application.AdminFeeComponents;
+using Moe.Modules.CourseBilling.Application.BillingConfiguration;
 using Moe.Modules.CourseBilling.Application.AdminStudentCourses;
 using Moe.Modules.CourseBilling.Application.BillingStatements;
 using Moe.Modules.CourseBilling.Application.Dashboard.GetAdminDashboard;
@@ -25,6 +26,7 @@ using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Contracts.AdminEnrollments;
 using Moe.Modules.CourseBilling.Contracts.AdminFeeComponents;
 using Moe.Modules.CourseBilling.Contracts.BillingStatements;
+using Moe.Modules.CourseBilling.Contracts.BillingConfiguration;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.IGateway.AdminStudentCourses;
 using Moe.Modules.CourseBilling.IGateway.Courses;
@@ -60,6 +62,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IStudentCourseContentRepository, StudentCourseContentRepository>();
         services.AddScoped<ICourseReferenceDirectory, CourseReferenceDirectory>();
         services.AddScoped<IBillingStatementRepository, BillingStatementRepository>();
+        services.AddScoped<IBillingPolicyRepository, BillingPolicyRepository>();
         services.AddScoped<AdminCourseAccess>();
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
@@ -108,6 +111,8 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IQueryHandler<GetStudentDashboardSummaryQuery, StudentDashboardSummaryResponse>, GetStudentDashboardSummaryHandler>();
         services.AddScoped<IQueryHandler<GetStudentCoursesQuery, StudentCoursesResponse>, GetStudentCoursesHandler>();
         services.AddScoped<IQueryHandler<GetBillingStatementQuery, BillingStatementResponse>, GetBillingStatementHandler>();
+        services.AddScoped<IQueryHandler<GetBillingConfigurationQuery, BillingConfigurationResponse>, GetBillingConfigurationHandler>();
+        services.AddScoped<ICommandHandler<UpdateBillingConfigurationCommand, BillingConfigurationResponse>, UpdateBillingConfigurationHandler>();
 
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();
         services.AddScoped<IValidator<SelfJoinCourseRequest>, SelfJoinCourseRequestValidator>();
@@ -119,6 +124,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IValidator<UpdateCourseFeeRequest>, UpdateCourseFeeRequestValidator>();
         services.AddScoped<IValidator<ContractCreateFeeComponentRequest>, CreateFeeComponentRequestValidator>();
         services.AddScoped<IValidator<ContractUpdateFeeComponentRequest>, UpdateFeeComponentRequestValidator>();
+        services.AddScoped<IValidator<UpdateBillingConfigurationRequest>, UpdateBillingConfigurationRequestValidator>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }

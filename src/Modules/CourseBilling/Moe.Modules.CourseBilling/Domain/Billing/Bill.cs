@@ -48,6 +48,7 @@ internal sealed class Bill : Entity<long>
     public string BillStatusCode { get; private set; } = string.Empty;
     public decimal DeferredAmount { get; private set; }
     public int DeferralCount { get; private set; }
+    public bool IsDeferExtensionGranted { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
@@ -113,16 +114,35 @@ internal sealed class Bill : Entity<long>
         return Result.Success();
     }
 
-    public Result DeferToNextMonth(long failedPaymentId, DateTime utcNow)
+    public Result GrantDeferExtension(DateTime utcNow)
     {
-        if (failedPaymentId <= 0 || OutstandingAmount <= 0m ||
+        if (OutstandingAmount <= 0m || BillStatusCode is BillStatusCodes.Paid or BillStatusCodes.Cancelled)
+        {
+            return Result.Failure(BillingErrors.InvalidDeferral);
+        }
+
+        IsDeferExtensionGranted = true;
+        UpdatedAtUtc = utcNow;
+        return Result.Success();
+    }
+
+    public Result DeferToNextMonth(int maxDeferralCount, DateTime utcNow)
+    {
+        if (maxDeferralCount < 0)
+            return Result.Failure(BillingErrors.InvalidBillingConfiguration);
+
+        if (OutstandingAmount <= 0m ||
             BillStatusCode is BillStatusCodes.Paid or BillStatusCodes.Cancelled)
             return Result.Failure(BillingErrors.InvalidDeferral);
+
+        if (!IsDeferExtensionGranted && DeferralCount >= maxDeferralCount)
+            return Result.Failure(BillingErrors.DeferralLimitReached);
 
         CurrentDueDate = CurrentDueDate.AddMonths(1);
         DueDate = CurrentDueDate;
         DeferredAmount = Money(DeferredAmount + OutstandingAmount);
         DeferralCount++;
+        IsDeferExtensionGranted = false;
         BillStatusCode = PaidAmount > 0m
             ? BillStatusCodes.PartiallyPaidDeferred
             : BillStatusCodes.Deferred;
@@ -153,4 +173,6 @@ public static class BillingErrors
     public static readonly Error PaidBillCannotBeCancelled = new("BILL.PAID_CANNOT_CANCEL", "A paid bill cannot be cancelled.");
     public static readonly Error InvalidPaymentAmount = new("BILL.INVALID_PAYMENT_AMOUNT", "The payment amount is invalid for this bill.");
     public static readonly Error InvalidDeferral = new("BILL.INVALID_DEFERRAL", "The bill cannot be deferred.");
+    public static readonly Error DeferralLimitReached = new("BILL.DEFERRAL_LIMIT_REACHED", "The bill has reached the maximum deferral count.");
+    public static readonly Error InvalidBillingConfiguration = new("BILL.INVALID_BILLING_CONFIGURATION", "The billing configuration is invalid.");
 }
