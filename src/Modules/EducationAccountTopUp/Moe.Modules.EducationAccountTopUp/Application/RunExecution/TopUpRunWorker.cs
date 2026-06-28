@@ -118,6 +118,7 @@ public sealed class TopUpRunWorker(
             run,
             totalRecipients,
             maxTotalAmount,
+            runs,
             recipientResolver,
             orchestrator,
             unitOfWork,
@@ -167,6 +168,7 @@ public sealed class TopUpRunWorker(
         TopUpRun run,
         int totalRecipients,
         decimal? maxTotalAmount,
+        ITopUpRunRepository runs,
         IRecipientResolver recipientResolver,
         IRunExecutionOrchestrator orchestrator,
         IUnitOfWork unitOfWork,
@@ -194,12 +196,27 @@ public sealed class TopUpRunWorker(
 
             int offset = 0;
             var accumulator = new ChunkProcessingAccumulator();
+            int cancelCheckCounter = 0;
 
             while (offset < totalRecipients)
             {
-                if (linkedCts.Token.IsCancellationRequested)
+                if (linkedCts.Token.IsCancellationRequested || run.IsCancelRequested)
                 {
                     break;
+                }
+
+                cancelCheckCounter++;
+                if (cancelCheckCounter % 10 == 0)
+                {
+                    TopUpRun? refreshedRun = await runs.GetByIdAsync(run.Id, ct);
+                    if (refreshedRun is not null && refreshedRun.IsCancelRequested)
+                    {
+                        run.RequestCancel(clock.UtcNow.UtcDateTime);
+                        logger.LogInformation(
+                            "Top-up run {RunId} cancel request detected from database; stopping execution",
+                            run.Id);
+                        break;
+                    }
                 }
 
                 IReadOnlyList<RecipientInfo> chunk = await recipientResolver.GetRecipientsChunkAsync(

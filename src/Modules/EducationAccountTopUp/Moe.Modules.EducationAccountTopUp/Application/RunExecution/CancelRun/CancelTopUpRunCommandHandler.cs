@@ -30,8 +30,11 @@ internal sealed class CancelTopUpRunCommandHandler(
 
         if (run.RunStatusCode == TopUpRunStatusCodes.Processing)
         {
-            // The run is currently executing. Tell the orchestrator to abort.
-            // The orchestrator will gracefully finalize the run with Skipped status for remaining.
+            // Persist cancellation intent so it survives pod restarts.
+            run.RequestCancel(clock.UtcNow.UtcDateTime);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Also tell the in-memory orchestrator to abort immediately if it's tracking this run.
             bool isActive = orchestrator.CancelRun(request.RunId);
             if (!isActive)
             {
