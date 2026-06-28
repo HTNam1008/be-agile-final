@@ -313,6 +313,11 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(_runs.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
         }
 
+        public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)
         {
             AddCalls++;

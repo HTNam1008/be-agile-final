@@ -169,6 +169,13 @@ public sealed class TopUpSchedulerWorker(
                 var campaign = await campaignRepo.GetByIdAsync(group.Key, ct);
                 if (campaign is null) continue;
 
+                bool activeRunExists = await runs.HasActiveRunsForCampaignAsync(group.Key, ct);
+                if (activeRunExists)
+                {
+                    logger.LogInformation("Skipping contract dispatch for campaign {CampaignId} — an active run is already processing.", group.Key);
+                    continue;
+                }
+
                 var run = TopUpRun.CreateForContracts(group.Key, campaign.CampaignVersion, nowUtc);
                 await runs.AddAsync(run, ct);
                 await unitOfWork.SaveChangesAsync(ct);

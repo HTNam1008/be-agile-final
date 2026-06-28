@@ -204,6 +204,7 @@ public sealed class PendingTransactionRecoveryTests
         public Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult<TopUpRun?>(null);
         public Task<bool> ExistsForScheduledOccurrenceAsync(long campaignId, DateTime scheduledFor, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default) { _run = run; return Task.CompletedTask; }
     }
 
