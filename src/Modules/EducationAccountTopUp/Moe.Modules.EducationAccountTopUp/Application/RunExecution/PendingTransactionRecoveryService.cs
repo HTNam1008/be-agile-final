@@ -10,6 +10,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 
 public sealed class PendingTransactionRecoveryService(
     ITopUpTransactionRepository transactions,
+    ITopUpRunRepository runs,
     IAccountCreditGateway accountCreditGateway,
     ITopUpExecutionEventPublisher events,
     ITopUpExecutionMetrics metrics,
@@ -123,6 +124,37 @@ public sealed class PendingTransactionRecoveryService(
                     "Failed to recover pending top-up transaction {TopUpTransactionId} for run {TopUpRunId}",
                     transaction.Id,
                     topUpRunId);
+            }
+        }
+
+        if (recovered > 0)
+        {
+            TopUpRun? run = await runs.GetByIdAsync(topUpRunId, cancellationToken);
+            if (run is not null)
+            {
+                List<TopUpTransaction> allTransactions = await transactions.GetByRunIdAsync(
+                    topUpRunId,
+                    cancellationToken);
+
+                int totalProcessed = allTransactions.Count;
+                int totalSucceeded = allTransactions.Count(t => t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed);
+                int totalFailed = allTransactions.Count(t => t.TransactionStatusCode == TopUpTransactionStatusCodes.Failed);
+                int totalSkipped = allTransactions.Count(t => t.TransactionStatusCode == TopUpTransactionStatusCodes.Skipped);
+                decimal totalAmount = allTransactions
+                    .Where(t => t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed)
+                    .Sum(t => t.Amount);
+
+                run.ReconcileCounters(totalProcessed, totalSucceeded, totalFailed, totalSkipped, totalAmount);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+
+                logger.LogInformation(
+                    "Reconciled run {TopUpRunId} counters: {TotalProcessed} processed, {TotalSucceeded} succeeded, {TotalFailed} failed, {TotalSkipped} skipped, {TotalAmount} total",
+                    topUpRunId,
+                    totalProcessed,
+                    totalSucceeded,
+                    totalFailed,
+                    totalSkipped,
+                    totalAmount);
             }
         }
 
