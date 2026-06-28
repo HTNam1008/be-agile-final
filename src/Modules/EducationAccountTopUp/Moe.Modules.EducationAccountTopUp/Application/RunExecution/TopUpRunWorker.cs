@@ -63,11 +63,13 @@ public sealed class TopUpRunWorker(
         IServiceProvider services = scope.ServiceProvider;
 
         ITopUpRunRepository runs = services.GetRequiredService<ITopUpRunRepository>();
+        ITopUpCampaignRepository campaigns = services.GetRequiredService<ITopUpCampaignRepository>();
         IRecipientResolver recipientResolver = services.GetRequiredService<IRecipientResolver>();
         IRunExecutionOrchestrator orchestrator = services.GetRequiredService<IRunExecutionOrchestrator>();
         IRunReconciliationService reconciliation = services.GetRequiredService<IRunReconciliationService>();
         IPendingTransactionRecoveryService recovery = services.GetRequiredService<IPendingTransactionRecoveryService>();
         IUnitOfWork unitOfWork = services.GetRequiredService<IUnitOfWork>();
+        IDynamicTopUpContractRepository contractRepo = services.GetRequiredService<IDynamicTopUpContractRepository>();
         var dbContext = services.GetService<Microsoft.EntityFrameworkCore.DbContext>();
 
         TopUpRun? run = await runs.GetByIdAsync(runId, cancellationToken);
@@ -88,9 +90,13 @@ public sealed class TopUpRunWorker(
 
         if (run.IsContractDriven)
         {
-            await ProcessContractDrivenRunAsync(run, runs, orchestrator, recovery, reconciliation, cancellationToken);
+            await ProcessContractDrivenRunAsync(run, runs, campaigns, contractRepo, orchestrator, recovery, reconciliation, unitOfWork, cancellationToken);
             return;
         }
+
+        TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, cancellationToken);
+        bool isInstant = string.Equals(campaign?.DeliveryTypeCode, "INSTANT", StringComparison.OrdinalIgnoreCase);
+        decimal? maxTotalAmount = (!isInstant && campaign?.MaxTotalAmount > 0) ? campaign.MaxTotalAmount : null;
 
         await recovery.RecoverPendingTransactionsAsync(
             runId,
@@ -111,6 +117,7 @@ public sealed class TopUpRunWorker(
         Result<RunExecutionResult> execution = await ExecuteRunStreamedAsync(
             run,
             totalRecipients,
+            maxTotalAmount,
             recipientResolver,
             orchestrator,
             unitOfWork,
@@ -159,6 +166,7 @@ public sealed class TopUpRunWorker(
     private async Task<Result<RunExecutionResult>> ExecuteRunStreamedAsync(
         TopUpRun run,
         int totalRecipients,
+        decimal? maxTotalAmount,
         IRecipientResolver recipientResolver,
         IRunExecutionOrchestrator orchestrator,
         IUnitOfWork unitOfWork,
@@ -206,9 +214,19 @@ public sealed class TopUpRunWorker(
                     break;
                 }
 
+                if (maxTotalAmount.HasValue && accumulator.TotalAmount >= maxTotalAmount.Value)
+                {
+                    logger.LogInformation(
+                        "Top-up run {RunId} reached MaxTotalAmount cap {MaxTotalAmount}; skipping remaining {Remaining} recipients",
+                        run.Id, maxTotalAmount.Value, totalRecipients - offset);
+                    break;
+                }
+
+                IReadOnlyList<RecipientInfo> cappedChunk = CapChunkToBudget(chunk, maxTotalAmount, accumulator.TotalAmount);
+
                 Result<ChunkProcessingResult> chunkResult = await orchestrator.ProcessChunkAsync(
                     run.Id,
-                    chunk,
+                    cappedChunk,
                     accumulator,
                     linkedCts.Token);
 
@@ -283,14 +301,14 @@ public sealed class TopUpRunWorker(
     private async Task ProcessContractDrivenRunAsync(
         TopUpRun run,
         ITopUpRunRepository runs,
+        ITopUpCampaignRepository campaigns,
+        IDynamicTopUpContractRepository contractRepo,
         IRunExecutionOrchestrator orchestrator,
         IPendingTransactionRecoveryService recovery,
         IRunReconciliationService reconciliation,
+        IUnitOfWork unitOfWork,
         CancellationToken ct)
     {
-        using var scope = scopeFactory.CreateScope();
-        var contractRepo = scope.ServiceProvider.GetRequiredService<IDynamicTopUpContractRepository>();
-
         DateTime nowUtc = clock.UtcNow.UtcDateTime;
 
         await recovery.RecoverPendingTransactionsAsync(
@@ -350,7 +368,6 @@ public sealed class TopUpRunWorker(
                 }
             }
 
-            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
             await unitOfWork.SaveChangesAsync(ct);
         }
         else
@@ -378,5 +395,45 @@ public sealed class TopUpRunWorker(
                 run.Id,
                 reconciliationResult.Error.Code);
         }
+    }
+
+    private static IReadOnlyList<RecipientInfo> CapChunkToBudget(
+        IReadOnlyList<RecipientInfo> chunk,
+        decimal? maxTotalAmount,
+        decimal currentTotal)
+    {
+        if (!maxTotalAmount.HasValue)
+        {
+            return chunk;
+        }
+
+        decimal remaining = maxTotalAmount.Value - currentTotal;
+        if (remaining <= 0)
+        {
+            return Array.Empty<RecipientInfo>();
+        }
+
+        List<RecipientInfo> capped = [];
+        decimal runningTotal = 0m;
+
+        foreach (RecipientInfo recipient in chunk)
+        {
+            decimal available = remaining - runningTotal;
+            if (available <= 0)
+            {
+                break;
+            }
+
+            decimal cappedAmount = Math.Min(recipient.Amount, available);
+            if (cappedAmount <= 0)
+            {
+                break;
+            }
+
+            capped.Add(recipient with { Amount = cappedAmount });
+            runningTotal += cappedAmount;
+        }
+
+        return capped;
     }
 }

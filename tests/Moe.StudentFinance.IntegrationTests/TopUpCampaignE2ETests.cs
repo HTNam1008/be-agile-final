@@ -140,7 +140,7 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             recipientModeCode = "DynamicRules",
             defaultTopUpAmount = 75.00m,
             reason = "E2E Testing Dynamic",
-            scheduleTypeCode = "Immediate",
+            scheduleTypeCode = "Recurring",
             startDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(12).ToString("yyyy-MM-dd"),
             frequencyCode = "Quarterly",
@@ -198,12 +198,13 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             throw new Exception($"Activate failed: {activateResponse.StatusCode} - {err}");
         }
 
-        // 5. Request idempotent manual run and wait for worker completion.
-        var runId = await RequestManualRunAsync(campaignId, $"dynamic:{campaignId}:{Guid.NewGuid():N}");
-        using JsonDocument summary = await WaitForRunSummaryAsync(runId);
-        JsonElement data = summary.RootElement.GetProperty("data");
-        Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
-        Assert.True(data.GetProperty("succeededCount").GetInt32() > 0);
+        // 5. DynamicRules campaigns cannot be manually triggered — verify rejection
+        var runResponse = await _client.PostAsJsonAsync(
+            $"/api/admin/v1/top-up-campaigns/{campaignId}/runs",
+            new { idempotencyKey = $"dynamic:{campaignId}:{Guid.NewGuid():N}", note = "Should fail" });
+        Assert.False(runResponse.IsSuccessStatusCode, "DynamicRules campaigns must not allow manual runs");
+        var runError = await runResponse.Content.ReadAsStringAsync();
+        Assert.Contains("ManualRunDisabled", runError);
     }
 
     private async Task<long> RequestManualRunAsync(long campaignId, string idempotencyKey)
