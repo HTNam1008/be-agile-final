@@ -265,6 +265,19 @@ public sealed class RecipientProcessingServiceTests
             return Task.FromResult(_transactions.Where(x => x.TopUpRunId == topUpRunId).ToList());
         }
 
+        public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(
+            long topUpRunId,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpTransaction>>(
+                _transactions.Where(x => x.TopUpRunId == topUpRunId && x.TransactionStatusCode == TopUpTransactionStatusCodes.Pending)
+                    .Skip(skip)
+                    .Take(take)
+                    .ToList());
+        }
+
         public void Add(TopUpTransaction transaction)
         {
             AddCalls++;

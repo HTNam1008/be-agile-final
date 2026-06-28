@@ -137,6 +137,8 @@ public sealed class PendingTransactionRecoveryTests
         public Task<TopUpTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
         public Task<TopUpTransaction?> GetByRunAndAccountAsync(long topUpRunId, long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.SingleOrDefault(x => x.TopUpRunId == topUpRunId && x.EducationAccountId == educationAccountId));
         public Task<List<TopUpTransaction>> GetByRunIdAsync(long topUpRunId, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.Where(x => x.TopUpRunId == topUpRunId).ToList());
+        public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(long topUpRunId, int skip, int take, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpTransaction>>(_transactions.Where(x => x.TopUpRunId == topUpRunId && x.TransactionStatusCode == TopUpTransactionStatusCodes.Pending).Skip(skip).Take(take).ToList());
         public void Add(TopUpTransaction transaction) => _transactions.Add(transaction);
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) { Add(transaction); return Task.CompletedTask; }
     }

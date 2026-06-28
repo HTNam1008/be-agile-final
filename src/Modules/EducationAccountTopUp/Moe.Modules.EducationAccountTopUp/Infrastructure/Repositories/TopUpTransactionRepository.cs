@@ -41,6 +41,22 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(
+        long topUpRunId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpTransaction>()
+            .AsNoTracking()
+            .Where(x => x.TopUpRunId == topUpRunId
+                && x.TransactionStatusCode == TopUpTransactionStatusCodes.Pending)
+            .OrderBy(x => x.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(TopUpTransaction transaction)
     {
         dbContext.Set<TopUpTransaction>().Add(transaction);

@@ -424,6 +424,13 @@ public sealed class RunExecutionOrchestratorTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(new List<TopUpTransaction>());
 
+        public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(
+            long topUpRunId,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpTransaction>>([]);
+
         public void Add(TopUpTransaction transaction) { }
 
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default)
