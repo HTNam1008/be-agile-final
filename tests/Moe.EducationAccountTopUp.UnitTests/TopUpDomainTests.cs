@@ -25,6 +25,8 @@ public sealed class TopUpDomainTests
             endDate: null,
             frequencyCode: null,
             frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
             currentUserId: 99,
             nowUtc: now
         );
@@ -33,16 +35,18 @@ public sealed class TopUpDomainTests
         campaign.CampaignStatusCode.Should().Be("DRAFT");
         campaign.CampaignVersion.Should().Be(1);
         campaign.DefaultTopUpAmount.Should().Be(50.0m);
+        campaign.DeliveryTypeCode.Should().Be("INSTANT");
+        campaign.MaxTotalAmount.Should().Be(50);
     }
 
     [Fact]
     public void TopUpCampaign_Update_ShouldIncrementVersion()
     {
         var now = DateTime.UtcNow;
-        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
+        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 50, 99, now);
 
-        campaign.Update("New Name", "New Desc", 100, "New Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
-
+        var result = campaign.Update("New Name", "New Desc", 100, "New Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100, 99, now);
+        result.IsSuccess.Should().BeTrue();
         campaign.CampaignVersion.Should().Be(2);
         campaign.CampaignName.Should().Be("New Name");
         campaign.DefaultTopUpAmount.Should().Be(100);
@@ -52,7 +56,7 @@ public sealed class TopUpDomainTests
     public void TopUpRun_UpdateProgress_ShouldAccumulateCorrectly()
     {
         var now = DateTime.UtcNow;
-        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
+        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 50, 99, now);
         var run = TopUpRun.CreateManual(campaign, "IDEM-1", 99, now, null);
 
         run.StartProcessing(now);
