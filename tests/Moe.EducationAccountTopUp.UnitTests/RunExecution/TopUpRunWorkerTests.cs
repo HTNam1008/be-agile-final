@@ -153,6 +153,7 @@ public sealed class TopUpRunWorkerTests
             ServiceCollection services = new();
             services.AddSingleton<ITopUpRunRepository>(Runs);
             services.AddSingleton<ITopUpCampaignRepository>(Campaigns);
+            services.AddSingleton<ITopUpTransactionRepository>(new FakeTransactionRepository());
             services.AddSingleton<IDynamicTopUpContractRepository>(ContractRepo);
             services.AddSingleton<IRecipientResolver>(Resolver);
             services.AddSingleton<IRunExecutionOrchestrator>(Orchestrator);
@@ -195,6 +196,18 @@ public sealed class TopUpRunWorkerTests
             Runs.Add(run);
             return run;
         }
+    }
+
+    private sealed class FakeTransactionRepository : ITopUpTransactionRepository
+    {
+        public Task<TopUpTransaction?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult<TopUpTransaction?>(null);
+        public Task<TopUpTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult<TopUpTransaction?>(null);
+        public Task<TopUpTransaction?> GetByRunAndAccountAsync(long topUpRunId, long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult<TopUpTransaction?>(null);
+        public Task<List<TopUpTransaction>> GetByRunIdAsync(long topUpRunId, CancellationToken cancellationToken = default) => Task.FromResult(new List<TopUpTransaction>());
+        public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(long topUpRunId, int skip, int take, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpTransaction>>([]);
+        public Task<decimal> GetTotalDisbursedForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0m);
+        public void Add(TopUpTransaction transaction) { }
+        public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeTopUpRunQueueReader : ITopUpRunQueueReader

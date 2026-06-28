@@ -64,6 +64,7 @@ public sealed class TopUpRunWorker(
 
         ITopUpRunRepository runs = services.GetRequiredService<ITopUpRunRepository>();
         ITopUpCampaignRepository campaigns = services.GetRequiredService<ITopUpCampaignRepository>();
+        ITopUpTransactionRepository transactions = services.GetRequiredService<ITopUpTransactionRepository>();
         IRecipientResolver recipientResolver = services.GetRequiredService<IRecipientResolver>();
         IRunExecutionOrchestrator orchestrator = services.GetRequiredService<IRunExecutionOrchestrator>();
         IRunReconciliationService reconciliation = services.GetRequiredService<IRunReconciliationService>();
@@ -90,7 +91,7 @@ public sealed class TopUpRunWorker(
 
         if (run.IsContractDriven)
         {
-            await ProcessContractDrivenRunAsync(run, runs, campaigns, contractRepo, orchestrator, recovery, reconciliation, unitOfWork, cancellationToken);
+            await ProcessContractDrivenRunAsync(run, campaigns, contractRepo, orchestrator, recovery, reconciliation, unitOfWork, cancellationToken);
             return;
         }
 
@@ -113,6 +114,28 @@ public sealed class TopUpRunWorker(
             runId,
             totalRecipients,
             ChunkSize);
+
+        if (maxTotalAmount.HasValue && campaign is not null)
+        {
+            decimal alreadyDisbursed = await transactions.GetTotalDisbursedForCampaignAsync(campaign.Id, cancellationToken);
+            decimal projectedTotal = alreadyDisbursed + ((decimal)totalRecipients * campaign.DefaultTopUpAmount);
+
+            if (projectedTotal > maxTotalAmount.Value)
+            {
+                logger.LogWarning(
+                    "Top-up run {RunId} would exceed budget cap: already disbursed {AlreadyDisbursed} + projected {Projected} = {Total} > cap {Cap}",
+                    runId, alreadyDisbursed, projectedTotal, alreadyDisbursed + projectedTotal, maxTotalAmount.Value);
+
+                Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
+                if (cancelResult.IsSuccess)
+                {
+                    run.ReconcileCounters(0, 0, 0, 0, 0m);
+                    await unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+
+                return;
+            }
+        }
 
         Result<RunExecutionResult> execution = await ExecuteRunStreamedAsync(
             run,
@@ -317,7 +340,6 @@ public sealed class TopUpRunWorker(
 
     private async Task ProcessContractDrivenRunAsync(
         TopUpRun run,
-        ITopUpRunRepository runs,
         ITopUpCampaignRepository campaigns,
         IDynamicTopUpContractRepository contractRepo,
         IRunExecutionOrchestrator orchestrator,

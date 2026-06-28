@@ -16,7 +16,6 @@ public sealed class RunExecutionOrchestratorTests
 {
     private readonly FakeRecipientProcessingService _recipientProcessor = new();
     private readonly FakeTopUpRunRepository _runs = new();
-    private readonly FakeTopUpTransactionRepository _transactions = new();
     private readonly FakeTopUpExecutionEventPublisher _events = new();
     private readonly FakeTopUpExecutionMetrics _metrics = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -232,7 +231,6 @@ public sealed class RunExecutionOrchestratorTests
             _recipientProcessor,
             new FakeTopUpCampaignRepository(),
             _runs,
-            _transactions,
             _events,
             _metrics,
             _unitOfWork,
@@ -430,6 +428,11 @@ public sealed class RunExecutionOrchestratorTests
             int take,
             CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<TopUpTransaction>>([]);
+
+        public Task<decimal> GetTotalDisbursedForCampaignAsync(
+            long campaignId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(0m);
 
         public void Add(TopUpTransaction transaction) { }
 
