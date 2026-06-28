@@ -132,7 +132,10 @@ public sealed class GetTopUpTransactionResultsHandlerTests
             new FakeRunReader(new RunSummaryProjection(
                 42,
                 7,
+                "TEST-01",
+                "Test Campaign",
                 organizationId,
+                0m,
                 DateTime.UtcNow,
                 "MANUAL",
                 "COMPLETED",
