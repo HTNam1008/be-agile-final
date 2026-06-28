@@ -75,7 +75,7 @@ public sealed class TopUpTransaction : Entity<long>
         }
 
         TransactionStatusCode = TopUpTransactionStatusCodes.Failed;
-        Amount = 0m;
+        // Amount preserved — never zero the intended amount
         Reason = reason.Trim();
         CompletedAtUtc = utcNow;
         return Result.Success();
@@ -95,7 +95,7 @@ public sealed class TopUpTransaction : Entity<long>
         }
 
         TransactionStatusCode = TopUpTransactionStatusCodes.Skipped;
-        Amount = 0m;
+        // Amount preserved — never zero the intended amount
         Reason = reason.Trim();
         CompletedAtUtc = utcNow;
         return Result.Success();
