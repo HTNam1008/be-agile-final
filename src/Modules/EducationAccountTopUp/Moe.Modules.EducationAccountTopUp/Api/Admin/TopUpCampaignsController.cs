@@ -35,9 +35,18 @@ public sealed class TopUpCampaignsController(
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetCampaigns(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetCampaigns(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? dateFrom = null,
+        [FromQuery] string? dateTo = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = await queryDispatcher.Send(new GetCampaignsQuery(), cancellationToken);
+        var result = await queryDispatcher.Send(
+            new GetCampaignsQuery(pageNumber, pageSize, search, status, dateFrom, dateTo),
+            cancellationToken);
         if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return Ok(result.Value);
     }

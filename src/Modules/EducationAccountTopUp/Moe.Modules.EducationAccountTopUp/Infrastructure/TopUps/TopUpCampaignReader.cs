@@ -38,8 +38,14 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<CampaignListItem>> GetCampaignsAsync(
+    public async Task<CampaignListResult> GetCampaignsAsync(
         IReadOnlyCollection<long>? accessibleOrgIds,
+        int pageNumber = 1,
+        int pageSize = 50,
+        string? search = null,
+        string? status = null,
+        DateOnly? dateFrom = null,
+        DateOnly? dateTo = null,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.Set<TopUpCampaign>().AsNoTracking();
@@ -47,8 +53,28 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
         if (accessibleOrgIds != null && accessibleOrgIds.Count > 0)
             query = query.Where(c => accessibleOrgIds.Contains(c.OrganizationId));
 
-        return await query
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var lowerSearch = search.ToLower();
+            query = query.Where(c => c.CampaignCode.ToLower().Contains(lowerSearch)
+                                  || c.CampaignName.ToLower().Contains(lowerSearch));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(c => c.CampaignStatusCode == status);
+
+        if (dateFrom.HasValue)
+            query = query.Where(c => c.StartDate >= dateFrom.Value);
+
+        if (dateTo.HasValue)
+            query = query.Where(c => c.StartDate <= dateTo.Value);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
             .OrderByDescending(c => c.Id)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .Select(c => new CampaignListItem(
                 c.Id,
                 c.OrganizationId,
@@ -71,6 +97,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
+
+        return new CampaignListResult(items, totalCount, pageNumber, pageSize);
     }
 
     public async Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
