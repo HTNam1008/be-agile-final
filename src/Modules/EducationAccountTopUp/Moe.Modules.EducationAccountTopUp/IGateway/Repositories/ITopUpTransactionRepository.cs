@@ -25,6 +25,10 @@ public interface ITopUpTransactionRepository
         int take,
         CancellationToken cancellationToken = default);
 
+    Task<decimal> GetTotalDisbursedForCampaignAsync(
+        long campaignId,
+        CancellationToken cancellationToken = default);
+
     void Add(TopUpTransaction transaction);
 
     Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default);

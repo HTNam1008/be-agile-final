@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
+using TopUpRun = Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRun;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 
@@ -55,6 +56,18 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<decimal> GetTotalDisbursedForCampaignAsync(
+        long campaignId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpTransaction>()
+            .AsNoTracking()
+            .Where(x => dbContext.Set<TopUpRun>()
+                .Any(r => r.Id == x.TopUpRunId && r.TopUpCampaignId == campaignId)
+                && x.TransactionStatusCode == TopUpTransactionStatusCodes.Completed)
+            .SumAsync(x => x.Amount, cancellationToken);
     }
 
     public void Add(TopUpTransaction transaction)
