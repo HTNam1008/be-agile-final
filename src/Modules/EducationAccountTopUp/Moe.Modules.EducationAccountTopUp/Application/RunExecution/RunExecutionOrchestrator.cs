@@ -117,17 +117,30 @@ public sealed class RunExecutionOrchestrator(
         }
 
         int totalProcessed = totalSucceeded + totalFailed + totalSkipped;
-        Result finalize = run.Finalize(
-            totalProcessed,
-            totalSucceeded,
-            totalFailed,
-            totalSkipped,
-            totalAmount,
-            clock.UtcNow.UtcDateTime);
 
-        if (finalize.IsFailure)
+        if (linkedCts.Token.IsCancellationRequested)
         {
-            return Result<RunExecutionResult>.Failure(finalize.Error);
+            Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
+            if (cancelResult.IsFailure)
+            {
+                return Result<RunExecutionResult>.Failure(cancelResult.Error);
+            }
+            run.ReconcileCounters(totalProcessed, totalSucceeded, totalFailed, totalSkipped, totalAmount);
+        }
+        else
+        {
+            Result finalize = run.Finalize(
+                totalProcessed,
+                totalSucceeded,
+                totalFailed,
+                totalSkipped,
+                totalAmount,
+                clock.UtcNow.UtcDateTime);
+
+            if (finalize.IsFailure)
+            {
+                return Result<RunExecutionResult>.Failure(finalize.Error);
+            }
         }
 
         DateTime completedAtUtc = run.CompletedAtUtc ?? clock.UtcNow.UtcDateTime;
