@@ -33,6 +33,8 @@ public sealed class RunExecutionOrchestrator(
 
         try
         {
+            // Reserved: transaction writes are handled by RecipientProcessingService
+            // at the chunk level; this dependency is kept for future direct access.
             _ = transactions;
 
         TopUpRun? run = await runs.GetByIdAsync(topUpRunId, cancellationToken);

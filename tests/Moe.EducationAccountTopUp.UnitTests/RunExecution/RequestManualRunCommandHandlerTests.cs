@@ -151,6 +151,22 @@ public sealed class RequestManualRunCommandHandlerTests
         domainEvent.RequestedByUserId.Should().Be(_currentUser.UserAccountId);
     }
 
+    [Fact]
+    public async Task Should_Fail_When_Campaign_Is_DynamicRules()
+    {
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "DYNAMIC_RULES", 100m, "Reason", "Recurring", new DateOnly(2026, 1, 1), null, "Quarterly", 1, "CONDITIONAL_RECURRING", 500m, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
+
+        RequestManualRunCommandHandler handler = CreateHandler();
+        var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(TopUpErrors.ManualRunDisabled);
+        _runs.AddCalls.Should().Be(0);
+    }
+
     private RequestManualRunCommandHandler CreateHandler(IAdminAccessControl? adminAccess = null)
     {
         return new RequestManualRunCommandHandler(

@@ -139,6 +139,8 @@ public sealed class TopUpRunWorkerTests
         private readonly ServiceProvider _provider;
 
         public FakeTopUpRunRepository Runs { get; } = new();
+        public FakeTopUpCampaignRepository Campaigns { get; } = new();
+        public FakeDynamicTopUpContractRepository ContractRepo { get; } = new();
         public FakeRecipientResolver Resolver { get; } = new();
         public FakeRunExecutionOrchestrator Orchestrator { get; } = new();
         public FakeRunReconciliationService Reconciliation { get; } = new();
@@ -150,6 +152,8 @@ public sealed class TopUpRunWorkerTests
         {
             ServiceCollection services = new();
             services.AddSingleton<ITopUpRunRepository>(Runs);
+            services.AddSingleton<ITopUpCampaignRepository>(Campaigns);
+            services.AddSingleton<IDynamicTopUpContractRepository>(ContractRepo);
             services.AddSingleton<IRecipientResolver>(Resolver);
             services.AddSingleton<IRunExecutionOrchestrator>(Orchestrator);
             services.AddSingleton<IRunReconciliationService>(Reconciliation);
@@ -186,6 +190,7 @@ public sealed class TopUpRunWorkerTests
                 99,
                 now);
             campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
+            Campaigns.Add(campaign);
             TopUpRun run = TopUpRun.CreateManual(campaign, Guid.NewGuid().ToString("N"), 99, now, null);
             Runs.Add(run);
             return run;
@@ -196,6 +201,62 @@ public sealed class TopUpRunWorkerTests
     {
         private readonly System.Threading.Channels.Channel<long> _channel = System.Threading.Channels.Channel.CreateUnbounded<long>();
         public System.Threading.Channels.ChannelReader<long> Reader => _channel.Reader;
+    }
+
+    private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository
+    {
+        private readonly Dictionary<long, TopUpCampaign> _campaigns = [];
+        public void Add(TopUpCampaign campaign) => _campaigns[campaign.Id] = campaign;
+        public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
+        {
+            _campaigns.TryGetValue(id, out TopUpCampaign? campaign);
+            return Task.FromResult(campaign);
+        }
+        public Task<bool> CampaignCodeExistsAsync(long organizationId, string campaignCode, CancellationToken cancellationToken = default)
+            => Task.FromResult(_campaigns.Values.Any(c => c.OrganizationId == organizationId && c.CampaignCode == campaignCode));
+        public Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
+        public Task<IReadOnlyList<TopUpCampaign>> GetDueForAssessmentAsync(DateOnly today, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
+        public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
+        public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
+        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpCampaignRule>>([]);
+        public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
+        public Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new Dictionary<long, decimal>());
+        public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, long userId, DateTime nowUtc, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task AddRecipientAsync(TopUpCampaignRecipient recipient, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
+        {
+            Add(campaign);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeDynamicTopUpContractRepository : IDynamicTopUpContractRepository
+    {
+        public Task<DynamicTopUpContract?> GetByCampaignAndAccountAsync(long campaignId, long accountId, CancellationToken cancellationToken = default)
+            => Task.FromResult<DynamicTopUpContract?>(null);
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetActiveByCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetDueForPaymentAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task AddAsync(DynamicTopUpContract contract, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetActiveByCampaignAndAccountsAsync(long campaignId, IEnumerable<long> accountIds, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task SuspendNonQualifyingContractsAsync(long campaignId, IEnumerable<long> qualifyingAccountIds, DateTime suspendedAtUtc, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 
     private sealed class FakeTopUpRunRepository : ITopUpRunRepository

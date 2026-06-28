@@ -2,6 +2,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
@@ -37,6 +38,11 @@ public sealed class RequestManualRunCommandHandler(
         if (!campaign.IsExecutable)
         {
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignNotExecutable);
+        }
+
+        if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
         }
 
         if (!campaign.ScheduleTypeCode.Equals("IMMEDIATE", StringComparison.OrdinalIgnoreCase))
