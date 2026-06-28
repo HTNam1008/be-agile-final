@@ -27,6 +27,9 @@ internal sealed class TopUpRunConfiguration : IEntityTypeConfiguration<TopUpRun>
         builder.Property(x => x.TriggerTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.RunStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.RuleSnapshotJson);
+        builder.Property(x => x.IsContractDriven).HasDefaultValue(false);
+        builder.Property(x => x.RunTypeCode).HasMaxLength(20).IsUnicode(false);
+        builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(x => x.TotalSelected).HasDefaultValue(0);
         builder.Property(x => x.TotalProcessed).HasDefaultValue(0);
         builder.Property(x => x.TotalSucceeded).HasDefaultValue(0);
