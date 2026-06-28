@@ -228,16 +228,16 @@ public sealed class TopUpRunWorker(
                 if (execution.Value.SuccessfulAccountIds.Contains(contract.EducationAccountId))
                 {
                     contract.RecordPayment(contract.AmountPerPayment, nowUtc);
-                }
 
-                if (contract.DeliveryTypeCode == DeliveryType.FixedContract && !contract.IsCompleted)
-                {
-                    DateTime? nextPaymentDate = RecurrenceCalculator.CalculateNextRun(
-                        contract.FrequencyCode,
-                        contract.FrequencyInterval,
-                        contract.NextPaymentDate!.Value,
-                        null);
-                    contract.SetNextPaymentDate(nextPaymentDate, nowUtc);
+                    if (contract.DeliveryTypeCode == DeliveryType.FixedContract && !contract.IsCompleted)
+                    {
+                        DateTime? nextPaymentDate = RecurrenceCalculator.CalculateNextRun(
+                            contract.FrequencyCode,
+                            contract.FrequencyInterval,
+                            contract.NextPaymentDate!.Value,
+                            null);
+                        contract.SetNextPaymentDate(nextPaymentDate, nowUtc);
+                    }
                 }
             }
 
