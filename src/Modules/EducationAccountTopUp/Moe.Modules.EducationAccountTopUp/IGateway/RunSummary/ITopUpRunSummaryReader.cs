@@ -10,7 +10,10 @@ internal interface ITopUpRunSummaryReader
 internal sealed record RunSummaryProjection(
     long RunId,
     long CampaignId,
+    string CampaignCode,
+    string CampaignName,
     long OrganizationId,
+    decimal CampaignMaxTotalAmount,
     DateTime RunDateUtc,
     string TriggerType,
     string Status,
