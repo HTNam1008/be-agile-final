@@ -247,5 +247,11 @@ public sealed class TopUpCampaignsController(
     /// <returns>Campaign basic data.</returns>
     [HttpGet("{id:long}", Name = "Get")]
     [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
-    public IActionResult Get(long id) => Ok(new { Id = id });
+    public async Task<IActionResult> Get(long id, CancellationToken cancellationToken)
+    {
+        var result = await queryDispatcher.Send(new GetCampaignByIdQuery(id), cancellationToken);
+        return result.IsSuccess
+            ? result.Value is not null ? Ok(result.Value) : NotFound()
+            : BadRequest(result.Error);
+    }
 }
