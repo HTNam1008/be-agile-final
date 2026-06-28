@@ -73,50 +73,56 @@ internal sealed class DeferExtensionRequestRepository(MoeDbContext dbContext)
     {
         int normalizedPage = Math.Max(1, page);
         int normalizedPageSize = Math.Clamp(pageSize, 1, 100);
-        IQueryable<DeferExtensionRequestProjection> query =
+        var query =
             from request in dbContext.Set<DeferExtensionRequest>().AsNoTracking()
             join bill in dbContext.Set<Bill>().AsNoTracking() on request.BillId equals bill.Id
             join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
                 on request.CourseEnrollmentId equals enrollment.Id
             join course in dbContext.Set<Course>().AsNoTracking() on enrollment.CourseId equals course.Id
-            select new DeferExtensionRequestProjection(
-                request.Id,
-                request.BillId,
-                request.CourseEnrollmentId,
-                request.PersonId,
-                request.OrganizationId,
-                request.StatusCode,
-                request.RequestedAtUtc,
-                request.RequestedByLoginAccountId,
-                request.ReviewedAtUtc,
-                request.ReviewedByLoginAccountId,
-                request.DeadlineAtUtc,
-                course.CourseCode,
-                course.CourseName,
-                bill.BillNumber,
-                bill.DeferralCount);
+            select new
+            {
+                Request = request,
+                Bill = bill,
+                Course = course
+            };
 
         if (organizationId is long selectedOrganizationId)
         {
-            query = query.Where(request => request.OrganizationId == selectedOrganizationId);
+            query = query.Where(item => item.Request.OrganizationId == selectedOrganizationId);
         }
         else if (!hasGlobalAccess)
         {
-            query = query.Where(request => scopedOrganizationIds.Contains(request.OrganizationId));
+            query = query.Where(item => scopedOrganizationIds.Contains(item.Request.OrganizationId));
         }
 
         if (!string.IsNullOrWhiteSpace(statusCode))
         {
             string normalizedStatus = statusCode.Trim().ToUpperInvariant();
-            query = query.Where(request => request.StatusCode == normalizedStatus);
+            query = query.Where(item => item.Request.StatusCode == normalizedStatus);
         }
 
         int total = await query.CountAsync(cancellationToken);
         DeferExtensionRequestProjection[] items = await query
-            .OrderByDescending(request => request.RequestedAtUtc)
-            .ThenByDescending(request => request.RequestId)
+            .OrderByDescending(item => item.Request.RequestedAtUtc)
+            .ThenByDescending(item => item.Request.Id)
             .Skip((normalizedPage - 1) * normalizedPageSize)
             .Take(normalizedPageSize)
+            .Select(item => new DeferExtensionRequestProjection(
+                item.Request.Id,
+                item.Request.BillId,
+                item.Request.CourseEnrollmentId,
+                item.Request.PersonId,
+                item.Request.OrganizationId,
+                item.Request.StatusCode,
+                item.Request.RequestedAtUtc,
+                item.Request.RequestedByLoginAccountId,
+                item.Request.ReviewedAtUtc,
+                item.Request.ReviewedByLoginAccountId,
+                item.Request.DeadlineAtUtc,
+                item.Course.CourseCode,
+                item.Course.CourseName,
+                item.Bill.BillNumber,
+                item.Bill.DeferralCount))
             .ToArrayAsync(cancellationToken);
 
         return new PageResponse<DeferExtensionRequestProjection>(
