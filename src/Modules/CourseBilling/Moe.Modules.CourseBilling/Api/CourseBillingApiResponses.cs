@@ -28,6 +28,7 @@ internal static class CourseBillingApiResponses
         => error.Code switch
         {
             "COURSE.ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
+            "COURSE.SCHOOL_ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
             "COURSE.ORGANIZATION_FORBIDDEN" => ApiResponseCodes.Forbidden,
             "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "COURSE.FEE_COMPONENT_MANAGE_FORBIDDEN" => ApiResponseCodes.Forbidden,

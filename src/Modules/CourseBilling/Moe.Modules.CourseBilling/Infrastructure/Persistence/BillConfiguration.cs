@@ -23,6 +23,7 @@ internal sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
         builder.Property(x => x.PaidAmount).HasPrecision(19, 2);
         builder.Property(x => x.OutstandingAmount).HasPrecision(19, 2);
         builder.Property(x => x.DeferredAmount).HasPrecision(19, 2);
+        builder.Property(x => x.IsDeferExtensionGranted).HasDefaultValue(false);
         builder.Property(x => x.BillStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");

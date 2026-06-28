@@ -458,7 +458,6 @@ internal static class StatementBillSelection
 }
 
 internal sealed class DeferBillingStatementHandler(
-    IPaymentCheckoutRepository payments,
     ICoursePaymentGateway billing,
     IEducationAccountPaymentGateway accounts,
     ICurrentUser currentUser,
@@ -469,12 +468,6 @@ internal sealed class DeferBillingStatementHandler(
         if (!currentUser.TryGetStudent(out long personId) || currentUser.UserAccountId is not long actorId)
             return Result.Failure(PaymentApplicationErrors.StudentRequired);
 
-        Payment? payment = await payments.FindPaymentAsync(command.Request.FailedPaymentId, ct);
-        if (payment is null || payment.BillingStatementId != command.StatementId ||
-            payment.PayerPersonId != personId ||
-            payment.PaymentStatusCode is not (PaymentStatusCodes.Failed or PaymentStatusCodes.Expired or PaymentStatusCodes.Cancelled))
-            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
-
         PayableStatement? statement = await billing.FindPayableStatementAsync(command.StatementId, personId, ct);
         if (statement is null)
             return Result.Failure(PaymentApplicationErrors.BillNotFound);
@@ -483,30 +476,48 @@ internal sealed class DeferBillingStatementHandler(
             .Where(id => id > 0)
             .Distinct()
             .ToArray() ?? [];
-        PayableStatementBill[] selectedBills = requestedBillIds.Length == 0
-            ? statement.Bills.Where(bill => bill.IsInstallment).ToArray()
-            : statement.Bills.Where(bill => requestedBillIds.Contains(bill.BillId)).ToArray();
+        if (requestedBillIds.Length == 0)
+            return Result.Failure(PaymentDomainErrors.NoDeferrableBills);
 
-        if (requestedBillIds.Length > 0 && selectedBills.Length != requestedBillIds.Length)
+        PayableStatementBill[] selectedBills = statement.Bills
+            .Where(bill => requestedBillIds.Contains(bill.BillId))
+            .ToArray();
+
+        if (selectedBills.Length != requestedBillIds.Length)
             return Result.Failure(PaymentDomainErrors.InvalidDeferral);
         if (selectedBills.Any(bill => !bill.IsInstallment))
             return Result.Failure(PaymentDomainErrors.FullPaymentCannotBeDeferred);
         if (selectedBills.Length == 0)
             return Result.Failure(PaymentDomainErrors.NoDeferrableBills);
 
+        long[] organizationIds = selectedBills
+            .Select(bill => bill.OrganizationId)
+            .Distinct()
+            .ToArray();
+        if (organizationIds.Length != 1)
+            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
+
+        BillingPolicySnapshot policy = await billing.GetBillingPolicyAsync(organizationIds[0], ct);
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
-        decimal selectedOutstandingAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
-        if (balance?.AvailableBalance >= selectedOutstandingAmount)
+        decimal availableBalance = balance?.AvailableBalance ?? 0m;
+        if (selectedBills.Any(bill => availableBalance >= bill.OutstandingAmount))
             return Result.Failure(PaymentDomainErrors.EducationAccountCanCoverDeferral);
 
-        await billing.DeferStatementAsync(
+        Result deferResult = await billing.DeferStatementAsync(
             command.StatementId,
             personId,
-            payment.Id,
             selectedBills.Select(bill => bill.BillId).ToArray(),
+            policy.MaxDeferralCount,
             actorId,
             clock.UtcNow.UtcDateTime,
             ct);
+        if (deferResult.IsFailure)
+        {
+            return deferResult.Error.Code == "BILL.DEFERRAL_LIMIT_REACHED"
+                ? Result.Failure(PaymentDomainErrors.DeferralLimitReached)
+                : Result.Failure(PaymentDomainErrors.InvalidDeferral);
+        }
+
         return Result.Success();
     }
 }

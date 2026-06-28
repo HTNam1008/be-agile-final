@@ -264,6 +264,11 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("IssuedAt");
 
+                    b.Property<bool>("IsDeferExtensionGranted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<decimal>("NetPayableAmount")
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
@@ -337,9 +342,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
 
-                    b.Property<long>("FailedPaymentId")
-                        .HasColumnType("bigint");
-
                     b.Property<DateOnly>("FromDueDate")
                         .HasColumnType("date");
 
@@ -349,6 +351,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<long?>("SourcePaymentId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateOnly>("ToDueDate")
                         .HasColumnType("date");
 
@@ -357,10 +362,46 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasIndex("BillId", "DeferralSequenceNumber")
                         .IsUnique();
 
-                    b.HasIndex("BillId", "FailedPaymentId")
-                        .IsUnique();
+                    b.HasIndex("BillId", "SourcePaymentId");
 
                     b.ToTable("BillDeferral", "billing");
+                });
+
+            modelBuilder.Entity("Moe.Modules.CourseBilling.Domain.Billing.OrganizationBillingConfiguration", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("OrganizationBillingConfigurationId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<int>("MaxDeferralCount")
+                        .HasColumnType("int");
+
+                    b.Property<long>("OrganizationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("RejectionGracePeriodDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<long>("UpdatedByLoginAccountId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId")
+                        .IsUnique();
+
+                    b.ToTable("OrganizationBillingConfiguration", "billing");
                 });
 
             modelBuilder.Entity("Moe.Modules.CourseBilling.Domain.Billing.BillLine", b =>

@@ -50,7 +50,7 @@ public static class PaymentDomainErrors
     public static readonly Error RefundExceedsPayment = new("PAYMENT.REFUND_EXCEEDS_PAYMENT", "The refund exceeds the remaining refundable amount.");
     public static readonly Error InvalidDeferral = new(
         "PAYMENT.INVALID_DEFERRAL",
-        "Only a failed, cancelled or expired statement payment can be deferred.");
+        "The selected bills cannot be deferred.");
 
     public static readonly Error FullPaymentCannotBeDeferred = new(
         "PAYMENT.FULL_PAYMENT_CANNOT_BE_DEFERRED",
@@ -63,4 +63,8 @@ public static class PaymentDomainErrors
     public static readonly Error EducationAccountCanCoverDeferral = new(
         "PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT",
         "Your available Education Account balance can cover the monthly installment. Pay with your Education Account instead of deferring it.");
+
+    public static readonly Error DeferralLimitReached = new(
+        "PAYMENT.DEFERRAL_LIMIT_REACHED",
+        "One or more selected bills has reached the maximum deferral count. Request a defer extension before deferring again.");
 }

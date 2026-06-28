@@ -57,6 +57,4 @@ public sealed record PendingEnrollmentPaymentResponse(
     DateTime? CheckoutExpiresAtUtc,
     IReadOnlyCollection<long> BillIds);
 
-public sealed record DeferBillingStatementRequest(
-    long FailedPaymentId,
-    IReadOnlyCollection<long>? BillIds = null);
+public sealed record DeferBillingStatementRequest(IReadOnlyCollection<long>? BillIds = null);

@@ -696,7 +696,10 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { failedPaymentId = retry.GetProperty("paymentId").GetInt64() });
+            new
+            {
+                billIds = new[] { statement.BillId }
+            });
         await AssertStatusAsync(HttpStatusCode.OK, defer);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -741,10 +744,13 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { failedPaymentId = pay.GetProperty("paymentId").GetInt64() });
+            new
+            {
+                billIds = new[] { statement.BillId }
+            });
 
         await AssertStatusAsync(HttpStatusCode.BadRequest, defer);
-        Assert.Contains("PAYMENT.NO_DEFERRABLE_BILLS", await defer.Content.ReadAsStringAsync());
+        Assert.Contains("PAYMENT.FULL_PAYMENT_CANNOT_BE_DEFERRED", await defer.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -771,7 +777,10 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { failedPaymentId = pay.GetProperty("paymentId").GetInt64() });
+            new
+            {
+                billIds = new[] { statement.BillId }
+            });
 
         await AssertStatusAsync(HttpStatusCode.BadRequest, defer);
         Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", await defer.Content.ReadAsStringAsync());
@@ -843,13 +852,23 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
         await PostWebhookAsync("failure", checkoutId, 11000, $"evt_mixed_fail_{Guid.NewGuid():N}");
 
+        using HttpResponseMessage rejectEmpty = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statementId}/defer",
+            new
+            {
+                billIds = Array.Empty<long>()
+            });
+        await AssertStatusAsync(HttpStatusCode.BadRequest, rejectEmpty);
+        Assert.Contains("PAYMENT.NO_DEFERRABLE_BILLS", await rejectEmpty.Content.ReadAsStringAsync());
+
         using HttpResponseMessage rejectFull = await SendStudentAsync(
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statementId}/defer",
             new
             {
-                failedPaymentId = pay.GetProperty("paymentId").GetInt64(),
                 billIds = new[] { fullBillId }
             });
         await AssertStatusAsync(HttpStatusCode.BadRequest, rejectFull);
@@ -861,7 +880,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             $"/api/eservice/v1/billing-statements/{statementId}/defer",
             new
             {
-                failedPaymentId = pay.GetProperty("paymentId").GetInt64(),
                 billIds = new[] { installmentBillId }
             });
         await AssertStatusAsync(HttpStatusCode.OK, deferInstallment);
@@ -1049,7 +1067,8 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             .SingleAsync();
         return new StatementInfo(
             data.GetProperty("billingStatementId").GetInt64(),
-            enrollmentId);
+            enrollmentId,
+            billId);
     }
 
     private async Task<JsonElement> PreviewPaymentAsync(TestStudent student, long statementId)
@@ -1160,5 +1179,5 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
 
     private sealed record TestStudent(long PersonId, long UserAccountId);
     private sealed record TestCourse(long CourseId, IReadOnlyDictionary<string, long> PlanIds);
-    private sealed record StatementInfo(long StatementId, long EnrollmentId);
+    private sealed record StatementInfo(long StatementId, long EnrollmentId, long BillId);
 }
