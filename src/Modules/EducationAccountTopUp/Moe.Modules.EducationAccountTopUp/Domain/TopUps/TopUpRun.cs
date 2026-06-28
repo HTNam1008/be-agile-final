@@ -157,7 +157,7 @@ public sealed class TopUpRun : AggregateRoot<long>
 
     public Result Cancel(DateTime utcNow)
     {
-        Result transition = ValidateTransition(TopUpRunStatusCodes.Previewed, TopUpRunStatusCodes.Cancelled);
+        Result transition = ValidateTransition(RunStatusCode, TopUpRunStatusCodes.Cancelled);
         if (transition.IsFailure)
         {
             return transition;

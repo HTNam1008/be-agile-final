@@ -192,12 +192,14 @@ public sealed class RunExecutionOrchestrator(
         }
     }
 
-    public void CancelRun(long topUpRunId)
+    public bool CancelRun(long topUpRunId)
     {
         if (_cancellationTokens.TryGetValue(topUpRunId, out CancellationTokenSource? cts))
         {
             cts.Cancel();
+            return true;
         }
+        return false;
     }
 
     private async Task<RecipientProcessingResult> ProcessRecipientWithRetryAsync(

@@ -30,7 +30,15 @@ internal sealed class CancelTopUpRunCommandHandler(
         {
             // The run is currently executing. Tell the orchestrator to abort.
             // The orchestrator will gracefully finalize the run with Skipped status for remaining.
-            orchestrator.CancelRun(request.RunId);
+            bool isActive = orchestrator.CancelRun(request.RunId);
+            if (!isActive)
+            {
+                // ZOMBIE RUN DETECTED! The run is Processing but the orchestrator is not tracking it (e.g., worker crashed).
+                // Force cancel it in the database directly.
+                Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
+                if (cancelResult.IsFailure) return cancelResult;
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
         }
         else if (run.RunStatusCode == TopUpRunStatusCodes.Previewed)
         {

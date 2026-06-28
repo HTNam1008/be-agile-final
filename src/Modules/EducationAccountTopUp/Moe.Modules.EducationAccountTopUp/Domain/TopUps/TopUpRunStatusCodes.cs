@@ -21,6 +21,6 @@ public static class TopUpRunStatusCodes
         new Dictionary<string, IReadOnlySet<string>>
         {
             [Previewed] = new HashSet<string> { Processing, Cancelled },
-            [Processing] = new HashSet<string> { Completed, Partial, Failed }
+            [Processing] = new HashSet<string> { Completed, Partial, Failed, Cancelled }
         };
 }

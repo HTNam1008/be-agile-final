@@ -9,5 +9,5 @@ public interface IRunExecutionOrchestrator
         IReadOnlyList<RecipientInfo> recipients,
         CancellationToken cancellationToken = default);
 
-    void CancelRun(long topUpRunId);
+    bool CancelRun(long topUpRunId);
 }
