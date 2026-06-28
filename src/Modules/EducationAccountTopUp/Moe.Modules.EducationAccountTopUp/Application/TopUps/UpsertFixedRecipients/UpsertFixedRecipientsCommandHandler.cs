@@ -77,15 +77,21 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
 
         TopUpAccountSelectionResolution resolution = selectionResult.Value;
         HashSet<long> incomingIds = resolution.EducationAccountIds.ToHashSet();
-        IReadOnlyDictionary<long, decimal?> amountOverrides = command.Mode == TopUpAccountSelectionMode.ExplicitIds
-            ? command.Recipients.ToDictionary(x => x.EducationAccountId, x => x.AmountOverride)
-            : new Dictionary<long, decimal?>();
+        IReadOnlyDictionary<long, decimal?> amountOverrides = command.Mode switch
+        {
+            TopUpAccountSelectionMode.ExplicitIds =>
+                command.Recipients.ToDictionary(x => x.EducationAccountId, x => x.AmountOverride),
+            TopUpAccountSelectionMode.AllMatchingFilter =>
+                (await campaigns.GetAmountOverridesByCampaignAsync(campaign.Id, cancellationToken))
+                    .ToDictionary(x => x.Key, x => (decimal?)x.Value),
+            _ => new Dictionary<long, decimal?>(),
+        };
 
         var nowUtc = clock.UtcNow.UtcDateTime;
         var userId = currentUser.UserAccountId ?? 0;
 
-        var toDelete = existingRecipients.Values.Where(x => !incomingIds.Contains(x.EducationAccountId)).ToList();
-        await campaigns.RemoveRecipientsAsync(toDelete, cancellationToken);
+        var toDelete = existingRecipients.Values.Where(x => !incomingIds.Contains(x.EducationAccountId) && x.DeletedAtUtc == null).ToList();
+        await campaigns.RemoveRecipientsAsync(toDelete, userId, nowUtc, cancellationToken);
 
         foreach (long educationAccountId in resolution.EducationAccountIds)
         {
@@ -93,6 +99,8 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
 
             if (existingRecipients.TryGetValue(educationAccountId, out var existing))
             {
+                if (existing.DeletedAtUtc is not null)
+                    existing.Undelete();
                 existing.UpdateAmountOverride(amountOverride);
             }
             else
