@@ -10,6 +10,34 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.TopUps;
 
 internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampaignReader
 {
+    public async Task<CampaignListItem?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpCampaign>().AsNoTracking()
+            .Where(c => c.Id == id)
+            .Select(c => new CampaignListItem(
+                c.Id,
+                c.OrganizationId,
+                c.CampaignCode,
+                c.CampaignName,
+                c.Description,
+                c.RecipientModeCode,
+                c.DefaultTopUpAmount,
+                c.Reason,
+                c.ScheduleTypeCode,
+                c.StartDate,
+                c.EndDate,
+                c.FrequencyCode,
+                c.FrequencyInterval,
+                c.NextRunAtUtc,
+                c.CampaignStatusCode,
+                c.CampaignVersion,
+                c.DeliveryTypeCode,
+                c.MaxTotalAmount,
+                c.CreatedAtUtc,
+                c.UpdatedAtUtc))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CampaignListItem>> GetCampaignsAsync(
         IReadOnlyCollection<long>? accessibleOrgIds,
         CancellationToken cancellationToken = default)
@@ -38,6 +66,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.NextRunAtUtc,
                 c.CampaignStatusCode,
                 c.CampaignVersion,
+                c.DeliveryTypeCode,
+                c.MaxTotalAmount,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc))
             .ToListAsync(cancellationToken);

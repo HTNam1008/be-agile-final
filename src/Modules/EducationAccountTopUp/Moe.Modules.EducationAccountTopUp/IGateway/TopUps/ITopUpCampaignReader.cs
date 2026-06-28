@@ -5,6 +5,7 @@ namespace Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 
 public interface ITopUpCampaignReader
 {
+    Task<CampaignListItem?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CampaignListItem>> GetCampaignsAsync(
         IReadOnlyCollection<long>? accessibleOrgIds,
         CancellationToken cancellationToken = default);
