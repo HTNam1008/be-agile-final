@@ -278,6 +278,13 @@ public sealed class RecipientProcessingServiceTests
                     .ToList());
         }
 
+        public Task<decimal> GetTotalDisbursedForCampaignAsync(
+            long campaignId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0m);
+        }
+
         public void Add(TopUpTransaction transaction)
         {
             AddCalls++;
