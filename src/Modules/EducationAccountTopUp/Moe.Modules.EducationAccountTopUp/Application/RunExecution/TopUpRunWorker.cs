@@ -225,6 +225,8 @@ public sealed class TopUpRunWorker(
 
             foreach (var contract in campaignContracts)
             {
+                contract.RecordPayment(contract.AmountPerPayment, nowUtc);
+
                 if (contract.DeliveryTypeCode == DeliveryType.FixedContract && !contract.IsCompleted)
                 {
                     DateTime? nextPaymentDate = RecurrenceCalculator.CalculateNextRun(
