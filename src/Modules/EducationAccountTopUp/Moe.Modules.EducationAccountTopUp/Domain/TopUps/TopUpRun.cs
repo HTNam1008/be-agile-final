@@ -102,12 +102,12 @@ public sealed class TopUpRun : AggregateRoot<long>
             string.IsNullOrWhiteSpace(ruleSnapshotJson) ? null : ruleSnapshotJson);
     }
 
-    public static TopUpRun CreateForContracts(long campaignId, DateTime utcNow)
+    public static TopUpRun CreateForContracts(long campaignId, int campaignVersion, DateTime utcNow)
     {
         return new TopUpRun
         {
             TopUpCampaignId = campaignId,
-            CampaignVersion = 0,
+            CampaignVersion = campaignVersion,
             ScheduledForUtc = utcNow,
             TriggerTypeCode = TopUpRunTriggerTypes.Scheduled,
             RunStatusCode = TopUpRunStatusCodes.Previewed,
