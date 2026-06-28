@@ -8,4 +8,6 @@ public interface IRunExecutionOrchestrator
         long topUpRunId,
         IReadOnlyList<RecipientInfo> recipients,
         CancellationToken cancellationToken = default);
+
+    void CancelRun(long topUpRunId);
 }

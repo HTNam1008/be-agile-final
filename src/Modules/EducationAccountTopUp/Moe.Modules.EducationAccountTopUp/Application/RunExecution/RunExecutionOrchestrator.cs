@@ -21,13 +21,19 @@ public sealed class RunExecutionOrchestrator(
 {
     private const int MaxTransientRetries = 3;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _cancellationTokens = new();
 
     public async Task<Result<RunExecutionResult>> ExecuteRunAsync(
         long topUpRunId,
         IReadOnlyList<RecipientInfo> recipients,
         CancellationToken cancellationToken = default)
     {
-        _ = transactions;
+        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _cancellationTokens.TryAdd(topUpRunId, linkedCts);
+
+        try
+        {
+            _ = transactions;
 
         TopUpRun? run = await runs.GetByIdAsync(topUpRunId, cancellationToken);
         if (run is null)
@@ -82,12 +88,16 @@ public sealed class RunExecutionOrchestrator(
 
         foreach (RecipientInfo recipient in recipients)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (linkedCts.Token.IsCancellationRequested)
+            {
+                totalSkipped++;
+                continue;
+            }
 
             RecipientProcessingResult result = await ProcessRecipientWithRetryAsync(
                 topUpRunId,
                 recipient,
-                cancellationToken);
+                linkedCts.Token);
 
             switch (result.Status)
             {
@@ -175,6 +185,19 @@ public sealed class RunExecutionOrchestrator(
             TotalSkipped = totalSkipped,
             TotalAmount = totalAmount
         });
+        }
+        finally
+        {
+            _cancellationTokens.TryRemove(topUpRunId, out _);
+        }
+    }
+
+    public void CancelRun(long topUpRunId)
+    {
+        if (_cancellationTokens.TryGetValue(topUpRunId, out CancellationTokenSource? cts))
+        {
+            cts.Cancel();
+        }
     }
 
     private async Task<RecipientProcessingResult> ProcessRecipientWithRetryAsync(

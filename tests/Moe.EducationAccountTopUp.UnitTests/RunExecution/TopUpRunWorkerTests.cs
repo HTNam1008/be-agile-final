@@ -254,6 +254,11 @@ public sealed class TopUpRunWorkerTests
                 TotalAmount = recipients.Sum(x => x.Amount)
             }));
         }
+
+        public void CancelRun(long topUpRunId)
+        {
+            // Fake implementation for tests
+        }
     }
 
     private sealed class FakeRunReconciliationService : IRunReconciliationService
