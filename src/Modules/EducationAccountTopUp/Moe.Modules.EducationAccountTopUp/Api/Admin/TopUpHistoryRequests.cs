@@ -10,7 +10,7 @@ public sealed class CampaignHistoryRequest
     public string? Status { get; init; }
     public long? ActorId { get; init; }
     public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 25;
+    public int PageSize { get; init; } = 10;
 }
 
 public sealed class RunHistoryRequest
@@ -25,5 +25,5 @@ public sealed class RunHistoryRequest
     public string? StudentOrAccountSearch { get; init; }
     public long? ActorId { get; init; }
     public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 25;
+    public int PageSize { get; init; } = 10;
 }

@@ -15,7 +15,7 @@ namespace Moe.Modules.FasPayment.Api.EService;
 [ServiceFilter(typeof(FasApiExceptionFilter))]
 public sealed class StudentFasApplicationsController(StudentFasApplicationService service) : ControllerBase
 {
-    [HttpGet("schemes")] public Task<object> Schemes([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken ct = default) => service.ListSchemes(page, pageSize, search, ct);
+    [HttpGet("schemes")] public Task<object> Schemes([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? search = null, CancellationToken ct = default) => service.ListSchemes(page, pageSize, search, ct);
     [HttpGet("schemes/{id:long}")] public Task<object> Scheme(long id, CancellationToken ct) => service.SchemeDetail(id, ct);
     [HttpPost("eligibility/check")] public Task<object> Eligibility(EligibilityRequest request, CancellationToken ct) => service.CheckEligibility(request, ct);
     [HttpGet("applications/prefill")] public Task<object> Prefill(CancellationToken ct) => service.Prefill(ct);

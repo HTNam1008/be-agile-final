@@ -48,7 +48,7 @@ public sealed class MyEducationAccountController(
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTransactions(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] int pageSize = 10,
         [FromQuery] string? category = null,
         CancellationToken cancellationToken = default)
     {
