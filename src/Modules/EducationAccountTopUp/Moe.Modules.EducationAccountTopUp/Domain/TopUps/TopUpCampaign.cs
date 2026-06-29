@@ -55,6 +55,7 @@ public sealed class TopUpCampaign : Entity<long>
 
     public string DeliveryTypeCode { get; private set; } = DeliveryType.Instant;
     public decimal MaxTotalAmount { get; private set; }
+    public decimal BudgetReserved { get; private set; }
 
     public bool IsExecutable => CampaignStatusCode == TopUpCampaignStatusCodes.Active;
 
@@ -105,6 +106,9 @@ public sealed class TopUpCampaign : Entity<long>
     {
         if (string.IsNullOrWhiteSpace(newCampaignCode))
             return Result.Failure(TopUpErrors.CampaignCodeCannotBeEmpty);
+
+        if (CampaignCode == newCampaignCode)
+            return Result.Success();
 
         if (CampaignStatusCode != TopUpCampaignStatusCodes.Draft)
             return Result.Failure(TopUpErrors.CannotChangeCampaignCodeAfterActive);
