@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
@@ -41,6 +42,7 @@ internal sealed class PayBillingStatementRequestValidator : AbstractValidator<Pa
 internal sealed class GetPendingEnrollmentPaymentHandler(
     IPaymentCheckoutRepository payments,
     IBillingStatementRepository billingStatements,
+    StatementPaymentPreviewBuilder previewBuilder,
     ICurrentUser currentUser,
     IClock clock) : IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>
 {
@@ -82,6 +84,20 @@ internal sealed class GetPendingEnrollmentPaymentHandler(
                 .Select(x => x.BillId)
                 .Distinct()
                 .ToArray();
+        if (billIds.Length == 0)
+        {
+            billIds = [pendingBill.BillId];
+        }
+        BillingStatementItemResponse? billItem = statement.Items
+            .FirstOrDefault(item => billIds.Contains(item.BillId));
+        Result<StatementPaymentPreviewResponse> previewResult = await previewBuilder.BuildAsync(
+            personId,
+            payment?.BillingStatementId ?? statement.BillingStatementId,
+            billIds,
+            ct);
+        if (previewResult.IsFailure)
+            return Result<PendingEnrollmentPaymentResponse?>.Failure(previewResult.Error);
+
         StatementPaymentCheckoutSession? checkout = payment is null
             ? null
             : await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
@@ -97,18 +113,19 @@ internal sealed class GetPendingEnrollmentPaymentHandler(
             checkout?.CheckoutUrl,
             checkout?.Id,
             checkout?.ExpiresAtUtc,
-            billIds.Length > 0 ? billIds : [pendingBill.BillId],
+            billIds,
             reservations.Select(x => new PendingEnrollmentFasSubsidyResponse(
                 x.FasApplicationSchemeId,
                 x.SchemeName,
                 x.AppliedAmount,
-                x.StatusCode)).ToArray()));
+                x.StatusCode)).ToArray(),
+            billItem,
+            previewResult.Value));
     }
 }
 
 internal sealed class PreviewStatementPaymentHandler(
-    ICoursePaymentGateway billing,
-    IEducationAccountPaymentGateway accounts,
+    StatementPaymentPreviewBuilder previewBuilder,
     ICurrentUser currentUser)
     : IQueryHandler<PreviewStatementPaymentQuery, StatementPaymentPreviewResponse>
 {
@@ -117,11 +134,25 @@ internal sealed class PreviewStatementPaymentHandler(
         if (!currentUser.TryGetStudent(out long personId))
             return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.StudentRequired);
 
-        PayableStatement? statement = await billing.FindPayableStatementAsync(query.StatementId, personId, ct);
+        return await previewBuilder.BuildAsync(personId, query.StatementId, query.BillIds, ct);
+    }
+}
+
+internal sealed class StatementPaymentPreviewBuilder(
+    ICoursePaymentGateway billing,
+    IEducationAccountPaymentGateway accounts)
+{
+    public async Task<Result<StatementPaymentPreviewResponse>> BuildAsync(
+        long personId,
+        long statementId,
+        IReadOnlyCollection<long>? billIds,
+        CancellationToken ct)
+    {
+        PayableStatement? statement = await billing.FindPayableStatementAsync(statementId, personId, ct);
         if (statement is null) return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.BillNotFound);
         Result<IReadOnlyCollection<PayableStatementBill>> selectedBillsResult = StatementBillSelection.Select(
             statement,
-            query.BillIds);
+            billIds);
         if (selectedBillsResult.IsFailure)
             return Result<StatementPaymentPreviewResponse>.Failure(selectedBillsResult.Error);
 
