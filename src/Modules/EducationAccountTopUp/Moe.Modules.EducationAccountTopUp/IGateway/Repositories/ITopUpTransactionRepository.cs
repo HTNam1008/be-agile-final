@@ -33,6 +33,16 @@ public interface ITopUpTransactionRepository
         long educationAccountId,
         CancellationToken cancellationToken = default);
 
+    Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(
+        long educationAccountId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default);
+
+    Task<long> CountByAccountIdAsync(
+        long educationAccountId,
+        CancellationToken cancellationToken = default);
+
     void Add(TopUpTransaction transaction);
 
     Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default);

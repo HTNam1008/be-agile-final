@@ -367,6 +367,11 @@ public sealed class RunExecutionOrchestratorTests
             return Task.FromResult(run);
         }
 
+        public Task<IReadOnlyList<TopUpRun>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpRun>>(_runs.Values.Where(r => ids.Contains(r.Id)).ToList());
+        }
+
         public Task<TopUpRun?> GetByIdempotencyKeyAsync(
             string idempotencyKey,
             CancellationToken cancellationToken = default)
@@ -438,6 +443,18 @@ public sealed class RunExecutionOrchestratorTests
             long educationAccountId,
             CancellationToken cancellationToken = default)
             => Task.FromResult(new List<TopUpTransaction>());
+
+        public Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(
+            long educationAccountId,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<(List<TopUpTransaction>, long)>((new List<TopUpTransaction>(), 0));
+
+        public Task<long> CountByAccountIdAsync(
+            long educationAccountId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(0L);
 
         public void Add(TopUpTransaction transaction) { }
 
@@ -529,6 +546,7 @@ public sealed class RunExecutionOrchestratorTests
         public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult<TopUpCampaign?>(CreateActiveCampaign());
+        public Task<IReadOnlyList<TopUpCampaign>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
         public Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
         public Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(new Dictionary<long, decimal>());

@@ -13,6 +13,16 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
         return dbContext.Set<TopUpCampaign>().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TopUpCampaign>> GetByIdsAsync(
+        IReadOnlyList<long> ids,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpCampaign>()
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> CampaignCodeExistsAsync(
         long organizationId,
         string campaignCode,

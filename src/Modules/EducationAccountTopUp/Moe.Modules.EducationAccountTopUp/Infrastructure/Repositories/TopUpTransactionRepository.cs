@@ -81,6 +81,36 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(
+        long educationAccountId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.Set<TopUpTransaction>()
+            .AsNoTracking()
+            .Where(x => x.EducationAccountId == educationAccountId);
+
+        var totalCount = await query.LongCountAsync(cancellationToken);
+
+        var transactions = await query
+            .OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        return (transactions, totalCount);
+    }
+
+    public async Task<long> CountByAccountIdAsync(
+        long educationAccountId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<TopUpTransaction>()
+            .AsNoTracking()
+            .LongCountAsync(x => x.EducationAccountId == educationAccountId, cancellationToken);
+    }
+
     public void Add(TopUpTransaction transaction)
     {
         dbContext.Set<TopUpTransaction>().Add(transaction);

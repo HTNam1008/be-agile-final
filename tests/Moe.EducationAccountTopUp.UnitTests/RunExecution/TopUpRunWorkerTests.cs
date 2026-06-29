@@ -207,6 +207,8 @@ public sealed class TopUpRunWorkerTests
         public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(long topUpRunId, int skip, int take, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpTransaction>>([]);
         public Task<decimal> GetTotalDisbursedForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0m);
         public Task<List<TopUpTransaction>> GetByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(new List<TopUpTransaction>());
+        public Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(long educationAccountId, int skip, int take, CancellationToken cancellationToken = default) => Task.FromResult<(List<TopUpTransaction>, long)>((new List<TopUpTransaction>(), 0));
+        public Task<long> CountByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(0L);
         public void Add(TopUpTransaction transaction) { }
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
@@ -225,6 +227,10 @@ public sealed class TopUpRunWorkerTests
         {
             _campaigns.TryGetValue(id, out TopUpCampaign? campaign);
             return Task.FromResult(campaign);
+        }
+        public Task<IReadOnlyList<TopUpCampaign>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpCampaign>>(_campaigns.Values.Where(c => ids.Contains(c.Id)).ToList());
         }
         public Task<bool> CampaignCodeExistsAsync(long organizationId, string campaignCode, CancellationToken cancellationToken = default)
             => Task.FromResult(_campaigns.Values.Any(c => c.OrganizationId == organizationId && c.CampaignCode == campaignCode));
@@ -291,6 +297,11 @@ public sealed class TopUpRunWorkerTests
         {
             _runs.TryGetValue(id, out TopUpRun? run);
             return Task.FromResult(run);
+        }
+
+        public Task<IReadOnlyList<TopUpRun>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpRun>>(_runs.Values.Where(r => ids.Contains(r.Id)).ToList());
         }
 
         public Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult(_runs.Values.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
