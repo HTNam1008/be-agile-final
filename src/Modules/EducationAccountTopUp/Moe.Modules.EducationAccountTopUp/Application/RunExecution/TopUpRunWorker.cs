@@ -118,7 +118,8 @@ public sealed class TopUpRunWorker(
         if (maxTotalAmount.HasValue && campaign is not null)
         {
             decimal alreadyDisbursed = await transactions.GetTotalDisbursedForCampaignAsync(campaign.Id, cancellationToken);
-            decimal projectedTotal = alreadyDisbursed + ((decimal)totalRecipients * campaign.DefaultTopUpAmount);
+            decimal resolvedAmount = await recipientResolver.GetTotalResolvedAmountAsync(run.TopUpCampaignId, runId, cancellationToken);
+            decimal projectedTotal = alreadyDisbursed + resolvedAmount;
 
             if (projectedTotal > maxTotalAmount.Value)
             {

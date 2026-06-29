@@ -304,6 +304,7 @@ public sealed class TopUpRunWorkerTests
 
         public void SetRecipients(IReadOnlyList<RecipientInfo> recipients) => _recipients = recipients.OrderBy(x => x.EducationAccountId).ToArray();
         public Task<int> GetTotalRecipientCountAsync(long campaignId, long runId, CancellationToken cancellationToken = default) => Task.FromResult(_recipients.Count);
+        public Task<decimal> GetTotalResolvedAmountAsync(long campaignId, long runId, CancellationToken cancellationToken = default) => Task.FromResult(_recipients.Sum(r => r.Amount));
 
         public Task<IReadOnlyList<RecipientInfo>> GetRecipientsChunkAsync(long campaignId, long runId, int chunkSize, int offset, CancellationToken cancellationToken = default)
         {
