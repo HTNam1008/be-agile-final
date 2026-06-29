@@ -36,6 +36,7 @@ internal static class CourseBillingApiResponses
             "COURSE.SYSTEM_COURSE_FEE_FORBIDDEN" => ApiResponseCodes.Forbidden,
             "COURSE.NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.MATERIAL_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "COURSE.MATERIAL_PREVIEW_UNAVAILABLE" => ApiResponseCodes.UnprocessableEntity,
             "COURSE.FEE_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.GST_COMPONENT_NOT_CONFIGURED" => ApiResponseCodes.NotFound,
             "COURSE.ENROLLMENT_NOT_FOUND" => ApiResponseCodes.NotFound,

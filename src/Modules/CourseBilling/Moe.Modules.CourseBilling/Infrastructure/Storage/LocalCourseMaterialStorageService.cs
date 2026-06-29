@@ -56,4 +56,13 @@ internal sealed class LocalCourseMaterialStorageService(IWebHostEnvironment envi
             useAsync: true);
         return Task.FromResult(stream);
     }
+
+    public Task<Uri?> CreateReadUriAsync(
+        string storagePath,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<Uri?>(null);
+    }
 }
