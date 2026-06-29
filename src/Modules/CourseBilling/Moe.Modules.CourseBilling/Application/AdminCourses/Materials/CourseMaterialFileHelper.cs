@@ -6,6 +6,11 @@ namespace Moe.Modules.CourseBilling.Application.AdminCourses.Materials;
 
 internal static class CourseMaterialFileHelper
 {
+    public const long MaxFileSizeBytes = 20 * 1024 * 1024;
+
+    public static bool ExceedsMaxFileSize(IFormFile file)
+        => file.Length > MaxFileSizeBytes;
+
     public static async Task<StoredCourseMaterialFile> StoreFileAsync(
         ICourseMaterialStorageService storage,
         long courseId,

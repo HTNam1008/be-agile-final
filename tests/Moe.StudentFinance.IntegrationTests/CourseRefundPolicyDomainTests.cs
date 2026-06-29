@@ -50,15 +50,14 @@ public sealed class CourseRefundPolicyDomainTests
     }
 
     [Fact]
-    public void Course_Content_Remains_Locked_Until_Start_Date()
+    public void Course_Content_Opens_Before_Start_Date_For_Active_Enrollment()
     {
         Course course = CreateCourse();
         CourseEnrollment enrollment = CreateActiveEnrollment(course);
 
         var result = CourseContentAccessPolicy.Check(enrollment, course, new DateOnly(2026, 7, 31));
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(CourseBillingErrors.CourseContentNotOpen, result.Error);
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]
@@ -78,6 +77,32 @@ public sealed class CourseRefundPolicyDomainTests
         Course course = CreateCourse();
         CourseEnrollment enrollment = CourseEnrollment.JoinSelf(
             1, 2, 3, 4, DateTime.UtcNow, 100m, 50m).Value;
+
+        var result = CourseContentAccessPolicy.Check(enrollment, course, course.StartDate);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(CourseBillingErrors.CourseContentLocked, result.Error);
+    }
+
+    [Fact]
+    public void Course_Content_Opens_Before_Start_Date_For_Paid_In_Full_Enrollment()
+    {
+        Course course = CreateCourse();
+        CourseEnrollment enrollment = CourseEnrollment.JoinSelf(
+            1, 2, 3, 4, DateTime.UtcNow, 100m, 50m).Value;
+        enrollment.GrantPaidAccess(paidInFull: true);
+
+        var result = CourseContentAccessPolicy.Check(enrollment, course, new DateOnly(2026, 7, 31));
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public void Course_Content_Stays_Locked_For_Exited_Enrollment()
+    {
+        Course course = CreateCourse();
+        CourseEnrollment enrollment = CreateActiveEnrollment(course);
+        enrollment.Cancel(DateTime.UtcNow);
 
         var result = CourseContentAccessPolicy.Check(enrollment, course, course.StartDate);
 

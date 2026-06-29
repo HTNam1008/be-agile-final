@@ -14,9 +14,6 @@ internal static class CourseContentAccessPolicy
 
     public static Result Check(CourseEnrollment enrollment, Course course, DateOnly today)
     {
-        if (today < course.StartDate)
-            return Result.Failure(CourseBillingErrors.CourseContentNotOpen);
-
         if (enrollment.ExitAtUtc is not null ||
             !AccessibleStatuses.Contains(enrollment.EnrollmentStatusCode, StringComparer.Ordinal))
         {
