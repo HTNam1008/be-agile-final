@@ -87,7 +87,9 @@ public sealed class TopUpAssessmentWorker(
                     // If a student got an INSTANT contract, got paid, and it became COMPLETED,
                     // they still have an existing contract and should not get a second one.
                     var existingContracts = await contractRepo.GetByCampaignAndAccountsAsync(campaign.Id, chunkIds, ct);
-                    var existingByAccount = existingContracts.ToDictionary(c => c.EducationAccountId);
+                    var existingByAccount = existingContracts
+                        .GroupBy(c => c.EducationAccountId)
+                        .ToDictionary(g => g.Key, g => g.First());
 
                     foreach (long accountId in chunkSet)
                     {
