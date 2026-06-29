@@ -15,4 +15,9 @@ public interface IRecipientResolver
         long campaignId,
         long runId,
         CancellationToken cancellationToken = default);
+
+    Task<decimal> GetTotalResolvedAmountAsync(
+        long campaignId,
+        long runId,
+        CancellationToken cancellationToken = default);
 }

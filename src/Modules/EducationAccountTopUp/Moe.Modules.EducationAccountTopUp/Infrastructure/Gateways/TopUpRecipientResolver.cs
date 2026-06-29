@@ -69,6 +69,27 @@ internal sealed class TopUpRecipientResolver(
         return await dynamicRuleFilter.CountMatchingAccountsAsync(projections, DateTime.UtcNow, cancellationToken);
     }
 
+    public async Task<decimal> GetTotalResolvedAmountAsync(
+        long campaignId,
+        long runId,
+        CancellationToken cancellationToken = default)
+    {
+        TopUpCampaign? campaign = await GetCampaignAsync(campaignId, cancellationToken);
+        if (campaign is null)
+        {
+            return 0m;
+        }
+
+        if (IsFixedSelection(campaign))
+        {
+            return await GetFixedRecipientAmountSumQuery(campaign.Id, campaign.DefaultTopUpAmount)
+                .SumAsync(cancellationToken);
+        }
+
+        int count = await GetTotalRecipientCountAsync(campaignId, runId, cancellationToken);
+        return count * campaign.DefaultTopUpAmount;
+    }
+
     private Task<TopUpCampaign?> GetCampaignAsync(long campaignId, CancellationToken cancellationToken)
     {
         return dbContext.Set<TopUpCampaign>()
@@ -112,6 +133,19 @@ internal sealed class TopUpRecipientResolver(
                    OrganizationUnitId = organizationId,
                    CampaignReason = campaignReason
                };
+    }
+
+    private IQueryable<decimal> GetFixedRecipientAmountSumQuery(
+        long campaignId,
+        decimal defaultTopUpAmount)
+    {
+        return from recipient in dbContext.Set<TopUpCampaignRecipient>().AsNoTracking()
+               join account in dbContext.Set<EducationAccount>().AsNoTracking()
+                   on recipient.EducationAccountId equals account.Id
+               where recipient.TopUpCampaignId == campaignId
+                   && recipient.IsActive
+                   && account.StatusCode == AccountStatuses.Active
+               select (recipient.AmountOverride ?? defaultTopUpAmount);
     }
 
     private async Task<IReadOnlyList<RecipientInfo>> GetDynamicRecipientsAsync(
