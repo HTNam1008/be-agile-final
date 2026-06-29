@@ -72,6 +72,7 @@ internal sealed class ChangeMfaPinHandler(
         return Result<MfaStatusResponse>.Success(new MfaStatusResponse(
             credential.StatusCode,
             credential.LockedUntilUtc,
-            credential.LastVerifiedAtUtc));
+            credential.LastVerifiedAtUtc,
+            false));
     }
 }

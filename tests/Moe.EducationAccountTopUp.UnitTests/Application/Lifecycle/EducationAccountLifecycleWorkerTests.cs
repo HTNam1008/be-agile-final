@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -9,6 +11,7 @@ using Moe.Modules.EducationAccountTopUp.Domain.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using System.Reflection;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests.Application.Lifecycle;
@@ -41,12 +44,14 @@ public sealed class EducationAccountLifecycleWorkerTests
         FakeEligiblePersonLookupGateway people = new([1, 2, 2]);
         FakeAutomaticEducationAccountCreator creator = new();
         FakeAutomaticEducationAccountCloser closer = new();
+        FakeEducationAccountLifecycleRunRepository runs = new(enforceUniqueScheduledRuns: true);
         EducationAccountLifecycleWorker worker = CreateWorker(
             new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
             new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
             people,
             creator,
-            closer);
+            closer,
+            runs);
 
         await worker.RunIfDueAsync(CancellationToken.None);
         await worker.RunIfDueAsync(CancellationToken.None);
@@ -54,6 +59,9 @@ public sealed class EducationAccountLifecycleWorkerTests
         closer.Calls.Should().Be(1);
         people.Calls.Should().Be(1);
         creator.CreatedPersonIds.Should().Equal(1, 2);
+        runs.Runs.Should().ContainSingle(x =>
+            x.RunDateUtc == new DateOnly(2026, 6, 24)
+            && x.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled);
     }
 
     [Fact]
@@ -169,6 +177,78 @@ public sealed class EducationAccountLifecycleWorkerTests
             && x.EducationAccountId == 10);
     }
 
+    [Fact]
+    public async Task ProcessAsync_WhenScheduledRunAlreadyClaimed_Skips_WithoutProcessingAgain()
+    {
+        DateOnly today = new(2026, 6, 24);
+        FakeEligiblePersonLookupGateway people = new([10]);
+        FakeAutomaticEducationAccountCreator creator = new();
+        FakeAutomaticEducationAccountCloser closer = new();
+        FakeEducationAccountLifecycleRunRepository runs = new(enforceUniqueScheduledRuns: true);
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer,
+            runs);
+
+        EducationAccountLifecycleRunResult first = await worker.ProcessAsync(
+            today,
+            new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero),
+            EducationAccountLifecycleRunTriggerTypes.Scheduled,
+            CancellationToken.None);
+        EducationAccountLifecycleRunResult second = await worker.ProcessAsync(
+            today,
+            new DateTimeOffset(2026, 6, 24, 2, 1, 0, TimeSpan.Zero),
+            EducationAccountLifecycleRunTriggerTypes.Scheduled,
+            CancellationToken.None);
+
+        first.Should().BeEquivalentTo(new { OpenedCount = 1, ClosedCount = 0, Skipped = false });
+        second.Should().BeEquivalentTo(new { OpenedCount = 0, ClosedCount = 0, Skipped = true });
+        closer.Calls.Should().Be(1);
+        people.Calls.Should().Be(1);
+        creator.CreatedPersonIds.Should().Equal(10);
+        runs.Runs.Should().ContainSingle(x =>
+            x.RunDateUtc == today
+            && x.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenManualRunsRepeatSameDate_AllRowsAreWritten()
+    {
+        DateOnly today = new(2026, 6, 24);
+        FakeEligiblePersonLookupGateway people = new(Array.Empty<long>());
+        FakeAutomaticEducationAccountCreator creator = new();
+        FakeAutomaticEducationAccountCloser closer = new();
+        FakeEducationAccountLifecycleRunRepository runs = new(enforceUniqueScheduledRuns: true);
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer,
+            runs);
+
+        await worker.ProcessAsync(
+            today,
+            new DateTimeOffset(2026, 6, 24, 7, 0, 0, TimeSpan.Zero),
+            EducationAccountLifecycleRunTriggerTypes.Manual,
+            CancellationToken.None);
+        await worker.ProcessAsync(
+            today,
+            new DateTimeOffset(2026, 6, 24, 7, 1, 0, TimeSpan.Zero),
+            EducationAccountLifecycleRunTriggerTypes.Manual,
+            CancellationToken.None);
+
+        runs.Runs
+            .Where(x =>
+                x.RunDateUtc == today
+                && x.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Manual)
+            .Should()
+            .HaveCount(2);
+    }
+
     private static EducationAccountLifecycleWorker CreateWorker(
         EducationAccountLifecycleOptions options,
         IClock clock,
@@ -183,7 +263,7 @@ public sealed class EducationAccountLifecycleWorkerTests
             .AddSingleton<IAutomaticEducationAccountCreator>(creator)
             .AddSingleton<IAutomaticEducationAccountCloser>(closer)
             .AddSingleton<IEducationAccountLifecycleRunRepository>(runs)
-            .AddSingleton<IUnitOfWork, FakeUnitOfWork>()
+            .AddSingleton<IUnitOfWork>(new FakeUnitOfWork(runs))
             .BuildServiceProvider();
 
         return new EducationAccountLifecycleWorker(
@@ -281,23 +361,87 @@ public sealed class EducationAccountLifecycleWorkerTests
         }
     }
 
-    private sealed class FakeEducationAccountLifecycleRunRepository
+    private sealed class FakeEducationAccountLifecycleRunRepository(bool enforceUniqueScheduledRuns = false)
         : IEducationAccountLifecycleRunRepository
     {
+        private readonly bool _enforceUniqueScheduledRuns = enforceUniqueScheduledRuns;
+        private readonly List<EducationAccountLifecycleRun> _pendingRuns = [];
         public List<EducationAccountLifecycleRun> Runs { get; } = [];
 
         public Task AddAsync(
             EducationAccountLifecycleRun run,
             CancellationToken cancellationToken)
         {
-            Runs.Add(run);
+            _pendingRuns.Add(run);
             return Task.CompletedTask;
+        }
+
+        public void SaveChanges()
+        {
+            if (_enforceUniqueScheduledRuns)
+            {
+                EducationAccountLifecycleRun? duplicateScheduledRun = _pendingRuns.FirstOrDefault(pending =>
+                    pending.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled
+                    && Runs.Any(committed =>
+                        committed.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled
+                        && committed.RunDateUtc == pending.RunDateUtc));
+
+                if (duplicateScheduledRun is not null)
+                {
+                    _pendingRuns.Remove(duplicateScheduledRun);
+                    throw new DbUpdateException(
+                        "Cannot insert duplicate key row.",
+                        CreateSqlException(2601));
+                }
+            }
+
+            Runs.AddRange(_pendingRuns);
+            _pendingRuns.Clear();
+        }
+
+        private static SqlException CreateSqlException(int number)
+        {
+            ConstructorInfo errorConstructor = typeof(SqlError)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+                .First(constructor => constructor.GetParameters().Length == 8);
+            object?[] args =
+            [
+                number,
+                (byte)0,
+                (byte)0,
+                "server",
+                "duplicate key",
+                "procedure",
+                1,
+                null
+            ];
+            var error = (SqlError)errorConstructor.Invoke(args);
+            var errors = (SqlErrorCollection)Activator.CreateInstance(
+                typeof(SqlErrorCollection),
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                args: null,
+                culture: null)!;
+            typeof(SqlErrorCollection)
+                .GetMethod("Add", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(errors, [error]);
+            return (SqlException)typeof(SqlException)
+                .GetMethod(
+                    "CreateException",
+                    BindingFlags.Static | BindingFlags.NonPublic,
+                    binder: null,
+                    types: [typeof(SqlErrorCollection), typeof(string)],
+                    modifiers: null)!
+                .Invoke(null, [errors, "15.0"])!;
         }
     }
 
-    private sealed class FakeUnitOfWork : IUnitOfWork
+    private sealed class FakeUnitOfWork(FakeEducationAccountLifecycleRunRepository runs) : IUnitOfWork
     {
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(1);
+        {
+            runs.SaveChanges();
+            return Task.FromResult(1);
+        }
     }
 }

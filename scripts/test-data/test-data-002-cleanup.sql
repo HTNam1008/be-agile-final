@@ -26,7 +26,9 @@ FROM person.PersonIdentifier pi
 WHERE pi.IdentifierMasked IN
 (
     'S912001A', 'S912002B', 'S912003C', 'S912004D', 'S912005E',
-    'S912006F', 'S912008H', 'S912009J'
+    'S912006F', 'S912008H', 'S912009J',
+    'S7000051E', 'S7000052F', 'S7000053G', 'S7000054H', 'S7000055J',
+    'S7000056K', 'S7000057L', 'S7000058M', 'S7000059N', 'S7000060P'
 )
 AND NOT EXISTS (SELECT 1 FROM @FixturePersonIds f WHERE f.PersonId = pi.PersonId);
 
@@ -97,7 +99,7 @@ SELECT 'org.Organization' AS TableName, COUNT(*) AS RemainingSeedRows
 FROM org.Organization
 WHERE OrganizationCode = 'QA_TEST_AUTO002_SCHOOL_B'
 UNION ALL SELECT 'person.Person', COUNT(*) FROM person.Person WHERE MockPassPersonId LIKE 'QA_TEST_AUTO002_%' OR FullName LIKE 'QA TEST AUTO002%'
-UNION ALL SELECT 'person.PersonIdentifier', COUNT(*) FROM person.PersonIdentifier WHERE IdentifierMasked IN ('S912001A', 'S912002B', 'S912003C', 'S912004D', 'S912005E', 'S912006F', 'S912008H', 'S912009J')
+UNION ALL SELECT 'person.PersonIdentifier', COUNT(*) FROM person.PersonIdentifier WHERE IdentifierMasked IN ('S912001A', 'S912002B', 'S912003C', 'S912004D', 'S912005E', 'S912006F', 'S912008H', 'S912009J', 'S7000051E', 'S7000052F', 'S7000053G', 'S7000054H', 'S7000055J', 'S7000056K', 'S7000057L', 'S7000058M', 'S7000059N', 'S7000060P')
 UNION ALL SELECT 'person.SchoolEnrollment', COUNT(*) FROM person.SchoolEnrollment WHERE SourceCode = 'QA_TEST_AUTO002'
 UNION ALL SELECT 'account.EducationAccount', COUNT(*) FROM account.EducationAccount WHERE AccountNumber LIKE 'QA-AUTO002-EA-%'
 UNION ALL SELECT 'account.EducationAccount fixture persons', COUNT(*) FROM account.EducationAccount WHERE PersonId IN (SELECT PersonId FROM @FixturePersonIds)
