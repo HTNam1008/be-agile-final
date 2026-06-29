@@ -774,6 +774,56 @@ public sealed class StudentFasApplicationService(
 
         return new { items, page, pageSize, totalCount };
     }
+
+    public async Task<object> ApplicableActiveSchemesForCourse(long courseId, CancellationToken ct)
+    {
+        if (courseId <= 0) throw new ArgumentException("FAS.COURSE_REQUIRED");
+        var (person, _) = Identity();
+        var profile = await Profile(ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var courseExists = await db.Set<Course>()
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == courseId && x.OrganizationId == profile.SchoolOrganizationId, ct);
+        if (!courseExists) throw new KeyNotFoundException("COURSE.NOT_FOUND");
+
+        var rows = await (
+                from active in db.Set<FasActiveScheme>().AsNoTracking()
+                join item in db.Set<FasApplicationScheme>().AsNoTracking()
+                    on active.FasApplicationSchemeId equals item.Id
+                join scheme in db.Set<FasScheme>().AsNoTracking()
+                    on active.FasSchemeId equals scheme.Id
+                where active.StudentPersonId == person
+                      && active.StatusCode == "ACTIVE"
+                      && item.IsActive
+                      && scheme.StatusCode == "ACTIVE"
+                      && active.ActiveFrom <= today
+                      && active.ActiveTo >= today
+                      && !db.Set<FasVoucherRedemption>().Any(redemption =>
+                          redemption.FasApplicationSchemeId == item.Id &&
+                          redemption.StatusCode == "PENDING")
+                      && (!db.Set<FasSchemeCourse>().Any(schemeCourse =>
+                              schemeCourse.FasSchemeId == scheme.Id) ||
+                          db.Set<FasSchemeCourse>().Any(schemeCourse =>
+                              schemeCourse.FasSchemeId == scheme.Id &&
+                              schemeCourse.CourseId == courseId))
+                orderby scheme.Name, item.Id
+                select new
+                {
+                    applicationSchemeId = item.Id,
+                    schemeId = scheme.Id,
+                    schemeName = scheme.Name,
+                    approvedAmount = item.ApprovedAmount,
+                    approvedComponentsJson = item.ApprovedComponentsJson,
+                    validFrom = active.ActiveFrom,
+                    validTo = active.ActiveTo,
+                    appliesToAllCourses = !db.Set<FasSchemeCourse>().Any(schemeCourse =>
+                        schemeCourse.FasSchemeId == scheme.Id)
+                })
+            .ToListAsync(ct);
+
+        return rows;
+    }
+
     public async Task<object> Summary(CancellationToken ct)
     {
         var (person, _) = Identity();
