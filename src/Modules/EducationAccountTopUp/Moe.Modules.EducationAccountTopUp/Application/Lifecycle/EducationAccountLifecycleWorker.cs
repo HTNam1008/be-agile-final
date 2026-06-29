@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.Lifecycle;
@@ -17,8 +19,6 @@ public sealed class EducationAccountLifecycleWorker(
     ILogger<EducationAccountLifecycleWorker> logger,
     IClock clock) : BackgroundService
 {
-    private DateOnly? _lastRunDate;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Education Account lifecycle worker started");
@@ -56,7 +56,7 @@ public sealed class EducationAccountLifecycleWorker(
         DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
         TimeOnly currentTime = TimeOnly.FromDateTime(now.UtcDateTime);
 
-        if (_lastRunDate == today || currentTime < runAtUtc)
+        if (currentTime < runAtUtc)
         {
             return;
         }
@@ -66,7 +66,6 @@ public sealed class EducationAccountLifecycleWorker(
             now,
             EducationAccountLifecycleRunTriggerTypes.Scheduled,
             cancellationToken);
-        _lastRunDate = today;
     }
 
     internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
@@ -89,12 +88,25 @@ public sealed class EducationAccountLifecycleWorker(
         IEducationAccountLifecycleRunRepository runs =
             runScope.ServiceProvider.GetRequiredService<IEducationAccountLifecycleRunRepository>();
         IUnitOfWork unitOfWork = runScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        EducationAccountLifecycleRun run = EducationAccountLifecycleRun.Start(
-            today,
-            lifecycleAtUtc,
-            triggerTypeCode);
-        await runs.AddAsync(run, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        EducationAccountLifecycleRun run;
+        try
+        {
+            run = EducationAccountLifecycleRun.Start(
+                today,
+                lifecycleAtUtc,
+                triggerTypeCode);
+            await runs.AddAsync(run, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (
+            triggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled
+            && IsUniqueConstraintViolation(exception))
+        {
+            logger.LogInformation(
+                "Scheduled lifecycle run already claimed for {RunDateUtc}, skipping.",
+                today);
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true);
+        }
 
         AutomaticEducationAccountClosureSummary closureSummary;
         try
@@ -176,4 +188,8 @@ public sealed class EducationAccountLifecycleWorker(
             throw;
         }
     }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        => exception.InnerException is SqlException sqlException
+           && sqlException.Errors.Cast<SqlError>().Any(error => error.Number is 2601 or 2627);
 }
