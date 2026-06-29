@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.FasPayment.Domain.Fas;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -19,7 +20,8 @@ public sealed class StudentFasApplicationService(
     IFasDocumentStorage storage,
     IFasDocumentScanner scanner,
     IOrganizationUnitRepository organizations,
-    IAuditService audit)
+    IAuditService audit,
+    FasEmailNotificationService fasEmails)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
@@ -490,6 +492,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await fasEmails.SendSchemeApprovedAsync(item.Id, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, selectedTierId = tier.Id, item.ApprovedAmount, item.ValidFrom, item.ValidTo };
         });
@@ -520,6 +523,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await fasEmails.SendSchemeRejectedAsync(item.Id, r.Notes, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, item.RejectionNotes };
         });
@@ -587,6 +591,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await fasEmails.SendSubmissionAcknowledgementAsync(app.Id, ct);
             return await ApplicationReview(id, ct);
         });
     }

@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\Modules\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
     <ProjectReference Include="..\..\Modules\Mfa\Moe.Modules.Mfa\Moe.Modules.Mfa.csproj" />
     <ProjectReference Include="..\..\Modules\AiCopilot\Moe.Modules.AiCopilot\Moe.Modules.AiCopilot.csproj" />
+    <ProjectReference Include="..\..\Modules\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="log4net.config">
