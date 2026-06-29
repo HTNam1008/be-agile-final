@@ -45,7 +45,7 @@ internal sealed class BillDeferralConfiguration : IEntityTypeConfiguration<BillD
         builder.ToTable("BillDeferral", "billing");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("BillDeferralId").UseIdentityColumn();
-        builder.HasIndex(x => new { x.BillId, x.FailedPaymentId }).IsUnique();
+        builder.HasIndex(x => new { x.BillId, x.SourcePaymentId });
         builder.HasIndex(x => new { x.BillId, x.DeferralSequenceNumber }).IsUnique();
         builder.Property(x => x.DeferredAmount).HasPrecision(19, 2);
         builder.Property(x => x.ReasonCode).HasMaxLength(50).IsUnicode(false);

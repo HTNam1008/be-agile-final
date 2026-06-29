@@ -113,9 +113,9 @@ internal sealed class Bill : Entity<long>
         return Result.Success();
     }
 
-    public Result DeferToNextMonth(long failedPaymentId, DateTime utcNow)
+    public Result DeferToNextMonth(DateTime utcNow)
     {
-        if (failedPaymentId <= 0 || OutstandingAmount <= 0m ||
+        if (OutstandingAmount <= 0m ||
             BillStatusCode is BillStatusCodes.Paid or BillStatusCodes.Cancelled)
             return Result.Failure(BillingErrors.InvalidDeferral);
 

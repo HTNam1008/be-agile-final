@@ -19,7 +19,7 @@ internal sealed record PreviewStatementPaymentQuery(
     IReadOnlyCollection<long>? BillIds = null) : IQuery<StatementPaymentPreviewResponse>;
 internal sealed record PayBillingStatementCommand(long StatementId, PayBillingStatementRequest Request) : ICommand<PayBillingStatementResponse>;
 internal sealed record CancelBillingStatementPaymentCommand(long StatementId, long PaymentId) : ICommand;
-internal sealed record DeferBillingStatementCommand(long StatementId, DeferBillingStatementRequest Request) : ICommand;
+internal sealed record DeferBillingStatementCommand(long StatementId, DeferBillingStatementRequest Request) : ICommand<DeferBillingStatementResponse>;
 internal sealed record GetPendingEnrollmentPaymentQuery(long CourseEnrollmentId) : IQuery<PendingEnrollmentPaymentResponse?>;
 
 internal sealed class PayBillingStatementRequestValidator : AbstractValidator<PayBillingStatementRequest>
@@ -458,55 +458,75 @@ internal static class StatementBillSelection
 }
 
 internal sealed class DeferBillingStatementHandler(
-    IPaymentCheckoutRepository payments,
     ICoursePaymentGateway billing,
     IEducationAccountPaymentGateway accounts,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<DeferBillingStatementCommand>
+    IClock clock) : ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>
 {
-    public async Task<Result> Handle(DeferBillingStatementCommand command, CancellationToken ct)
+    public async Task<Result<DeferBillingStatementResponse>> Handle(DeferBillingStatementCommand command, CancellationToken ct)
     {
         if (!currentUser.TryGetStudent(out long personId) || currentUser.UserAccountId is not long actorId)
-            return Result.Failure(PaymentApplicationErrors.StudentRequired);
-
-        Payment? payment = await payments.FindPaymentAsync(command.Request.FailedPaymentId, ct);
-        if (payment is null || payment.BillingStatementId != command.StatementId ||
-            payment.PayerPersonId != personId ||
-            payment.PaymentStatusCode is not (PaymentStatusCodes.Failed or PaymentStatusCodes.Expired or PaymentStatusCodes.Cancelled))
-            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentApplicationErrors.StudentRequired);
 
         PayableStatement? statement = await billing.FindPayableStatementAsync(command.StatementId, personId, ct);
         if (statement is null)
-            return Result.Failure(PaymentApplicationErrors.BillNotFound);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentApplicationErrors.BillNotFound);
 
         long[] requestedBillIds = command.Request.BillIds?
             .Where(id => id > 0)
             .Distinct()
             .ToArray() ?? [];
-        PayableStatementBill[] selectedBills = requestedBillIds.Length == 0
-            ? statement.Bills.Where(bill => bill.IsInstallment).ToArray()
-            : statement.Bills.Where(bill => requestedBillIds.Contains(bill.BillId)).ToArray();
+        if (requestedBillIds.Length == 0)
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.NoDeferrableBills);
 
-        if (requestedBillIds.Length > 0 && selectedBills.Length != requestedBillIds.Length)
-            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
+        PayableStatementBill[] selectedBills = statement.Bills
+            .Where(bill => requestedBillIds.Contains(bill.BillId))
+            .ToArray();
+
+        if (selectedBills.Length != requestedBillIds.Length)
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
         if (selectedBills.Any(bill => !bill.IsInstallment))
-            return Result.Failure(PaymentDomainErrors.FullPaymentCannotBeDeferred);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.FullPaymentCannotBeDeferred);
         if (selectedBills.Length == 0)
-            return Result.Failure(PaymentDomainErrors.NoDeferrableBills);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.NoDeferrableBills);
 
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
-        decimal selectedOutstandingAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
-        if (balance?.AvailableBalance >= selectedOutstandingAmount)
-            return Result.Failure(PaymentDomainErrors.EducationAccountCanCoverDeferral);
+        decimal availableBalance = balance?.AvailableBalance ?? 0m;
+        DeferCoverableBillResponse[] coverableBills = selectedBills
+            .Where(bill => availableBalance >= bill.OutstandingAmount)
+            .OrderBy(bill => bill.OutstandingAmount)
+            .ThenBy(bill => bill.CurrentDueDate)
+            .ThenBy(bill => bill.BillId)
+            .Select(bill => new DeferCoverableBillResponse(
+                bill.BillId,
+                bill.BillingStatementItemId,
+                bill.OutstandingAmount,
+                bill.CurrentDueDate,
+                bill.CourseCode,
+                bill.CourseName))
+            .ToArray();
+        if (coverableBills.Length > 0)
+        {
+            return Result<DeferBillingStatementResponse>.Success(new DeferBillingStatementResponse(
+                Deferred: false,
+                BlockedReasonCode: PaymentDomainErrors.EducationAccountCanCoverDeferral.Code,
+                AvailableBalance: availableBalance,
+                CoverableBillIds: coverableBills.Select(bill => bill.BillId).ToArray(),
+                CoverableBills: coverableBills));
+        }
 
-        await billing.DeferStatementAsync(
+        Result deferResult = await billing.DeferStatementAsync(
             command.StatementId,
             personId,
-            payment.Id,
             selectedBills.Select(bill => bill.BillId).ToArray(),
             actorId,
             clock.UtcNow.UtcDateTime,
             ct);
-        return Result.Success();
+        if (deferResult.IsFailure)
+        {
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
+        }
+
+        return Result<DeferBillingStatementResponse>.Success(new DeferBillingStatementResponse(Deferred: true));
     }
 }

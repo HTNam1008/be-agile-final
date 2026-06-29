@@ -279,6 +279,8 @@ public static class CourseBillingErrors
     public static readonly Error PersonNotInCourseOrganization = new("COURSE.PERSON_NOT_IN_ORGANIZATION", "The person is not actively enrolled in the course organization.");
     public static readonly Error CourseOrganizationForbidden = new("COURSE.ORGANIZATION_FORBIDDEN", "The administrator cannot manage courses in this organization.");
     public static readonly Error OrganizationOutsideScope = new("AUTH.ORGANIZATION_OUTSIDE_SCOPE", "The requested organization is outside the current admin's scope.");
+    public static readonly Error SchoolAdminRequired = new("COURSE.SCHOOL_ADMIN_REQUIRED", "A school administrator is required.");
+    public static readonly Error BillNotFound = new("BILL.NOT_FOUND", "The bill was not found.");
     public static readonly Error CourseContentNotOpen = new("COURSE.CONTENT_NOT_OPEN", "Course content is available from the course start date.");
     public static readonly Error CourseContentLocked = new("COURSE.CONTENT_LOCKED", "Course content is locked for this enrollment status.");
 }

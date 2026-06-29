@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.Domain.Fas;
@@ -196,13 +197,30 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         }
     }
 
-    public async Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken)
+    public async Task<PageResponse<FasSchemeListItem>> ListAsync(string? status, string? search, int page, int pageSize, CancellationToken cancellationToken)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(status)) { string normalized = status.Trim().ToUpperInvariant(); query = query.Where(x => x.StatusCode == normalized); }
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            string normalized = status.Trim().ToUpperInvariant();
+            if (normalized == "NOT_STARTED")
+            {
+                DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+                query = query.Where(x => x.StatusCode == FasSchemeStatusCodes.Active && x.StartDate > today);
+            }
+            else if (normalized == "CLOSED") query = query.Where(x => x.StatusCode == FasSchemeStatusCodes.Retired);
+            else query = query.Where(x => x.StatusCode == normalized);
+        }
         else query = query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
         if (!string.IsNullOrWhiteSpace(search)) { string value = search.Trim(); query = query.Where(x => x.SchemeCode.Contains(value) || x.GrantCode.Contains(value) || x.Name.Contains(value)); }
-        var schemes = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
+        long totalCount = await query.LongCountAsync(cancellationToken);
+        var schemes = await query
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
         long[] ids = schemes.Select(x => x.Id).ToArray();
         var courses = await dbContext.Set<FasSchemeCourse>().AsNoTracking().Where(x => ids.Contains(x.FasSchemeId)).ToListAsync(cancellationToken);
         var applicationCounts = await dbContext.Set<FasApplicationScheme>().AsNoTracking()
@@ -210,9 +228,9 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
             .GroupBy(x => x.FasSchemeId)
             .Select(x => new { SchemeId = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.SchemeId, x => x.Count, cancellationToken);
-        return new FasSchemeListResponse(schemes.Select(x => new FasSchemeListItem(x.Id, x.SchemeCode, x.GrantCode, x.Name,
+        return new PageResponse<FasSchemeListItem>(schemes.Select(x => new FasSchemeListItem(x.Id, x.SchemeCode, x.GrantCode, x.Name,
             x.Description, x.StartDate, x.EndDate, x.StatusCode, courses.Where(c => c.FasSchemeId == x.Id).Select(c => c.CourseId).Order().ToArray(),
-            applicationCounts.GetValueOrDefault(x.Id))).ToArray());
+            applicationCounts.GetValueOrDefault(x.Id))).ToArray(), page, pageSize, totalCount);
     }
 
     public async Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken)
