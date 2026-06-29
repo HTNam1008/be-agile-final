@@ -78,6 +78,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IAdminStudentListReader, AdminStudentListReader>();
         services.AddScoped<IStudentBulkImportWorkbookReader, ClosedXmlStudentBulkImportWorkbookReader>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
+        services.AddScoped<IEmailRecipientResolver, EmailRecipientResolver>();
         services.AddScoped<IEligiblePersonReader, EligiblePersonReader>();
         services.AddScoped<ILifecyclePersonDisplayReader, LifecyclePersonDisplayReader>();
         services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();
