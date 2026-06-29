@@ -206,6 +206,7 @@ public sealed class TopUpRunWorkerTests
         public Task<List<TopUpTransaction>> GetByRunIdAsync(long topUpRunId, CancellationToken cancellationToken = default) => Task.FromResult(new List<TopUpTransaction>());
         public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(long topUpRunId, int skip, int take, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpTransaction>>([]);
         public Task<decimal> GetTotalDisbursedForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0m);
+        public Task<List<TopUpTransaction>> GetByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(new List<TopUpTransaction>());
         public void Add(TopUpTransaction transaction) { }
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
@@ -270,6 +271,8 @@ public sealed class TopUpRunWorkerTests
             => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
         public Task SuspendNonQualifyingContractsAsync(long campaignId, IEnumerable<long> qualifyingAccountIds, DateTime suspendedAtUtc, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetByAccountIdAsync(long accountId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
     }
 
     private sealed class FakeTopUpRunRepository : ITopUpRunRepository

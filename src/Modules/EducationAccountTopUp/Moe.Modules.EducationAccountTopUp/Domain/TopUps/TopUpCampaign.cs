@@ -117,7 +117,12 @@ public sealed class TopUpCampaign : Entity<long>
         DateTime nowUtc)
     {
         if (CampaignStatusCode != TopUpCampaignStatusCodes.Draft)
+        {
+            if (maxTotalAmount != MaxTotalAmount)
+                return Result.Failure(TopUpErrors.CannotChangeMaxTotalAmountAfterActive);
+
             return Result.Failure(TopUpErrors.CannotUpdateActiveCampaign);
+        }
 
         CampaignName = campaignName;
         Description = description;

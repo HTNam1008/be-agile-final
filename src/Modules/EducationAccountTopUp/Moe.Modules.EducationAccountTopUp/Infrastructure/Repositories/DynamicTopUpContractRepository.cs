@@ -55,4 +55,12 @@ internal sealed class DynamicTopUpContractRepository(MoeDbContext dbContext) : I
                 .SetProperty(c => c.NextPaymentDate, (DateTime?)null)
                 .SetProperty(c => c.UpdatedAtUtc, suspendedAtUtc), cancellationToken);
     }
+
+    public async Task<IReadOnlyList<DynamicTopUpContract>> GetByAccountIdAsync(long accountId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<DynamicTopUpContract>()
+            .AsNoTracking()
+            .Where(x => x.EducationAccountId == accountId)
+            .ToListAsync(cancellationToken);
+    }
 }

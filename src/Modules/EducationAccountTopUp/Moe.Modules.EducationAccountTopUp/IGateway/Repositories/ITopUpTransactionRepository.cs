@@ -29,6 +29,10 @@ public interface ITopUpTransactionRepository
         long campaignId,
         CancellationToken cancellationToken = default);
 
+    Task<List<TopUpTransaction>> GetByAccountIdAsync(
+        long educationAccountId,
+        CancellationToken cancellationToken = default);
+
     void Add(TopUpTransaction transaction);
 
     Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default);

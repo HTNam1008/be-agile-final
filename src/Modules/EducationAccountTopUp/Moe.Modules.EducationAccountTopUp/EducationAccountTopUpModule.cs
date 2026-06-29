@@ -10,6 +10,7 @@ using Moe.Modules.EducationAccountTopUp.Api.Admin;
 using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Application.History;
+using Moe.Modules.EducationAccountTopUp.Application.History.AccountFlatHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.AccountTopUpTransactionHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignTransactionHistory;
@@ -146,6 +147,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunDetailQuery, EducationAccountLifecycleRunDetail>, GetEducationAccountLifecycleRunDetailHandler>();
         services.AddScoped<IQueryHandler<SearchTopUpAccountsQuery, SearchTopUpAccountsResponse>, SearchTopUpAccountsHandler>();
         services.AddScoped<IQueryHandler<GetAccountTransactionHistoryQuery, PageResponse<AccountTransactionHistoryItem>>, GetAccountTransactionHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetAccountFlatHistoryQuery, AccountFlatHistoryResponse>, GetAccountFlatHistoryQueryHandler>();
 
         // Validators
         services.AddScoped<IValidator<OpenManualAccountRequest>, OpenManualAccountRequestValidator>();

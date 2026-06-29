@@ -434,6 +434,11 @@ public sealed class RunExecutionOrchestratorTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(0m);
 
+        public Task<List<TopUpTransaction>> GetByAccountIdAsync(
+            long educationAccountId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<TopUpTransaction>());
+
         public void Add(TopUpTransaction transaction) { }
 
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default)
