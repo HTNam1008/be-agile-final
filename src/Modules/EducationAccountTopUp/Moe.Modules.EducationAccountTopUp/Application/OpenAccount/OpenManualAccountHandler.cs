@@ -17,7 +17,8 @@ internal sealed class OpenManualAccountHandler(
     ICurrentUser currentUser,
     IClock clock,
     IUnitOfWork unitOfWork,
-    IAuditService auditService) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
+    IAuditService auditService,
+    EducationAccountCreatedEmailService accountCreatedEmails) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
 {
     public async Task<Result<OpenManualAccountResponse>> Handle(
         OpenManualAccountCommand command,
@@ -88,6 +89,7 @@ internal sealed class OpenManualAccountHandler(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await accountCreatedEmails.SendAsync(accountResult.Value, cancellationToken);
 
         OpenManualAccountResponse response = new(
             accountResult.Value.Id,
