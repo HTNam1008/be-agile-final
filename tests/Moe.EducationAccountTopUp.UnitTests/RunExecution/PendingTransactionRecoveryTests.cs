@@ -149,6 +149,7 @@ public sealed class PendingTransactionRecoveryTests
         public Task<long> CountByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult((long)_transactions.Count(x => x.EducationAccountId == educationAccountId));
         public void Add(TopUpTransaction transaction) => _transactions.Add(transaction);
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) { Add(transaction); return Task.CompletedTask; }
+        public Task<bool> TryReserveBudgetAsync(long campaignId, decimal requestedAmount, decimal budgetCap, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class FakeAccountCreditGateway : IAccountCreditGateway

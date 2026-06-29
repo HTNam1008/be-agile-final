@@ -460,6 +460,9 @@ public sealed class RunExecutionOrchestratorTests
 
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+
+        public Task<bool> TryReserveBudgetAsync(long campaignId, decimal requestedAmount, decimal budgetCap, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

@@ -70,6 +70,58 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
             .SumAsync(x => x.Amount, cancellationToken);
     }
 
+    public async Task<bool> TryReserveBudgetAsync(
+        long campaignId,
+        decimal requestedAmount,
+        decimal budgetCap,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var connection = dbContext.Database.GetDbConnection();
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync(cancellationToken);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                DECLARE @AlreadyDisbursed DECIMAL(18,2);
+                SELECT @AlreadyDisbursed = ISNULL(SUM(t.Amount), 0)
+                FROM TopUpTransactions t
+                INNER JOIN TopUpRuns r ON t.TopUpRunId = r.Id
+                WHERE r.TopUpCampaignId = @CampaignId
+                AND t.TransactionStatusCode = 'COMPLETED';
+
+                IF (@AlreadyDisbursed + @RequestedAmount <= @BudgetCap)
+                BEGIN
+                    SELECT 1;
+                END
+                ELSE
+                BEGIN
+                    SELECT 0;
+                END";
+
+            command.Parameters.Add(CreateParameter(command, "@CampaignId", campaignId));
+            command.Parameters.Add(CreateParameter(command, "@RequestedAmount", requestedAmount));
+            command.Parameters.Add(CreateParameter(command, "@BudgetCap", budgetCap));
+
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            return result != null && Convert.ToInt32(result) == 1;
+        }
+        catch (InvalidOperationException)
+        {
+            decimal alreadyDisbursed = await GetTotalDisbursedForCampaignAsync(campaignId, cancellationToken);
+            return alreadyDisbursed + requestedAmount <= budgetCap;
+        }
+    }
+
+    private static System.Data.Common.DbParameter CreateParameter(System.Data.Common.DbCommand command, string name, object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        return parameter;
+    }
+
     public Task<List<TopUpTransaction>> GetByAccountIdAsync(
         long educationAccountId,
         CancellationToken cancellationToken = default)
@@ -95,6 +147,7 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
 
         var transactions = await query
             .OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);

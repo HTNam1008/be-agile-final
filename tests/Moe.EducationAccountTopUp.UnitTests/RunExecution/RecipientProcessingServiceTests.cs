@@ -323,6 +323,9 @@ public sealed class RecipientProcessingServiceTests
             Add(transaction);
             return Task.CompletedTask;
         }
+
+        public Task<bool> TryReserveBudgetAsync(long campaignId, decimal requestedAmount, decimal budgetCap, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
     }
 
     private sealed class FakeAccountCreditGateway : IAccountCreditGateway

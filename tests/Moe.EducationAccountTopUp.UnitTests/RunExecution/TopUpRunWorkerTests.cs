@@ -211,6 +211,7 @@ public sealed class TopUpRunWorkerTests
         public Task<long> CountByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(0L);
         public void Add(TopUpTransaction transaction) { }
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> TryReserveBudgetAsync(long campaignId, decimal requestedAmount, decimal budgetCap, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class FakeTopUpRunQueueReader : ITopUpRunQueueReader

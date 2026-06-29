@@ -136,6 +136,23 @@ public sealed class TopUpRunWorker(
 
                 return;
             }
+
+            bool budgetReserved = await transactions.TryReserveBudgetAsync(campaign.Id, resolvedAmount, maxTotalAmount.Value, cancellationToken);
+            if (!budgetReserved)
+            {
+                logger.LogWarning(
+                    "Top-up run {RunId} failed to reserve budget: already disbursed {AlreadyDisbursed} + requested {Requested} would exceed cap {Cap}",
+                    runId, alreadyDisbursed, resolvedAmount, maxTotalAmount.Value);
+
+                Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
+                if (cancelResult.IsSuccess)
+                {
+                    run.ReconcileCounters(0, 0, 0, 0, 0m);
+                    await unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+
+                return;
+            }
         }
 
         Result<RunExecutionResult> execution = await ExecuteRunStreamedAsync(
