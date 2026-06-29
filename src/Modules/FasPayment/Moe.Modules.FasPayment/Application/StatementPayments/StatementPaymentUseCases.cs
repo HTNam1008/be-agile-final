@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Application;
 using Moe.Modules.FasPayment.Contracts.Payments;
@@ -39,7 +41,10 @@ internal sealed class PayBillingStatementRequestValidator : AbstractValidator<Pa
 
 internal sealed class GetPendingEnrollmentPaymentHandler(
     IPaymentCheckoutRepository payments,
-    ICurrentUser currentUser) : IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>
+    IBillingStatementRepository billingStatements,
+    StatementPaymentPreviewBuilder previewBuilder,
+    ICurrentUser currentUser,
+    IClock clock) : IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>
 {
     public async Task<Result<PendingEnrollmentPaymentResponse?>> Handle(
         GetPendingEnrollmentPaymentQuery query,
@@ -52,28 +57,75 @@ internal sealed class GetPendingEnrollmentPaymentHandler(
             query.CourseEnrollmentId,
             personId,
             ct);
-        if (payment is null || payment.BillingStatementId is not long statementId)
-            return Result<PendingEnrollmentPaymentResponse?>.Success(null);
 
-        IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, ct);
-        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
+        PendingEnrollmentBill? pendingBill = await payments.FindPendingEnrollmentBillAsync(
+            query.CourseEnrollmentId,
+            personId,
+            ct);
+        if (pendingBill is null)
+        {
+            return Result<PendingEnrollmentPaymentResponse?>.Success(null);
+        }
+
+        int year = pendingBill.CurrentDueDate.Year;
+        int month = pendingBill.CurrentDueDate.Month;
+        var statement = await billingStatements.GetOrCreateAsync(
+            personId,
+            year,
+            month,
+            clock.UtcNow.UtcDateTime,
+            ct);
+        IReadOnlyCollection<PendingEnrollmentFasReservation> reservations =
+            await payments.ListPendingFasReservationsForEnrollmentAsync(query.CourseEnrollmentId, personId, ct);
+
+        long[] billIds = payment is null
+            ? [pendingBill.BillId]
+            : (await payments.ListPaymentAllocationsAsync(payment.Id, ct))
+                .Select(x => x.BillId)
+                .Distinct()
+                .ToArray();
+        if (billIds.Length == 0)
+        {
+            billIds = [pendingBill.BillId];
+        }
+        BillingStatementItemResponse? billItem = statement.Items
+            .FirstOrDefault(item => billIds.Contains(item.BillId));
+        Result<StatementPaymentPreviewResponse> previewResult = await previewBuilder.BuildAsync(
+            personId,
+            payment?.BillingStatementId ?? statement.BillingStatementId,
+            billIds,
+            ct);
+        if (previewResult.IsFailure)
+            return Result<PendingEnrollmentPaymentResponse?>.Failure(previewResult.Error);
+
+        StatementPaymentCheckoutSession? checkout = payment is null
+            ? null
+            : await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
         return Result<PendingEnrollmentPaymentResponse?>.Success(new(
             query.CourseEnrollmentId,
-            statementId,
-            payment.Id,
-            payment.PaymentStatusCode,
-            payment.EducationAccountAmount,
-            payment.OnlinePaymentAmount,
+            payment?.BillingStatementId ?? statement.BillingStatementId,
+            year,
+            month,
+            payment?.Id,
+            payment?.PaymentStatusCode,
+            payment?.EducationAccountAmount ?? 0m,
+            payment?.OnlinePaymentAmount ?? 0m,
             checkout?.CheckoutUrl,
             checkout?.Id,
             checkout?.ExpiresAtUtc,
-            allocations.Select(x => x.BillId).Distinct().ToArray()));
+            billIds,
+            reservations.Select(x => new PendingEnrollmentFasSubsidyResponse(
+                x.FasApplicationSchemeId,
+                x.SchemeName,
+                x.AppliedAmount,
+                x.StatusCode)).ToArray(),
+            billItem,
+            previewResult.Value));
     }
 }
 
 internal sealed class PreviewStatementPaymentHandler(
-    ICoursePaymentGateway billing,
-    IEducationAccountPaymentGateway accounts,
+    StatementPaymentPreviewBuilder previewBuilder,
     ICurrentUser currentUser)
     : IQueryHandler<PreviewStatementPaymentQuery, StatementPaymentPreviewResponse>
 {
@@ -82,11 +134,25 @@ internal sealed class PreviewStatementPaymentHandler(
         if (!currentUser.TryGetStudent(out long personId))
             return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.StudentRequired);
 
-        PayableStatement? statement = await billing.FindPayableStatementAsync(query.StatementId, personId, ct);
+        return await previewBuilder.BuildAsync(personId, query.StatementId, query.BillIds, ct);
+    }
+}
+
+internal sealed class StatementPaymentPreviewBuilder(
+    ICoursePaymentGateway billing,
+    IEducationAccountPaymentGateway accounts)
+{
+    public async Task<Result<StatementPaymentPreviewResponse>> BuildAsync(
+        long personId,
+        long statementId,
+        IReadOnlyCollection<long>? billIds,
+        CancellationToken ct)
+    {
+        PayableStatement? statement = await billing.FindPayableStatementAsync(statementId, personId, ct);
         if (statement is null) return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.BillNotFound);
         Result<IReadOnlyCollection<PayableStatementBill>> selectedBillsResult = StatementBillSelection.Select(
             statement,
-            query.BillIds);
+            billIds);
         if (selectedBillsResult.IsFailure)
             return Result<StatementPaymentPreviewResponse>.Failure(selectedBillsResult.Error);
 

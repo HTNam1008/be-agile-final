@@ -22,6 +22,14 @@ internal interface IPaymentCheckoutRepository
         CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentPart>> ListPaymentPartsAsync(long paymentId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentAllocation>> ListPaymentAllocationsAsync(long paymentId, CancellationToken cancellationToken);
+    Task<PendingEnrollmentBill?> FindPendingEnrollmentBillAsync(
+        long courseEnrollmentId,
+        long personId,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<PendingEnrollmentFasReservation>> ListPendingFasReservationsForEnrollmentAsync(
+        long courseEnrollmentId,
+        long personId,
+        CancellationToken cancellationToken);
     Task<bool> PaymentReferenceExistsAsync(string providerReference, CancellationToken cancellationToken);
     Task AddPaymentAsync(Payment payment, CancellationToken cancellationToken);
     Task<Payment?> FindPaymentAsync(long paymentId, CancellationToken cancellationToken);
@@ -103,6 +111,16 @@ internal sealed record UserFasSettlement(
     string StatusCode,
     DateTime CreatedAtUtc,
     DateTime? RedeemedAtUtc);
+
+internal sealed record PendingEnrollmentBill(
+    long BillId,
+    DateOnly CurrentDueDate);
+
+internal sealed record PendingEnrollmentFasReservation(
+    long FasApplicationSchemeId,
+    string? SchemeName,
+    decimal AppliedAmount,
+    string StatusCode);
 
 
 internal sealed record StripeCheckoutGatewayRequest(
