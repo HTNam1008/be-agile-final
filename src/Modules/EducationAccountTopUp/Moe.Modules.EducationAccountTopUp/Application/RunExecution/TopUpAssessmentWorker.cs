@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -13,7 +14,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 public sealed class TopUpAssessmentWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<TopUpAssessmentWorker> logger,
-    IClock clock) : BackgroundService
+    IClock clock,
+    IOptions<TopUpWorkerOptions> options) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -60,10 +62,10 @@ public sealed class TopUpAssessmentWorker(
 
             try
             {
-                lockAcquired = await distributedLock.TryAcquireAsync(lockKey, TimeSpan.FromMinutes(15), ct);
+                lockAcquired = await distributedLock.TryAcquireAsync(lockKey, options.Value.AssessmentLockTtl, ct);
                 if (!lockAcquired)
                 {
-                    logger.LogInformation("Skipping assessment for campaign {CampaignId} — another instance is already processing it.", campaign.Id);
+                    logger.LogWarning("Skipping assessment for campaign {CampaignId} — lock acquisition failed. Another instance may be processing or a previous run timed out.", campaign.Id);
                     continue;
                 }
 
