@@ -38,6 +38,16 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
+    public void End_date_must_be_after_start_date()
+    {
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+        var result = _validator.Validate(source with { EndDate = source.StartDate });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(x => x.ErrorMessage == "End date must be after start date.");
+    }
+
+    [Fact]
     public void Start_date_before_today_fails()
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
@@ -133,4 +143,19 @@ public sealed class CreateFasSchemeValidationTests
     [InlineData("PUBLISHED", false)]
     public void List_status_validation_is_explicit(string? status, bool valid)
         => new ListFasSchemesRequestValidator().Validate(new ListFasSchemesRequest(status, null)).IsValid.Should().Be(valid);
+
+    [Theory]
+    [InlineData("schemeName", "asc", true)]
+    [InlineData("createdDate", "desc", true)]
+    [InlineData("status", "asc", true)]
+    [InlineData("grantCode", "asc", false)]
+    [InlineData("schemeName", "descending", false)]
+    public void List_sort_validation_is_explicit(string? sortBy, string? sortDirection, bool valid)
+        => new ListFasSchemesRequestValidator().Validate(new ListFasSchemesRequest(SortBy: sortBy, SortDirection: sortDirection)).IsValid.Should().Be(valid);
+
+    [Fact]
+    public void List_duration_filter_range_must_be_ordered()
+        => new ListFasSchemesRequestValidator()
+            .Validate(new ListFasSchemesRequest(DurationFrom: DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1), DurationTo: DateOnly.FromDateTime(DateTime.UtcNow)))
+            .IsValid.Should().BeFalse();
 }
