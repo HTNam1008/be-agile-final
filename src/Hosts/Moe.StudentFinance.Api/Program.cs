@@ -20,6 +20,7 @@ using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.MailDelivery;
 using Moe.Modules.Mfa;
 using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
@@ -48,7 +49,8 @@ IModule[] modules =
     new CourseBillingModule(),
     new FasPaymentModule(),
     new MfaModule(),
-    new AiCopilotModule()
+    new AiCopilotModule(),
+    new MailDeliveryModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddScoped<IEligiblePersonLookupGateway, EligiblePersonLookupGatewayAdapter>();
@@ -74,7 +76,8 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
     .AddApplicationPart(typeof(FasPaymentModule).Assembly)
     .AddApplicationPart(typeof(MfaModule).Assembly)
-    .AddApplicationPart(typeof(AiCopilotModule).Assembly);
+    .AddApplicationPart(typeof(AiCopilotModule).Assembly)
+    .AddApplicationPart(typeof(MailDeliveryModule).Assembly);
 
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
 {
