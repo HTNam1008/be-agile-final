@@ -64,7 +64,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, AzureBlobCourseMaterialStorageService>();
         services.AddScoped<ICourseMaterialPreviewConverter, PowerPointCourseMaterialPreviewConverter>();
-        services.AddSingleton<ICourseMaterialPreviewCache, RedisCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewCache, AzureBlobCourseMaterialPreviewCache>();
 
         services.AddScoped<IQueryHandler<ListCoursesQuery, PageResponse<CourseSummaryDto>>, ListCoursesQueryHandler>();
         services.AddScoped<IQueryHandler<GetCourseQuery, CourseDetailDto>, GetCourseQueryHandler>();
@@ -104,6 +104,7 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IQueryHandler<PreviewPaymentPlanBillQuery, PaymentPlanBillPreviewResponse>, PreviewPaymentPlanBillHandler>();
         services.AddScoped<IQueryHandler<GetStudentCourseContentQuery, StudentCourseContentResponse>, GetStudentCourseContentHandler>();
         services.AddScoped<IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>, DownloadStudentCourseMaterialHandler>();
+        services.AddScoped<IQueryHandler<GetStudentCourseMaterialOfficePreviewQuery, StudentCourseMaterialOfficePreviewResponse>, GetStudentCourseMaterialOfficePreviewHandler>();
         services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentDashboardQuery, StudentDashboardResponse>, GetStudentDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentEnrolledCoursesQuery, PageResponse<AdminStudentEnrolledCourseItem>>, GetStudentEnrolledCoursesHandler>();

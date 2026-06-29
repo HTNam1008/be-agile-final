@@ -83,4 +83,13 @@ public sealed class CourseEnrollmentsController(
             ? this.ToCourseBillingResponse(result)
             : File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
     }
+
+    [HttpGet("{enrollmentId:long}/materials/{courseMaterialId:long}/office-preview")]
+    public async Task<IActionResult> GetOfficePreview(
+        long enrollmentId,
+        long courseMaterialId,
+        CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await queries.Send(
+            new GetStudentCourseMaterialOfficePreviewQuery(enrollmentId, courseMaterialId),
+            cancellationToken));
 }
