@@ -28,4 +28,7 @@ public sealed class MailDeliveryOptions
 
     [Required]
     public string FromDisplayName { get; init; } = "MOE SEEDS";
+
+    [EmailAddress]
+    public string? DevelopmentFallbackRecipient { get; init; }
 }

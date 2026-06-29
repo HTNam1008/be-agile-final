@@ -2,15 +2,20 @@ using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp;
+using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 using Xunit;
 
@@ -25,6 +30,8 @@ public sealed class AutomaticEducationAccountCloserTests
     private readonly FakeEligiblePersonLookupGateway _people = new();
     private readonly FakeAuditService _audit = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
+    private readonly FakePersonDirectory _personDirectory = new();
+    private readonly FakeEmailDeliveryGateway _mailGateway = new();
 
     [Fact]
     public async Task CloseEligibleAsync_ClosesActiveAccountsForPeopleAgedAtLeast30_RegardlessOfOpeningMode()
@@ -58,6 +65,7 @@ public sealed class AutomaticEducationAccountCloserTests
         _audit.Calls.Select(x => x.ActionCode).Should()
             .OnlyContain(x => x == AuditActionCodes.EducationAccountClosedAutomatically);
         _unitOfWork.SaveCalls.Should().Be(3);
+        _mailGateway.Messages.Should().HaveCount(3);
     }
 
     [Fact]
@@ -110,7 +118,8 @@ public sealed class AutomaticEducationAccountCloserTests
             new EducationAccountRepository(dbContext),
             _people,
             _audit,
-            new DbUnitOfWork(dbContext));
+            new DbUnitOfWork(dbContext),
+            CreateClosureEmails());
 
         await closer.EnsureClosedAsync(account, Now, CancellationToken.None);
 
@@ -119,7 +128,14 @@ public sealed class AutomaticEducationAccountCloserTests
     }
 
     private AutomaticEducationAccountCloser CreateCloser()
-        => new(_educationAccounts, _people, _audit, _unitOfWork);
+        => new(_educationAccounts, _people, _audit, _unitOfWork, CreateClosureEmails());
+
+    private EducationAccountClosureEmailService CreateClosureEmails()
+        => new(
+            _personDirectory,
+            new TestDoubles.FixedEmailRecipientResolver(),
+            _mailGateway,
+            NullLogger<EducationAccountClosureEmailService>.Instance);
 
     private EducationAccount AddManualAccount(long accountId, long personId)
     {
@@ -209,6 +225,31 @@ public sealed class AutomaticEducationAccountCloserTests
             RequestedMinAge = minAge;
             RequestedToday = today;
             return Task.FromResult(AgedAtLeastPersonIds);
+        }
+    }
+
+    private sealed class FakePersonDirectory : IPersonDirectory
+    {
+        public Task<PersonSummary?> FindAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<PersonSummary?>(new PersonSummary(
+                personId,
+                $"Student {personId}",
+                new DateOnly(1990, 1, 1),
+                "SG",
+                "CITIZEN",
+                10));
+    }
+
+    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
+    {
+        public List<EmailDeliveryMessage> Messages { get; } = [];
+
+        public Task<Result> SendAsync(
+            EmailDeliveryMessage message,
+            CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.FromResult(Result.Success());
         }
     }
 

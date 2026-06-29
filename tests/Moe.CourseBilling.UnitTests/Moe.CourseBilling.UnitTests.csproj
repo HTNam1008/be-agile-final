@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup><PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" /><PackageReference Include="Microsoft.NET.Test.Sdk" /><PackageReference Include="xunit" /><PackageReference Include="xunit.runner.visualstudio" /><PackageReference Include="FluentAssertions" /><PackageReference Include="coverlet.collector" /></ItemGroup>
-  <ItemGroup><ProjectReference Include="..\..\src\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="..\..\src\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" /><ProjectReference Include="..\..\src\Modules\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" /></ItemGroup>
 </Project>
