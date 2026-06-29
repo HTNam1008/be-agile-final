@@ -42,8 +42,8 @@ public sealed class AiFinanceReader(
             new GetBillingStatementQuery(utcNow.Year, utcNow.Month), ct);
         BillingStatementResponse? statement = statementResult.IsSuccess ? statementResult.Value : null;
 
-        var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(), ct);
-        IReadOnlyCollection<UserPaymentHistoryResponse> history = historyResult.IsSuccess ? historyResult.Value : [];
+        var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(1, 5), ct);
+        IReadOnlyCollection<UserPaymentHistoryResponse> history = historyResult.IsSuccess ? historyResult.Value.Items : [];
 
         AiOutstandingBill[] outstanding = statement?.Items
             .Where(x => x.OutstandingAmount > 0m)
@@ -71,7 +71,7 @@ public sealed class AiFinanceReader(
             outstanding.Length,
             outstanding.FirstOrDefault()?.DueDate,
             outstanding,
-            history.OrderByDescending(x => x.InitiatedAtUtc).Take(5)
+            history.OrderByDescending(x => x.InitiatedAtUtc)
                 .Select(x => new AiPaymentHistoryItem(x.PaymentId, x.PaymentNumber, x.PaymentAmount,
                     x.PaymentStatusCode, x.InitiatedAtUtc, x.Refunds.Sum(r => r.Amount))).ToArray());
     }
