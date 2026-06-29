@@ -38,18 +38,18 @@ public sealed class EducationAccountLifecycleWorker(
         }
     }
 
-    internal async Task RunIfDueAsync(CancellationToken cancellationToken)
+    public async Task<EducationAccountLifecycleRunResult> RunIfDueAsync(CancellationToken cancellationToken)
     {
         EducationAccountLifecycleOptions currentOptions = options.Value;
         if (!currentOptions.Enabled)
         {
-            return;
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true, SkipReason: "Lifecycle worker is disabled.");
         }
 
         if (!TimeOnly.TryParse(currentOptions.RunAtUtc, out TimeOnly runAtUtc))
         {
             logger.LogWarning("Invalid EducationAccountLifecycle:RunAtUtc value {RunAtUtc}.", currentOptions.RunAtUtc);
-            return;
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true, SkipReason: $"Invalid lifecycle RunAtUtc value {currentOptions.RunAtUtc}.");
         }
 
         DateTimeOffset now = clock.UtcNow;
@@ -58,14 +58,21 @@ public sealed class EducationAccountLifecycleWorker(
 
         if (currentTime < runAtUtc)
         {
-            return;
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true, SkipReason: $"Current UTC time is before scheduled lifecycle time {runAtUtc:HH:mm}.");
         }
 
-        await ProcessAsync(
+        return await ProcessAsync(
             today,
             now,
             EducationAccountLifecycleRunTriggerTypes.Scheduled,
             cancellationToken);
+    }
+
+    public async Task<EducationAccountLifecycleRunResult> RunNowAsync(CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = clock.UtcNow;
+        DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
+        return await ProcessAsync(today, now, cancellationToken);
     }
 
     internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
@@ -105,7 +112,7 @@ public sealed class EducationAccountLifecycleWorker(
             logger.LogInformation(
                 "Scheduled lifecycle run already claimed for {RunDateUtc}, skipping.",
                 today);
-            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true);
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true, SkipReason: "Scheduled lifecycle already ran for this date.");
         }
 
         AutomaticEducationAccountClosureSummary closureSummary;

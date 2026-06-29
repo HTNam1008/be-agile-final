@@ -104,7 +104,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IPendingTransactionRecoveryService, PendingTransactionRecoveryService>();
         // Workers
         services.AddHostedService<TopUpRunWorker>();
-        services.AddHostedService<TopUpSchedulerWorker>();
+        services.AddSingleton<TopUpSchedulerWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<TopUpSchedulerWorker>());
         services.AddSingleton<EducationAccountLifecycleWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();

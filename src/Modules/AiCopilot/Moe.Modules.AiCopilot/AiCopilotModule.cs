@@ -33,6 +33,7 @@ public sealed class AiCopilotModule : IModule
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
+        services.AddSingleton<AiRetentionCleanupRunner>();
         services.AddHostedService<AiRetentionService>();
     }
 
