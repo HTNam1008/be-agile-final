@@ -1,5 +1,6 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 using Microsoft.Extensions.Configuration;
 using Moe.Modules.CourseBilling.IGateway.Storage;
 
@@ -64,5 +65,18 @@ internal sealed class AzureBlobCourseMaterialStorageService : ICourseMaterialSto
     {
         BlobClient blob = container.GetBlobClient(storagePath.Replace('\\', '/'));
         return (await blob.DownloadStreamingAsync(cancellationToken: cancellationToken)).Value.Content;
+    }
+
+    public Task<Uri?> CreateReadUriAsync(
+        string storagePath,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BlobClient blob = container.GetBlobClient(storagePath.Replace('\\', '/'));
+        Uri? readUri = blob.CanGenerateSasUri
+            ? blob.GenerateSasUri(BlobSasPermissions.Read, expiresAtUtc)
+            : null;
+        return Task.FromResult(readUri);
     }
 }
