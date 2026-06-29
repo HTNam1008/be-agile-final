@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Payments;
@@ -125,6 +126,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
             from item in dbContext.Set<BillingStatementItem>().AsNoTracking()
             join bill in dbContext.Set<Bill>().AsNoTracking() on item.BillId equals bill.Id
             join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking() on bill.CourseEnrollmentId equals enrollment.Id
+            join course in dbContext.Set<Course>().AsNoTracking() on enrollment.CourseId equals course.Id
             where item.BillingStatementId == statementId
                 && bill.OutstandingAmount > 0m
                 && bill.BillStatusCode != BillStatusCodes.Paid
@@ -133,10 +135,13 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
             select new PayableStatementBill(
                 item.Id,
                 bill.Id,
+                course.OrganizationId,
                 bill.OutstandingAmount,
                 bill.CurrentDueDate,
                 bill.OriginalDueDate,
-                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1))
+                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1,
+                course.CourseCode,
+                course.CourseName))
             .ToArrayAsync(cancellationToken);
         decimal total = bills.Sum(x => x.OutstandingAmount);
         return total <= 0m ? null : new(statement.Id, personId, total, statement.CurrencyCode, bills);
@@ -200,10 +205,9 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         statement.Refresh(total, total - outstanding, paidAtUtc);
     }
 
-    public async Task DeferStatementAsync(
+    public async Task<Result> DeferStatementAsync(
         long statementId,
         long personId,
-        long failedPaymentId,
         IReadOnlyCollection<long> billIds,
         long actorLoginAccountId,
         DateTime utcNow,
@@ -223,12 +227,14 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         {
             DateOnly from = bill.CurrentDueDate;
             decimal amount = bill.OutstandingAmount;
-            var result = bill.DeferToNextMonth(failedPaymentId, utcNow);
-            if (result.IsFailure) throw new InvalidOperationException(result.Error.Message);
+            var result = bill.DeferToNextMonth(utcNow);
+            if (result.IsFailure)
+                return result;
+
             await dbContext.Set<BillDeferral>().AddAsync(new BillDeferral(
                 bill.Id,
                 bill.CourseEnrollmentId,
-                failedPaymentId,
+                null,
                 from,
                 bill.CurrentDueDate,
                 amount,
@@ -238,6 +244,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         }
         statement.Refresh(statement.TotalAmount, statement.PaidAmount, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     private async Task MarkEnrollmentsRefundedAsync(

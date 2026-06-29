@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Moe.StudentFinance.Persistence;
 
@@ -11,9 +12,11 @@ using Moe.StudentFinance.Persistence;
 namespace Moe.StudentFinance.Migrations.Migrations
 {
     [DbContext(typeof(MoeDbContext))]
-    partial class MoeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260629045722_RemoveAdvancedDeferPolicy")]
+    partial class RemoveAdvancedDeferPolicy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1920,11 +1923,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StartedAtUtc");
+                    b.HasIndex("RunDateUtc");
 
-                    b.HasIndex("RunDateUtc", "TriggerTypeCode")
-                        .IsUnique()
-                        .HasFilter("[TriggerTypeCode] = 'SCHEDULED'");
+                    b.HasIndex("StartedAtUtc");
 
                     b.ToTable("EducationAccountLifecycleRun", "account");
                 });

@@ -340,6 +340,164 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task CancelUnpaidEnrollment_BeforeCourseStart_CancelsOutstandingBills()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{statement.EnrollmentId}/cancel",
+            new { idempotencyKey = $"cancel-unpaid-{Guid.NewGuid():N}" });
+
+        await AssertStatusAsync(HttpStatusCode.OK, cancel);
+        JsonElement cancellation = await ReadDataAsync(cancel);
+        Assert.Equal("CANCELLED", cancellation.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(0m, cancellation.GetProperty("refundAmount").GetDecimal());
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Bill bill = await db.Set<Bill>().SingleAsync(x => x.Id == statement.BillId);
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == statement.EnrollmentId);
+
+        Assert.Equal(BillStatusCodes.Cancelled, bill.BillStatusCode);
+        Assert.Equal(0m, bill.OutstandingAmount);
+        Assert.Equal(CourseEnrollmentStatusCodes.Cancelled, enrollment.EnrollmentStatusCode);
+    }
+
+    [Fact]
+    public async Task CancelEnrollment_AfterCourseStart_WithOutstandingBills_IsBlocked()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            Course entity = await db.Set<Course>().SingleAsync(x => x.Id == course.CourseId);
+            DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+            entity.Update(
+                entity.CourseCode,
+                entity.CourseName,
+                entity.Description,
+                today.AddDays(-1),
+                today.AddDays(30),
+                entity.EnrollmentOpenAtUtc,
+                entity.EnrollmentCloseAtUtc,
+                10,
+                DateTime.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        CourseEnrollment enrollmentBefore;
+        Bill[] billsBefore;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            enrollmentBefore = await db.Set<CourseEnrollment>().SingleAsync(x =>
+                x.PersonId == student.PersonId &&
+                x.CourseId == course.CourseId);
+            billsBefore = await db.Set<Bill>()
+                .Where(x => x.CourseEnrollmentId == enrollmentBefore.Id)
+                .OrderBy(x => x.SequenceNumber)
+                .ToArrayAsync();
+        }
+
+        using HttpResponseMessage preview = await SendStudentAsync(
+            student,
+            HttpMethod.Get,
+            $"/api/eservice/v1/course-enrollments/{enrollmentBefore.Id}/cancellation-preview");
+        await AssertStatusAsync(HttpStatusCode.OK, preview);
+        JsonElement previewData = await ReadDataAsync(preview);
+        Assert.False(previewData.GetProperty("canCancel").GetBoolean());
+        Assert.Equal(
+            "This course has started and has outstanding bills. Please settle the bills or contact your school admin.",
+            previewData.GetProperty("cannotCancelReason").GetString());
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{enrollmentBefore.Id}/cancel",
+            new { idempotencyKey = $"cancel-started-outstanding-{Guid.NewGuid():N}" });
+        await AssertStatusAsync(HttpStatusCode.Conflict, cancel);
+        using JsonDocument errorDocument = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync());
+        Assert.Equal(
+            "PAYMENT.CANCELLATION_OUTSTANDING_BILLS_REQUIRED",
+            errorDocument.RootElement.GetProperty("errors").EnumerateArray().Single().GetString());
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == enrollmentBefore.Id);
+            Bill[] bills = await db.Set<Bill>()
+                .Where(x => x.CourseEnrollmentId == enrollmentBefore.Id)
+                .OrderBy(x => x.SequenceNumber)
+                .ToArrayAsync();
+
+            Assert.Equal(CourseEnrollmentStatusCodes.Active, enrollment.EnrollmentStatusCode);
+            Assert.Equal(billsBefore.Select(x => x.BillStatusCode).ToArray(), bills.Select(x => x.BillStatusCode).ToArray());
+            Assert.Equal(billsBefore.Select(x => x.OutstandingAmount).ToArray(), bills.Select(x => x.OutstandingAmount).ToArray());
+        }
+    }
+
+    [Fact]
+    public async Task DevClock_CanAdvancePastCourseStart_ForCancellationTesting()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
+
+        CourseEnrollment enrollment;
+        DateOnly startDate;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            enrollment = await db.Set<CourseEnrollment>().SingleAsync(x =>
+                x.PersonId == student.PersonId &&
+                x.CourseId == course.CourseId);
+            startDate = await db.Set<Course>()
+                .Where(x => x.Id == course.CourseId)
+                .Select(x => x.StartDate)
+                .SingleAsync();
+        }
+
+        try
+        {
+            using HttpResponseMessage setClock = await _client.PutAsJsonAsync(
+                "/dev/clock",
+                new { utcNow = startDate.AddDays(1).ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc) });
+            await AssertStatusAsync(HttpStatusCode.OK, setClock);
+
+            using HttpResponseMessage preview = await SendStudentAsync(
+                student,
+                HttpMethod.Get,
+                $"/api/eservice/v1/course-enrollments/{enrollment.Id}/cancellation-preview");
+
+            await AssertStatusAsync(HttpStatusCode.OK, preview);
+            JsonElement previewData = await ReadDataAsync(preview);
+            Assert.False(previewData.GetProperty("canCancel").GetBoolean());
+            Assert.Equal(
+                "This course has started and has outstanding bills. Please settle the bills or contact your school admin.",
+                previewData.GetProperty("cannotCancelReason").GetString());
+        }
+        finally
+        {
+            using HttpResponseMessage resetClock = await _client.DeleteAsync("/dev/clock");
+            await AssertStatusAsync(HttpStatusCode.OK, resetClock);
+        }
+    }
+
+    [Fact]
     public async Task Student_CanJoinCourseAgainAfterPaidEnrollmentIsCancelled()
     {
         TestStudent student = await CreateStudentAsync(balance: 150m);
@@ -696,7 +854,10 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { failedPaymentId = retry.GetProperty("paymentId").GetInt64() });
+            new
+            {
+                billIds = new[] { statement.BillId }
+            });
         await AssertStatusAsync(HttpStatusCode.OK, defer);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -722,7 +883,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
-    public async Task FailedFullPayment_CannotBeDeferred()
+    public async Task FullPayment_CannotBeDeferred()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
         TestCourse course = await CreateCourseAsync(
@@ -731,24 +892,21 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
         StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
 
-        using HttpResponseMessage payResponse = await PayStatementAsync(student, statement.StatementId);
-        await AssertStatusAsync(HttpStatusCode.Created, payResponse);
-        JsonElement pay = await ReadDataAsync(payResponse);
-        long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
-        await PostWebhookAsync("failure", checkoutId, 6000, $"evt_full_fail_{Guid.NewGuid():N}");
-
         using HttpResponseMessage defer = await SendStudentAsync(
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { failedPaymentId = pay.GetProperty("paymentId").GetInt64() });
+            new
+            {
+                billIds = new[] { statement.BillId }
+            });
 
         await AssertStatusAsync(HttpStatusCode.BadRequest, defer);
-        Assert.Contains("PAYMENT.NO_DEFERRABLE_BILLS", await defer.Content.ReadAsStringAsync());
+        Assert.Contains("PAYMENT.FULL_PAYMENT_CANNOT_BE_DEFERRED", await defer.Content.ReadAsStringAsync());
     }
 
     [Fact]
-    public async Task FailedOnlineOnlyInstallment_CannotBeDeferred_WhenEducationAccountCanCoverBill()
+    public async Task Installment_CannotBeDeferred_WhenEducationAccountCanCoverBill()
     {
         TestStudent student = await CreateStudentAsync(balance: 50m);
         TestCourse course = await CreateCourseAsync(
@@ -758,23 +916,24 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
         StatementInfo statement = await GetStatementAsync(student, firstDueMonth.Year, firstDueMonth.Month);
 
-        using HttpResponseMessage payResponse = await PayStatementAsync(
-            student,
-            statement.StatementId,
-            "ONLINE_ONLY");
-        await AssertStatusAsync(HttpStatusCode.Created, payResponse);
-        JsonElement pay = await ReadDataAsync(payResponse);
-        long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
-        await PostWebhookAsync("failure", checkoutId, 3300, $"evt_online_only_fail_{Guid.NewGuid():N}");
-
         using HttpResponseMessage defer = await SendStudentAsync(
             student,
             HttpMethod.Post,
             $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { failedPaymentId = pay.GetProperty("paymentId").GetInt64() });
+            new
+            {
+                billIds = new[] { statement.BillId }
+            });
 
         await AssertStatusAsync(HttpStatusCode.BadRequest, defer);
-        Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", await defer.Content.ReadAsStringAsync());
+        string deferBody = await defer.Content.ReadAsStringAsync();
+        Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", deferBody);
+        using JsonDocument deferJson = JsonDocument.Parse(deferBody);
+        JsonElement deferData = deferJson.RootElement.GetProperty("data");
+        Assert.Equal(50m, deferData.GetProperty("availableBalance").GetDecimal());
+        Assert.Contains(
+            statement.BillId,
+            deferData.GetProperty("coverableBillIds").EnumerateArray().Select(item => item.GetInt64()));
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -787,9 +946,85 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task MultiBillDefer_ReturnsCoverableBillDetails_AndAllowsDeferringRemainingBills()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse smallInstallmentCourse = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        TestCourse largeInstallmentCourse = await CreateCourseAsync(
+            fee: 150m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, smallInstallmentCourse, "INSTALLMENT-3");
+        await JoinSuccessfullyAsync(student, largeInstallmentCourse, "INSTALLMENT-3");
+        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+
+        using HttpResponseMessage statementResponse = await SendStudentAsync(
+            student,
+            HttpMethod.Get,
+            $"/api/eservice/v1/billing-statements/{firstDueMonth.Year}/{firstDueMonth.Month}");
+        await AssertStatusAsync(HttpStatusCode.OK, statementResponse);
+        JsonElement statement = await ReadDataAsync(statementResponse);
+        long statementId = statement.GetProperty("billingStatementId").GetInt64();
+        var statementItems = statement.GetProperty("items")
+            .EnumerateArray()
+            .Select(item => new
+            {
+                BillId = item.GetProperty("billId").GetInt64(),
+                OutstandingAmount = item.GetProperty("outstandingAmount").GetDecimal()
+            })
+            .OrderBy(item => item.OutstandingAmount)
+            .ToArray();
+        Assert.Equal(2, statementItems.Length);
+        long coverableBillId = statementItems[0].BillId;
+        long remainingBillId = statementItems[1].BillId;
+        Assert.True(statementItems[0].OutstandingAmount <= 40m);
+        Assert.True(statementItems[1].OutstandingAmount > 40m);
+
+        using HttpResponseMessage blockedDefer = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statementId}/defer",
+            new
+            {
+                billIds = statementItems.Select(item => item.BillId).ToArray()
+            });
+        await AssertStatusAsync(HttpStatusCode.BadRequest, blockedDefer);
+        string blockedBody = await blockedDefer.Content.ReadAsStringAsync();
+        Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", blockedBody);
+        using JsonDocument blockedJson = JsonDocument.Parse(blockedBody);
+        JsonElement blockedData = blockedJson.RootElement.GetProperty("data");
+        Assert.Equal(40m, blockedData.GetProperty("availableBalance").GetDecimal());
+        Assert.Equal(
+            [coverableBillId],
+            blockedData.GetProperty("coverableBillIds").EnumerateArray().Select(item => item.GetInt64()).ToArray());
+        Assert.Equal(
+            coverableBillId,
+            blockedData.GetProperty("coverableBills").EnumerateArray().Single().GetProperty("billId").GetInt64());
+
+        using HttpResponseMessage deferRemaining = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statementId}/defer",
+            new
+            {
+                billIds = new[] { remainingBillId }
+            });
+        await AssertStatusAsync(HttpStatusCode.OK, deferRemaining);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Bill coverableBill = await db.Set<Bill>().SingleAsync(x => x.Id == coverableBillId);
+        Bill deferredBill = await db.Set<Bill>().SingleAsync(x => x.Id == remainingBillId);
+        Assert.Equal(0, coverableBill.DeferralCount);
+        Assert.Equal(1, deferredBill.DeferralCount);
+        Assert.Equal(firstDueMonth.AddMonths(1), deferredBill.CurrentDueDate);
+    }
+
+    [Fact]
     public async Task MixedStatement_DefersOnlySelectedInstallmentBill_AndKeepsFullPaymentDue()
     {
-        TestStudent student = await CreateStudentAsync(balance: 20m);
+        TestStudent student = await CreateStudentAsync(balance: 0m);
         TestCourse installmentCourse = await CreateCourseAsync(
             fee: 90m,
             plans: [("Three monthly payments", "INSTALLMENT", 3)]);
@@ -837,11 +1072,16 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.True(items.Single(x => x.GetProperty("billId").GetInt64() == installmentBillId).GetProperty("canDefer").GetBoolean());
         Assert.False(items.Single(x => x.GetProperty("billId").GetInt64() == fullBillId).GetProperty("canDefer").GetBoolean());
 
-        using HttpResponseMessage payResponse = await PayStatementAsync(student, statementId);
-        await AssertStatusAsync(HttpStatusCode.Created, payResponse);
-        JsonElement pay = await ReadDataAsync(payResponse);
-        long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
-        await PostWebhookAsync("failure", checkoutId, 11000, $"evt_mixed_fail_{Guid.NewGuid():N}");
+        using HttpResponseMessage rejectEmpty = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statementId}/defer",
+            new
+            {
+                billIds = Array.Empty<long>()
+            });
+        await AssertStatusAsync(HttpStatusCode.BadRequest, rejectEmpty);
+        Assert.Contains("PAYMENT.NO_DEFERRABLE_BILLS", await rejectEmpty.Content.ReadAsStringAsync());
 
         using HttpResponseMessage rejectFull = await SendStudentAsync(
             student,
@@ -849,7 +1089,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             $"/api/eservice/v1/billing-statements/{statementId}/defer",
             new
             {
-                failedPaymentId = pay.GetProperty("paymentId").GetInt64(),
                 billIds = new[] { fullBillId }
             });
         await AssertStatusAsync(HttpStatusCode.BadRequest, rejectFull);
@@ -861,7 +1100,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             $"/api/eservice/v1/billing-statements/{statementId}/defer",
             new
             {
-                failedPaymentId = pay.GetProperty("paymentId").GetInt64(),
                 billIds = new[] { installmentBillId }
             });
         await AssertStatusAsync(HttpStatusCode.OK, deferInstallment);
@@ -875,6 +1113,39 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal("DEFERRED", deferredInstallment.BillStatusCode);
         Assert.Equal(currentDueDate, fullBill.CurrentDueDate);
         Assert.Equal("ISSUED", fullBill.BillStatusCode);
+    }
+
+    [Fact]
+    public async Task InstallmentBill_CanBeDeferredMoreThanPreviousDefaultLimit()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
+        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+        StatementInfo statement = await GetStatementAsync(student, firstDueMonth.Year, firstDueMonth.Month);
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            Bill bill = await db.Set<Bill>().SingleAsync(x => x.Id == statement.BillId);
+            db.Entry(bill).Property(nameof(Bill.DeferralCount)).CurrentValue = 2;
+            await db.SaveChangesAsync();
+        }
+
+        using HttpResponseMessage defer = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
+            new { billIds = new[] { statement.BillId } });
+        await AssertStatusAsync(HttpStatusCode.OK, defer);
+
+        await using AsyncServiceScope verifyScope = factory.Services.CreateAsyncScope();
+        MoeDbContext verifyDb = verifyScope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Bill deferredBill = await verifyDb.Set<Bill>().SingleAsync(x => x.Id == statement.BillId);
+        Assert.Equal(3, deferredBill.DeferralCount);
+        Assert.Equal(firstDueMonth.AddMonths(1), deferredBill.CurrentDueDate);
     }
 
     private async Task AssertFailedAttemptReleasedAsync(long personId, long paymentId, decimal expectedBalance)
@@ -1049,7 +1320,8 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             .SingleAsync();
         return new StatementInfo(
             data.GetProperty("billingStatementId").GetInt64(),
-            enrollmentId);
+            enrollmentId,
+            billId);
     }
 
     private async Task<JsonElement> PreviewPaymentAsync(TestStudent student, long statementId)
@@ -1160,5 +1432,5 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
 
     private sealed record TestStudent(long PersonId, long UserAccountId);
     private sealed record TestCourse(long CourseId, IReadOnlyDictionary<string, long> PlanIds);
-    private sealed record StatementInfo(long StatementId, long EnrollmentId);
+    private sealed record StatementInfo(long StatementId, long EnrollmentId, long BillId);
 }

@@ -9,7 +9,7 @@ internal sealed class BillDeferral : Entity<long>
     public BillDeferral(
         long billId,
         long courseEnrollmentId,
-        long failedPaymentId,
+        long? sourcePaymentId,
         DateOnly fromDueDate,
         DateOnly toDueDate,
         decimal deferredAmount,
@@ -19,19 +19,21 @@ internal sealed class BillDeferral : Entity<long>
     {
         BillId = billId;
         CourseEnrollmentId = courseEnrollmentId;
-        FailedPaymentId = failedPaymentId;
+        SourcePaymentId = sourcePaymentId;
         FromDueDate = fromDueDate;
         ToDueDate = toDueDate;
         DeferredAmount = deferredAmount;
         DeferralSequenceNumber = sequenceNumber;
-        ReasonCode = "ONLINE_PAYMENT_NOT_COMPLETED";
+        ReasonCode = sourcePaymentId is null
+            ? "STUDENT_DEFER_REQUEST"
+            : "ONLINE_PAYMENT_NOT_COMPLETED";
         CreatedByLoginAccountId = createdByLoginAccountId;
         CreatedAtUtc = createdAtUtc;
     }
 
     public long BillId { get; private set; }
     public long CourseEnrollmentId { get; private set; }
-    public long FailedPaymentId { get; private set; }
+    public long? SourcePaymentId { get; private set; }
     public DateOnly FromDueDate { get; private set; }
     public DateOnly ToDueDate { get; private set; }
     public decimal DeferredAmount { get; private set; }

@@ -28,6 +28,7 @@ internal static class CourseBillingApiResponses
         => error.Code switch
         {
             "COURSE.ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
+            "COURSE.SCHOOL_ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
             "COURSE.ORGANIZATION_FORBIDDEN" => ApiResponseCodes.Forbidden,
             "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "COURSE.FEE_COMPONENT_MANAGE_FORBIDDEN" => ApiResponseCodes.Forbidden,
@@ -46,6 +47,7 @@ internal static class CourseBillingApiResponses
             "COURSE.ENROLLMENT_WINDOW_CLOSED" => ApiResponseCodes.Conflict,
             "COURSE.CONTENT_NOT_OPEN" => ApiResponseCodes.Conflict,
             "COURSE.CONTENT_LOCKED" => ApiResponseCodes.Forbidden,
+            "BILL.NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.PERSON_NOT_IN_ORGANIZATION" => ApiResponseCodes.Conflict,
             _ => ApiResponseCodes.BadRequest
         };

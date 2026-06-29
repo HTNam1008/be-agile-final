@@ -115,8 +115,10 @@ internal sealed class ListFasSchemesRequestValidator : AbstractValidator<ListFas
     public ListFasSchemesRequestValidator()
     {
         RuleFor(x => x.Status)
-            .Must(status => status is null or "DRAFT" or "ACTIVE" or "RETIRED" or "DISABLED")
-            .WithMessage("Status must be DRAFT, ACTIVE, RETIRED, or DISABLED.");
+            .Must(status => status is null or "DRAFT" or "ACTIVE" or "NOT_STARTED" or "RETIRED" or "DISABLED" or "CLOSED")
+            .WithMessage("Status must be DRAFT, ACTIVE, NOT_STARTED, RETIRED, DISABLED, or CLOSED.");
         RuleFor(x => x.Search).MaximumLength(255);
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
     }
 }

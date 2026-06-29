@@ -3,6 +3,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.IGateway.Courses;
 using Moe.Modules.FasPayment.Application.Audit;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
@@ -305,10 +306,10 @@ internal static class FasSchemeAuditWriter
     }
 }
 
-internal sealed class ListFasSchemesHandler(IFasSchemeRepository repository) : IQueryHandler<ListFasSchemesQuery, FasSchemeListResponse>
+internal sealed class ListFasSchemesHandler(IFasSchemeRepository repository) : IQueryHandler<ListFasSchemesQuery, PageResponse<FasSchemeListItem>>
 {
-    public async Task<Result<FasSchemeListResponse>> Handle(ListFasSchemesQuery query, CancellationToken cancellationToken)
-        => Result<FasSchemeListResponse>.Success(await repository.ListAsync(query.Status, query.Search, cancellationToken));
+    public async Task<Result<PageResponse<FasSchemeListItem>>> Handle(ListFasSchemesQuery query, CancellationToken cancellationToken)
+        => Result<PageResponse<FasSchemeListItem>>.Success(await repository.ListAsync(query.Status, query.Search, query.Page, query.PageSize, cancellationToken));
 }
 
 internal sealed class GetFasSchemeHandler(IFasSchemeRepository repository) : IQueryHandler<GetFasSchemeQuery, FasSchemeDetail>
