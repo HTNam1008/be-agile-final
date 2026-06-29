@@ -29,6 +29,12 @@ public interface ITopUpTransactionRepository
         long campaignId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> TryReserveBudgetAsync(
+        long campaignId,
+        decimal requestedAmount,
+        decimal budgetCap,
+        CancellationToken cancellationToken = default);
+
     Task<List<TopUpTransaction>> GetByAccountIdAsync(
         long educationAccountId,
         CancellationToken cancellationToken = default);
