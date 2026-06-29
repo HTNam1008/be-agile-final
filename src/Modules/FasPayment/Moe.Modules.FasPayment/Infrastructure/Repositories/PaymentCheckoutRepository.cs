@@ -106,6 +106,45 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
     public async Task<IReadOnlyCollection<PaymentAllocation>> ListPaymentAllocationsAsync(long paymentId, CancellationToken cancellationToken)
         => await dbContext.Set<PaymentAllocation>().Where(x => x.PaymentId == paymentId).ToArrayAsync(cancellationToken);
 
+    public Task<PendingEnrollmentBill?> FindPendingEnrollmentBillAsync(
+        long courseEnrollmentId,
+        long personId,
+        CancellationToken cancellationToken)
+        => (
+            from bill in dbContext.Set<Bill>().AsNoTracking()
+            join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+                on bill.CourseEnrollmentId equals enrollment.Id
+            where enrollment.Id == courseEnrollmentId
+                  && enrollment.PersonId == personId
+                  && bill.OutstandingAmount > 0m
+                  && bill.BillStatusCode != BillStatusCodes.Cancelled
+            orderby bill.CurrentDueDate, bill.SequenceNumber, bill.Id
+            select new PendingEnrollmentBill(
+                bill.Id,
+                bill.CurrentDueDate))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyCollection<PendingEnrollmentFasReservation>> ListPendingFasReservationsForEnrollmentAsync(
+        long courseEnrollmentId,
+        long personId,
+        CancellationToken cancellationToken)
+        => await (
+            from redemption in dbContext.Set<FasVoucherRedemption>().AsNoTracking()
+            join item in dbContext.Set<FasApplicationScheme>().AsNoTracking()
+                on redemption.FasApplicationSchemeId equals item.Id
+            join scheme in dbContext.Set<FasScheme>().AsNoTracking()
+                on item.FasSchemeId equals scheme.Id
+            where redemption.CourseEnrollmentId == courseEnrollmentId
+                  && redemption.StudentPersonId == personId
+                  && redemption.StatusCode == "PENDING"
+            orderby redemption.CreatedAtUtc, redemption.Id
+            select new PendingEnrollmentFasReservation(
+                redemption.FasApplicationSchemeId,
+                scheme.Name,
+                redemption.AppliedAmount,
+                redemption.StatusCode))
+            .ToArrayAsync(cancellationToken);
+
     public Task<bool> PaymentReferenceExistsAsync(string providerReference, CancellationToken cancellationToken)
         => dbContext.Set<Payment>().AnyAsync(payment =>
             payment.ProviderPaymentIntentId == providerReference ||
