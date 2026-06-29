@@ -47,6 +47,7 @@ public sealed class TopUpAssessmentWorker(
         var ruleFilter = scope.ServiceProvider.GetRequiredService<IDynamicRuleFilter>();
         var contractRepo = scope.ServiceProvider.GetRequiredService<IDynamicTopUpContractRepository>();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var distributedLock = scope.ServiceProvider.GetRequiredService<IDistributedLock>();
 
         DateTime nowUtc = clock.UtcNow.UtcDateTime;
         DateOnly today = DateOnly.FromDateTime(nowUtc);
@@ -54,8 +55,18 @@ public sealed class TopUpAssessmentWorker(
 
         foreach (var campaign in activeCampaigns)
         {
+            string lockKey = $"topup-assessment:campaign:{campaign.Id}";
+            bool lockAcquired = false;
+
             try
             {
+                lockAcquired = await distributedLock.TryAcquireAsync(lockKey, TimeSpan.FromMinutes(15), ct);
+                if (!lockAcquired)
+                {
+                    logger.LogInformation("Skipping assessment for campaign {CampaignId} — another instance is already processing it.", campaign.Id);
+                    continue;
+                }
+
                 var rules = await campaignReader.GetRulesAsync(campaign.Id, ct);
                 int totalCount = await ruleFilter.CountMatchingAccountsAsync(rules, nowUtc, ct);
                 
@@ -120,6 +131,13 @@ public sealed class TopUpAssessmentWorker(
                 logger.LogError(ex,
                     "Assessment failed for campaign {CampaignId} — continuing with next campaign",
                     campaign.Id);
+            }
+            finally
+            {
+                if (lockAcquired)
+                {
+                    await distributedLock.ReleaseAsync(lockKey);
+                }
             }
         }
     }
