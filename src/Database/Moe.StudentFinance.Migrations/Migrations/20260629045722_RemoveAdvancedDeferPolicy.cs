@@ -26,7 +26,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
             migrationBuilder.Sql("""
                 IF COL_LENGTH('ai.Message', 'ResponseJson') IS NULL
-                    ALTER TABLE [ai].[Message] ADD [ResponseJson] nvarchar(8000) NULL;
+                    ALTER TABLE [ai].[Message] ADD [ResponseJson] nvarchar(max) NULL;
                 """);
         }
 
