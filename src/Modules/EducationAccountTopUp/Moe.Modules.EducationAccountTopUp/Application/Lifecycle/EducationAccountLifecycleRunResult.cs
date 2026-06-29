@@ -3,4 +3,5 @@ namespace Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 public sealed record EducationAccountLifecycleRunResult(
     int OpenedCount,
     int ClosedCount,
-    bool Skipped = false);
+    bool Skipped = false,
+    string? SkipReason = null);

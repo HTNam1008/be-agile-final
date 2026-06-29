@@ -22,7 +22,7 @@ public sealed class TopUpSchedulerWorker(
         {
             try
             {
-                await PollAndScheduleRunsAsync(stoppingToken);
+                await RunOnceAsync(stoppingToken);
             }
             catch (Exception exception)
             {
@@ -35,7 +35,7 @@ public sealed class TopUpSchedulerWorker(
         }
     }
 
-    private async Task PollAndScheduleRunsAsync(CancellationToken cancellationToken)
+    public async Task<TopUpSchedulerRunOnceResult> RunOnceAsync(CancellationToken cancellationToken)
     {
         DateTime nowUtc = clock.UtcNow.UtcDateTime;
         IReadOnlyList<long> dueCampaignIds;
@@ -52,6 +52,11 @@ public sealed class TopUpSchedulerWorker(
             logger.LogInformation("Found {Count} campaigns due for execution.", dueCampaignIds.Count);
         }
 
+        int createdRunCount = 0;
+        int skippedRunCount = 0;
+        int failedRunCount = 0;
+        List<long> createdRunIds = [];
+
         foreach (long campaignId in dueCampaignIds)
         {
             try
@@ -63,7 +68,11 @@ public sealed class TopUpSchedulerWorker(
                 ITopUpRunDispatcher dispatcher = innerScope.ServiceProvider.GetRequiredService<ITopUpRunDispatcher>();
 
                 TopUpCampaign? campaign = await campaigns.GetByIdAsync(campaignId, cancellationToken);
-                if (campaign is null || !campaign.NextRunAtUtc.HasValue) continue;
+                if (campaign is null || !campaign.NextRunAtUtc.HasValue)
+                {
+                    skippedRunCount++;
+                    continue;
+                }
 
                 DateTime scheduledFor = campaign.NextRunAtUtc.Value;
 
@@ -71,6 +80,7 @@ public sealed class TopUpSchedulerWorker(
                 if (runExists)
                 {
                     logger.LogWarning("Run for campaign {CampaignId} scheduled at {ScheduledFor} already exists.", campaign.Id, scheduledFor);
+                    skippedRunCount++;
                     continue;
                 }
 
@@ -95,12 +105,29 @@ public sealed class TopUpSchedulerWorker(
                 await unitOfWork.SaveChangesAsync(cancellationToken);
                 await dispatcher.EnqueueAsync(run.Id, cancellationToken);
 
+                createdRunCount++;
+                createdRunIds.Add(run.Id);
                 logger.LogInformation("Successfully scheduled and dispatched run {RunId} for campaign {CampaignId}.", run.Id, campaign.Id);
             }
             catch (Exception ex)
             {
+                failedRunCount++;
                 logger.LogError(ex, "Failed to schedule run for campaign {CampaignId}", campaignId);
             }
         }
+
+        return new TopUpSchedulerRunOnceResult(
+            dueCampaignIds.Count,
+            createdRunCount,
+            skippedRunCount,
+            failedRunCount,
+            createdRunIds);
     }
 }
+
+public sealed record TopUpSchedulerRunOnceResult(
+    int DueCampaignCount,
+    int CreatedRunCount,
+    int SkippedRunCount,
+    int FailedRunCount,
+    IReadOnlyList<long> CreatedRunIds);

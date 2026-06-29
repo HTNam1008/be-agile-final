@@ -22,6 +22,7 @@ using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
 using Moe.Modules.Mfa;
 using Moe.StudentFinance.Api.CompositionRoot;
+using Moe.StudentFinance.Api.DevTools;
 using Moe.StudentFinance.Persistence;
 using NSwag;
 using NSwag.Generation.Processors.Security;
@@ -33,7 +34,8 @@ builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
-if (builder.Environment.IsDevelopment())
+bool devTestClockEnabled = DevTestClockEndpoints.IsEnabled(builder);
+if (devTestClockEnabled)
 {
     builder.Services.RemoveAll<IClock>();
     builder.Services.AddSingleton<DevelopmentManualClock>();
@@ -244,40 +246,7 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
     });
 }).AllowAnonymous();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(new
-    {
-        utcNow = clock.UtcNow,
-        isOverridden = clock.IsOverridden
-    }))
-        .AllowAnonymous()
-        .RequireCors("PortalCors");
-
-    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, DevelopmentManualClock clock) =>
-    {
-        clock.Set(request.UtcNow);
-        return Results.Ok(new
-        {
-            utcNow = clock.UtcNow,
-            isOverridden = clock.IsOverridden
-        });
-    })
-        .AllowAnonymous()
-        .RequireCors("PortalCors");
-
-    app.MapDelete("/dev/clock", (DevelopmentManualClock clock) =>
-    {
-        clock.Reset();
-        return Results.Ok(new
-        {
-            utcNow = clock.UtcNow,
-            isOverridden = clock.IsOverridden
-        });
-    })
-        .AllowAnonymous()
-        .RequireCors("PortalCors");
-}
+if (devTestClockEnabled) app.MapDevTestClockEndpoints();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -368,7 +337,5 @@ static string GetSwaggerTag(string path)
 
     return "General";
 }
-
-internal sealed record SetDevelopmentClockRequest(DateTimeOffset UtcNow);
 
 public partial class Program;
