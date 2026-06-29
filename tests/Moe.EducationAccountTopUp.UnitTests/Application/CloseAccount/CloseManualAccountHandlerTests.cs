@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
@@ -9,6 +10,7 @@ using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Xunit;
 
@@ -23,6 +25,7 @@ public sealed class CloseManualAccountHandlerTests
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 6, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeAuditService _audit = new();
+    private readonly FakeEmailDeliveryGateway _mailGateway = new();
 
     [Fact]
     public async Task Handle_OnSuccess_CallsAuditServiceWithReasonAndActor()
@@ -49,6 +52,9 @@ public sealed class CloseManualAccountHandlerTests
         root.GetProperty("closedByLoginAccountId").GetInt64().Should().Be(42);
         root.TryGetProperty("remarks", out _).Should().BeFalse();
         _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().ContainSingle();
+        _mailGateway.Messages.Single().ToEmail.Should().Be("student.real@example.com");
+        _mailGateway.Messages.Single().Subject.Should().Be("Your Education Account Has Been Closed");
     }
 
     [Fact]
@@ -183,7 +189,12 @@ public sealed class CloseManualAccountHandlerTests
             _adminAccess,
             _clock,
             _unitOfWork,
-            _audit);
+            _audit,
+            new EducationAccountClosureEmailService(
+                _people,
+                new TestDoubles.FixedEmailRecipientResolver(),
+                _mailGateway,
+                NullLogger<EducationAccountClosureEmailService>.Instance));
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)
         => new(
@@ -319,6 +330,19 @@ public sealed class CloseManualAccountHandlerTests
         {
             SchoolCalls.Add(context);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
+    {
+        public List<EmailDeliveryMessage> Messages { get; } = [];
+
+        public Task<Result> SendAsync(
+            EmailDeliveryMessage message,
+            CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.FromResult(Result.Success());
         }
     }
 

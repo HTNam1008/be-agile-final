@@ -18,6 +18,7 @@ using Moe.Modules.FasPayment.Application.Applications.GetSchemeApplications;
 using Moe.Modules.FasPayment.Application.Applications.Reject;
 using Moe.Modules.FasPayment.Application.Checkout;
 using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Application.PaymentPlans;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Application.StudentApplications;
@@ -56,6 +57,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IValidator<ListFasSchemesRequest>, ListFasSchemesRequestValidator>();
         services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
         services.AddScoped<StudentFasApplicationService>();
+        services.AddScoped<FasEmailNotificationService>();
         services.AddScoped<FasApiExceptionFilter>();
         services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"])
             ? new PrivateFileFasDocumentStorage()
@@ -89,7 +91,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>, PayBillingStatementHandler>();
         services.AddScoped<ICommandHandler<CancelBillingStatementPaymentCommand>, CancelBillingStatementPaymentHandler>();
         services.AddScoped<ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>, DeferBillingStatementHandler>();
-        services.AddScoped<IQueryHandler<ListUserPaymentHistoryQuery, IReadOnlyCollection<UserPaymentHistoryResponse>>, ListUserPaymentHistoryHandler>();
+        services.AddScoped<IQueryHandler<ListUserPaymentHistoryQuery, PageResponse<UserPaymentHistoryResponse>>, ListUserPaymentHistoryHandler>();
         services.AddScoped<IQueryHandler<PreviewEnrollmentCancellationQuery, EnrollmentCancellationPreviewResponse>, PreviewEnrollmentCancellationHandler>();
         services.AddScoped<ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>, CancelEnrollmentHandler>();
         services.AddScoped<IValidator<CreateCoursePaymentPlanRequest>, CreateCoursePaymentPlanRequestValidator>();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
@@ -13,7 +14,8 @@ internal sealed class AutomaticEducationAccountCloser(
     IEducationAccountRepository educationAccounts,
     IEligiblePersonLookupGateway people,
     IAuditService auditService,
-    IUnitOfWork unitOfWork) : IAutomaticEducationAccountCloser
+    IUnitOfWork unitOfWork,
+    EducationAccountClosureEmailService closureEmails) : IAutomaticEducationAccountCloser
 {
     private const int ClosingAge = 30;
 
@@ -85,6 +87,10 @@ internal sealed class AutomaticEducationAccountCloser(
             cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await closureEmails.SendClosedAsync(
+            account,
+            "Automatic closure when the account holder reached age 30",
+            cancellationToken);
 
         return new AutomaticEducationAccountClosureResult(
             account.Id,

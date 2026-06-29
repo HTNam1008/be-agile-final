@@ -56,7 +56,7 @@ public sealed class EducationAccountsController(
     public async Task<IActionResult> GetTransactions(
         [FromRoute] long educationAccountId,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
         var query = new GetAccountTransactionHistoryQuery(

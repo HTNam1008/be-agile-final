@@ -87,6 +87,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IAutomaticEducationAccountCreator, AutomaticEducationAccountCreator>();
         services.AddScoped<IAutomaticEducationAccountCloser, AutomaticEducationAccountCloser>();
         services.AddScoped<IAdminDashboardTopUpDirectory, AdminDashboardTopUpDirectory>();
+        services.AddScoped<EducationAccountClosureEmailService>();
+        services.AddScoped<EducationAccountCreatedEmailService>();
 
         // Services & Utilities
         services.AddSingleton<ChannelTopUpRunDispatcher>();

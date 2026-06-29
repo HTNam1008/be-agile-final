@@ -19,7 +19,7 @@ public sealed record AdminStudentListCriteria(
         AdminStudentAccountStatusFilter accountStatus = AdminStudentAccountStatusFilter.All,
         AdminStudentEnrollmentStatusFilter enrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
         int page = 1,
-        int pageSize = 20)
+        int pageSize = 10)
         => new(
             organizationId,
             search,
