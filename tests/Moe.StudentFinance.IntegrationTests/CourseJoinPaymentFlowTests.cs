@@ -449,6 +449,55 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task DevClock_CanAdvancePastCourseStart_ForCancellationTesting()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
+
+        CourseEnrollment enrollment;
+        DateOnly startDate;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            enrollment = await db.Set<CourseEnrollment>().SingleAsync(x =>
+                x.PersonId == student.PersonId &&
+                x.CourseId == course.CourseId);
+            startDate = await db.Set<Course>()
+                .Where(x => x.Id == course.CourseId)
+                .Select(x => x.StartDate)
+                .SingleAsync();
+        }
+
+        try
+        {
+            using HttpResponseMessage setClock = await _client.PutAsJsonAsync(
+                "/dev/clock",
+                new { utcNow = startDate.AddDays(1).ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc) });
+            await AssertStatusAsync(HttpStatusCode.OK, setClock);
+
+            using HttpResponseMessage preview = await SendStudentAsync(
+                student,
+                HttpMethod.Get,
+                $"/api/eservice/v1/course-enrollments/{enrollment.Id}/cancellation-preview");
+
+            await AssertStatusAsync(HttpStatusCode.OK, preview);
+            JsonElement previewData = await ReadDataAsync(preview);
+            Assert.False(previewData.GetProperty("canCancel").GetBoolean());
+            Assert.Equal(
+                "This course has started and has outstanding bills. Please settle the bills or contact your school admin.",
+                previewData.GetProperty("cannotCancelReason").GetString());
+        }
+        finally
+        {
+            using HttpResponseMessage resetClock = await _client.DeleteAsync("/dev/clock");
+            await AssertStatusAsync(HttpStatusCode.OK, resetClock);
+        }
+    }
+
+    [Fact]
     public async Task Student_CanJoinCourseAgainAfterPaidEnrollmentIsCancelled()
     {
         TestStudent student = await CreateStudentAsync(balance: 150m);
