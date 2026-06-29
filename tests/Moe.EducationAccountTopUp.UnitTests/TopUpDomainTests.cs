@@ -250,4 +250,68 @@ public sealed class TopUpDomainTests
         campaign.CampaignName.Should().Be("Test Campaign");
         campaign.CampaignVersion.Should().Be(2);
     }
+
+    [Fact]
+    public void TopUpCampaign_CannotChangeCampaignCodeAfterActivation()
+    {
+        var now = DateTime.UtcNow;
+        var campaign = TopUpCampaign.Create(
+            organizationId: 10,
+            campaignCode: "TEST-01",
+            campaignName: "Test Campaign",
+            description: "Desc",
+            recipientModeCode: "FIXED_SELECTION",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        var codeResult = campaign.UpdateCampaignCode("NEW-CODE");
+        codeResult.IsSuccess.Should().BeTrue();
+        campaign.CampaignCode.Should().Be("NEW-CODE");
+
+        var activateResult = campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
+        activateResult.IsSuccess.Should().BeTrue();
+
+        var lockedResult = campaign.UpdateCampaignCode("ANOTHER-CODE");
+        lockedResult.IsFailure.Should().BeTrue();
+        lockedResult.Error.Code.Should().Be("TopUp.CannotChangeCampaignCodeAfterActive");
+        campaign.CampaignCode.Should().Be("NEW-CODE");
+    }
+
+    [Fact]
+    public void TopUpCampaign_UpdateCampaignCode_RejectsEmpty()
+    {
+        var now = DateTime.UtcNow;
+        var campaign = TopUpCampaign.Create(
+            organizationId: 10,
+            campaignCode: "TEST-01",
+            campaignName: "Test Campaign",
+            description: "Desc",
+            recipientModeCode: "FIXED_SELECTION",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        var emptyResult = campaign.UpdateCampaignCode("");
+        emptyResult.IsFailure.Should().BeTrue();
+        emptyResult.Error.Code.Should().Be("TopUp.CampaignCodeCannotBeEmpty");
+    }
 }

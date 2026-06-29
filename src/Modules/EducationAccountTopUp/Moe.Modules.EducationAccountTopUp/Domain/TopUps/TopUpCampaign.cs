@@ -101,6 +101,18 @@ public sealed class TopUpCampaign : Entity<long>
         };
     }
 
+    public Result UpdateCampaignCode(string newCampaignCode)
+    {
+        if (string.IsNullOrWhiteSpace(newCampaignCode))
+            return Result.Failure(TopUpErrors.CampaignCodeCannotBeEmpty);
+
+        if (CampaignStatusCode != TopUpCampaignStatusCodes.Draft)
+            return Result.Failure(TopUpErrors.CannotChangeCampaignCodeAfterActive);
+
+        CampaignCode = newCampaignCode;
+        return Result.Success();
+    }
+
     public Result Update(
         string campaignName,
         string? description,
