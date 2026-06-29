@@ -1,5 +1,6 @@
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -7,22 +8,28 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.StatementPayments;
 
-public sealed record ListUserPaymentHistoryQuery
-    : IQuery<IReadOnlyCollection<UserPaymentHistoryResponse>>;
+public sealed record ListUserPaymentHistoryQuery(
+    int Page = 1,
+    int PageSize = 10,
+    string? Status = null)
+    : IQuery<PageResponse<UserPaymentHistoryResponse>>;
 
 internal sealed class ListUserPaymentHistoryHandler(
     IPaymentCheckoutRepository payments,
     ICurrentUser currentUser)
-    : IQueryHandler<ListUserPaymentHistoryQuery, IReadOnlyCollection<UserPaymentHistoryResponse>>
+    : IQueryHandler<ListUserPaymentHistoryQuery, PageResponse<UserPaymentHistoryResponse>>
 {
-    public async Task<Result<IReadOnlyCollection<UserPaymentHistoryResponse>>> Handle(
+    public async Task<Result<PageResponse<UserPaymentHistoryResponse>>> Handle(
         ListUserPaymentHistoryQuery query,
         CancellationToken cancellationToken)
     {
         long personId = currentUser.PersonId ?? 0;
         if (!currentUser.IsAuthenticated || personId <= 0)
-            return Result<IReadOnlyCollection<UserPaymentHistoryResponse>>.Failure(
+            return Result<PageResponse<UserPaymentHistoryResponse>>.Failure(
                 PaymentApplicationErrors.StudentRequired);
+
+        int page = Math.Max(query.Page, 1);
+        int pageSize = Math.Clamp(query.PageSize, 1, 100);
 
         IReadOnlyCollection<Payment> history =
             await payments.ListPaymentsForPersonAsync(personId, cancellationToken);
@@ -99,12 +106,36 @@ internal sealed class ListUserPaymentHistoryHandler(
                 [ToFasSettlementResponse(settlement)]))
             .ToArray();
 
-        return Result<IReadOnlyCollection<UserPaymentHistoryResponse>>.Success(
-            paymentRows
+        UserPaymentHistoryResponse[] orderedRows = paymentRows
                 .Concat(fasRows)
                 .OrderByDescending(row => row.CompletedAtUtc ?? row.FailedAtUtc ?? row.InitiatedAtUtc)
-                .Take(150)
-                .ToArray());
+                .Where(row => MatchesStatus(row, query.Status))
+                .ToArray();
+
+        long totalCount = orderedRows.LongLength;
+        UserPaymentHistoryResponse[] pageRows = orderedRows
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArray();
+
+        return Result<PageResponse<UserPaymentHistoryResponse>>.Success(
+            new PageResponse<UserPaymentHistoryResponse>(pageRows, page, pageSize, totalCount));
+    }
+
+    private static bool MatchesStatus(UserPaymentHistoryResponse row, string? status)
+    {
+        string normalized = (status ?? "ALL").Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized == "ALL") return true;
+
+        string group = row.PaymentStatusCode.ToUpperInvariant() switch
+        {
+            PaymentStatusCodes.Successful or PaymentStatusCodes.PartiallyRefunded or PaymentStatusCodes.Refunded => "SUCCESS",
+            PaymentStatusCodes.Initiated or PaymentStatusCodes.PendingOnlinePayment => "PENDING",
+            PaymentStatusCodes.Failed or PaymentStatusCodes.Cancelled or PaymentStatusCodes.Expired => "FAILED",
+            _ => row.PaymentStatusCode.ToUpperInvariant()
+        };
+
+        return group == normalized;
     }
 
     private static UserPaymentHistoryFasSettlementResponse ToFasSettlementResponse(UserFasSettlement settlement)
