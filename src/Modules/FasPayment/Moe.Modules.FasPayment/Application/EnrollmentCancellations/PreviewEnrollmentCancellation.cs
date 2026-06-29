@@ -33,8 +33,9 @@ internal sealed class PreviewEnrollmentCancellationHandler(
             return Result<EnrollmentCancellationPreviewResponse>.Failure(
                 PaymentApplicationErrors.EnrollmentNotFound);
 
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         EnrollmentRefundCalculation calculation = EnrollmentRefundPreviewCalculator.Calculate(
-            DateOnly.FromDateTime(clock.UtcNow.UtcDateTime),
+            today,
             snapshot.Course.StartDate,
             snapshot.Course.EndDate,
             snapshot.Enrollment.BeforeStartRefundPercentage,
@@ -43,6 +44,7 @@ internal sealed class PreviewEnrollmentCancellationHandler(
                 snapshot.PaidAmount,
                 snapshot.EducationAccountPaidAmount,
                 snapshot.OnlinePaidAmount));
+        calculation = EnrollmentCancellationPolicy.Apply(snapshot, calculation, today);
 
         return Result<EnrollmentCancellationPreviewResponse>.Success(new(
             snapshot.Enrollment.Id,

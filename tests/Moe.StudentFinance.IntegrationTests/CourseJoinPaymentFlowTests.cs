@@ -340,6 +340,115 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task CancelUnpaidEnrollment_BeforeCourseStart_CancelsOutstandingBills()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{statement.EnrollmentId}/cancel",
+            new { idempotencyKey = $"cancel-unpaid-{Guid.NewGuid():N}" });
+
+        await AssertStatusAsync(HttpStatusCode.OK, cancel);
+        JsonElement cancellation = await ReadDataAsync(cancel);
+        Assert.Equal("CANCELLED", cancellation.GetProperty("enrollmentStatusCode").GetString());
+        Assert.Equal(0m, cancellation.GetProperty("refundAmount").GetDecimal());
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Bill bill = await db.Set<Bill>().SingleAsync(x => x.Id == statement.BillId);
+        CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == statement.EnrollmentId);
+
+        Assert.Equal(BillStatusCodes.Cancelled, bill.BillStatusCode);
+        Assert.Equal(0m, bill.OutstandingAmount);
+        Assert.Equal(CourseEnrollmentStatusCodes.Cancelled, enrollment.EnrollmentStatusCode);
+    }
+
+    [Fact]
+    public async Task CancelEnrollment_AfterCourseStart_WithOutstandingBills_IsBlocked()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 0m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            Course entity = await db.Set<Course>().SingleAsync(x => x.Id == course.CourseId);
+            DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+            entity.Update(
+                entity.CourseCode,
+                entity.CourseName,
+                entity.Description,
+                today.AddDays(-1),
+                today.AddDays(30),
+                entity.EnrollmentOpenAtUtc,
+                entity.EnrollmentCloseAtUtc,
+                10,
+                DateTime.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        CourseEnrollment enrollmentBefore;
+        Bill[] billsBefore;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            enrollmentBefore = await db.Set<CourseEnrollment>().SingleAsync(x =>
+                x.PersonId == student.PersonId &&
+                x.CourseId == course.CourseId);
+            billsBefore = await db.Set<Bill>()
+                .Where(x => x.CourseEnrollmentId == enrollmentBefore.Id)
+                .OrderBy(x => x.SequenceNumber)
+                .ToArrayAsync();
+        }
+
+        using HttpResponseMessage preview = await SendStudentAsync(
+            student,
+            HttpMethod.Get,
+            $"/api/eservice/v1/course-enrollments/{enrollmentBefore.Id}/cancellation-preview");
+        await AssertStatusAsync(HttpStatusCode.OK, preview);
+        JsonElement previewData = await ReadDataAsync(preview);
+        Assert.False(previewData.GetProperty("canCancel").GetBoolean());
+        Assert.Equal(
+            "This course has started and has outstanding bills. Please settle the bills or contact your school admin.",
+            previewData.GetProperty("cannotCancelReason").GetString());
+
+        using HttpResponseMessage cancel = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/course-enrollments/{enrollmentBefore.Id}/cancel",
+            new { idempotencyKey = $"cancel-started-outstanding-{Guid.NewGuid():N}" });
+        await AssertStatusAsync(HttpStatusCode.Conflict, cancel);
+        using JsonDocument errorDocument = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync());
+        Assert.Equal(
+            "PAYMENT.CANCELLATION_OUTSTANDING_BILLS_REQUIRED",
+            errorDocument.RootElement.GetProperty("errors").EnumerateArray().Single().GetString());
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            CourseEnrollment enrollment = await db.Set<CourseEnrollment>().SingleAsync(x => x.Id == enrollmentBefore.Id);
+            Bill[] bills = await db.Set<Bill>()
+                .Where(x => x.CourseEnrollmentId == enrollmentBefore.Id)
+                .OrderBy(x => x.SequenceNumber)
+                .ToArrayAsync();
+
+            Assert.Equal(CourseEnrollmentStatusCodes.Active, enrollment.EnrollmentStatusCode);
+            Assert.Equal(billsBefore.Select(x => x.BillStatusCode).ToArray(), bills.Select(x => x.BillStatusCode).ToArray());
+            Assert.Equal(billsBefore.Select(x => x.OutstandingAmount).ToArray(), bills.Select(x => x.OutstandingAmount).ToArray());
+        }
+    }
+
+    [Fact]
     public async Task Student_CanJoinCourseAgainAfterPaidEnrollmentIsCancelled()
     {
         TestStudent student = await CreateStudentAsync(balance: 150m);
