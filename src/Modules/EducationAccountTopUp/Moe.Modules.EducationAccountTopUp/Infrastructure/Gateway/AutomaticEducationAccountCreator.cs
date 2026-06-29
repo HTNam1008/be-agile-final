@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
@@ -12,7 +13,8 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 internal sealed class AutomaticEducationAccountCreator(
     IEducationAccountRepository educationAccounts,
     IAuditService auditService,
-    IUnitOfWork unitOfWork) : IAutomaticEducationAccountCreator
+    IUnitOfWork unitOfWork,
+    EducationAccountCreatedEmailService accountCreatedEmails) : IAutomaticEducationAccountCreator
 {
     public async Task<AutomaticEducationAccountCreationResult> EnsureCreatedAsync(
         long personId,
@@ -68,6 +70,8 @@ internal sealed class AutomaticEducationAccountCreator(
                 reloaded.AccountNumber,
                 Created: false);
         }
+
+        await accountCreatedEmails.SendAsync(result.Value, cancellationToken);
 
         return new AutomaticEducationAccountCreationResult(
             result.Value.Id,

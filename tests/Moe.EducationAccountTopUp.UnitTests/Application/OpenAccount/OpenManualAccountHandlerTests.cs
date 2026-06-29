@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
@@ -9,6 +10,8 @@ using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
+using Moe.SharedKernel.Results;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests.Application.OpenAccount;
@@ -21,6 +24,7 @@ public sealed class OpenManualAccountHandlerTests
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 6, 22, 6, 0, 0, TimeSpan.Zero));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeAuditService _audit = new();
+    private readonly FakeEmailDeliveryGateway _mailGateway = new();
 
     [Fact]
     public async Task Handle_OnSuccessfulCreation_CallsAuditServiceWithCorrectActionCode()
@@ -36,6 +40,10 @@ public sealed class OpenManualAccountHandlerTests
         call.EntityTypeCode.Should().Be("EducationAccount");
         call.EntityId.Should().Be(result.Value.EducationAccountId.ToString());
         _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().ContainSingle();
+        _mailGateway.Messages.Single().ToEmail.Should().Be("student.real@example.com");
+        _mailGateway.Messages.Single().Subject.Should().Be("MOE - Your Education Account has been created!");
+        _mailGateway.Messages.Single().PlainTextBody.Should().Contain("Account ID:");
     }
 
     [Fact]
@@ -108,7 +116,12 @@ public sealed class OpenManualAccountHandlerTests
             _currentUser,
             _clock,
             _unitOfWork,
-            _audit);
+            _audit,
+            new EducationAccountCreatedEmailService(
+                _people,
+                new TestDoubles.FixedEmailRecipientResolver(),
+                _mailGateway,
+                NullLogger<EducationAccountCreatedEmailService>.Instance));
     }
 
     private static OpenManualAccountCommand CreateCommand(long personId)
@@ -239,4 +252,17 @@ public sealed class OpenManualAccountHandlerTests
         string EntityTypeCode,
         string EntityId,
         string? DetailsJson);
+
+    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
+    {
+        public List<EmailDeliveryMessage> Messages { get; } = [];
+
+        public Task<Result> SendAsync(
+            EmailDeliveryMessage message,
+            CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.FromResult(Result.Success());
+        }
+    }
 }

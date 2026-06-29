@@ -1,10 +1,13 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Application.StatementPayments;
+using Moe.Modules.FasPayment.Contracts.Payments;
 
 namespace Moe.Modules.FasPayment.Api.EService;
 
@@ -17,9 +20,14 @@ public sealed class EServicePaymentsController(
     IQueryDispatcher queries) : ControllerBase
 {
     [HttpGet("history")]
-    public async Task<IActionResult> GetHistory(CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(ApiResponse<PageResponse<UserPaymentHistoryResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHistory(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? status = null,
+        CancellationToken cancellationToken = default)
         => this.ToPaymentResponse(await queries.Send(
-            new ListUserPaymentHistoryQuery(),
+            new ListUserPaymentHistoryQuery(page, pageSize, status),
             cancellationToken));
 
 }

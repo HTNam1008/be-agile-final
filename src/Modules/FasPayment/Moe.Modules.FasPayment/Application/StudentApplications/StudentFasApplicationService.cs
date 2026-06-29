@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.FasPayment.Domain.Fas;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -19,7 +20,8 @@ public sealed class StudentFasApplicationService(
     IFasDocumentStorage storage,
     IFasDocumentScanner scanner,
     IOrganizationUnitRepository organizations,
-    IAuditService audit)
+    IAuditService audit,
+    FasEmailNotificationService fasEmails)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
@@ -490,6 +492,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await fasEmails.SendSchemeApprovedAsync(item.Id, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, selectedTierId = tier.Id, item.ApprovedAmount, item.ValidFrom, item.ValidTo };
         });
@@ -520,6 +523,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await fasEmails.SendSchemeRejectedAsync(item.Id, r.Notes, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, item.RejectionNotes };
         });
@@ -587,6 +591,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await fasEmails.SendSubmissionAcknowledgementAsync(app.Id, ct);
             return await ApplicationReview(id, ct);
         });
     }
@@ -700,38 +705,46 @@ public sealed class StudentFasApplicationService(
     }
 
 
-    public async Task<object> MyApplications(CancellationToken ct)
+    public async Task<object> MyApplications(int page, int pageSize, CancellationToken ct)
     {
         var (person, _) = Identity();
-        var rows = await (from a in db.Set<FasApplication>().AsNoTracking()
-                          join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId
-                          join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
-                          where a.StudentPersonId == person
-                          orderby a.SubmittedAtUtc descending, a.CreatedAt descending, i.Id
-                          select new
-                          {
-                              applicationId = a.Id,
-                              applicationSchemeId = i.Id,
-                              applicationReference = a.ApplicationNo,
-                              schemeId = s.Id,
-                              schemeName = s.Name,
-                              applicationStatus = a.StatusCode,
-                              submittedDate = a.SubmittedAtUtc,
-                              itemStatus = i.StatusCode,
-                              schemeStatus = s.StatusCode,
-                              canReview = true,
-                              i.RejectionNotes,
-                              i.ApprovedAmount,
-                              i.ApprovedComponentsJson,
-                              i.IsActive,
-                              isReserved = db.Set<FasVoucherRedemption>().Any(r =>
-                                  r.FasApplicationSchemeId == i.Id && r.StatusCode == "PENDING"),
-                              i.ValidFrom,
-                              i.ValidTo,
-                              redeemedAt = i.RedeemedAtUtc
-                          }).ToListAsync(ct);
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = from a in db.Set<FasApplication>().AsNoTracking()
+                    join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId
+                    join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
+                    where a.StudentPersonId == person
+                    orderby a.SubmittedAtUtc descending, a.CreatedAt descending, i.Id
+                    select new
+                    {
+                        applicationId = a.Id,
+                        applicationSchemeId = i.Id,
+                        applicationReference = a.ApplicationNo,
+                        schemeId = s.Id,
+                        schemeName = s.Name,
+                        applicationStatus = a.StatusCode,
+                        submittedDate = a.SubmittedAtUtc,
+                        itemStatus = i.StatusCode,
+                        schemeStatus = s.StatusCode,
+                        canReview = true,
+                        i.RejectionNotes,
+                        i.ApprovedAmount,
+                        i.ApprovedComponentsJson,
+                        i.IsActive,
+                        isReserved = db.Set<FasVoucherRedemption>().Any(r =>
+                            r.FasApplicationSchemeId == i.Id && r.StatusCode == "PENDING"),
+                        i.ValidFrom,
+                        i.ValidTo,
+                        redeemedAt = i.RedeemedAtUtc
+                    };
 
-        return rows.Select(x => new
+        var totalCount = await query.LongCountAsync(ct);
+        var rows = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var items = rows.Select(x => new
         {
             x.applicationId,
             x.applicationSchemeId,
@@ -758,6 +771,8 @@ public sealed class StudentFasApplicationService(
             x.ValidTo,
             x.redeemedAt
         }).ToList();
+
+        return new { items, page, pageSize, totalCount };
     }
     public async Task<object> Summary(CancellationToken ct)
     {

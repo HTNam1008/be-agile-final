@@ -13,5 +13,5 @@ public sealed class SearchTopUpAccountsRequest
     public decimal? BalanceFrom { get; init; }
     public decimal? BalanceTo { get; init; }
     public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 25;
+    public int PageSize { get; init; } = 10;
 }
