@@ -154,7 +154,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Fail_When_Campaign_Is_DynamicRules()
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "DYNAMIC_RULES", 100m, "Reason", "Recurring", new DateOnly(2026, 1, 1), null, "Quarterly", 1, "CONDITIONAL_RECURRING", 500m, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "DynamicRules", 100m, "Reason", "Recurring", new DateOnly(2026, 1, 1), null, "Quarterly", 1, "CONDITIONAL_RECURRING", 500m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);

@@ -45,10 +45,7 @@ public sealed class RequestManualRunCommandHandler(
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
         }
 
-        if (!campaign.ScheduleTypeCode.Equals(ScheduleTypes.Immediate, StringComparison.OrdinalIgnoreCase))
-        {
-            return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
-        }
+
 
         TopUpRun? existingRun = await runs.GetByIdempotencyKeyAsync(command.IdempotencyKey, cancellationToken);
         if (existingRun is not null)
