@@ -84,28 +84,17 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                DECLARE @AlreadyDisbursed DECIMAL(18,2);
-                SELECT @AlreadyDisbursed = ISNULL(SUM(t.Amount), 0)
-                FROM TopUpTransactions t
-                INNER JOIN TopUpRuns r ON t.TopUpRunId = r.Id
-                WHERE r.TopUpCampaignId = @CampaignId
-                AND t.TransactionStatusCode = 'COMPLETED';
-
-                IF (@AlreadyDisbursed + @RequestedAmount <= @BudgetCap)
-                BEGIN
-                    SELECT 1;
-                END
-                ELSE
-                BEGIN
-                    SELECT 0;
-                END";
+                UPDATE TopUpCampaigns
+                SET BudgetReserved = BudgetReserved + @RequestedAmount
+                WHERE Id = @CampaignId
+                  AND BudgetReserved + @RequestedAmount <= @BudgetCap";
 
             command.Parameters.Add(CreateParameter(command, "@CampaignId", campaignId));
             command.Parameters.Add(CreateParameter(command, "@RequestedAmount", requestedAmount));
             command.Parameters.Add(CreateParameter(command, "@BudgetCap", budgetCap));
 
-            var result = await command.ExecuteScalarAsync(cancellationToken);
-            return result != null && Convert.ToInt32(result) == 1;
+            var rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
+            return rowsAffected > 0;
         }
         catch (InvalidOperationException)
         {
