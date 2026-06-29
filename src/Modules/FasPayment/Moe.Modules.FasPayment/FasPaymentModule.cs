@@ -87,7 +87,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>, GetPendingEnrollmentPaymentHandler>();
         services.AddScoped<ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>, PayBillingStatementHandler>();
         services.AddScoped<ICommandHandler<CancelBillingStatementPaymentCommand>, CancelBillingStatementPaymentHandler>();
-        services.AddScoped<ICommandHandler<DeferBillingStatementCommand>, DeferBillingStatementHandler>();
+        services.AddScoped<ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>, DeferBillingStatementHandler>();
         services.AddScoped<IQueryHandler<ListUserPaymentHistoryQuery, IReadOnlyCollection<UserPaymentHistoryResponse>>, ListUserPaymentHistoryHandler>();
         services.AddScoped<IQueryHandler<PreviewEnrollmentCancellationQuery, EnrollmentCancellationPreviewResponse>, PreviewEnrollmentCancellationHandler>();
         services.AddScoped<ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>, CancelEnrollmentHandler>();

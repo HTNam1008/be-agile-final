@@ -54,13 +54,15 @@ public sealed class ApiResponse<T>
         string message,
         IReadOnlyCollection<string>? errors = null,
         int code = ApiResponseCodes.BadRequest,
-        string? traceId = null)
+        string? traceId = null,
+        T? data = default)
     {
         return new ApiResponse<T>
         {
             Success = false,
             Code = code,
             Message = message,
+            Data = data,
             Errors = errors,
             TraceId = traceId,
             TimestampUtc = DateTime.UtcNow
