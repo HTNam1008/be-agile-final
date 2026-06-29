@@ -68,11 +68,21 @@ public sealed class StudentFasApplicationService(
         };
     }
 
-    public async Task<object> ListSchemes(CancellationToken ct)
+    public async Task<object> ListSchemes(int page, int pageSize, string? search, CancellationToken ct)
     {
+        if (page < 1 || pageSize is < 1 or > 100) throw new ArgumentException("FAS.INVALID_PAGING");
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (search?.Length > 255) throw new ArgumentException("FAS.SEARCH_TOO_LONG");
+
         var p = await Profile(ct); var today = DateOnly.FromDateTime(DateTime.UtcNow); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
-        var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id))
-            .OrderBy(x => x.StartDate).Select(x => new
+        IQueryable<FasScheme> query = db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id));
+        if (search is not null) query = query.Where(x => x.Name.Contains(search) || (x.Description != null && x.Description.Contains(search)));
+        long totalCount = await query.LongCountAsync(ct);
+        var schemes = await query
+            .OrderBy(x => x.StartDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new
             {
                 id = x.Id,
                 x.Name,
@@ -81,7 +91,7 @@ public sealed class StudentFasApplicationService(
                 applicationEndDate = x.EndDate,
                 isOpenForApplication = x.StartDate <= today && x.EndDate >= today
             }).ToListAsync(ct);
-        return new { currentSchool = new { id = p.SchoolOrganizationId, name = p.SchoolName }, items = schemes };
+        return new { currentSchool = new { id = p.SchoolOrganizationId, name = p.SchoolName }, items = schemes, page, pageSize, totalCount };
     }
 
     public async Task<object> SchemeDetail(long id, CancellationToken ct)

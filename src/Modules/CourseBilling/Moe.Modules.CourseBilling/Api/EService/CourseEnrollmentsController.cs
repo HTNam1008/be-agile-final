@@ -70,10 +70,14 @@ public sealed class CourseEnrollmentsController(
     public async Task<IActionResult> DownloadMaterial(
         long enrollmentId,
         long courseMaterialId,
+        [FromQuery] string? preview,
         CancellationToken cancellationToken)
     {
         var result = await queries.Send(
-            new DownloadStudentCourseMaterialQuery(enrollmentId, courseMaterialId),
+            new DownloadStudentCourseMaterialQuery(
+                enrollmentId,
+                courseMaterialId,
+                string.Equals(preview, "pdf", StringComparison.OrdinalIgnoreCase)),
             cancellationToken);
         return result.IsFailure
             ? this.ToCourseBillingResponse(result)

@@ -8,6 +8,8 @@ internal sealed record EnrollmentCancellationSnapshot(
     decimal PaidAmount,
     decimal EducationAccountPaidAmount,
     decimal OnlinePaidAmount,
+    decimal OutstandingAmount,
+    int OutstandingBillCount,
     IReadOnlyCollection<EnrollmentPaymentRefundSource> RefundSources);
 
 internal sealed record EnrollmentPaymentRefundSource(

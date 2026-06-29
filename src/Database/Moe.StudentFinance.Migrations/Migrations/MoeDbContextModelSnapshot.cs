@@ -138,6 +138,10 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<int?>("LatencyMs")
                         .HasColumnType("int");
 
+                    b.Property<string>("ResponseJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("RoleCode")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -337,9 +341,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
 
-                    b.Property<long>("FailedPaymentId")
-                        .HasColumnType("bigint");
-
                     b.Property<DateOnly>("FromDueDate")
                         .HasColumnType("date");
 
@@ -349,6 +350,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<long?>("SourcePaymentId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateOnly>("ToDueDate")
                         .HasColumnType("date");
 
@@ -357,8 +361,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasIndex("BillId", "DeferralSequenceNumber")
                         .IsUnique();
 
-                    b.HasIndex("BillId", "FailedPaymentId")
-                        .IsUnique();
+                    b.HasIndex("BillId", "SourcePaymentId");
 
                     b.ToTable("BillDeferral", "billing");
                 });
@@ -3649,20 +3652,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.UseTphMappingStrategy();
                 });
 
-            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.BillPaymentCheckoutSession", b =>
-                {
-                    b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
-
-                    b.HasDiscriminator().HasValue("BILL");
-                });
-
-            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.StatementPaymentCheckoutSession", b =>
-                {
-                    b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
-
-                    b.HasDiscriminator().HasValue("STATEMENT");
-                });
-
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.PaymentPart", b =>
                 {
                     b.Property<long>("Id")
@@ -3920,6 +3909,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasIndex("CorrelationId");
 
                     b.HasIndex("AuditScopeCode", "OccurredAtUtc");
+
+                    b.HasIndex("OrganizationId", "OccurredAtUtc")
+                        .HasDatabaseName("IX_AuditLog_OrganizationId_OccurredAt");
 
                     b.ToTable("AuditLog", "audit");
                 });
@@ -10449,6 +10441,20 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("LoginMfaCredential", "iam");
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.BillPaymentCheckoutSession", b =>
+                {
+                    b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
+
+                    b.HasDiscriminator().HasValue("BILL");
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.StatementPaymentCheckoutSession", b =>
+                {
+                    b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
+
+                    b.HasDiscriminator().HasValue("STATEMENT");
                 });
 
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRunItem", b =>

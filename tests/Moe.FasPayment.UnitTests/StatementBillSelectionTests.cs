@@ -51,6 +51,7 @@ public sealed class StatementBillSelectionTests
                 new(
                     BillingStatementItemId: 1,
                     BillId: 101,
+                    OrganizationId: 1,
                     OutstandingAmount: 50m,
                     CurrentDueDate: new DateOnly(2026, 6, 1),
                     OriginalDueDate: new DateOnly(2026, 6, 1),
@@ -58,6 +59,7 @@ public sealed class StatementBillSelectionTests
                 new(
                     BillingStatementItemId: 2,
                     BillId: 102,
+                    OrganizationId: 1,
                     OutstandingAmount: 75m,
                     CurrentDueDate: new DateOnly(2026, 6, 2),
                     OriginalDueDate: new DateOnly(2026, 6, 2),

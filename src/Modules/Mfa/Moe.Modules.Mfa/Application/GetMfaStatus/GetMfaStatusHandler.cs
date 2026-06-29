@@ -9,6 +9,7 @@ namespace Moe.Modules.Mfa.Application.GetMfaStatus;
 
 internal sealed class GetMfaStatusHandler(
     IMfaCredentialRepository credentials,
+    IMfaSessionProofService sessionProof,
     ICurrentUser currentUser,
     IClock clock) : IQueryHandler<GetMfaStatusQuery, MfaStatusResponse>
 {
@@ -25,7 +26,7 @@ internal sealed class GetMfaStatusHandler(
 
         if (credential is null)
         {
-            return Result<MfaStatusResponse>.Success(new MfaStatusResponse("NOT_CONFIGURED", null, null));
+            return Result<MfaStatusResponse>.Success(new MfaStatusResponse("NOT_CONFIGURED", null, null, false));
         }
 
         string statusCode = credential.IsLocked(clock.UtcNow.UtcDateTime)
@@ -35,6 +36,7 @@ internal sealed class GetMfaStatusHandler(
         return Result<MfaStatusResponse>.Success(new MfaStatusResponse(
             statusCode,
             credential.LockedUntilUtc,
-            credential.LastVerifiedAtUtc));
+            credential.LastVerifiedAtUtc,
+            sessionProof.IsCurrentSessionVerified()));
     }
 }
