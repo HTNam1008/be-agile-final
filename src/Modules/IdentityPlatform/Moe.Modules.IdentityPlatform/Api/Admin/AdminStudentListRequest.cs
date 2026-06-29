@@ -10,4 +10,4 @@ public sealed record AdminStudentListRequest(
     AdminStudentAccountStatusFilter AccountStatus = AdminStudentAccountStatusFilter.All,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
     int Page = 1,
-    int PageSize = 20);
+    int PageSize = 10);
