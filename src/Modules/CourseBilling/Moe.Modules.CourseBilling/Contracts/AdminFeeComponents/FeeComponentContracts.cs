@@ -4,7 +4,7 @@ public sealed record FeeComponentQueryRequest(
     string? Keyword,
     bool? IsActive,
     int Page = 1,
-    int PageSize = 20);
+    int PageSize = 10);
 
 public sealed record CreateFeeComponentRequest(
     string ComponentCode,

@@ -705,38 +705,46 @@ public sealed class StudentFasApplicationService(
     }
 
 
-    public async Task<object> MyApplications(CancellationToken ct)
+    public async Task<object> MyApplications(int page, int pageSize, CancellationToken ct)
     {
         var (person, _) = Identity();
-        var rows = await (from a in db.Set<FasApplication>().AsNoTracking()
-                          join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId
-                          join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
-                          where a.StudentPersonId == person
-                          orderby a.SubmittedAtUtc descending, a.CreatedAt descending, i.Id
-                          select new
-                          {
-                              applicationId = a.Id,
-                              applicationSchemeId = i.Id,
-                              applicationReference = a.ApplicationNo,
-                              schemeId = s.Id,
-                              schemeName = s.Name,
-                              applicationStatus = a.StatusCode,
-                              submittedDate = a.SubmittedAtUtc,
-                              itemStatus = i.StatusCode,
-                              schemeStatus = s.StatusCode,
-                              canReview = true,
-                              i.RejectionNotes,
-                              i.ApprovedAmount,
-                              i.ApprovedComponentsJson,
-                              i.IsActive,
-                              isReserved = db.Set<FasVoucherRedemption>().Any(r =>
-                                  r.FasApplicationSchemeId == i.Id && r.StatusCode == "PENDING"),
-                              i.ValidFrom,
-                              i.ValidTo,
-                              redeemedAt = i.RedeemedAtUtc
-                          }).ToListAsync(ct);
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = from a in db.Set<FasApplication>().AsNoTracking()
+                    join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId
+                    join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
+                    where a.StudentPersonId == person
+                    orderby a.SubmittedAtUtc descending, a.CreatedAt descending, i.Id
+                    select new
+                    {
+                        applicationId = a.Id,
+                        applicationSchemeId = i.Id,
+                        applicationReference = a.ApplicationNo,
+                        schemeId = s.Id,
+                        schemeName = s.Name,
+                        applicationStatus = a.StatusCode,
+                        submittedDate = a.SubmittedAtUtc,
+                        itemStatus = i.StatusCode,
+                        schemeStatus = s.StatusCode,
+                        canReview = true,
+                        i.RejectionNotes,
+                        i.ApprovedAmount,
+                        i.ApprovedComponentsJson,
+                        i.IsActive,
+                        isReserved = db.Set<FasVoucherRedemption>().Any(r =>
+                            r.FasApplicationSchemeId == i.Id && r.StatusCode == "PENDING"),
+                        i.ValidFrom,
+                        i.ValidTo,
+                        redeemedAt = i.RedeemedAtUtc
+                    };
 
-        return rows.Select(x => new
+        var totalCount = await query.LongCountAsync(ct);
+        var rows = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var items = rows.Select(x => new
         {
             x.applicationId,
             x.applicationSchemeId,
@@ -763,6 +771,8 @@ public sealed class StudentFasApplicationService(
             x.ValidTo,
             x.redeemedAt
         }).ToList();
+
+        return new { items, page, pageSize, totalCount };
     }
     public async Task<object> Summary(CancellationToken ct)
     {
