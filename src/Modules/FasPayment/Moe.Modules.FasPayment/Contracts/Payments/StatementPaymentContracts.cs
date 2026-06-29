@@ -1,3 +1,5 @@
+using Moe.Modules.CourseBilling.Contracts.BillingStatements;
+
 namespace Moe.Modules.FasPayment.Contracts.Payments;
 
 public sealed record StatementPaymentPreviewResponse(
@@ -58,7 +60,9 @@ public sealed record PendingEnrollmentPaymentResponse(
     long? PaymentCheckoutSessionId,
     DateTime? CheckoutExpiresAtUtc,
     IReadOnlyCollection<long> BillIds,
-    IReadOnlyCollection<PendingEnrollmentFasSubsidyResponse> ReservedFasSubsidies);
+    IReadOnlyCollection<PendingEnrollmentFasSubsidyResponse> ReservedFasSubsidies,
+    BillingStatementItemResponse? BillItem = null,
+    StatementPaymentPreviewResponse? PaymentPreview = null);
 
 public sealed record PendingEnrollmentFasSubsidyResponse(
     long FasApplicationSchemeId,
