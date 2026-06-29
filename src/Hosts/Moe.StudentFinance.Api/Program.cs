@@ -18,7 +18,6 @@ using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
 using Moe.Modules.MailDelivery;
-using Moe.Modules.MailDelivery.Infrastructure.Notifications;
 using Moe.Modules.Mfa;
 using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
@@ -247,7 +246,6 @@ if (!app.Environment.IsDevelopment())
 app.UseRouting();
 app.UseCors();
 app.UseRateLimiter();
-app.UseCreateStudentMailNotification();
 app.UseSharedInfrastructure();
 app.MapControllers();
 app.MapHealthChecks("/health/ready");
