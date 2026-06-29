@@ -11,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignSta
 
 internal sealed class ChangeCampaignStatusCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IDynamicTopUpContractRepository contracts,
     IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
@@ -32,6 +33,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         }
 
         var newStatusCode = command.NewStatusCode.ToUpperInvariant();
+        var nowUtc = clock.UtcNow.UtcDateTime;
 
         if (newStatusCode == TopUpCampaignStatusCodes.Active)
         {
@@ -47,17 +49,48 @@ internal sealed class ChangeCampaignStatusCommandHandler(
                 return Result.Failure(TopUpErrors.EmptyFixedRecipients);
             }
 
-            SetNextRunAt(campaign, clock.UtcNow.UtcDateTime);
+            // Mid-Cycle Freeze: if resuming from a PAUSED state, shift all active contract
+            // NextPaymentDates forward by the exact pause duration before re-enabling the run engine.
+            // This prevents stale dates from triggering immediate double-billing on resume.
+            if (campaign.CampaignStatusCode == TopUpCampaignStatusCodes.Paused)
+            {
+                TimeSpan? pauseDuration = campaign.RecordResume(nowUtc);
+                if (pauseDuration is { TotalSeconds: > 0 })
+                {
+                    await contracts.ShiftContractPaymentDatesAsync(
+                        campaign.Id, pauseDuration.Value, nowUtc, cancellationToken);
+                }
+            }
+
+            SetNextRunAt(campaign, nowUtc);
         }
-        else if (newStatusCode == TopUpCampaignStatusCodes.Paused || newStatusCode == TopUpCampaignStatusCodes.Cancelled)
+        else if (newStatusCode == TopUpCampaignStatusCodes.Paused)
+        {
+            // Stamp the pause anchor on the campaign domain object.
+            // RecordPause also nulls NextRunAtUtc so the scheduler skips this campaign.
+            campaign.RecordPause(nowUtc);
+        }
+        else if (newStatusCode == TopUpCampaignStatusCodes.Cancelled)
         {
             campaign.SetNextRunAt(null);
+            
+            // Ick 3 fix: clear PausedAtUtc in case it was paused before cancelling.
+            // RecordResume normally handles this, but direct cancel bypasses it.
+            if (campaign.CampaignStatusCode == TopUpCampaignStatusCodes.Paused)
+            {
+                campaign.RecordResume(nowUtc); // returns the duration but we discard it, just clears the anchor
+            }
+
+            // Cluster Fix — Orphan Termination: all ACTIVE contracts under a cancelled campaign
+            // are perpetual orphans. The run engine will never fire them. Terminate them now
+            // so the student ledger correctly shows no further disbursements are expected.
+            await contracts.CancelAllActiveContractsAsync(campaign.Id, nowUtc, cancellationToken);
         }
 
         Result statusResult = campaign.ChangeStatus(
             newStatusCode,
             currentUser.UserAccountId ?? 0,
-            clock.UtcNow.UtcDateTime);
+            nowUtc);
 
         if (statusResult.IsFailure)
         {

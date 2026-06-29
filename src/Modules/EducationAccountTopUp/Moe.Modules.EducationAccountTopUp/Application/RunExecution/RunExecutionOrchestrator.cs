@@ -11,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 public sealed class RunExecutionOrchestrator(
     IRecipientProcessingService recipientProcessor,
     ITopUpCampaignRepository campaigns,
+    IDynamicTopUpContractRepository contracts,
     ITopUpRunRepository runs,
     ITopUpExecutionEventPublisher events,
     ITopUpExecutionMetrics metrics,
@@ -145,6 +146,7 @@ public sealed class RunExecutionOrchestrator(
         await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(
             run,
             campaigns,
+            contracts,
             completedAtUtc,
             cancellationToken);
 

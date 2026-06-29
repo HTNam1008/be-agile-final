@@ -9,6 +9,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 
 public sealed class RunReconciliationService(
     ITopUpCampaignRepository campaigns,
+    IDynamicTopUpContractRepository contracts,
     ITopUpRunRepository runs,
     ITopUpTransactionRepository transactions,
     IUnitOfWork unitOfWork,
@@ -57,7 +58,7 @@ public sealed class RunReconciliationService(
                 return Result<ReconciliationResult>.Failure(finalize.Error);
             }
 
-            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, clock.UtcNow.UtcDateTime, cancellationToken);
+            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, contracts, clock.UtcNow.UtcDateTime, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
             return Result<ReconciliationResult>.Success(

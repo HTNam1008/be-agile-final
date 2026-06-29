@@ -9,6 +9,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution.CancelRun;
 
 internal sealed class CancelTopUpRunCommandHandler(
     ITopUpCampaignRepository campaigns,
+    IDynamicTopUpContractRepository contracts,
     ITopUpRunRepository runs,
     ITopUpTransactionRepository transactions,
     IRunExecutionOrchestrator orchestrator,
@@ -49,7 +50,7 @@ internal sealed class CancelTopUpRunCommandHandler(
                     tx.Skip("Run cancelled manually during execution", clock.UtcNow.UtcDateTime);
                 }
 
-                await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, clock.UtcNow.UtcDateTime, cancellationToken);
+                await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, contracts, clock.UtcNow.UtcDateTime, cancellationToken);
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
         }
@@ -61,7 +62,7 @@ internal sealed class CancelTopUpRunCommandHandler(
             {
                 return cancelResult;
             }
-            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, clock.UtcNow.UtcDateTime, cancellationToken);
+            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, contracts, clock.UtcNow.UtcDateTime, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         else
