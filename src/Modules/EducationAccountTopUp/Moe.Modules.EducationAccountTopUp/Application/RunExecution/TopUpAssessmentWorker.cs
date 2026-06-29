@@ -83,7 +83,10 @@ public sealed class TopUpAssessmentWorker(
                     allQualifyingIds.AddRange(chunkIds);
                     var chunkSet = chunkIds.ToHashSet();
 
-                    var existingContracts = await contractRepo.GetActiveByCampaignAndAccountsAsync(campaign.Id, chunkIds, ct);
+                    // Ick 1 fix: check for ALL existing contracts, not just ACTIVE ones.
+                    // If a student got an INSTANT contract, got paid, and it became COMPLETED,
+                    // they still have an existing contract and should not get a second one.
+                    var existingContracts = await contractRepo.GetByCampaignAndAccountsAsync(campaign.Id, chunkIds, ct);
                     var existingByAccount = existingContracts.ToDictionary(c => c.EducationAccountId);
 
                     foreach (long accountId in chunkSet)

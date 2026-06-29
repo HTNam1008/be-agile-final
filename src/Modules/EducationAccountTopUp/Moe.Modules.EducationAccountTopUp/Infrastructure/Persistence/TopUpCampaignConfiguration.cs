@@ -32,5 +32,6 @@ internal sealed class TopUpCampaignConfiguration : IEntityTypeConfiguration<TopU
         builder.Property(x => x.BudgetReserved).HasPrecision(19, 2).HasDefaultValue(0);
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
+        builder.Property(x => x.PausedAtUtc).HasColumnName("PausedAt");
     }
 }

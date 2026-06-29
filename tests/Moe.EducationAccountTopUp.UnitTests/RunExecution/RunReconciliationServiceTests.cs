@@ -158,6 +158,7 @@ public sealed class RunReconciliationServiceTests
     {
         return new RunReconciliationService(
             _campaigns,
+            new FakeDynamicTopUpContractRepository(),
             _runs,
             _transactions,
             _unitOfWork,
@@ -372,5 +373,20 @@ public sealed class RunReconciliationServiceTests
     private sealed class FakeClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+    }
+
+    private sealed class FakeDynamicTopUpContractRepository : IDynamicTopUpContractRepository
+    {
+        public Task<DynamicTopUpContract?> GetByCampaignAndAccountAsync(long campaignId, long accountId, CancellationToken cancellationToken = default) => Task.FromResult<DynamicTopUpContract?>(null);
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetActiveByCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetDueForPaymentAsync(DateTime nowUtc, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task AddAsync(DynamicTopUpContract contract, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetActiveByCampaignAndAccountsAsync(long campaignId, IEnumerable<long> accountIds, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetByCampaignAndAccountsAsync(long campaignId, IEnumerable<long> accountIds, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task SuspendNonQualifyingContractsAsync(long campaignId, IEnumerable<long> qualifyingAccountIds, DateTime suspendedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetByAccountIdAsync(long accountId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task ShiftContractPaymentDatesAsync(long campaignId, TimeSpan pauseDuration, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CancelAllActiveContractsAsync(long campaignId, DateTime cancelledAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CancelNonFixedContractActiveContractsAsync(long campaignId, DateTime completedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

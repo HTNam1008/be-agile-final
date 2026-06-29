@@ -276,11 +276,20 @@ public sealed class TopUpRunWorkerTests
             => Task.CompletedTask;
         public Task<IReadOnlyList<DynamicTopUpContract>> GetActiveByCampaignAndAccountsAsync(long campaignId, IEnumerable<long> accountIds, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task<IReadOnlyList<DynamicTopUpContract>> GetByCampaignAndAccountsAsync(long campaignId, IEnumerable<long> accountIds, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
         public Task SuspendNonQualifyingContractsAsync(long campaignId, IEnumerable<long> qualifyingAccountIds, DateTime suspendedAtUtc, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
         public Task<IReadOnlyList<DynamicTopUpContract>> GetByAccountIdAsync(long accountId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DynamicTopUpContract>>([]);
+        public Task ShiftContractPaymentDatesAsync(long campaignId, TimeSpan pauseDuration, DateTime nowUtc, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task CancelAllActiveContractsAsync(long campaignId, DateTime cancelledAtUtc, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task CancelNonFixedContractActiveContractsAsync(long campaignId, DateTime completedAtUtc, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
+
 
     private sealed class FakeTopUpRunRepository : ITopUpRunRepository
     {
