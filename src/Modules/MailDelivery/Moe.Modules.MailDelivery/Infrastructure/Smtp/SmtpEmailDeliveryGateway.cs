@@ -64,6 +64,10 @@ internal sealed class SmtpEmailDeliveryGateway(
                 message.PlainTextBody,
                 Encoding.UTF8,
                 "text/plain"));
+            mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
+                message.HtmlBody,
+                Encoding.UTF8,
+                "text/html"));
         }
 
         return mail;
