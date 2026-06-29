@@ -40,7 +40,7 @@ At the start of each run, the seed script deletes prior TEST-DATA-002 rows by th
 - `QA_TEST_AUTO002_%`
 - `QA-AUTO002-EA-%`
 - `QA_TEST_AUTO002_SCHOOL_B`
-- Excel NRICs `S912001A` through `S912009J`
+- Excel NRICs `S912001A` through `S912009J`, plus TEST-DATA-003 MockPass-aligned NRICs `S7000051E` through `S7000060P`
 
 ## Swagger Flow
 
@@ -71,10 +71,24 @@ Expected response:
 | 8 | Duplicate-in-file NRIC: row 8 `IdentityNumber = S912001A`, same as row 2 | `Failed`, `IDENTITY.STUDENT_IDENTITY_ALREADY_EXISTS` |
 | 9 | Blank required field: `FullName` is empty | `Failed`, `BULK_IMPORT.ROW_VALIDATION_FAILED`; message: `'Full Name' must not be empty.` |
 | 10 | `OrganizationId = 2` plus `SchoolName = QA TEST AUTO002 School B` | `Failed`, `IDENTITY.SCHOOL_IDENTIFIERS_CONFLICT` |
+| 11 | TEST-DATA-003 MockPass-aligned `BACHELOR` row, `IdentityNumber = S7000051E` | `Succeeded` |
+| 12 | TEST-DATA-003 MockPass-aligned `MASTER` row with blank `CitizenshipStatusCode`, `IdentityNumber = S7000052F` | `Succeeded` |
+| 13 | TEST-DATA-003 MockPass-aligned `PHD` row, `IdentityNumber = S7000053G` | `Succeeded` |
+| 14 | TEST-DATA-003 MockPass-aligned `BACHELOR` row with blank `CitizenshipStatusCode`, `IdentityNumber = S7000054H` | `Succeeded` |
+| 15 | TEST-DATA-003 MockPass-aligned `BACHELOR` row with `VALID_PASS_HOLDER`, `IdentityNumber = S7000055J` | `Succeeded` |
+| 16 | TEST-DATA-003 MockPass-aligned future `StartDate` row, `IdentityNumber = S7000056K` | `Succeeded` |
+| 17 | TEST-DATA-003 MockPass-aligned organization-only school resolution row, `IdentityNumber = S7000057L` | `Succeeded` |
+| 18 | TEST-DATA-003 MockPass-aligned school-name-only row with blank class/citizenship, `IdentityNumber = S7000058M` | `Succeeded` |
+| 19 | TEST-DATA-003 MockPass-aligned `PHD` row with `VALID_PASS_HOLDER`, `IdentityNumber = S7000059N` | `Succeeded` |
+| 20 | TEST-DATA-003 MockPass-aligned organization-only secondary row with blank `CitizenshipStatusCode`, `IdentityNumber = S7000060P` | `Succeeded` |
 
-Expected bulk totals: `totalRows = 9`, `succeededCount = 6`, `failedCount = 3`.
+Expected bulk totals after TEST-DATA-003 expansion: `totalRows = 19`, `succeededCount = 16`, `failedCount = 3`.
+
+TEST-DATA-003 adds 10 valid MockPass-aligned rows to the existing 9-row TEST-DATA-002 workbook. The expanded fixture therefore has 19 data rows, not 20 data rows; Excel row 20 is the final data row because Excel row 1 is the header. The three original intentionally invalid rows remain rows 8-10.
 
 Verification note, generated on 2026-06-24: the workbook was posted once to the real bulk-import HTTP endpoint through a fresh integration host/fake-auth harness, not the full xUnit suite. Observed response was `HTTP 200`, `totalRows = 9`, `succeededCount = 6`, `failedCount = 3`. Row 8 was verified as a duplicate-in-file case because row 2 and row 8 both carry `IdentityNumber = S912001A`; the fresh harness did not contain prior `S91200x` fixture identities before this request. Row 9 failed because `FullName` is blank, with response message `'Full Name' must not be empty.` Row 10 failed with `IDENTITY.SCHOOL_IDENTIFIERS_CONFLICT`.
+
+Lifecycle count note: the first-run lifecycle counts below were verified against the pre-TEST-DATA-003 workbook (`totalRows = 9`, `succeededCount = 6`, `failedCount = 3`). After the TEST-DATA-003 expansion, re-run the seed/import/lifecycle flow against a freshly seeded database before treating the lifecycle counts as final.
 
 3. Trigger lifecycle immediately:
 

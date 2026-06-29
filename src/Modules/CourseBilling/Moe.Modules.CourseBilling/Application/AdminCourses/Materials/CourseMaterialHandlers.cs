@@ -51,6 +51,11 @@ internal sealed class AddCourseMaterialCommandHandler(
             return Result<CourseMaterialDto>.Failure(CourseErrors.InvalidFile);
         }
 
+        if (CourseMaterialFileHelper.ExceedsMaxFileSize(request.File))
+        {
+            return Result<CourseMaterialDto>.Failure(CourseErrors.MaterialFileTooLarge);
+        }
+
         StoredCourseMaterialFile stored = await CourseMaterialFileHelper.StoreFileAsync(storage, command.CourseId, request.File, cancellationToken);
         CourseMaterial material = new(
             command.CourseId,
@@ -137,6 +142,11 @@ internal sealed class ReplaceCourseMaterialFileCommandHandler(
         if (request.File is null || request.File.Length <= 0)
         {
             return Result<CourseMaterialDto>.Failure(CourseErrors.InvalidFile);
+        }
+
+        if (CourseMaterialFileHelper.ExceedsMaxFileSize(request.File))
+        {
+            return Result<CourseMaterialDto>.Failure(CourseErrors.MaterialFileTooLarge);
         }
 
         CourseMaterial? material = await access.Courses.FindMaterialAsync(

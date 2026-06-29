@@ -81,6 +81,8 @@ internal sealed class DownloadStudentCourseMaterialHandler(
     ICurrentUser currentUser,
     IStudentCourseContentRepository contents,
     ICourseMaterialStorageService storage,
+    ICourseMaterialPreviewConverter previewConverter,
+    ICourseMaterialPreviewCache previewCache,
     IClock clock) : IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>
 {
     public async Task<Result<StudentCourseMaterialDownload>> Handle(
@@ -103,9 +105,62 @@ internal sealed class DownloadStudentCourseMaterialHandler(
             return Result<StudentCourseMaterialDownload>.Failure(CourseErrors.MaterialNotFound);
 
         Stream content = await storage.OpenReadAsync(material.StoragePath, cancellationToken);
+        if (query.PreviewAsPdf)
+        {
+            if (IsPdfMaterial(material))
+            {
+                return Result<StudentCourseMaterialDownload>.Success(new(
+                    content,
+                    "application/pdf",
+                    Path.ChangeExtension(material.OriginalFileName, ".pdf")));
+            }
+
+            Stream? cachedPreview = await previewCache.GetPdfAsync(material, cancellationToken);
+            if (cachedPreview is not null)
+            {
+                await content.DisposeAsync();
+                return Result<StudentCourseMaterialDownload>.Success(new(
+                    cachedPreview,
+                    "application/pdf",
+                    Path.ChangeExtension(material.OriginalFileName, ".pdf")));
+            }
+
+            Stream? preview = await previewConverter.TryConvertToPdfAsync(
+                material.OriginalFileName,
+                material.ContentType,
+                content,
+                cancellationToken);
+            await content.DisposeAsync();
+
+            if (preview is null)
+                return Result<StudentCourseMaterialDownload>.Failure(CourseErrors.MaterialPreviewUnavailable);
+
+            await using (preview)
+            {
+                byte[] previewBytes = await ReadAllBytesAsync(preview, cancellationToken);
+                await previewCache.SetPdfAsync(material, previewBytes, cancellationToken);
+
+                return Result<StudentCourseMaterialDownload>.Success(new(
+                    new MemoryStream(previewBytes, writable: false),
+                    "application/pdf",
+                    Path.ChangeExtension(material.OriginalFileName, ".pdf")));
+            }
+        }
+
         return Result<StudentCourseMaterialDownload>.Success(new(
             content,
             material.ContentType,
             material.OriginalFileName));
+    }
+
+    private static bool IsPdfMaterial(CourseMaterial material)
+        => material.ContentType.Contains("pdf", StringComparison.OrdinalIgnoreCase)
+           || Path.GetExtension(material.OriginalFileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        await using MemoryStream memory = new();
+        await stream.CopyToAsync(memory, cancellationToken);
+        return memory.ToArray();
     }
 }

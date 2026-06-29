@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -6,7 +7,7 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
-internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) : IStudentDashboardCourseRepository
+internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext, IClock clock) : IStudentDashboardCourseRepository
 {
     public async Task<int> CountCurrentCoursesAsync(
         long personId,
@@ -71,7 +72,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext) :
         CancellationToken cancellationToken)
     {
         string? normalizedSearch = Normalize(search);
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
 
         IQueryable<long> activeOrganizationIds = dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()

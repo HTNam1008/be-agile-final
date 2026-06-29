@@ -15,6 +15,9 @@ internal static class PaymentApplicationErrors
     public static readonly Error CancellationNotAllowed = new(
         "PAYMENT.CANCELLATION_NOT_ALLOWED",
         "This enrollment cannot be cancelled under the configured course refund policy.");
+    public static readonly Error CancellationOutstandingBillsRequired = new(
+        "PAYMENT.CANCELLATION_OUTSTANDING_BILLS_REQUIRED",
+        "This course has started and has outstanding bills. Please settle the bills or contact your school admin.");
     public static readonly Error IdempotencyKeyRequired = new(
         "PAYMENT.IDEMPOTENCY_KEY_REQUIRED",
         "An idempotency key is required to cancel an enrollment.");
