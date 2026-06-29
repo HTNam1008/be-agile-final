@@ -490,14 +490,6 @@ internal sealed class DeferBillingStatementHandler(
         if (selectedBills.Length == 0)
             return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.NoDeferrableBills);
 
-        long[] organizationIds = selectedBills
-            .Select(bill => bill.OrganizationId)
-            .Distinct()
-            .ToArray();
-        if (organizationIds.Length != 1)
-            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
-
-        BillingPolicySnapshot policy = await billing.GetBillingPolicyAsync(organizationIds[0], ct);
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
         decimal availableBalance = balance?.AvailableBalance ?? 0m;
         DeferCoverableBillResponse[] coverableBills = selectedBills
@@ -527,15 +519,12 @@ internal sealed class DeferBillingStatementHandler(
             command.StatementId,
             personId,
             selectedBills.Select(bill => bill.BillId).ToArray(),
-            policy.MaxDeferralCount,
             actorId,
             clock.UtcNow.UtcDateTime,
             ct);
         if (deferResult.IsFailure)
         {
-            return deferResult.Error.Code == "BILL.DEFERRAL_LIMIT_REACHED"
-                ? Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.DeferralLimitReached)
-                : Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
         }
 
         return Result<DeferBillingStatementResponse>.Success(new DeferBillingStatementResponse(Deferred: true));
