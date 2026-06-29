@@ -224,6 +224,11 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(campaign);
         }
 
+        public Task<IReadOnlyList<TopUpCampaign>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpCampaign>>(_campaigns.Values.Where(c => ids.Contains(c.Id)).ToList());
+        }
+
         public Task<bool> CampaignCodeExistsAsync(
             long organizationId,
             string campaignCode,
@@ -307,6 +312,11 @@ public sealed class RequestManualRunCommandHandlerTests
         public Task<TopUpRun?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_runs.SingleOrDefault(x => x.Id == id));
+        }
+
+        public Task<IReadOnlyList<TopUpRun>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpRun>>(_runs.Where(r => ids.Contains(r.Id)).ToList());
         }
 
         public Task<TopUpRun?> GetByIdempotencyKeyAsync(

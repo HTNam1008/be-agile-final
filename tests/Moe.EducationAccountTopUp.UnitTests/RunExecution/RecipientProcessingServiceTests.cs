@@ -292,6 +292,25 @@ public sealed class RecipientProcessingServiceTests
             return Task.FromResult(_transactions.Where(x => x.EducationAccountId == educationAccountId).ToList());
         }
 
+        public Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(
+            long educationAccountId,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+        {
+            var all = _transactions.Where(x => x.EducationAccountId == educationAccountId)
+                .OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc)
+                .ToList();
+            return Task.FromResult<(List<TopUpTransaction>, long)>((all.Skip(skip).Take(take).ToList(), all.Count));
+        }
+
+        public Task<long> CountByAccountIdAsync(
+            long educationAccountId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult((long)_transactions.Count(x => x.EducationAccountId == educationAccountId));
+        }
+
         public void Add(TopUpTransaction transaction)
         {
             AddCalls++;

@@ -7,6 +7,10 @@ public interface ITopUpCampaignRepository
 {
     Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<TopUpCampaign>> GetByIdsAsync(
+        IReadOnlyList<long> ids,
+        CancellationToken cancellationToken = default);
+
     Task<bool> CampaignCodeExistsAsync(
         long organizationId,
         string campaignCode,
