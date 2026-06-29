@@ -37,6 +37,14 @@ internal sealed class UpdateCampaignCommandHandler(
         }
 
         var request = command.Request;
+
+        if (!string.IsNullOrWhiteSpace(request.CampaignCode))
+        {
+            Result codeResult = campaign.UpdateCampaignCode(request.CampaignCode);
+            if (codeResult.IsFailure)
+                return codeResult;
+        }
+
         var scheduleTypeCode = Enum.Parse<ScheduleTypeCode>(request.ScheduleTypeCode, ignoreCase: true);
 
         string? frequencyCode = null;

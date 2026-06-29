@@ -42,6 +42,7 @@ public class CreateCampaignRequest
 
 public class UpdateCampaignRequest
 {
+    public string? CampaignCode { get; set; }
     public string CampaignName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal DefaultTopUpAmount { get; set; }

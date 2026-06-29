@@ -69,6 +69,12 @@ public static class TopUpErrors
     public static readonly Error CannotChangeMaxTotalAmountAfterActive =
         new("TopUp.CannotChangeMaxTotalAmountAfterActive", "MaxTotalAmount is immutable once campaign is active. Budget caps cannot be altered after execution begins.");
 
+    public static readonly Error CampaignCodeCannotBeEmpty =
+        new("TopUp.CampaignCodeCannotBeEmpty", "Campaign code cannot be empty.");
+
+    public static readonly Error CannotChangeCampaignCodeAfterActive =
+        new("TopUp.CannotChangeCampaignCodeAfterActive", "Campaign code is immutable once campaign is active.");
+
     public static readonly Error MaxTotalAmountBelowPerPayment =
         new("TopUp.MaxTotalAmountBelowPerPayment", "MaxTotalAmount must be greater than or equal to DefaultTopUpAmount.");
 
