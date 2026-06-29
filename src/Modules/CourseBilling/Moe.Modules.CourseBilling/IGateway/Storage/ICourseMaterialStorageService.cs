@@ -20,4 +20,9 @@ public interface ICourseMaterialStorageService
         CancellationToken cancellationToken);
 
     Task<Stream> OpenReadAsync(string storagePath, CancellationToken cancellationToken);
+
+    Task<Uri?> CreateReadUriAsync(
+        string storagePath,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken);
 }
