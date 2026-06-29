@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Api;
@@ -49,7 +50,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<PublishFasSchemeCommand, CreateFasSchemeResponse>, PublishFasSchemeHandler>();
         services.AddScoped<ICommandHandler<DisableFasSchemeCommand, CreateFasSchemeResponse>, DisableFasSchemeHandler>();
         services.AddScoped<ICommandHandler<DeleteFasSchemeCommand, CreateFasSchemeResponse>, DeleteFasSchemeHandler>();
-        services.AddScoped<IQueryHandler<ListFasSchemesQuery, FasSchemeListResponse>, ListFasSchemesHandler>();
+        services.AddScoped<IQueryHandler<ListFasSchemesQuery, PageResponse<FasSchemeListItem>>, ListFasSchemesHandler>();
         services.AddScoped<IQueryHandler<GetFasSchemeQuery, FasSchemeDetail>, GetFasSchemeHandler>();
         services.AddScoped<IValidator<CreateFasSchemeRequest>, CreateFasSchemeRequestValidator>();
         services.AddScoped<IValidator<ListFasSchemesRequest>, ListFasSchemesRequestValidator>();

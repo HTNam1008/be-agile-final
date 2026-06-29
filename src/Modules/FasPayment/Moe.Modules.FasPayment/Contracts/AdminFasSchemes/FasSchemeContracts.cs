@@ -1,6 +1,6 @@
 namespace Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 
-public sealed record ListFasSchemesRequest(string? Status = null, string? Search = null);
+public sealed record ListFasSchemesRequest(string? Status = null, string? Search = null, int Page = 1, int PageSize = 20);
 
 public sealed record CreateFasSchemeRequest(
     string SchemeCode, string GrantCode, string Name, string? Description,
@@ -20,7 +20,6 @@ public sealed record FasTierCriteriaValue(
     IReadOnlyList<string>? Nationalities);
 
 public sealed record CreateFasSchemeResponse(long SchemeId, string SchemeCode, string GrantCode, string Status);
-public sealed record FasSchemeListResponse(IReadOnlyList<FasSchemeListItem> Items);
 public sealed record FasSchemeListItem(long SchemeId, string SchemeCode, string GrantCode, string Name,
     string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds,
     int ApplicationCount);

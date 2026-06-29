@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Messaging;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 
 namespace Moe.Modules.FasPayment.Application.AdminFasSchemes;
@@ -10,5 +11,5 @@ internal sealed record DeleteFasSchemeDraftCommand(long SchemeId) : ICommand<boo
 internal sealed record PublishFasSchemeCommand(long SchemeId) : ICommand<CreateFasSchemeResponse>;
 internal sealed record DisableFasSchemeCommand(long SchemeId) : ICommand<CreateFasSchemeResponse>;
 internal sealed record DeleteFasSchemeCommand(long SchemeId) : ICommand<CreateFasSchemeResponse>;
-internal sealed record ListFasSchemesQuery(string? Status, string? Search) : IQuery<FasSchemeListResponse>;
+internal sealed record ListFasSchemesQuery(string? Status, string? Search, int Page, int PageSize) : IQuery<PageResponse<FasSchemeListItem>>;
 internal sealed record GetFasSchemeQuery(long SchemeId) : IQuery<FasSchemeDetail>;
