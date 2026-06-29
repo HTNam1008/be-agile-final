@@ -58,3 +58,18 @@ public sealed record PendingEnrollmentPaymentResponse(
     IReadOnlyCollection<long> BillIds);
 
 public sealed record DeferBillingStatementRequest(IReadOnlyCollection<long>? BillIds = null);
+
+public sealed record DeferBillingStatementResponse(
+    bool Deferred,
+    string? BlockedReasonCode = null,
+    decimal? AvailableBalance = null,
+    IReadOnlyCollection<long>? CoverableBillIds = null,
+    IReadOnlyCollection<DeferCoverableBillResponse>? CoverableBills = null);
+
+public sealed record DeferCoverableBillResponse(
+    long BillId,
+    long BillingStatementItemId,
+    decimal OutstandingAmount,
+    DateOnly CurrentDueDate,
+    string? CourseCode,
+    string? CourseName);

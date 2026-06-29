@@ -139,7 +139,9 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
                 bill.OutstandingAmount,
                 bill.CurrentDueDate,
                 bill.OriginalDueDate,
-                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1))
+                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1,
+                course.CourseCode,
+                course.CourseName))
             .ToArrayAsync(cancellationToken);
         decimal total = bills.Sum(x => x.OutstandingAmount);
         return total <= 0m ? null : new(statement.Id, personId, total, statement.CurrencyCode, bills);

@@ -35,7 +35,9 @@ public sealed record PayableStatementBill(
     decimal OutstandingAmount,
     DateOnly CurrentDueDate,
     DateOnly OriginalDueDate,
-    bool IsInstallment);
+    bool IsInstallment,
+    string? CourseCode = null,
+    string? CourseName = null);
 
 public sealed record BillPaymentAllocation(long BillId, decimal Amount);
 

@@ -783,7 +783,14 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             });
 
         await AssertStatusAsync(HttpStatusCode.BadRequest, defer);
-        Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", await defer.Content.ReadAsStringAsync());
+        string deferBody = await defer.Content.ReadAsStringAsync();
+        Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", deferBody);
+        using JsonDocument deferJson = JsonDocument.Parse(deferBody);
+        JsonElement deferData = deferJson.RootElement.GetProperty("data");
+        Assert.Equal(50m, deferData.GetProperty("availableBalance").GetDecimal());
+        Assert.Contains(
+            statement.BillId,
+            deferData.GetProperty("coverableBillIds").EnumerateArray().Select(item => item.GetInt64()));
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -793,6 +800,82 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal(0, bill.DeferralCount);
         Assert.Equal(firstDueMonth, bill.CurrentDueDate);
         Assert.Equal("ISSUED", bill.BillStatusCode);
+    }
+
+    [Fact]
+    public async Task MultiBillDefer_ReturnsCoverableBillDetails_AndAllowsDeferringRemainingBills()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse smallInstallmentCourse = await CreateCourseAsync(
+            fee: 90m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        TestCourse largeInstallmentCourse = await CreateCourseAsync(
+            fee: 150m,
+            plans: [("Three monthly payments", "INSTALLMENT", 3)]);
+        await JoinSuccessfullyAsync(student, smallInstallmentCourse, "INSTALLMENT-3");
+        await JoinSuccessfullyAsync(student, largeInstallmentCourse, "INSTALLMENT-3");
+        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+
+        using HttpResponseMessage statementResponse = await SendStudentAsync(
+            student,
+            HttpMethod.Get,
+            $"/api/eservice/v1/billing-statements/{firstDueMonth.Year}/{firstDueMonth.Month}");
+        await AssertStatusAsync(HttpStatusCode.OK, statementResponse);
+        JsonElement statement = await ReadDataAsync(statementResponse);
+        long statementId = statement.GetProperty("billingStatementId").GetInt64();
+        var statementItems = statement.GetProperty("items")
+            .EnumerateArray()
+            .Select(item => new
+            {
+                BillId = item.GetProperty("billId").GetInt64(),
+                OutstandingAmount = item.GetProperty("outstandingAmount").GetDecimal()
+            })
+            .OrderBy(item => item.OutstandingAmount)
+            .ToArray();
+        Assert.Equal(2, statementItems.Length);
+        long coverableBillId = statementItems[0].BillId;
+        long remainingBillId = statementItems[1].BillId;
+        Assert.True(statementItems[0].OutstandingAmount <= 40m);
+        Assert.True(statementItems[1].OutstandingAmount > 40m);
+
+        using HttpResponseMessage blockedDefer = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statementId}/defer",
+            new
+            {
+                billIds = statementItems.Select(item => item.BillId).ToArray()
+            });
+        await AssertStatusAsync(HttpStatusCode.BadRequest, blockedDefer);
+        string blockedBody = await blockedDefer.Content.ReadAsStringAsync();
+        Assert.Contains("PAYMENT.EDUCATION_ACCOUNT_CAN_COVER_PAYMENT", blockedBody);
+        using JsonDocument blockedJson = JsonDocument.Parse(blockedBody);
+        JsonElement blockedData = blockedJson.RootElement.GetProperty("data");
+        Assert.Equal(40m, blockedData.GetProperty("availableBalance").GetDecimal());
+        Assert.Equal(
+            [coverableBillId],
+            blockedData.GetProperty("coverableBillIds").EnumerateArray().Select(item => item.GetInt64()).ToArray());
+        Assert.Equal(
+            coverableBillId,
+            blockedData.GetProperty("coverableBills").EnumerateArray().Single().GetProperty("billId").GetInt64());
+
+        using HttpResponseMessage deferRemaining = await SendStudentAsync(
+            student,
+            HttpMethod.Post,
+            $"/api/eservice/v1/billing-statements/{statementId}/defer",
+            new
+            {
+                billIds = new[] { remainingBillId }
+            });
+        await AssertStatusAsync(HttpStatusCode.OK, deferRemaining);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Bill coverableBill = await db.Set<Bill>().SingleAsync(x => x.Id == coverableBillId);
+        Bill deferredBill = await db.Set<Bill>().SingleAsync(x => x.Id == remainingBillId);
+        Assert.Equal(0, coverableBill.DeferralCount);
+        Assert.Equal(1, deferredBill.DeferralCount);
+        Assert.Equal(firstDueMonth.AddMonths(1), deferredBill.CurrentDueDate);
     }
 
     [Fact]
