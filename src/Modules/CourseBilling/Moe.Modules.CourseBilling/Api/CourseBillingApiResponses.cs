@@ -48,8 +48,6 @@ internal static class CourseBillingApiResponses
             "COURSE.CONTENT_NOT_OPEN" => ApiResponseCodes.Conflict,
             "COURSE.CONTENT_LOCKED" => ApiResponseCodes.Forbidden,
             "BILL.NOT_FOUND" => ApiResponseCodes.NotFound,
-            "BILL.DEFER_EXTENSION_REQUEST_NOT_FOUND" => ApiResponseCodes.NotFound,
-            "BILL.DEFER_EXTENSION_DUPLICATE_PENDING" => ApiResponseCodes.Conflict,
             "COURSE.PERSON_NOT_IN_ORGANIZATION" => ApiResponseCodes.Conflict,
             _ => ApiResponseCodes.BadRequest
         };

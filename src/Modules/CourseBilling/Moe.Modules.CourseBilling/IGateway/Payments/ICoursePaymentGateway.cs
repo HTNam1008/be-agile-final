@@ -41,11 +41,6 @@ public sealed record PayableStatementBill(
 
 public sealed record BillPaymentAllocation(long BillId, decimal Amount);
 
-public sealed record BillingPolicySnapshot(
-    long OrganizationId,
-    int MaxDeferralCount,
-    int RejectionGracePeriodDays);
-
 public interface ICoursePaymentPlanGateway
 {
     Task<CourseBillingPlan?> FindPlanAsync(
@@ -91,10 +86,7 @@ public interface ICoursePaymentGateway
         long statementId,
         long personId,
         IReadOnlyCollection<long> billIds,
-        int maxDeferralCount,
         long actorLoginAccountId,
         DateTime utcNow,
         CancellationToken cancellationToken);
-
-    Task<BillingPolicySnapshot> GetBillingPolicyAsync(long organizationId, CancellationToken cancellationToken);
 }

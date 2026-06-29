@@ -883,7 +883,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
-    public async Task FailedFullPayment_CannotBeDeferred()
+    public async Task FullPayment_CannotBeDeferred()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
         TestCourse course = await CreateCourseAsync(
@@ -891,12 +891,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             plans: [("Full payment", "FULL_PAYMENT", 1)]);
         await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
         StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
-
-        using HttpResponseMessage payResponse = await PayStatementAsync(student, statement.StatementId);
-        await AssertStatusAsync(HttpStatusCode.Created, payResponse);
-        JsonElement pay = await ReadDataAsync(payResponse);
-        long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
-        await PostWebhookAsync("failure", checkoutId, 6000, $"evt_full_fail_{Guid.NewGuid():N}");
 
         using HttpResponseMessage defer = await SendStudentAsync(
             student,
@@ -912,7 +906,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
-    public async Task FailedOnlineOnlyInstallment_CannotBeDeferred_WhenEducationAccountCanCoverBill()
+    public async Task Installment_CannotBeDeferred_WhenEducationAccountCanCoverBill()
     {
         TestStudent student = await CreateStudentAsync(balance: 50m);
         TestCourse course = await CreateCourseAsync(
@@ -921,15 +915,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
         DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
         StatementInfo statement = await GetStatementAsync(student, firstDueMonth.Year, firstDueMonth.Month);
-
-        using HttpResponseMessage payResponse = await PayStatementAsync(
-            student,
-            statement.StatementId,
-            "ONLINE_ONLY");
-        await AssertStatusAsync(HttpStatusCode.Created, payResponse);
-        JsonElement pay = await ReadDataAsync(payResponse);
-        long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
-        await PostWebhookAsync("failure", checkoutId, 3300, $"evt_online_only_fail_{Guid.NewGuid():N}");
 
         using HttpResponseMessage defer = await SendStudentAsync(
             student,
@@ -1039,7 +1024,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     [Fact]
     public async Task MixedStatement_DefersOnlySelectedInstallmentBill_AndKeepsFullPaymentDue()
     {
-        TestStudent student = await CreateStudentAsync(balance: 20m);
+        TestStudent student = await CreateStudentAsync(balance: 0m);
         TestCourse installmentCourse = await CreateCourseAsync(
             fee: 90m,
             plans: [("Three monthly payments", "INSTALLMENT", 3)]);
@@ -1087,12 +1072,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.True(items.Single(x => x.GetProperty("billId").GetInt64() == installmentBillId).GetProperty("canDefer").GetBoolean());
         Assert.False(items.Single(x => x.GetProperty("billId").GetInt64() == fullBillId).GetProperty("canDefer").GetBoolean());
 
-        using HttpResponseMessage payResponse = await PayStatementAsync(student, statementId);
-        await AssertStatusAsync(HttpStatusCode.Created, payResponse);
-        JsonElement pay = await ReadDataAsync(payResponse);
-        long checkoutId = ReadCheckoutId(pay.GetProperty("checkoutUrl").GetString()!);
-        await PostWebhookAsync("failure", checkoutId, 11000, $"evt_mixed_fail_{Guid.NewGuid():N}");
-
         using HttpResponseMessage rejectEmpty = await SendStudentAsync(
             student,
             HttpMethod.Post,
@@ -1137,57 +1116,8 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
-    public async Task SchoolAdmin_Can_Update_DeferPolicy_But_HqAdmin_Cannot()
+    public async Task InstallmentBill_CanBeDeferredMoreThanPreviousDefaultLimit()
     {
-        using HttpRequestMessage get = AdminMessage(
-            HttpMethod.Get,
-            "/api/admin/v1/billing-configuration",
-            roleCode: CourseBillingRoles.SchoolAdmin);
-        using HttpResponseMessage getResponse = await _client.SendAsync(get);
-        await AssertStatusAsync(HttpStatusCode.OK, getResponse);
-        JsonElement defaults = await ReadDataAsync(getResponse);
-        Assert.Equal(2, defaults.GetProperty("maxDeferralCount").GetInt32());
-        Assert.Equal(7, defaults.GetProperty("rejectionGracePeriodDays").GetInt32());
-
-        using HttpRequestMessage update = AdminMessage(
-            HttpMethod.Put,
-            "/api/admin/v1/billing-configuration",
-            new { maxDeferralCount = 3, rejectionGracePeriodDays = 10 },
-            roleCode: CourseBillingRoles.SchoolAdmin);
-        using HttpResponseMessage updateResponse = await _client.SendAsync(update);
-        await AssertStatusAsync(HttpStatusCode.OK, updateResponse);
-        JsonElement updated = await ReadDataAsync(updateResponse);
-        Assert.Equal(3, updated.GetProperty("maxDeferralCount").GetInt32());
-        Assert.Equal(10, updated.GetProperty("rejectionGracePeriodDays").GetInt32());
-
-        using HttpRequestMessage hqUpdate = AdminMessage(
-            HttpMethod.Put,
-            "/api/admin/v1/billing-configuration",
-            new { organizationId = 1, maxDeferralCount = 4, rejectionGracePeriodDays = 12 },
-            roleCode: CourseBillingRoles.HqAdmin);
-        using HttpResponseMessage hqResponse = await _client.SendAsync(hqUpdate);
-        await AssertStatusAsync(HttpStatusCode.Forbidden, hqResponse);
-
-        using HttpRequestMessage restore = AdminMessage(
-            HttpMethod.Put,
-            "/api/admin/v1/billing-configuration",
-            new { maxDeferralCount = 2, rejectionGracePeriodDays = 7 },
-            roleCode: CourseBillingRoles.SchoolAdmin);
-        using HttpResponseMessage restoreResponse = await _client.SendAsync(restore);
-        await AssertStatusAsync(HttpStatusCode.OK, restoreResponse);
-    }
-
-    [Fact]
-    public async Task Student_Can_Request_DeferExtension_And_Defer_Once_After_Approval()
-    {
-        using HttpRequestMessage resetPolicy = AdminMessage(
-            HttpMethod.Put,
-            "/api/admin/v1/billing-configuration",
-            new { maxDeferralCount = 2, rejectionGracePeriodDays = 7 },
-            roleCode: CourseBillingRoles.SchoolAdmin);
-        using HttpResponseMessage resetPolicyResponse = await _client.SendAsync(resetPolicy);
-        await AssertStatusAsync(HttpStatusCode.OK, resetPolicyResponse);
-
         TestStudent student = await CreateStudentAsync(balance: 0m);
         TestCourse course = await CreateCourseAsync(
             fee: 90m,
@@ -1204,31 +1134,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             await db.SaveChangesAsync();
         }
 
-        using HttpResponseMessage blockedDefer = await SendStudentAsync(
-            student,
-            HttpMethod.Post,
-            $"/api/eservice/v1/billing-statements/{statement.StatementId}/defer",
-            new { billIds = new[] { statement.BillId } });
-        await AssertStatusAsync(HttpStatusCode.BadRequest, blockedDefer);
-        Assert.Contains("PAYMENT.DEFERRAL_LIMIT_REACHED", await blockedDefer.Content.ReadAsStringAsync());
-
-        using HttpResponseMessage requestExtension = await SendStudentAsync(
-            student,
-            HttpMethod.Post,
-            $"/api/eservice/v1/bills/{statement.BillId}/defer-extension-requests");
-        await AssertStatusAsync(HttpStatusCode.Created, requestExtension);
-        long requestId = (await ReadDataAsync(requestExtension)).GetProperty("requestId").GetInt64();
-
-        using HttpRequestMessage approve = AdminMessage(
-            HttpMethod.Post,
-            $"/api/admin/v1/defer-extension-requests/{requestId}/approve",
-            roleCode: CourseBillingRoles.SchoolAdmin);
-        using HttpResponseMessage approveResponse = await _client.SendAsync(approve);
-        await AssertStatusAsync(HttpStatusCode.OK, approveResponse);
-        Assert.Equal(
-            DeferExtensionRequestStatusCodes.Approved,
-            (await ReadDataAsync(approveResponse)).GetProperty("statusCode").GetString());
-
         using HttpResponseMessage defer = await SendStudentAsync(
             student,
             HttpMethod.Post,
@@ -1240,7 +1145,6 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         MoeDbContext verifyDb = verifyScope.ServiceProvider.GetRequiredService<MoeDbContext>();
         Bill deferredBill = await verifyDb.Set<Bill>().SingleAsync(x => x.Id == statement.BillId);
         Assert.Equal(3, deferredBill.DeferralCount);
-        Assert.False(deferredBill.IsDeferExtensionGranted);
         Assert.Equal(firstDueMonth.AddMonths(1), deferredBill.CurrentDueDate);
     }
 

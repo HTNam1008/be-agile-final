@@ -209,7 +209,6 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         long statementId,
         long personId,
         IReadOnlyCollection<long> billIds,
-        int maxDeferralCount,
         long actorLoginAccountId,
         DateTime utcNow,
         CancellationToken cancellationToken)
@@ -228,7 +227,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         {
             DateOnly from = bill.CurrentDueDate;
             decimal amount = bill.OutstandingAmount;
-            var result = bill.DeferToNextMonth(maxDeferralCount, utcNow);
+            var result = bill.DeferToNextMonth(utcNow);
             if (result.IsFailure)
                 return result;
 
@@ -246,25 +245,6 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         statement.Refresh(statement.TotalAmount, statement.PaidAmount, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Result.Success();
-    }
-
-    public async Task<BillingPolicySnapshot> GetBillingPolicyAsync(
-        long organizationId,
-        CancellationToken cancellationToken)
-    {
-        OrganizationBillingConfiguration? configuration = await dbContext.Set<OrganizationBillingConfiguration>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(candidate => candidate.OrganizationId == organizationId, cancellationToken);
-
-        return configuration is null
-            ? new BillingPolicySnapshot(
-                organizationId,
-                BillDeferralPolicy.DefaultMaxDeferralCount,
-                BillDeferralPolicy.DefaultRejectionGracePeriodDays)
-            : new BillingPolicySnapshot(
-                organizationId,
-                configuration.MaxDeferralCount,
-                configuration.RejectionGracePeriodDays);
     }
 
     private async Task MarkEnrollmentsRefundedAsync(
