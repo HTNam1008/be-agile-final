@@ -309,6 +309,9 @@ public sealed class RunReconciliationServiceTests
         public Task<decimal> GetTotalDisbursedForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
             => Task.FromResult(0m);
 
+        public Task<List<TopUpTransaction>> GetByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default)
+            => Task.FromResult(_transactions.Where(x => x.EducationAccountId == educationAccountId).ToList());
+
         public void Add(TopUpTransaction transaction) => _transactions.Add(transaction);
 
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default)

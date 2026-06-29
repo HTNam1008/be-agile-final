@@ -70,6 +70,17 @@ internal sealed class TopUpTransactionRepository(MoeDbContext dbContext) : ITopU
             .SumAsync(x => x.Amount, cancellationToken);
     }
 
+    public Task<List<TopUpTransaction>> GetByAccountIdAsync(
+        long educationAccountId,
+        CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<TopUpTransaction>()
+            .AsNoTracking()
+            .Where(x => x.EducationAccountId == educationAccountId)
+            .OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(TopUpTransaction transaction)
     {
         dbContext.Set<TopUpTransaction>().Add(transaction);

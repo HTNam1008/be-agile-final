@@ -285,6 +285,13 @@ public sealed class RecipientProcessingServiceTests
             return Task.FromResult(0m);
         }
 
+        public Task<List<TopUpTransaction>> GetByAccountIdAsync(
+            long educationAccountId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_transactions.Where(x => x.EducationAccountId == educationAccountId).ToList());
+        }
+
         public void Add(TopUpTransaction transaction)
         {
             AddCalls++;
