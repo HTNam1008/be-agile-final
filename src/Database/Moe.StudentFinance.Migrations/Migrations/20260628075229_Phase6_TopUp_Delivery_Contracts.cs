@@ -70,13 +70,10 @@ public partial class Phase6_TopUp_Delivery_Contracts : Migration
             nullable: false,
             defaultValue: 0m);
 
-        migrationBuilder.AddColumn<string>(
-            name: "ResponseJson",
-            schema: "ai",
-            table: "Message",
-            type: "nvarchar(max)",
-            maxLength: 8000,
-            nullable: true);
+        migrationBuilder.Sql("""
+            IF COL_LENGTH('ai.Message', 'ResponseJson') IS NULL
+                ALTER TABLE [ai].[Message] ADD [ResponseJson] nvarchar(max) NULL;
+            """);
 
         migrationBuilder.CreateTable(
             name: "DynamicTopUpContract",
@@ -156,9 +153,9 @@ public partial class Phase6_TopUp_Delivery_Contracts : Migration
             schema: "topup",
             table: "TopUpCampaign");
 
-        migrationBuilder.DropColumn(
-            name: "ResponseJson",
-            schema: "ai",
-            table: "Message");
+        migrationBuilder.Sql("""
+            IF COL_LENGTH('ai.Message', 'ResponseJson') IS NOT NULL
+                ALTER TABLE [ai].[Message] DROP COLUMN [ResponseJson];
+            """);
     }
 }
