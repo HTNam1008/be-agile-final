@@ -12,37 +12,19 @@ internal sealed class FasCriteriaEvaluator
         decimal? age,
         decimal? gdpValue,
         decimal? pciValue,
-        string? nationality)
+        string? nationality,
+        IReadOnlyCollection<string>? parentNationalities = null,
+        string? accountType = null)
     {
         if (criteria == null || criteria.Count == 0)
         {
             return true; // No criteria implies eligible
         }
 
-        // Left-to-right evaluation without grouping precedence
-        bool result = EvaluateSingle(criteria[0], nationalitiesByCriteriaId[criteria[0].Id], age, gdpValue, pciValue, nationality);
+        IReadOnlyList<IReadOnlyList<FasTierCriteria>> groups = BuildGroups(criteria);
 
-        for (int i = 1; i < criteria.Count; i++)
-        {
-            string? connector = criteria[i - 1].ConnectorToNext;
-            bool nextResult = EvaluateSingle(criteria[i], nationalitiesByCriteriaId[criteria[i].Id], age, gdpValue, pciValue, nationality);
-
-            if (connector == "AND")
-            {
-                result = result && nextResult;
-            }
-            else if (connector == "OR")
-            {
-                result = result || nextResult;
-            }
-            else
-            {
-                // Default to AND if missing
-                result = result && nextResult;
-            }
-        }
-
-        return result;
+        return groups.Any(group => group.All(item =>
+            EvaluateSingle(item, nationalitiesByCriteriaId[item.Id], age, gdpValue, pciValue, nationality, parentNationalities, accountType)));
     }
 
     private bool EvaluateSingle(
@@ -51,7 +33,9 @@ internal sealed class FasCriteriaEvaluator
         decimal? age,
         decimal? gdpValue,
         decimal? pciValue,
-        string? nationality)
+        string? nationality,
+        IReadOnlyCollection<string>? parentNationalities,
+        string? accountType)
     {
         switch (c.CriteriaType)
         {
@@ -77,8 +61,49 @@ internal sealed class FasCriteriaEvaluator
                 if (string.IsNullOrWhiteSpace(nationality)) return false;
                 return nationalities.Contains(nationality);
 
+            case "PARENT_NATIONALITY":
+                return parentNationalities is not null && parentNationalities.Any(nationalities.Contains);
+
+            case "ACCOUNT_TYPE":
+                return !string.IsNullOrWhiteSpace(accountType) && nationalities.Contains(accountType);
+
             default:
                 return false;
         }
+    }
+
+    private static IReadOnlyList<IReadOnlyList<FasTierCriteria>> BuildGroups(IReadOnlyList<FasTierCriteria> criteria)
+    {
+        if (criteria.Any(item => item.FasTierCriteriaGroupId > 0))
+        {
+            return criteria
+                .OrderBy(item => item.FasTierCriteriaGroupId)
+                .ThenBy(item => item.DisplayOrder)
+                .GroupBy(item => item.FasTierCriteriaGroupId)
+                .Select(group => (IReadOnlyList<FasTierCriteria>)group.ToArray())
+                .ToArray();
+        }
+
+        var groups = new List<IReadOnlyList<FasTierCriteria>>();
+        var current = new List<FasTierCriteria>();
+
+        foreach (FasTierCriteria item in criteria.OrderBy(item => item.DisplayOrder))
+        {
+            current.Add(item);
+            if (item.ConnectorToNext != "OR")
+            {
+                continue;
+            }
+
+            groups.Add(current.ToArray());
+            current = new List<FasTierCriteria>();
+        }
+
+        if (current.Count > 0)
+        {
+            groups.Add(current.ToArray());
+        }
+
+        return groups;
     }
 }

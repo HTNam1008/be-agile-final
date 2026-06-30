@@ -138,9 +138,10 @@ public sealed class StudentFasApplicationService(
             var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == scheme.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
             foreach (var tier in tiers)
             {
+                var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
                 var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-                var values = new List<(bool Match, string? Connector)>();
-                foreach (var c in criteria)
+                var values = new Dictionary<long, bool>();
+                foreach (FasTierCriteria c in criteria)
                 {
                     bool ok = c.CriteriaType switch
                     {
@@ -153,10 +154,9 @@ public sealed class StudentFasApplicationService(
                         "ACCOUNT_TYPE" => await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id && n.Nationality == accountType, ct),
                         _ => false
                     };
-                    values.Add((ok, c.ConnectorToNext));
+                    values[c.Id] = ok;
                 }
-                var matched = values.Count == 0;
-                if (values.Count > 0) { matched = values[0].Match; for (var i = 1; i < values.Count; i++) matched = values[i - 1].Connector == "OR" ? matched || values[i].Match : matched && values[i].Match; }
+                bool matched = criteria.Count == 0 || GroupsMatch(groups, criteria, values);
                 if (matched)
                 {
                     matches.Add(new
@@ -424,6 +424,7 @@ public sealed class StudentFasApplicationService(
         long[] schemeIds = pageRows.Select(x => x.selection.FasSchemeId).Distinct().ToArray();
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
         var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
@@ -434,7 +435,7 @@ public sealed class StudentFasApplicationService(
             string? recommendedTier = tiers
                 .Where(t => t.FasSchemeId == row.selection.FasSchemeId)
                 .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, row.application, criteria, categorical))
+                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical))
                 .Select(t => t.Label)
                 .FirstOrDefault();
 
@@ -485,6 +486,7 @@ public sealed class StudentFasApplicationService(
         var schemeIds = items.Select(x => x.FasSchemeId).Distinct().ToArray();
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         var tierIds = tiers.Select(x => x.Id).ToArray();
+        var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         var criteriaIds = criteria.Select(x => x.Id).ToArray();
         var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
@@ -507,7 +509,7 @@ public sealed class StudentFasApplicationService(
             recommendedTierId = tiers
                 .Where(t => t.FasSchemeId == item.FasSchemeId)
                 .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, app, criteria, categorical))
+                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical))
                 .Select(t => (long?)t.Id)
                 .FirstOrDefault()
         }).ToArray();
@@ -1210,7 +1212,7 @@ public sealed class StudentFasApplicationService(
             .AnyAsync(x => x.PersonId == personId, ct);
         return hasEducationAccount ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
     }
-    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues)
+    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteriaGroup> allGroups, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues)
     {
         var criteria = allCriteria
             .Where(x => x.FasTierId == tierId)
@@ -1239,15 +1241,59 @@ public sealed class StudentFasApplicationService(
             };
         }
 
-        bool result = Match(criteria[0]);
-        for (var index = 1; index < criteria.Length; index++)
+        var values = criteria.ToDictionary(criteriaItem => criteriaItem.Id, Match);
+        FasTierCriteriaGroup[] groups = allGroups
+            .Where(x => x.FasTierId == tierId)
+            .OrderBy(x => x.DisplayOrder)
+            .ToArray();
+
+        return GroupsMatch(groups, criteria, values);
+    }
+
+    private static bool GroupsMatch(
+        IReadOnlyCollection<FasTierCriteriaGroup> groups,
+        IReadOnlyCollection<FasTierCriteria> criteria,
+        IReadOnlyDictionary<long, bool> values)
+    {
+        if (groups.Count == 0)
         {
-            result = criteria[index - 1].ConnectorToNext == "OR"
-                ? result || Match(criteria[index])
-                : result && Match(criteria[index]);
+            return LegacyGroups(criteria).Any(group => group.All(criteriaItem => values.GetValueOrDefault(criteriaItem.Id)));
         }
 
-        return result;
+        return groups
+            .OrderBy(group => group.DisplayOrder)
+            .Any(group =>
+            {
+                FasTierCriteria[] groupCriteria = criteria
+                    .Where(criteriaItem => criteriaItem.FasTierCriteriaGroupId == group.Id)
+                    .ToArray();
+                return groupCriteria.Length > 0 && groupCriteria.All(criteriaItem => values.GetValueOrDefault(criteriaItem.Id));
+            });
+    }
+
+    private static IReadOnlyList<IReadOnlyList<FasTierCriteria>> LegacyGroups(IReadOnlyCollection<FasTierCriteria> criteria)
+    {
+        var groups = new List<IReadOnlyList<FasTierCriteria>>();
+        var current = new List<FasTierCriteria>();
+
+        foreach (FasTierCriteria item in criteria.OrderBy(item => item.DisplayOrder))
+        {
+            current.Add(item);
+            if (item.ConnectorToNext != "OR")
+            {
+                continue;
+            }
+
+            groups.Add(current.ToArray());
+            current = new List<FasTierCriteria>();
+        }
+
+        if (current.Count > 0)
+        {
+            groups.Add(current.ToArray());
+        }
+
+        return groups;
     }
     private static string[] ParseParentNationalities(string? json) => string.IsNullOrWhiteSpace(json) ? Array.Empty<string>() : JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
     private static string? ExtractApprovedTierLabel(string? approvedComponentsJson)
