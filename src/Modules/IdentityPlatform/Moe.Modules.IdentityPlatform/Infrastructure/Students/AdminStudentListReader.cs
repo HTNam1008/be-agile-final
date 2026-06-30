@@ -79,9 +79,7 @@ internal sealed class AdminStudentListReader(
         rows = ApplyFilters(rows, criteria);
 
         long total = rows.LongCount();
-        AdminStudentListItem[] items = rows
-            .OrderBy(x => x.Person.OfficialFullName)
-            .ThenBy(x => x.Person.Id)
+        AdminStudentListItem[] items = ApplySort(rows, criteria)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(ToItem)
@@ -89,6 +87,31 @@ internal sealed class AdminStudentListReader(
 
         return new AdminStudentListPage(items, page, pageSize, total);
     }
+
+    private static IEnumerable<Row> ApplySort(IEnumerable<Row> rows, AdminStudentListCriteria criteria)
+    {
+        bool descending = string.Equals(criteria.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string sortBy = criteria.SortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        return sortBy switch
+        {
+            "personid" => Order(rows, row => row.Person.Id, descending),
+            "nric" => Order(rows, row => row.Person.IdentityNumberMasked ?? string.Empty, descending),
+            "name" => Order(rows, row => row.Person.OfficialFullName, descending),
+            "level" => Order(rows, row => row.Enrollment?.LevelCode ?? string.Empty, descending),
+            "classname" => Order(rows, row => row.Enrollment?.ClassCode ?? string.Empty, descending),
+            "accountstatus" => Order(rows, row => row.Account?.AccountStatusCode ?? NoAccount, descending),
+            "balance" => Order(rows, row => row.Account?.CurrentBalance ?? decimal.MinValue, descending),
+            "nationality" => Order(rows, row => row.Person.NationalityCode ?? string.Empty, descending),
+            "enrollmentstatus" => Order(rows, row => row.IsEnrolled ? "ENROLLED" : NotEnrolled, descending),
+            _ => rows.OrderBy(x => x.Person.OfficialFullName).ThenBy(x => x.Person.Id)
+        };
+    }
+
+    private static IOrderedEnumerable<Row> Order<TKey>(IEnumerable<Row> rows, Func<Row, TKey> keySelector, bool descending)
+        => descending
+            ? rows.OrderByDescending(keySelector).ThenByDescending(row => row.Person.Id)
+            : rows.OrderBy(keySelector).ThenBy(row => row.Person.Id);
 
     public async Task<IReadOnlyList<string>> ListClassesAsync(
         long organizationId,
