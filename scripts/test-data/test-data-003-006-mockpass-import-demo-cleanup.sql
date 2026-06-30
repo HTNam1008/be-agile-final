@@ -114,6 +114,16 @@ WHERE EducationAccountId IN (SELECT EducationAccountId FROM @FixtureAccountIds);
 DELETE FROM iam.UserAccessScope
 WHERE UserAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
 
+DELETE FROM iam.LoginMfaAuditEvent
+WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds)
+   OR PerformedByAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
+
+DELETE FROM iam.LoginMfaChallenge
+WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
+
+DELETE FROM iam.LoginMfaCredential
+WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
+
 DELETE FROM iam.LoginAccount
 WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
 
@@ -157,4 +167,17 @@ WHERE PersonId IN (SELECT PersonId FROM @FixturePersonIds)
 UNION ALL
 SELECT 'iam.UserAccessScope', COUNT(*)
 FROM iam.UserAccessScope
-WHERE UserAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
+WHERE UserAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds)
+UNION ALL
+SELECT 'iam.LoginMfaAuditEvent', COUNT(*)
+FROM iam.LoginMfaAuditEvent
+WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds)
+   OR PerformedByAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds)
+UNION ALL
+SELECT 'iam.LoginMfaChallenge', COUNT(*)
+FROM iam.LoginMfaChallenge
+WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds)
+UNION ALL
+SELECT 'iam.LoginMfaCredential', COUNT(*)
+FROM iam.LoginMfaCredential
+WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
