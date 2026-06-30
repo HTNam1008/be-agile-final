@@ -46,6 +46,7 @@ internal sealed class ContractStatusReader(MoeDbContext dbContext) : IContractSt
                 c.DerivedTotalCycles,
                 c.NextPaymentDate,
                 c.ContractStatus,
+                c.CreatedAtUtc,
                 null,
                 null))
             .ToArrayAsync(cancellationToken);

@@ -21,4 +21,5 @@ public sealed record CampaignContractItem(
     decimal TotalReceived,
     int? CyclesCompleted,
     DateTime? NextPaymentDate,
-    string ContractStatus);
+    string ContractStatus,
+    DateTime CreatedAtUtc);
