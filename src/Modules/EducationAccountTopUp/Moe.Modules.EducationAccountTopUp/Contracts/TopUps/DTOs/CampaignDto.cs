@@ -20,6 +20,7 @@ public class CampaignDto
     public int CampaignVersion { get; set; }
     public string DeliveryTypeCode { get; set; } = string.Empty;
     public decimal MaxTotalAmount { get; set; }
+    public int TotalStudentsToppedUp { get; set; }
 }
 
 public class CreateCampaignRequest
