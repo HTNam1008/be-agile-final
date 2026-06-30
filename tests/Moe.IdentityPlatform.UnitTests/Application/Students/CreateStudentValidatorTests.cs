@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Moe.Modules.IdentityPlatform.Api.Admin;
-using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
+using Moe.Modules.IdentityPlatform.Domain.People;
 using Xunit;
 
 namespace Moe.IdentityPlatform.UnitTests.Application.Students;

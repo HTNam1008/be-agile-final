@@ -11,10 +11,10 @@ using Moe.Modules.Mfa.Application.ResetPin;
 using Moe.Modules.Mfa.Application.SetupPin;
 using Moe.Modules.Mfa.Application.StartChallenge;
 using Moe.Modules.Mfa.Application.VerifyPin;
-using Moe.Modules.Mfa.Infrastructure;
-using Moe.Modules.Mfa.Infrastructure.Repositories;
 using Moe.Modules.Mfa.IGateway.Repositories;
 using Moe.Modules.Mfa.IGateway.Security;
+using Moe.Modules.Mfa.Infrastructure;
+using Moe.Modules.Mfa.Infrastructure.Repositories;
 
 namespace Moe.Modules.Mfa;
 

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
@@ -138,7 +140,7 @@ internal sealed class GetAccountFlatHistoryQueryHandler(
 
 public sealed record AccountFlatHistoryResponse(
     IReadOnlyList<AccountFlatHistoryItem> Items,
-    int Page,
+    [property: JsonPropertyName("pageNumber")] int Page,
     int PageSize,
     long TotalCount,
     IReadOnlyList<ContractSummary> Contracts,

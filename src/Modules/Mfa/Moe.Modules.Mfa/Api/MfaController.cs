@@ -44,7 +44,7 @@ public sealed class MfaController(
     public async Task<IActionResult> Setup([FromBody] SetupMfaPinRequest request, CancellationToken cancellationToken)
     {
         var result = await commands.Send(new SetupMfaPinCommand(request.Pin), cancellationToken);
-        return result.ToApiResponse(this, ApiResponseCodes.BadRequest); 
+        return result.ToApiResponse(this, ApiResponseCodes.BadRequest);
     }
 
     [HttpPost("verify")]

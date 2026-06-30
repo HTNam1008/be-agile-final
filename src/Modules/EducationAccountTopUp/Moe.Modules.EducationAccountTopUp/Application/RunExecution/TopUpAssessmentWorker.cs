@@ -35,7 +35,7 @@ public sealed class TopUpAssessmentWorker(
             DateTime now = clock.UtcNow.UtcDateTime;
             DateTime nextRun = now.Date.AddDays(1); // Midnight tomorrow
             TimeSpan delay = nextRun - now;
-            
+
             logger.LogInformation("Assessment cycle completed. Next run at {NextRunUtc} (in {DelayHours:N1} hours).", nextRun, delay.TotalHours);
             await Task.Delay(delay, stoppingToken);
         }
@@ -71,7 +71,7 @@ public sealed class TopUpAssessmentWorker(
 
                 var rules = await campaignReader.GetRulesAsync(campaign.Id, ct);
                 int totalCount = await ruleFilter.CountMatchingAccountsAsync(rules, nowUtc, ct);
-                
+
                 var allQualifyingIds = new List<long>(totalCount);
 
                 const int pageSize = 5000;

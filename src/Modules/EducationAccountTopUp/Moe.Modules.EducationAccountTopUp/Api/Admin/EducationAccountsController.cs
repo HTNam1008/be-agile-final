@@ -8,9 +8,9 @@ using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Api;
 using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
+using Moe.Modules.EducationAccountTopUp.Application.History.AccountFlatHistory;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.TransactionHistory;
-using Moe.Modules.EducationAccountTopUp.Application.History.AccountFlatHistory;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 

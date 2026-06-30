@@ -295,8 +295,8 @@ public sealed class TopUpRunWorker(
 
                 offset += chunk.Count;
 
-            await unitOfWork.SaveChangesAsync(ct);
-            dbContext?.ChangeTracker.Clear();
+                await unitOfWork.SaveChangesAsync(ct);
+                dbContext?.ChangeTracker.Clear();
 
                 logger.LogInformation(
                     "Top-up run {RunId} processed chunk {Offset}/{TotalRecipients}: succeeded={Succeeded}, failed={Failed}, skipped={Skipped}",
