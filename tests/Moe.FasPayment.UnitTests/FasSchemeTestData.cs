@@ -13,6 +13,6 @@ internal static class FasSchemeTestData
         DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
         [101],
         "PERCENTAGE",
-        [new("AGE", "AND", 1), new("NATIONALITY", null, 2)],
-        [new("Full", 100, 1, [new(1, 13, 18, null), new(2, null, null, ["Singapore Citizen"])])]);
+        [new("AGE", "AND", 1), new("GHI", "AND", 2), new("PCI", "AND", 3), new("NATIONALITY", null, 4)],
+        [new("Full", 100, 1, [new(1, 16, 18, null), new(2, 0, 3000, null), new(3, 0, 1000, null), new(4, null, null, ["Singapore Citizen"])])]);
 }

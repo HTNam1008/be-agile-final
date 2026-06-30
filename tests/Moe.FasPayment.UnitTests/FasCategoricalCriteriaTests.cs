@@ -8,7 +8,7 @@ public sealed class FasCategoricalCriteriaTests
 {
     [Theory]
     [InlineData("NATIONALITY", "Singapore Citizen")]
-    [InlineData("PARENT_NATIONALITY", "Vietnamese")]
+    [InlineData("PARENT_NATIONALITY", "Foreigner")]
     [InlineData("ACCOUNT_TYPE", "EDUCATION_ACCOUNT")]
     [InlineData("ACCOUNT_TYPE", "PERSONAL_ACCOUNT")]
     public void Supported_categorical_values_are_accepted(string criteriaType, string value)
