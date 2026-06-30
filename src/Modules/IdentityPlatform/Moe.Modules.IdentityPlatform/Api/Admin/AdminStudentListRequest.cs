@@ -10,4 +10,6 @@ public sealed record AdminStudentListRequest(
     AdminStudentAccountStatusFilter AccountStatus = AdminStudentAccountStatusFilter.All,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
     int Page = 1,
-    int PageSize = 10);
+    int PageSize = 10,
+    string? SortBy = null,
+    string? SortDirection = null);
