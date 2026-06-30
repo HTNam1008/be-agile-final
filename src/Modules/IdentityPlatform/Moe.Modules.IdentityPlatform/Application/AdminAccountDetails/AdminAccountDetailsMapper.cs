@@ -10,6 +10,9 @@ internal static class AdminAccountDetailsMapper
         EducationAccountLookupSummary account)
         => new(
             profile.PersonId,
+            profile.PersonStatusCode,
+            profile.UserAccountId,
+            profile.UserAccountStatusCode,
             account.EducationAccountId,
             account.AccountNumber,
             profile.IdentityNumberMasked,

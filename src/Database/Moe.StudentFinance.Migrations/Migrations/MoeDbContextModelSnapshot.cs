@@ -1873,7 +1873,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EducationAccountId", "IsActive");
+                    b.HasIndex("EducationAccountId")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.ToTable("SettlementPreference", "account");
                 });
@@ -10583,6 +10585,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
 
                     b.HasDiscriminator().HasValue("STATEMENT");
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.SettlementPreference", b =>
+                {
+                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount", null)
+                        .WithMany()
+                        .HasForeignKey("EducationAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRunItem", b =>

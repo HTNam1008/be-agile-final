@@ -36,7 +36,9 @@ internal sealed class AdminAccountDetailsRepository(MoeDbContext dbContext) : IA
             .Select(x => x.IdentifierMasked)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return ToProfile(person, enrollment, identifierMasked ?? person.IdentityNumberMasked);
+        UserAccountProjection? userAccount = await GetStudentUserAccountAsync(personId, cancellationToken);
+
+        return ToProfile(person, userAccount, enrollment, identifierMasked ?? person.IdentityNumberMasked);
     }
 
     public async Task<AdminAccountDetailsUpdateResult> UpdateAsync(
@@ -128,8 +130,20 @@ internal sealed class AdminAccountDetailsRepository(MoeDbContext dbContext) : IA
             };
         }
 
-        AdminAccountDetailsProfile profile = ToProfile(person, updatedEnrollment, identifierMasked ?? person.IdentityNumberMasked);
+        UserAccountProjection? userAccount = await GetStudentUserAccountAsync(personId, cancellationToken);
+
+        AdminAccountDetailsProfile profile = ToProfile(person, userAccount, updatedEnrollment, identifierMasked ?? person.IdentityNumberMasked);
         return AdminAccountDetailsUpdateResult.Updated(profile, changedFields);
+    }
+
+    private Task<UserAccountProjection?> GetStudentUserAccountAsync(long personId, CancellationToken cancellationToken)
+    {
+        return dbContext.Set<UserAccount>()
+            .AsNoTracking()
+            .Where(x => x.PersonId == personId
+                && x.IdentityProviderCode == IdentityProviderCodes.Singpass)
+            .Select(x => new UserAccountProjection(x.Id, x.AccountStatusCode))
+            .SingleOrDefaultAsync(cancellationToken);
     }
 
     private IQueryable<EnrollmentProjection> GetCurrentEnrollmentQuery(long personId, DateOnly today)
@@ -153,10 +167,14 @@ internal sealed class AdminAccountDetailsRepository(MoeDbContext dbContext) : IA
 
     private static AdminAccountDetailsProfile ToProfile(
         Person person,
+        UserAccountProjection? userAccount,
         EnrollmentProjection? enrollment,
         string? identityNumberMasked)
         => new(
             person.Id,
+            person.PersonStatusCode,
+            userAccount?.UserAccountId,
+            userAccount?.AccountStatusCode,
             identityNumberMasked,
             person.OfficialFullName,
             person.DateOfBirth,
@@ -201,4 +219,6 @@ internal sealed class AdminAccountDetailsRepository(MoeDbContext dbContext) : IA
         string LevelCode,
         string? ClassCode,
         DateTime UpdatedAtUtc);
+
+    private sealed record UserAccountProjection(long UserAccountId, string AccountStatusCode);
 }

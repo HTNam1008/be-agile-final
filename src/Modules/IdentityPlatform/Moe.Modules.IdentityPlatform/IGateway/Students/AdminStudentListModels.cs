@@ -6,6 +6,7 @@ public sealed record AdminStudentListCriteria(
     IReadOnlyCollection<string> LevelCodes,
     string? ClassCode,
     AdminStudentAccountStatusFilter AccountStatus,
+    AdminStudentPortalAccessStatusFilter PortalAccessStatus,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
     int PageSize,
@@ -19,6 +20,7 @@ public sealed record AdminStudentListCriteria(
         IReadOnlyCollection<string>? levelCodes = null,
         string? classCode = null,
         AdminStudentAccountStatusFilter accountStatus = AdminStudentAccountStatusFilter.All,
+        AdminStudentPortalAccessStatusFilter portalAccessStatus = AdminStudentPortalAccessStatusFilter.All,
         AdminStudentEnrollmentStatusFilter enrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
         int page = 1,
         int pageSize = 10,
@@ -30,6 +32,7 @@ public sealed record AdminStudentListCriteria(
             levelCodes ?? (string.IsNullOrWhiteSpace(levelCode) ? [] : [levelCode]),
             classCode,
             accountStatus,
+            portalAccessStatus,
             enrollmentStatus,
             page,
             pageSize,
@@ -44,6 +47,13 @@ public enum AdminStudentAccountStatusFilter
     PendingClosure,
     Closed,
     NoAccount
+}
+
+public enum AdminStudentPortalAccessStatusFilter
+{
+    All,
+    Active,
+    Disabled
 }
 
 public enum AdminStudentEnrollmentStatusFilter
@@ -67,6 +77,9 @@ public sealed record AdminStudentListItem(
     string NationalityCode,
     string? LevelCode,
     string? ClassCode,
+    string PersonStatusCode,
+    long? UserAccountId,
+    string? UserAccountStatusCode,
     string? AccountStatusCode,
     decimal? Balance,
     string EnrollmentStatusCode,
