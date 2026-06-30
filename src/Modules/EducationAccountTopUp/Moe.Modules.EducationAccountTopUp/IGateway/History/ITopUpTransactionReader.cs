@@ -17,6 +17,12 @@ internal interface ITopUpTransactionReader
         int page,
         int pageSize,
         CancellationToken cancellationToken);
+
+    Task<TransactionHistoryPage> GetAllTransactionsAsync(
+        TopUpHistoryFilter filter,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
 }
 
 internal sealed record TransactionHistoryPage(
@@ -33,4 +39,5 @@ internal sealed record TransactionHistoryProjection(
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
     DateTime RunDateUtc,
+    string CampaignCode,
     string CampaignName);
