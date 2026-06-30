@@ -64,8 +64,7 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
         }
 
         long total = await query.LongCountAsync(cancellationToken);
-        List<Course> courses = await query
-            .OrderByDescending(x => x.UpdatedAtUtc)
+        List<Course> courses = await ApplyCourseSort(query, request)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -120,6 +119,88 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
             .ToList();
 
         return new PageResponse<CourseSummaryDto>(items, page, pageSize, total);
+    }
+
+    private IQueryable<Course> ApplyCourseSort(IQueryable<Course> query, CourseQueryRequest request)
+    {
+        bool descending = string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string sortBy = request.SortBy?.Trim() ?? string.Empty;
+
+        return sortBy.ToLowerInvariant() switch
+        {
+            "code" => descending
+                ? query.OrderByDescending(x => x.CourseCode).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CourseCode).ThenBy(x => x.Id),
+            "name" => descending
+                ? query.OrderByDescending(x => x.CourseName).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CourseName).ThenBy(x => x.Id),
+            "period" => descending
+                ? query.OrderByDescending(x => x.StartDate).ThenByDescending(x => x.EndDate).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.StartDate).ThenBy(x => x.EndDate).ThenBy(x => x.Id),
+            "lastenrollment" => descending
+                ? query.OrderByDescending(x => x.EnrollmentCloseAtUtc).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.EnrollmentCloseAtUtc).ThenBy(x => x.Id),
+            "enrolled" => SortByEnrollmentCount(query, descending),
+            "totalfee" => SortByTotalFee(query, descending),
+            "status" => descending
+                ? query.OrderByDescending(x => x.CourseStatusCode).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CourseStatusCode).ThenBy(x => x.Id),
+            _ => query.OrderByDescending(x => x.UpdatedAtUtc).ThenByDescending(x => x.Id)
+        };
+    }
+
+    private IQueryable<Course> SortByEnrollmentCount(IQueryable<Course> query, bool descending)
+    {
+        return descending
+            ? query.OrderByDescending(course => dbContext.Set<CourseEnrollment>()
+                    .Count(enrollment => enrollment.CourseId == course.Id
+                        && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled))
+                .ThenByDescending(course => course.Id)
+            : query.OrderBy(course => dbContext.Set<CourseEnrollment>()
+                    .Count(enrollment => enrollment.CourseId == course.Id
+                        && enrollment.EnrollmentStatusCode != CourseEnrollmentStatusCodes.Cancelled))
+                .ThenBy(course => course.Id);
+    }
+
+    private IQueryable<Course> SortByTotalFee(IQueryable<Course> query, bool descending)
+    {
+        IQueryable<CourseFeeTotalSortProjection> totalFeeQuery =
+            from fee in dbContext.Set<CourseFee>().AsNoTracking()
+            join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                on fee.FeeComponentId equals component.Id
+            where fee.IsActive && component.IsActive
+            group new { fee, component } by fee.CourseId
+            into feeGroup
+            select new CourseFeeTotalSortProjection(
+                feeGroup.Key,
+                feeGroup.Sum(x => !x.component.IsTaxComponent
+                    && x.component.CalculationTypeCode != FeeComponentCalculationTypes.Percentage
+                        ? x.fee.FeeValue
+                        : 0m),
+                feeGroup.Sum(x => x.component.IsTaxComponent
+                    && x.component.CalculationTypeCode == FeeComponentCalculationTypes.Percentage
+                        ? x.fee.FeeValue
+                        : 0m),
+                feeGroup.Sum(x => x.component.IsTaxComponent
+                    && x.component.CalculationTypeCode != FeeComponentCalculationTypes.Percentage
+                        ? x.fee.FeeValue
+                        : 0m));
+
+        var sortableQuery =
+            from course in query
+            join feeTotal in totalFeeQuery on course.Id equals feeTotal.CourseId into feeTotals
+            from feeTotal in feeTotals.DefaultIfEmpty()
+            select new
+            {
+                Course = course,
+                TotalFee = feeTotal == null
+                    ? 0m
+                    : feeTotal.Subtotal + feeTotal.TaxFixedAmount + (feeTotal.Subtotal * feeTotal.TaxPercentage / 100m)
+            };
+
+        return descending
+            ? sortableQuery.OrderByDescending(x => x.TotalFee).ThenByDescending(x => x.Course.Id).Select(x => x.Course)
+            : sortableQuery.OrderBy(x => x.TotalFee).ThenBy(x => x.Course.Id).Select(x => x.Course);
     }
 
     public async Task<int> DisableEndedCoursesAsync(
@@ -469,3 +550,9 @@ internal sealed record CourseFeeProjection(
     public CourseFeeBillingLine ToBillingLine()
         => new(CourseFeeId, FeeComponentId, FeeComponentName, CalculationTypeCode, IsTaxComponent, FeeValue);
 }
+
+internal sealed record CourseFeeTotalSortProjection(
+    long CourseId,
+    decimal Subtotal,
+    decimal TaxPercentage,
+    decimal TaxFixedAmount);
