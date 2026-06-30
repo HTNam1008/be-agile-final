@@ -1,5 +1,6 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure;
 using Microsoft.Extensions.Configuration;
 
 namespace Moe.Modules.FasPayment.Infrastructure.Documents;
@@ -31,16 +32,27 @@ internal sealed class PrivateFileFasDocumentStorage : IFasDocumentStorage
 internal sealed class AzureBlobFasDocumentStorage : IFasDocumentStorage
 {
     private readonly BlobContainerClient container;
+    private readonly PrivateFileFasDocumentStorage localFallback = new();
     public AzureBlobFasDocumentStorage(IConfiguration configuration)
     {
-        var connection = configuration["FasDocuments:AzureBlobConnectionString"] ?? throw new InvalidOperationException("FasDocuments:AzureBlobConnectionString is required.");
-        var name = configuration["FasDocuments:ContainerName"] ?? "fas-documents";
+        var connection = configuration["FasDocuments:AzureBlobConnectionString"] ?? configuration["AzureBlob:ConnectionString"] ?? throw new InvalidOperationException("AzureBlob:ConnectionString is required.");
+        var name = configuration["FasDocuments:ContainerName"] ?? configuration["AzureBlob:ContainerName"] ?? throw new InvalidOperationException("AzureBlob:ContainerName is required.");
         container = new BlobContainerClient(connection, name);
         container.CreateIfNotExists(PublicAccessType.None);
     }
     public async Task<string> UploadAsync(long applicationId, string fileName, Stream content, CancellationToken ct)
-    { var key = $"{applicationId}/{Guid.NewGuid():N}{Path.GetExtension(fileName).ToLowerInvariant()}"; await container.GetBlobClient(key).UploadAsync(content, new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = Mime(fileName) } }, ct); return key; }
-    public Task DeleteAsync(string key, CancellationToken ct) => container.GetBlobClient(key).DeleteIfExistsAsync(cancellationToken: ct);
-    public async Task<Stream> OpenReadAsync(string key, CancellationToken ct) => (await container.GetBlobClient(key).DownloadStreamingAsync(cancellationToken: ct)).Value.Content;
+    { var key = $"fas-applications/{applicationId}/{Guid.NewGuid():N}{Path.GetExtension(fileName).ToLowerInvariant()}"; await container.GetBlobClient(key).UploadAsync(content, new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = Mime(fileName) } }, ct); return key; }
+    public async Task DeleteAsync(string key, CancellationToken ct) { await container.GetBlobClient(key).DeleteIfExistsAsync(cancellationToken: ct); await localFallback.DeleteAsync(key, ct); }
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken ct)
+    {
+        try
+        {
+            return (await container.GetBlobClient(key).DownloadStreamingAsync(cancellationToken: ct)).Value.Content;
+        }
+        catch (RequestFailedException ex) when (ex.ErrorCode == BlobErrorCode.BlobNotFound.ToString())
+        {
+            return await localFallback.OpenReadAsync(key, ct);
+        }
+    }
     private static string Mime(string name) => Path.GetExtension(name).ToLowerInvariant() switch { ".pdf" => "application/pdf", ".png" => "image/png", _ => "image/jpeg" };
 }
