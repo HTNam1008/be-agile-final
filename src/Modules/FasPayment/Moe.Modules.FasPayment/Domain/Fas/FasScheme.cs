@@ -91,7 +91,7 @@ internal sealed class FasScheme : Entity<long>
     {
         DateOnly today = DateOnly.FromDateTime(utcNow);
         if (startDate < today) throw new ArgumentException("Start date cannot be before today.", nameof(startDate));
-        if (endDate < startDate) throw new ArgumentException("End date must not be before start date.", nameof(endDate));
+        if (endDate <= startDate) throw new ArgumentException("End date must be after start date.", nameof(endDate));
     }
 
     public void Retire(long actorId, DateTime utcNow)
