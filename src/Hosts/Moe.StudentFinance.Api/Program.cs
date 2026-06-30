@@ -5,10 +5,13 @@ using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Modules;
 using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Api;
+using Moe.Infrastructure.Shared.Clock;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.AiCopilot;
@@ -17,6 +20,7 @@ using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.MailDelivery;
 using Moe.Modules.Mfa;
 using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
@@ -30,6 +34,12 @@ builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.RemoveAll<IClock>();
+    builder.Services.AddSingleton<DevelopmentManualClock>();
+    builder.Services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
+}
 builder.Services.AddMoePersistence(builder.Configuration);
 
 IModule[] modules =
@@ -39,7 +49,8 @@ IModule[] modules =
     new CourseBillingModule(),
     new FasPaymentModule(),
     new MfaModule(),
-    new AiCopilotModule()
+    new AiCopilotModule(),
+    new MailDeliveryModule()
 ];
 foreach (var module in modules) module.AddServices(builder.Services, builder.Configuration);
 builder.Services.AddScoped<IEligiblePersonLookupGateway, EligiblePersonLookupGatewayAdapter>();
@@ -65,7 +76,8 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
     .AddApplicationPart(typeof(FasPaymentModule).Assembly)
     .AddApplicationPart(typeof(MfaModule).Assembly)
-    .AddApplicationPart(typeof(AiCopilotModule).Assembly);
+    .AddApplicationPart(typeof(AiCopilotModule).Assembly)
+    .AddApplicationPart(typeof(MailDeliveryModule).Assembly);
 
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
 {
@@ -242,6 +254,41 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
     });
 }).AllowAnonymous();
 
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(new
+    {
+        utcNow = clock.UtcNow,
+        isOverridden = clock.IsOverridden
+    }))
+        .AllowAnonymous()
+        .RequireCors("PortalCors");
+
+    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    {
+        clock.Set(request.UtcNow);
+        return Results.Ok(new
+        {
+            utcNow = clock.UtcNow,
+            isOverridden = clock.IsOverridden
+        });
+    })
+        .AllowAnonymous()
+        .RequireCors("PortalCors");
+
+    app.MapDelete("/dev/clock", (DevelopmentManualClock clock) =>
+    {
+        clock.Reset();
+        return Results.Ok(new
+        {
+            utcNow = clock.UtcNow,
+            isOverridden = clock.IsOverridden
+        });
+    })
+        .AllowAnonymous()
+        .RequireCors("PortalCors");
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
@@ -331,5 +378,7 @@ static string GetSwaggerTag(string path)
 
     return "General";
 }
+
+internal sealed record SetDevelopmentClockRequest(DateTimeOffset UtcNow);
 
 public partial class Program;

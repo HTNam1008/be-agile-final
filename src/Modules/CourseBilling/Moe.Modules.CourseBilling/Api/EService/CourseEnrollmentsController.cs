@@ -46,6 +46,17 @@ public sealed class CourseEnrollmentsController(
                 request.FasApplicationSchemeIds),
             cancellationToken));
 
+    [HttpPost("payment-plan-preview")]
+    public async Task<IActionResult> PreviewCoursePaymentPlanBill(
+        [FromBody] PreviewCoursePaymentPlanBillRequest request,
+        CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await queries.Send(
+            new PreviewCoursePaymentPlanBillQuery(
+                request.CourseId,
+                request.CoursePaymentPlanId,
+                request.FasApplicationSchemeIds),
+            cancellationToken));
+
     [HttpPost("{enrollmentId:long}/payment-plan-preview")]
     public async Task<IActionResult> PreviewPaymentPlanBill(
         long enrollmentId,
@@ -70,13 +81,26 @@ public sealed class CourseEnrollmentsController(
     public async Task<IActionResult> DownloadMaterial(
         long enrollmentId,
         long courseMaterialId,
+        [FromQuery] string? preview,
         CancellationToken cancellationToken)
     {
         var result = await queries.Send(
-            new DownloadStudentCourseMaterialQuery(enrollmentId, courseMaterialId),
+            new DownloadStudentCourseMaterialQuery(
+                enrollmentId,
+                courseMaterialId,
+                string.Equals(preview, "pdf", StringComparison.OrdinalIgnoreCase)),
             cancellationToken);
         return result.IsFailure
             ? this.ToCourseBillingResponse(result)
             : File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
     }
+
+    [HttpGet("{enrollmentId:long}/materials/{courseMaterialId:long}/office-preview")]
+    public async Task<IActionResult> GetOfficePreview(
+        long enrollmentId,
+        long courseMaterialId,
+        CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await queries.Send(
+            new GetStudentCourseMaterialOfficePreviewQuery(enrollmentId, courseMaterialId),
+            cancellationToken));
 }

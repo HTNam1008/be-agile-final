@@ -32,6 +32,8 @@ internal sealed class GetMyEducationAccountTransactionsQueryHandler(
                 Math.Max(query.Page, 1),
                 Math.Clamp(query.PageSize, 1, 100),
                 category,
+                query.SortBy,
+                query.SortDirection,
                 cancellationToken);
 
         if (transactions is null)

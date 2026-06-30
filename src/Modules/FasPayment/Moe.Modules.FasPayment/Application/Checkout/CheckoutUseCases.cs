@@ -53,7 +53,7 @@ internal sealed class CreateStripeCheckoutHandler(
         if (plan is null || !plan.IsActive || plan.CourseId != bill.CourseId)
             return Result<StripeCheckoutResponse>.Failure(PaymentDomainErrors.PaymentPlanNotFound);
 
-        PaymentCheckoutSession? checkout = await payments.FindOpenCheckoutAsync(
+        BillPaymentCheckoutSession? checkout = await payments.FindOpenCheckoutAsync(
             bill.BillId,
             personId,
             cancellationToken);
@@ -82,7 +82,7 @@ internal sealed class CreateStripeCheckoutHandler(
 
         if (checkout is null)
         {
-            Result<PaymentCheckoutSession> created = PaymentCheckoutSession.Create(
+            Result<BillPaymentCheckoutSession> created = BillPaymentCheckoutSession.Create(
                 bill.BillId,
                 bill.CourseEnrollmentId,
                 bill.CourseId,
@@ -141,7 +141,8 @@ internal sealed class CreateStripeCheckoutHandler(
 
 internal sealed class GetPaymentCheckoutStatusHandler(
     IPaymentCheckoutRepository payments,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IClock clock)
     : IQueryHandler<GetPaymentCheckoutStatusQuery, PaymentCheckoutStatusResponse>
 {
     public async Task<Result<PaymentCheckoutStatusResponse>> Handle(
@@ -152,13 +153,38 @@ internal sealed class GetPaymentCheckoutStatusHandler(
             return Result<PaymentCheckoutStatusResponse>.Failure(PaymentApplicationErrors.StudentRequired);
 
         PaymentCheckoutSession? checkout = await payments.FindCheckoutAsync(query.CheckoutId, personId, cancellationToken);
-        return checkout is null
-            ? Result<PaymentCheckoutStatusResponse>.Failure(PaymentDomainErrors.CheckoutNotFound)
-            : Result<PaymentCheckoutStatusResponse>.Success(new(
-                checkout.Id,
-                checkout.BillId,
-                checkout.CheckoutStatusCode,
-                checkout.PaidInstallmentCount,
-                checkout.RequiredInstallmentCount));
+        if (checkout is null)
+            return Result<PaymentCheckoutStatusResponse>.Failure(PaymentDomainErrors.CheckoutNotFound);
+
+        Payment? payment = checkout.PaymentId is long paymentId
+            ? await payments.FindPaymentAsync(paymentId, cancellationToken)
+            : null;
+        IReadOnlyCollection<PaymentAllocation> allocations = payment is not null
+            ? await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken)
+            : [];
+        long[] billIds = allocations.Count > 0
+            ? allocations.Select(allocation => allocation.BillId).Distinct().ToArray()
+            : checkout.BillId > 0
+                ? [checkout.BillId]
+                : [];
+
+        return Result<PaymentCheckoutStatusResponse>.Success(new(
+            checkout.Id,
+            checkout.BillId,
+            checkout.CheckoutStatusCode,
+            checkout.PaidInstallmentCount,
+            checkout.RequiredInstallmentCount,
+            checkout.CheckoutSessionTypeCode,
+            checkout.PaymentId,
+            checkout.BillingStatementId,
+            checkout.Amount,
+            checkout.CurrencyCode,
+            payment?.PaymentStatusCode,
+            payment?.EducationAccountAmount,
+            payment?.OnlinePaymentAmount,
+            billIds,
+            checkout.CheckoutUrl,
+            checkout.ExpiresAtUtc,
+            checkout.CanResume(clock.UtcNow.UtcDateTime)));
     }
 }

@@ -1,7 +1,16 @@
+using System.Globalization;
+using System.Net;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.MailDelivery.Templates;
+using Moe.SharedKernel.Results;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
@@ -10,8 +19,14 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
 internal sealed class BillingStatementRepository(
     MoeDbContext dbContext,
-    ICoursePaymentPlanGateway paymentPlans) : IBillingStatementRepository
+    ICoursePaymentPlanGateway paymentPlans,
+    IEmailRecipientResolver recipientResolver,
+    IEmailDeliveryGateway mailGateway,
+    IEmailDeliverySwitch mailSwitch,
+    ILogger<BillingStatementRepository> logger) : IBillingStatementRepository
 {
+    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
+
     public async Task<BillingStatementResponse> GetOrCreateAsync(
         long personId,
         int year,
@@ -102,6 +117,15 @@ internal sealed class BillingStatementRepository(
         decimal total = bills.Sum(x => x.Bill.OutstandingAmount);
         statement.Refresh(total, 0m, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (total > 0m)
+        {
+            await SendMonthlyBillEmailAsync(
+                personId,
+                monthStart,
+                total,
+                bills.Min(x => x.Bill.CurrentDueDate),
+                cancellationToken);
+        }
 
         long[] billIds = bills.Select(x => x.Bill.Id).ToArray();
         List<StatementBillLineProjection> billLines = await (
@@ -197,6 +221,173 @@ internal sealed class BillingStatementRepository(
             }
         }
         return result;
+    }
+
+    private async Task SendMonthlyBillEmailAsync(
+        long personId,
+        DateOnly billingMonth,
+        decimal totalAmountDue,
+        DateOnly dueDate,
+        CancellationToken cancellationToken)
+    {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Monthly bill email skipped because MailDelivery is disabled. PersonId={PersonId} BillingMonth={BillingMonth}",
+                personId,
+                billingMonth);
+            return;
+        }
+
+        EmailRecipient? recipient = await ResolveRecipientAsync(personId, billingMonth, cancellationToken);
+        if (recipient is null)
+        {
+            return;
+        }
+
+        Person? person = await dbContext.Set<Person>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == personId, cancellationToken);
+
+        string studentName = string.IsNullOrWhiteSpace(person?.OfficialFullName)
+            ? "Student"
+            : person.OfficialFullName.Trim();
+        string monthName = billingMonth.ToString("MMMM", CultureInfo.InvariantCulture);
+        string monthYear = billingMonth.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+        string totalAmountDisplay = $"SGD {totalAmountDue:N2}";
+        string dueDateDisplay = dueDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+
+        string subject = $"Your {monthName} Bill Is Ready";
+        string plainTextBody = string.Join(Environment.NewLine, [
+            "MOE SEEDS",
+            "Monthly bill notification",
+            string.Empty,
+            $"Hello {studentName}, your consolidated bill for {monthYear} is now ready.",
+            string.Empty,
+            $"Total Amount Due: {totalAmountDisplay}",
+            $"Due Date: {dueDateDisplay}",
+            string.Empty,
+            "Please log in to review the breakdown and complete your payment.",
+            $"View My Bill -> {PaymentDashboardUrl}"
+        ]);
+
+        string htmlBody = BuildMonthlyBillHtmlBody(
+            studentName,
+            monthName,
+            monthYear,
+            totalAmountDisplay,
+            dueDateDisplay);
+
+        try
+        {
+            Result result = await mailGateway.SendAsync(
+                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "Monthly bill email notification failed. PersonId={PersonId} BillingMonth={BillingMonth} ErrorCode={ErrorCode}",
+                    personId,
+                    monthYear,
+                    result.Error.Code);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Monthly bill email notification threw an exception. PersonId={PersonId} BillingMonth={BillingMonth}",
+                personId,
+                monthYear);
+        }
+    }
+
+    private async Task<EmailRecipient?> ResolveRecipientAsync(
+        long personId,
+        DateOnly billingMonth,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            EmailRecipient? recipient = await recipientResolver.ResolveForPersonAsync(personId, cancellationToken);
+            if (recipient is null)
+            {
+                logger.LogWarning(
+                    "Monthly bill email skipped because no valid recipient was found. PersonId={PersonId} BillingMonth={BillingMonth}",
+                    personId,
+                    billingMonth);
+            }
+
+            return recipient;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Monthly bill email recipient resolution failed. PersonId={PersonId} BillingMonth={BillingMonth}",
+                personId,
+                billingMonth);
+            return null;
+        }
+    }
+
+    private static string BuildMonthlyBillHtmlBody(
+        string studentName,
+        string monthName,
+        string monthYear,
+        string totalAmountDisplay,
+        string dueDateDisplay)
+    {
+        string encodedStudentName = WebUtility.HtmlEncode(studentName);
+        string encodedMonthYear = WebUtility.HtmlEncode(monthYear);
+        string encodedTotalAmount = WebUtility.HtmlEncode(totalAmountDisplay);
+        string encodedDueDate = WebUtility.HtmlEncode(dueDateDisplay);
+
+        StringBuilder builder = new();
+        EmailTemplateBranding.AppendShellStart(builder);
+        EmailTemplateBranding.AppendHeader(builder, $"Your {monthName} bill is ready");
+        builder.Append("<tr><td style=\"padding:30px;\">");
+        builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
+            .Append(encodedStudentName)
+            .Append(", your consolidated bill for <strong>")
+            .Append(encodedMonthYear)
+            .Append("</strong> is now ready.</p>");
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
+        AppendSummaryRow(builder, "Total Amount Due", encodedTotalAmount, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        AppendSummaryRow(builder, "Due Date", encodedDueDate, "#f8fafc", "#334155");
+        builder.Append("</table>");
+        builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please log in to review the breakdown and complete your payment.</p>");
+        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "View My Bill");
+        builder.Append("</td></tr>");
+        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS. If you have already paid, you can ignore this reminder.</td></tr>");
+        builder.Append("</table>");
+        builder.Append("</td></tr></table>");
+        builder.Append("</body></html>");
+        return builder.ToString();
+    }
+
+    private static void AppendSummaryRow(
+        StringBuilder builder,
+        string label,
+        string value,
+        string backgroundColor,
+        string valueColor)
+    {
+        builder.Append("<tr><td bgcolor=\"")
+            .Append(backgroundColor)
+            .Append("\" style=\"background-color:")
+            .Append(backgroundColor)
+            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
+        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
+            .Append(WebUtility.HtmlEncode(label))
+            .Append("</div>");
+        builder.Append("<div style=\"font-size:22px;line-height:28px;color:")
+            .Append(valueColor)
+            .Append(";font-weight:bold;padding-top:4px;\">")
+            .Append(value)
+            .Append("</div>");
+        builder.Append("</td></tr>");
     }
 }
 

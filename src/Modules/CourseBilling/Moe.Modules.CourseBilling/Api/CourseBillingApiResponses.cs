@@ -28,6 +28,7 @@ internal static class CourseBillingApiResponses
         => error.Code switch
         {
             "COURSE.ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
+            "COURSE.SCHOOL_ADMIN_REQUIRED" => ApiResponseCodes.Forbidden,
             "COURSE.ORGANIZATION_FORBIDDEN" => ApiResponseCodes.Forbidden,
             "AUTH.ORGANIZATION_OUTSIDE_SCOPE" => ApiResponseCodes.Forbidden,
             "COURSE.FEE_COMPONENT_MANAGE_FORBIDDEN" => ApiResponseCodes.Forbidden,
@@ -35,16 +36,19 @@ internal static class CourseBillingApiResponses
             "COURSE.SYSTEM_COURSE_FEE_FORBIDDEN" => ApiResponseCodes.Forbidden,
             "COURSE.NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.MATERIAL_NOT_FOUND" => ApiResponseCodes.NotFound,
+            "COURSE.MATERIAL_PREVIEW_UNAVAILABLE" => ApiResponseCodes.UnprocessableEntity,
             "COURSE.FEE_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.GST_COMPONENT_NOT_CONFIGURED" => ApiResponseCodes.NotFound,
             "COURSE.ENROLLMENT_NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.FEE_COMPONENT_DUPLICATE_CODE" => ApiResponseCodes.Conflict,
             "COURSE.FEE_COMPONENT_IN_USE" => ApiResponseCodes.Conflict,
             "COURSE.DISABLED" => ApiResponseCodes.Conflict,
+            "COURSE.NOT_DISABLED" => ApiResponseCodes.Conflict,
             "COURSE.NOT_PUBLISHED" => ApiResponseCodes.Conflict,
             "COURSE.ENROLLMENT_WINDOW_CLOSED" => ApiResponseCodes.Conflict,
             "COURSE.CONTENT_NOT_OPEN" => ApiResponseCodes.Conflict,
             "COURSE.CONTENT_LOCKED" => ApiResponseCodes.Forbidden,
+            "BILL.NOT_FOUND" => ApiResponseCodes.NotFound,
             "COURSE.PERSON_NOT_IN_ORGANIZATION" => ApiResponseCodes.Conflict,
             _ => ApiResponseCodes.BadRequest
         };

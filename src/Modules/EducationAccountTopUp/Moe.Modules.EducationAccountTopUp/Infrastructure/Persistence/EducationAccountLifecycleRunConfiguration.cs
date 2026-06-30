@@ -15,7 +15,9 @@ internal sealed class EducationAccountLifecycleRunConfiguration
         builder.Property(x => x.TriggerTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.ErrorMessage).HasMaxLength(2000);
-        builder.HasIndex(x => x.RunDateUtc);
+        builder.HasIndex(x => new { x.RunDateUtc, x.TriggerTypeCode })
+            .IsUnique()
+            .HasFilter("[TriggerTypeCode] = 'SCHEDULED'");
         builder.HasIndex(x => x.StartedAtUtc);
         builder.Ignore(x => x.DomainEvents);
         builder.Navigation(x => x.Items).UsePropertyAccessMode(PropertyAccessMode.Field);

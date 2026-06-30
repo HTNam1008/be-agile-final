@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
@@ -20,7 +21,9 @@ public sealed class StudentDashboardCourseRepositoryTests : IAsyncLifetime
             .Options;
 
         _dbContext = new MoeDbContext(options, [new CourseBillingModelConfiguration()]);
-        _repository = new StudentDashboardCourseRepository(_dbContext);
+        _repository = new StudentDashboardCourseRepository(
+            _dbContext,
+            new TestClock(new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero)));
     }
 
     public async Task InitializeAsync()
@@ -47,7 +50,7 @@ public sealed class StudentDashboardCourseRepositoryTests : IAsyncLifetime
             enrollmentCloseAtUtc: new DateTime(2026, 6, 30, 16, 0, 0, DateTimeKind.Utc),
             actorLoginAccountId: 42,
             utcNow: new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc));
-        FeeComponent tuition = new("TUITION", "Tuition", "TUITION", FeeComponentCalculationTypes.Fixed, false, 0m, false, true);
+        FeeComponent tuition = new("TUITION", "Tuition", "BASE", FeeComponentCalculationTypes.Fixed, false, 0m, false, true);
         FeeComponent gst = new("GST", "GST", "TAX", FeeComponentCalculationTypes.Percentage, true, 9m, true, true);
         _dbContext.AddRange(course, tuition, gst);
         await _dbContext.SaveChangesAsync();
@@ -70,5 +73,10 @@ public sealed class StudentDashboardCourseRepositoryTests : IAsyncLifetime
         courses.Should().ContainSingle();
         courses.Single().HasActiveFee.Should().BeTrue();
         courses.Single().TotalFee.Should().Be(1090m);
+    }
+
+    private sealed class TestClock(DateTimeOffset utcNow) : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = utcNow;
     }
 }

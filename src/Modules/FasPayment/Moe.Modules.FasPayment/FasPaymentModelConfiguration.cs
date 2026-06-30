@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.Infrastructure.Persistence;
 
 namespace Moe.Modules.FasPayment;
@@ -25,6 +26,8 @@ public sealed class FasPaymentModelConfiguration : IModelConfigurationContributo
         modelBuilder.ApplyConfiguration(new PaymentPartConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new CoursePaymentPlanConfiguration());
+        modelBuilder.Entity<BillPaymentCheckoutSession>();
+        modelBuilder.Entity<StatementPaymentCheckoutSession>();
         modelBuilder.ApplyConfiguration(new PaymentCheckoutSessionConfiguration());
         modelBuilder.ApplyConfiguration(new ProcessedPaymentWebhookEventConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentRefundConfiguration());

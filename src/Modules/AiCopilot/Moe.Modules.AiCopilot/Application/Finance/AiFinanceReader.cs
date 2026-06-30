@@ -1,13 +1,14 @@
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.Application.BillingStatements;
+using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
-using Moe.Modules.FasPayment.Application.LegacyPayments;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Contracts.Payments;
 
 namespace Moe.Modules.AiCopilot.Application.Finance;
 
-/// <param name="BillCount">Number of bills with OutstandingAmount > 0</param>
+/// <param name="BillCount">Number of bills with OutstandingAmount &gt; 0</param>
 /// <param name="TotalOutstanding">Sum of OutstandingAmount across those bills</param>
 public sealed record AiFinanceSnapshot(
     decimal CurrentBalance,
@@ -35,31 +36,42 @@ public sealed class AiFinanceReader(
     {
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
-        var billsResult = await queries.Send(new GetOutstandingBillsQuery(), ct);
-        OutstandingBillsResponse bills = billsResult.IsSuccess
-            ? billsResult.Value
-            : new OutstandingBillsResponse(balance?.AvailableBalance ?? 0m, balance?.CurrencyCode ?? "SGD", []);
-        var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(), ct);
-        IReadOnlyCollection<UserPaymentHistoryResponse> history = historyResult.IsSuccess ? historyResult.Value : [];
 
-        AiOutstandingBill[] outstanding = bills.Bills
+        DateTime utcNow = DateTime.UtcNow;
+        var statementResult = await queries.Send(
+            new GetBillingStatementQuery(utcNow.Year, utcNow.Month), ct);
+        BillingStatementResponse? statement = statementResult.IsSuccess ? statementResult.Value : null;
+
+        var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(1, 5), ct);
+        IReadOnlyCollection<UserPaymentHistoryResponse> history = historyResult.IsSuccess ? historyResult.Value.Items : [];
+
+        AiOutstandingBill[] outstanding = statement?.Items
             .Where(x => x.OutstandingAmount > 0m)
-            .OrderBy(x => x.DueDate)
-            .Select(x => new AiOutstandingBill(x.BillId, x.BillNumber, x.CourseName, x.DueDate, x.OutstandingAmount, x.BillStatusCode))
-            .ToArray();
+            .OrderBy(x => x.CurrentDueDate)
+            .Select(x => new AiOutstandingBill(
+                x.BillId,
+                $"BILL-{x.BillId}",
+                x.CourseName,
+                x.CurrentDueDate,
+                x.OutstandingAmount,
+                x.BillStatusCode))
+            .ToArray() ?? [];
+
         decimal total = outstanding.Sum(x => x.OutstandingAmount);
-        decimal available = balance?.AvailableBalance ?? bills.EducationAccountBalance;
+        string currencyCode = balance?.CurrencyCode ?? statement?.CurrencyCode ?? "SGD";
+        decimal available = balance?.AvailableBalance ?? 0m;
+
         return new AiFinanceSnapshot(
-            balance?.CurrentBalance ?? bills.EducationAccountBalance,
+            balance?.CurrentBalance ?? 0m,
             balance?.HeldBalance ?? 0m,
             available,
             total,
             available - total,
-            balance?.CurrencyCode ?? bills.CurrencyCode,
+            currencyCode,
             outstanding.Length,
             outstanding.FirstOrDefault()?.DueDate,
             outstanding,
-            history.OrderByDescending(x => x.InitiatedAtUtc).Take(5)
+            history.OrderByDescending(x => x.InitiatedAtUtc)
                 .Select(x => new AiPaymentHistoryItem(x.PaymentId, x.PaymentNumber, x.PaymentAmount,
                     x.PaymentStatusCode, x.InitiatedAtUtc, x.Refunds.Sum(r => r.Amount))).ToArray());
     }

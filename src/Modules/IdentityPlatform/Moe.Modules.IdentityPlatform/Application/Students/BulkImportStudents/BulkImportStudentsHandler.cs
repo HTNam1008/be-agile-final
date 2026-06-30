@@ -1,5 +1,7 @@
 using FluentValidation;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.SharedKernel.Results;
@@ -9,7 +11,9 @@ namespace Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 internal sealed class BulkImportStudentsHandler(
     IStudentBulkImportWorkbookReader workbookReader,
     IValidator<CreateStudentCommand> validator,
-    ICommandHandler<CreateStudentCommand, CreateStudentResponse> createStudentHandler)
+    ICommandHandler<CreateStudentCommand, CreateStudentResponse> createStudentHandler,
+    IAuditService audit,
+    IUnitOfWork unitOfWork)
     : ICommandHandler<BulkImportStudentsCommand, BulkImportStudentsResponse>
 {
     private const int MaxRows = 1000;
@@ -31,6 +35,7 @@ internal sealed class BulkImportStudentsHandler(
         }
 
         List<BulkImportStudentRowResult> results = [];
+        List<CreateStudentResponse> createdStudents = [];
         foreach (BulkImportStudentWorkbookRow row in rows)
         {
             CreateStudentCommand createCommand = ToCreateStudentCommand(row);
@@ -47,6 +52,11 @@ internal sealed class BulkImportStudentsHandler(
             Result<CreateStudentResponse> createResult =
                 await createStudentHandler.Handle(createCommand, cancellationToken);
 
+            if (createResult.IsSuccess)
+            {
+                createdStudents.Add(createResult.Value);
+            }
+
             results.Add(createResult.IsSuccess
                 ? BulkImportStudentRowResult.Succeeded(row.RowNumber, createResult.Value.PersonId)
                 : BulkImportStudentRowResult.Failed(
@@ -56,6 +66,25 @@ internal sealed class BulkImportStudentsHandler(
         }
 
         int succeededCount = results.Count(x => x.Status == "Succeeded");
+        foreach (var schoolGroup in createdStudents.GroupBy(x => x.OrganizationId))
+        {
+            await audit.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.StudentBulkImportCompleted,
+                    "BulkImportStudents",
+                    schoolGroup.Key,
+                    schoolGroup.Key,
+                    new SchoolAuditDetails(
+                        "Bulk student import completed",
+                        Count: schoolGroup.Count())),
+                cancellationToken);
+        }
+
+        if (createdStudents.Count > 0)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         BulkImportStudentsResponse response = new(
             rows.Count,
             succeededCount,

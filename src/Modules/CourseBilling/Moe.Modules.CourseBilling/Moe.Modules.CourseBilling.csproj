@@ -2,8 +2,10 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Asp.Versioning.Mvc" />
+    <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="StackExchange.Redis" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.CourseBilling.UnitTests" />
@@ -15,6 +17,7 @@
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
     <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
+    <ProjectReference Include="..\..\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />

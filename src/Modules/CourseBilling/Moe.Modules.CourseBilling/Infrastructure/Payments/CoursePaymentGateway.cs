@@ -1,13 +1,29 @@
+using System.Globalization;
+using System.Net;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.MailDelivery.Templates;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Payments;
 
-internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaymentGateway
+internal sealed class CoursePaymentGateway(
+    MoeDbContext dbContext,
+    IEmailRecipientResolver recipientResolver,
+    IEmailDeliveryGateway mailGateway,
+    IEmailDeliverySwitch mailSwitch,
+    ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
 {
+    private const string CourseDetailUrl = "http://localhost:5173/portal/courses";
+
     public Task<PayableCourseBill?> FindPayableBillAsync(
         long billId,
         long personId,
@@ -54,6 +70,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
             .SingleAsync(candidate => candidate.Id == billId, cancellationToken);
         CourseEnrollment enrollment = await dbContext.Set<CourseEnrollment>()
             .SingleAsync(candidate => candidate.Id == bill.CourseEnrollmentId, cancellationToken);
+        string previousStatus = enrollment.EnrollmentStatusCode;
 
         var result = bill.RecordPayment(amount, paidAtUtc);
         if (result.IsFailure) throw new InvalidOperationException(result.Error.Message);
@@ -64,6 +81,11 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
             candidate.BillStatusCode == BillStatusCodes.Paid ||
             candidate.BillStatusCode == BillStatusCodes.Cancelled);
         enrollment.GrantPaidAccess(allBillsPaid);
+
+        if (ShouldSendSelfJoinEnrollmentSuccessEmail(enrollment, previousStatus))
+        {
+            await SendCourseEnrollmentSuccessEmailAsync(enrollment, cancellationToken);
+        }
     }
 
     public async Task ApplyPaymentFailureAsync(long billId, CancellationToken cancellationToken)
@@ -125,6 +147,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
             from item in dbContext.Set<BillingStatementItem>().AsNoTracking()
             join bill in dbContext.Set<Bill>().AsNoTracking() on item.BillId equals bill.Id
             join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking() on bill.CourseEnrollmentId equals enrollment.Id
+            join course in dbContext.Set<Course>().AsNoTracking() on enrollment.CourseId equals course.Id
             where item.BillingStatementId == statementId
                 && bill.OutstandingAmount > 0m
                 && bill.BillStatusCode != BillStatusCodes.Paid
@@ -133,10 +156,13 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
             select new PayableStatementBill(
                 item.Id,
                 bill.Id,
+                course.OrganizationId,
                 bill.OutstandingAmount,
                 bill.CurrentDueDate,
                 bill.OriginalDueDate,
-                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1))
+                dbContext.Set<Bill>().Count(candidate => candidate.CourseEnrollmentId == enrollment.Id) > 1,
+                course.CourseCode,
+                course.CourseName))
             .ToArrayAsync(cancellationToken);
         decimal total = bills.Sum(x => x.OutstandingAmount);
         return total <= 0m ? null : new(statement.Id, personId, total, statement.CurrencyCode, bills);
@@ -164,6 +190,9 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         List<CourseEnrollment> enrollments = await dbContext.Set<CourseEnrollment>()
             .Where(x => enrollmentIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
+        Dictionary<long, string> previousStatusByEnrollmentId = enrollments.ToDictionary(
+            x => x.Id,
+            x => x.EnrollmentStatusCode);
         List<Bill> enrollmentBills = await dbContext.Set<Bill>()
             .Where(x => enrollmentIds.Contains(x.CourseEnrollmentId))
             .ToListAsync(cancellationToken);
@@ -175,6 +204,15 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
                     x.BillStatusCode == BillStatusCodes.Paid ||
                     x.BillStatusCode == BillStatusCodes.Cancelled);
             enrollment.GrantPaidAccess(allBillsPaid);
+        }
+        foreach (CourseEnrollment enrollment in enrollments)
+        {
+            if (ShouldSendSelfJoinEnrollmentSuccessEmail(
+                    enrollment,
+                    previousStatusByEnrollmentId[enrollment.Id]))
+            {
+                await SendCourseEnrollmentSuccessEmailAsync(enrollment, cancellationToken);
+            }
         }
         var statementBillAmounts = await (
                 from item in dbContext.Set<BillingStatementItem>()
@@ -200,10 +238,9 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         statement.Refresh(total, total - outstanding, paidAtUtc);
     }
 
-    public async Task DeferStatementAsync(
+    public async Task<Result> DeferStatementAsync(
         long statementId,
         long personId,
-        long failedPaymentId,
         IReadOnlyCollection<long> billIds,
         long actorLoginAccountId,
         DateTime utcNow,
@@ -223,12 +260,14 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         {
             DateOnly from = bill.CurrentDueDate;
             decimal amount = bill.OutstandingAmount;
-            var result = bill.DeferToNextMonth(failedPaymentId, utcNow);
-            if (result.IsFailure) throw new InvalidOperationException(result.Error.Message);
+            var result = bill.DeferToNextMonth(utcNow);
+            if (result.IsFailure)
+                return result;
+
             await dbContext.Set<BillDeferral>().AddAsync(new BillDeferral(
                 bill.Id,
                 bill.CourseEnrollmentId,
-                failedPaymentId,
+                null,
                 from,
                 bill.CurrentDueDate,
                 amount,
@@ -238,6 +277,7 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
         }
         statement.Refresh(statement.TotalAmount, statement.PaidAmount, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     private async Task MarkEnrollmentsRefundedAsync(
@@ -263,5 +303,154 @@ internal sealed class CoursePaymentGateway(MoeDbContext dbContext) : ICoursePaym
 
             enrollment.MarkRefunded(refundedAtUtc);
         }
+    }
+
+    private static bool ShouldSendSelfJoinEnrollmentSuccessEmail(
+        CourseEnrollment enrollment,
+        string previousStatus)
+        => enrollment.EnrollmentSourceCode == CourseEnrollmentSourceCodes.SelfJoin
+            && previousStatus != CourseEnrollmentStatusCodes.PaidInFull
+            && enrollment.EnrollmentStatusCode == CourseEnrollmentStatusCodes.PaidInFull;
+
+    private async Task SendCourseEnrollmentSuccessEmailAsync(
+        CourseEnrollment enrollment,
+        CancellationToken cancellationToken)
+    {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Course enrollment email skipped because MailDelivery is disabled. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}",
+                enrollment.PersonId,
+                enrollment.Id);
+            return;
+        }
+
+        EmailRecipient? recipient;
+        try
+        {
+            recipient = await recipientResolver.ResolveForPersonAsync(enrollment.PersonId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Course enrollment email recipient resolution failed. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
+            return;
+        }
+
+        if (recipient is null)
+        {
+            logger.LogWarning("Course enrollment email skipped because no valid recipient was found. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
+            return;
+        }
+
+        Course course = await dbContext.Set<Course>()
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
+        Person? person = await dbContext.Set<Person>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == enrollment.PersonId, cancellationToken);
+
+        string studentName = string.IsNullOrWhiteSpace(person?.OfficialFullName)
+            ? "Student"
+            : person.OfficialFullName.Trim();
+        string courseName = course.CourseName.Trim();
+        string startDateDisplay = course.StartDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+        string subject = $"You're Enrolled in {courseName}";
+        string courseUrl = $"{CourseDetailUrl}/{course.Id}";
+
+        string plainTextBody = string.Join(Environment.NewLine, [
+            "MOE SEEDS",
+            "Course enrollment confirmation",
+            string.Empty,
+            $"Hello {studentName}, your enrolment in {courseName} is confirmed and your payment has been received.",
+            string.Empty,
+            $"Course Start Date: {startDateDisplay}",
+            string.Empty,
+            "You can view the course details and start preparing from your Dashboard.",
+            $"View Course -> {courseUrl}"
+        ]);
+
+        string htmlBody = BuildCourseEnrollmentSuccessHtmlBody(
+            studentName,
+            courseName,
+            startDateDisplay,
+            courseUrl);
+
+        try
+        {
+            Result result = await mailGateway.SendAsync(
+                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "Course enrollment success email failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
+                    enrollment.Id,
+                    result.Error.Code);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Course enrollment success email threw an exception. CourseEnrollmentId={CourseEnrollmentId}",
+                enrollment.Id);
+        }
+    }
+
+    private static string BuildCourseEnrollmentSuccessHtmlBody(
+        string studentName,
+        string courseName,
+        string startDateDisplay,
+        string courseUrl)
+    {
+        string encodedStudentName = WebUtility.HtmlEncode(studentName);
+        string encodedCourseName = WebUtility.HtmlEncode(courseName);
+        string encodedStartDate = WebUtility.HtmlEncode(startDateDisplay);
+
+        StringBuilder builder = new();
+        EmailTemplateBranding.AppendShellStart(builder);
+        EmailTemplateBranding.AppendHeader(builder, $"You're enrolled in {courseName}");
+        builder.Append("<tr><td style=\"padding:30px;\">");
+        builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
+            .Append(encodedStudentName)
+            .Append(", your enrolment in <strong>")
+            .Append(encodedCourseName)
+            .Append("</strong> is confirmed and your payment has been received.</p>");
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
+        AppendSummaryRow(builder, "Course", encodedCourseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        AppendSummaryRow(builder, "Course Start Date", encodedStartDate, "#f8fafc", "#334155");
+        builder.Append("</table>");
+        builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">You can view the course details and start preparing from your Dashboard.</p>");
+        EmailTemplateBranding.AppendButton(builder, courseUrl, "View Course");
+        builder.Append("</td></tr>");
+        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after your course payment was received.</td></tr>");
+        builder.Append("</table>");
+        builder.Append("</td></tr></table>");
+        builder.Append("</body></html>");
+        return builder.ToString();
+    }
+
+    private static void AppendSummaryRow(
+        StringBuilder builder,
+        string label,
+        string value,
+        string backgroundColor,
+        string valueColor)
+    {
+        builder.Append("<tr><td bgcolor=\"")
+            .Append(backgroundColor)
+            .Append("\" style=\"background-color:")
+            .Append(backgroundColor)
+            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
+        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
+            .Append(WebUtility.HtmlEncode(label))
+            .Append("</div>");
+        builder.Append("<div style=\"font-size:22px;line-height:28px;color:")
+            .Append(valueColor)
+            .Append(";font-weight:bold;padding-top:4px;\">")
+            .Append(value)
+            .Append("</div>");
+        builder.Append("</td></tr>");
     }
 }

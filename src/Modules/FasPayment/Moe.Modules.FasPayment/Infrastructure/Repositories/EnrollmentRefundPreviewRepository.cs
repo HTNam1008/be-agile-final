@@ -29,11 +29,23 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
         if (course is null)
             return null;
 
-        long[] billIds = await dbContext.Set<Bill>()
+        var billSnapshots = await dbContext.Set<Bill>()
             .AsNoTracking()
             .Where(x => x.CourseEnrollmentId == enrollment.Id)
-            .Select(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.BillStatusCode,
+                x.OutstandingAmount
+            })
             .ToArrayAsync(cancellationToken);
+        long[] billIds = billSnapshots.Select(x => x.Id).ToArray();
+        decimal outstandingAmount = Money(billSnapshots
+            .Where(x => x.BillStatusCode is not (BillStatusCodes.Paid or BillStatusCodes.Cancelled))
+            .Sum(x => x.OutstandingAmount));
+        int outstandingBillCount = billSnapshots.Count(x =>
+            x.BillStatusCode is not (BillStatusCodes.Paid or BillStatusCodes.Cancelled) &&
+            x.OutstandingAmount > 0m);
 
         var rows = await (
             from allocation in dbContext.Set<PaymentAllocation>().AsNoTracking()
@@ -45,7 +57,6 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
             where billIds.Contains(allocation.BillId)
                 && allocation.AllocationStatusCode == "APPLIED"
                 && (payment.PaymentStatusCode == PaymentStatusCodes.Successful
-                    || payment.PaymentStatusCode == PaymentStatusCodes.Completed
                     || payment.PaymentStatusCode == PaymentStatusCodes.PartiallyRefunded)
             select new
             {
@@ -98,6 +109,8 @@ internal sealed class EnrollmentRefundPreviewRepository(MoeDbContext dbContext)
             Money(paid),
             Money(educationPaid),
             Money(onlinePaid),
+            outstandingAmount,
+            outstandingBillCount,
             sources);
     }
 

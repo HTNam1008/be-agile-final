@@ -1,10 +1,11 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
-using Moe.Modules.FasPayment.Application.LegacyPayments;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Contracts.Payments;
 
@@ -16,30 +17,19 @@ namespace Moe.Modules.FasPayment.Api.EService;
 [Authorize(Policy = AuthorizationPolicies.EServicePortal)]
 [EnableCors("EServiceCors")]
 public sealed class EServicePaymentsController(
-    ICommandDispatcher commands,
     IQueryDispatcher queries) : ControllerBase
 {
     [HttpGet("history")]
-    public async Task<IActionResult> GetHistory(CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(ApiResponse<PageResponse<UserPaymentHistoryResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHistory(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? status = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
+        CancellationToken cancellationToken = default)
         => this.ToPaymentResponse(await queries.Send(
-            new ListUserPaymentHistoryQuery(),
+            new ListUserPaymentHistoryQuery(page, pageSize, status, sortBy, sortDirection),
             cancellationToken));
 
-    [HttpGet("outstanding-bills")]
-    public async Task<IActionResult> GetOutstandingBills(CancellationToken cancellationToken)
-    {
-        return this.ToPaymentResponse(await queries.Send(
-            new GetOutstandingBillsQuery(),
-            cancellationToken));
-    }
-
-    [HttpPost("pay")]
-    public async Task<IActionResult> PayBill(
-        [FromBody] PayBillRequest request,
-        CancellationToken cancellationToken)
-    {
-        return this.ToPaymentResponse(await commands.Send(
-            new PayOutstandingBillCommand(request),
-            cancellationToken), created: true);
-    }
 }

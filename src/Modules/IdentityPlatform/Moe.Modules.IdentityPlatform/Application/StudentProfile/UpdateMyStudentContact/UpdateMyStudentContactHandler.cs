@@ -1,5 +1,7 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.IdentityPlatform.Application;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
@@ -12,7 +14,9 @@ internal sealed class UpdateMyStudentContactHandler(
     ICurrentUser currentUser,
     IUserAccountRepository userAccounts,
     IStudentProfileRepository studentProfiles,
-    IClock clock)
+    IClock clock,
+    IAuditService audit,
+    IUnitOfWork unitOfWork)
     : ICommandHandler<UpdateMyStudentContactCommand, StudentProfileResponse>
 {
     public async Task<Result<StudentProfileResponse>> Handle(UpdateMyStudentContactCommand command, CancellationToken cancellationToken)
@@ -44,6 +48,22 @@ internal sealed class UpdateMyStudentContactHandler(
         if (profile is null)
         {
             return Result<StudentProfileResponse>.Failure(IdentityErrors.PersonNotFound);
+        }
+
+        if (profile.SchoolOrganizationId is long schoolOrganizationId)
+        {
+            await audit.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.StudentContactUpdated,
+                    "Person",
+                    profile.PersonId,
+                    schoolOrganizationId,
+                    new SchoolAuditDetails(
+                        "Student profile/contact details updated by student",
+                        EntityDisplayName: profile.OfficialFullName,
+                        ChangedFields: ["contactEmail", "contactMobile"])),
+                cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         return Result<StudentProfileResponse>.Success(StudentProfileMapper.ToResponse(account, profile, today, currentUser));

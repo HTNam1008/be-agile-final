@@ -3,11 +3,12 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Domain.Payments;
 
-internal sealed class PaymentCheckoutSession : Entity<long>
+internal abstract partial class PaymentCheckoutSession : Entity<long>
 {
-    private PaymentCheckoutSession() : base(0) { }
+    protected PaymentCheckoutSession() : base(0) { }
 
-    private PaymentCheckoutSession(
+    protected PaymentCheckoutSession(
+        string checkoutSessionTypeCode,
         long billId,
         long courseEnrollmentId,
         long courseId,
@@ -18,6 +19,7 @@ internal sealed class PaymentCheckoutSession : Entity<long>
         string idempotencyKey,
         DateTime createdAtUtc) : base(0)
     {
+        CheckoutSessionTypeCode = checkoutSessionTypeCode;
         BillId = billId;
         CourseEnrollmentId = courseEnrollmentId;
         CourseId = courseId;
@@ -32,19 +34,20 @@ internal sealed class PaymentCheckoutSession : Entity<long>
         UpdatedAtUtc = createdAtUtc;
     }
 
-    public long BillId { get; private set; }
-    public long CourseEnrollmentId { get; private set; }
-    public long CourseId { get; private set; }
-    public long PersonId { get; private set; }
-    public long CoursePaymentPlanId { get; private set; }
-    public long? PaymentId { get; private set; }
-    public long? BillingStatementId { get; private set; }
-    public decimal Amount { get; private set; }
-    public string CurrencyCode { get; private set; } = string.Empty;
-    public int RequiredInstallmentCount { get; private set; }
-    public int PaidInstallmentCount { get; private set; }
-    public string CheckoutStatusCode { get; private set; } = string.Empty;
-    public string IdempotencyKey { get; private set; } = string.Empty;
+    public string CheckoutSessionTypeCode { get; protected set; } = string.Empty;
+    public long BillId { get; protected set; }
+    public long CourseEnrollmentId { get; protected set; }
+    public long CourseId { get; protected set; }
+    public long PersonId { get; protected set; }
+    public long CoursePaymentPlanId { get; protected set; }
+    public long? PaymentId { get; protected set; }
+    public long? BillingStatementId { get; protected set; }
+    public decimal Amount { get; protected set; }
+    public string CurrencyCode { get; protected set; } = string.Empty;
+    public int RequiredInstallmentCount { get; protected set; }
+    public int PaidInstallmentCount { get; protected set; }
+    public string CheckoutStatusCode { get; protected set; } = string.Empty;
+    public string IdempotencyKey { get; protected set; } = string.Empty;
     public string? ProviderCheckoutSessionId { get; private set; }
     public string? ProviderPaymentIntentId { get; private set; }
     public string? ProviderSubscriptionId { get; private set; }
@@ -52,14 +55,24 @@ internal sealed class PaymentCheckoutSession : Entity<long>
     public string? ProviderPriceId { get; private set; }
     public string? CheckoutUrl { get; private set; }
     public DateTime? ExpiresAtUtc { get; private set; }
-    public DateTime CreatedAtUtc { get; private set; }
-    public DateTime UpdatedAtUtc { get; private set; }
+    public DateTime CreatedAtUtc { get; protected set; }
+    public DateTime UpdatedAtUtc { get; protected set; }
     public DateTime? LastPaymentEventAtUtc { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
 
     public bool IsInstallment => RequiredInstallmentCount > 1;
+    public bool IsBillCheckout => CheckoutSessionTypeCode == PaymentCheckoutSessionTypeCodes.Bill;
+    public bool IsStatementCheckout => CheckoutSessionTypeCode == PaymentCheckoutSessionTypeCodes.Statement;
 
-    public static PaymentCheckoutSession CreateForStatement(
+    protected static string Required(string value) =>
+        string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Provider identifier is required.") : value.Trim();
+}
+
+internal sealed class StatementPaymentCheckoutSession : PaymentCheckoutSession
+{
+    private StatementPaymentCheckoutSession() : base() { }
+
+    public static StatementPaymentCheckoutSession Create(
         long paymentId,
         long billingStatementId,
         long personId,
@@ -68,8 +81,9 @@ internal sealed class PaymentCheckoutSession : Entity<long>
     {
         if (paymentId <= 0 || billingStatementId <= 0 || personId <= 0 || onlineAmount <= 0m)
             throw new ArgumentOutOfRangeException(nameof(paymentId));
-        return new PaymentCheckoutSession
+        return new StatementPaymentCheckoutSession
         {
+            CheckoutSessionTypeCode = PaymentCheckoutSessionTypeCodes.Statement,
             PaymentId = paymentId,
             BillingStatementId = billingStatementId,
             BillId = 0,
@@ -86,8 +100,36 @@ internal sealed class PaymentCheckoutSession : Entity<long>
             UpdatedAtUtc = createdAtUtc
         };
     }
+}
 
-    public static Result<PaymentCheckoutSession> Create(
+internal sealed class BillPaymentCheckoutSession : PaymentCheckoutSession
+{
+    private BillPaymentCheckoutSession() : base() { }
+
+    private BillPaymentCheckoutSession(
+        long billId,
+        long courseEnrollmentId,
+        long courseId,
+        long personId,
+        long paymentPlanId,
+        decimal amount,
+        int requiredInstallmentCount,
+        string idempotencyKey,
+        DateTime createdAtUtc) : base(
+            PaymentCheckoutSessionTypeCodes.Bill,
+            billId,
+            courseEnrollmentId,
+            courseId,
+            personId,
+            paymentPlanId,
+            amount,
+            requiredInstallmentCount,
+            idempotencyKey,
+            createdAtUtc)
+    {
+    }
+
+    public static Result<BillPaymentCheckoutSession> Create(
         long billId,
         long courseEnrollmentId,
         long courseId,
@@ -97,10 +139,10 @@ internal sealed class PaymentCheckoutSession : Entity<long>
         DateTime createdAtUtc)
     {
         if (billId <= 0 || courseEnrollmentId <= 0 || courseId <= 0 || personId <= 0 || amount <= 0)
-            return Result<PaymentCheckoutSession>.Failure(PaymentDomainErrors.InvalidCheckout);
+            return Result<BillPaymentCheckoutSession>.Failure(PaymentDomainErrors.InvalidCheckout);
 
         string key = $"stripe-checkout:{billId}:{plan.Id}:{personId}";
-        return Result<PaymentCheckoutSession>.Success(new(
+        return Result<BillPaymentCheckoutSession>.Success(new(
             billId,
             courseEnrollmentId,
             courseId,
@@ -111,7 +153,10 @@ internal sealed class PaymentCheckoutSession : Entity<long>
             key,
             createdAtUtc));
     }
+}
 
+internal abstract partial class PaymentCheckoutSession
+{
     public void AssignProviderCheckout(
         string sessionId,
         string priceId,
@@ -189,9 +234,12 @@ internal sealed class PaymentCheckoutSession : Entity<long>
         LastPaymentEventAtUtc = updatedAtUtc;
         return true;
     }
+}
 
-    private static string Required(string value) =>
-        string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("Provider identifier is required.") : value.Trim();
+public static class PaymentCheckoutSessionTypeCodes
+{
+    public const string Bill = "BILL";
+    public const string Statement = "STATEMENT";
 }
 
 public static class CheckoutStatusCodes

@@ -2,7 +2,7 @@
     Seeds baseline course fee components.
 
     Domain values:
-      ComponentTypeCode: TUITION, MATERIAL, TAX
+      ComponentTypeCode: BASE, ADDON, TAX
       CalculationTypeCode: FIXED, PERCENTAGE
 
     This script is idempotent. Existing rows with the same ComponentCode are
@@ -17,8 +17,8 @@ MERGE [course].[FeeComponent] AS target
 USING
 (
     VALUES
-        (N'TUITION',  N'Tuition fee',             'TUITION',  'FIXED',      CAST(0 AS bit), CAST(1 AS bit)),
-        (N'MATERIAL', N'Material fee',            'MATERIAL', 'FIXED',      CAST(0 AS bit), CAST(1 AS bit)),
+        (N'TUITION',  N'Tuition fee',             'BASE',     'FIXED',      CAST(0 AS bit), CAST(1 AS bit)),
+        (N'MATERIAL', N'Material fee',            'ADDON',    'FIXED',      CAST(0 AS bit), CAST(1 AS bit)),
         (N'TAX',      N'Goods and services tax',  'TAX',      'PERCENTAGE', CAST(1 AS bit), CAST(1 AS bit))
 ) AS source
 (

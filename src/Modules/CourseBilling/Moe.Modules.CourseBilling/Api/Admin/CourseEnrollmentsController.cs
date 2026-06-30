@@ -25,8 +25,7 @@ public sealed class CourseEnrollmentsController(ICommandDispatcher commands) : C
     {
         var command = new AdminEnrollPersonCommand(
             courseId,
-            request.StudentNumber,
-            request.CoursePaymentPlanId);
+            request.StudentNumber);
 
         var result = await commands.Send(command, cancellationToken);
         return this.ToCourseBillingResponse(result, created: true);

@@ -18,7 +18,8 @@ internal sealed class CloseManualAccountHandler(
     IAdminAccessControl adminAccess,
     IClock clock,
     IUnitOfWork unitOfWork,
-    IAuditService auditService) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
+    IAuditService auditService,
+    EducationAccountClosureEmailService closureEmails) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
 {
     public async Task<Result<CloseManualAccountResponse>> Handle(
         CloseManualAccountCommand command,
@@ -78,7 +79,30 @@ internal sealed class CloseManualAccountHandler(
             detailsJson,
             cancellationToken);
 
+        if (person.OrganizationId is long schoolOrganizationId)
+        {
+            await auditService.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.EducationAccountClosedManually,
+                    "EducationAccount",
+                    account.Id,
+                    schoolOrganizationId,
+                    new SchoolAuditDetails(
+                        "Education account closed manually",
+                        RelatedIds: new Dictionary<string, long>
+                        {
+                            ["studentPersonId"] = account.PersonId
+                        },
+                        StatusTransition: new SchoolAuditStatusTransition(null, account.StatusCode),
+                        ReasonCode: command.ReasonCode)),
+                cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        string closureReason = string.IsNullOrWhiteSpace(command.Remarks)
+            ? command.ReasonCode
+            : $"{command.ReasonCode} - {command.Remarks.Trim()}";
+        await closureEmails.SendClosedAsync(account, closureReason, cancellationToken);
 
         return Result<CloseManualAccountResponse>.Success(new CloseManualAccountResponse(
             account.PersonId,

@@ -11,10 +11,11 @@ using Moe.Modules.Mfa.Application.ResetPin;
 using Moe.Modules.Mfa.Application.SetupPin;
 using Moe.Modules.Mfa.Application.StartChallenge;
 using Moe.Modules.Mfa.Application.VerifyPin;
-using Moe.Modules.Mfa.IGateway.Repositories;
-using Moe.Modules.Mfa.IGateway.Security;
 using Moe.Modules.Mfa.Infrastructure;
 using Moe.Modules.Mfa.Infrastructure.Repositories;
+using Moe.Modules.Mfa.Infrastructure.Security;
+using Moe.Modules.Mfa.IGateway.Repositories;
+using Moe.Modules.Mfa.IGateway.Security;
 
 namespace Moe.Modules.Mfa;
 
@@ -31,6 +32,7 @@ public sealed class MfaModule : IModule
         services.AddScoped<IMfaCredentialRepository, MfaCredentialRepository>();
         services.AddScoped<IMfaChallengeRepository, MfaChallengeRepository>();
         services.AddScoped<IMfaAuditEventRepository, MfaAuditEventRepository>();
+        services.AddScoped<IMfaSessionProofService, MfaSessionProofService>();
 
         services.AddScoped<IQueryHandler<GetMfaStatusQuery, MfaStatusResponse>, GetMfaStatusHandler>();
         services.AddScoped<ICommandHandler<StartMfaChallengeCommand, MfaChallengeResponse>, StartMfaChallengeHandler>();

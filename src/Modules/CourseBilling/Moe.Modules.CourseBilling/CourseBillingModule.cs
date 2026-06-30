@@ -62,7 +62,9 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<IBillingStatementRepository, BillingStatementRepository>();
         services.AddScoped<AdminCourseAccess>();
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
-        services.AddScoped<ICourseMaterialStorageService, LocalCourseMaterialStorageService>();
+        services.AddScoped<ICourseMaterialStorageService, AzureBlobCourseMaterialStorageService>();
+        services.AddScoped<ICourseMaterialPreviewConverter, PowerPointCourseMaterialPreviewConverter>();
+        services.AddSingleton<ICourseMaterialPreviewCache, AzureBlobCourseMaterialPreviewCache>();
 
         services.AddScoped<IQueryHandler<ListCoursesQuery, PageResponse<CourseSummaryDto>>, ListCoursesQueryHandler>();
         services.AddScoped<IQueryHandler<GetCourseQuery, CourseDetailDto>, GetCourseQueryHandler>();
@@ -97,11 +99,14 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICommandHandler<DeleteFeeComponentCommand, long>, DeleteFeeComponentCommandHandler>();
 
         services.AddScoped<ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>, AdminEnrollPersonHandler>();
+        services.AddScoped<PaymentPlanBillPreviewBuilder>();
         services.AddScoped<ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>, SelfJoinCourseHandler>();
         services.AddScoped<ICommandHandler<ChangeEnrollmentPaymentPlanCommand, CourseEnrollmentResponse>, ChangeEnrollmentPaymentPlanHandler>();
+        services.AddScoped<IQueryHandler<PreviewCoursePaymentPlanBillQuery, PaymentPlanBillPreviewResponse>, PreviewCoursePaymentPlanBillHandler>();
         services.AddScoped<IQueryHandler<PreviewPaymentPlanBillQuery, PaymentPlanBillPreviewResponse>, PreviewPaymentPlanBillHandler>();
         services.AddScoped<IQueryHandler<GetStudentCourseContentQuery, StudentCourseContentResponse>, GetStudentCourseContentHandler>();
         services.AddScoped<IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>, DownloadStudentCourseMaterialHandler>();
+        services.AddScoped<IQueryHandler<GetStudentCourseMaterialOfficePreviewQuery, StudentCourseMaterialOfficePreviewResponse>, GetStudentCourseMaterialOfficePreviewHandler>();
         services.AddScoped<IQueryHandler<GetAdminDashboardQuery, AdminDashboardResponse>, GetAdminDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentDashboardQuery, StudentDashboardResponse>, GetStudentDashboardHandler>();
         services.AddScoped<IQueryHandler<GetStudentEnrolledCoursesQuery, PageResponse<AdminStudentEnrolledCourseItem>>, GetStudentEnrolledCoursesHandler>();
@@ -111,6 +116,7 @@ public sealed class CourseBillingModule : IModule
 
         services.AddScoped<IValidator<AdminEnrollPersonRequest>, AdminEnrollPersonRequestValidator>();
         services.AddScoped<IValidator<SelfJoinCourseRequest>, SelfJoinCourseRequestValidator>();
+        services.AddScoped<IValidator<PreviewCoursePaymentPlanBillRequest>, PreviewCoursePaymentPlanBillRequestValidator>();
         services.AddScoped<IValidator<CreateCourseRequest>, CreateCourseRequestValidator>();
         services.AddScoped<IValidator<UpdateCourseRequest>, UpdateCourseRequestValidator>();
         services.AddScoped<IValidator<CreateCourseMaterialRequest>, CreateCourseMaterialRequestValidator>();

@@ -15,24 +15,26 @@ namespace Moe.Modules.FasPayment.Api.EService;
 [ServiceFilter(typeof(FasApiExceptionFilter))]
 public sealed class StudentFasApplicationsController(StudentFasApplicationService service) : ControllerBase
 {
-    [HttpGet("schemes")] public Task<object> Schemes(CancellationToken ct) => service.ListSchemes(ct);
+    [HttpGet("schemes")] public Task<object> Schemes([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? search = null, CancellationToken ct = default) => service.ListSchemes(page, pageSize, search, ct);
+    [HttpGet("schemes/applicable")] public Task<object> ApplicableSchemes([FromQuery] long courseId, CancellationToken ct = default) => service.ApplicableActiveSchemesForCourse(courseId, ct);
     [HttpGet("schemes/{id:long}")] public Task<object> Scheme(long id, CancellationToken ct) => service.SchemeDetail(id, ct);
     [HttpPost("eligibility/check")] public Task<object> Eligibility(EligibilityRequest request, CancellationToken ct) => service.CheckEligibility(request, ct);
     [HttpGet("applications/prefill")] public Task<object> Prefill(CancellationToken ct) => service.Prefill(ct);
-    [HttpGet("applications/me")] public Task<object> Mine(CancellationToken ct) => service.MyApplications(ct);
+    [HttpGet("applications/me")] public Task<object> Mine([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? search = null, [FromQuery] string? status = null, [FromQuery] string? sortBy = null, [FromQuery] string? sortDirection = null, CancellationToken ct = default) => service.MyApplications(page, pageSize, search, status, sortBy, sortDirection, ct);
     [HttpGet("applications/me/summary")] public Task<object> Summary(CancellationToken ct) => service.Summary(ct);
     [HttpPost("applications/draft")] public Task<object> Draft(CreateDraftRequest request, CancellationToken ct) => service.CreateOrResumeDraft(request, ct);
     [HttpPut("applications/{id:long}/schemes")] public Task<object> Schemes(long id, ReplaceSchemesRequest request, CancellationToken ct) => service.ReplaceSchemes(id, request, ct);
     [HttpPut("applications/{id:long}/particulars")] public Task<object> Particulars(long id, UpdateParticularsRequest request, CancellationToken ct) => service.UpdateParticulars(id, request, ct);
     [HttpPut("applications/{id:long}/income")] public Task<object> Income(long id, UpdateIncomeRequest request, CancellationToken ct) => service.UpdateIncome(id, request, ct);
     [HttpGet("applications/{id:long}/required-documents")] public Task<object> RequiredDocuments(long id, CancellationToken ct) => service.RequiredDocuments(id, ct);
-    [HttpPost("applications/{id:long}/documents"), RequestSizeLimit(10 * 1024 * 1024 + 65536)]
+    [HttpPost("applications/{id:long}/documents"), RequestSizeLimit(20 * 1024 * 1024 + 65536)]
     public async Task<object> Upload(long id, [FromForm] string checklistItemCode, [FromForm] IFormFile file, CancellationToken ct)
     { await using var stream = file.OpenReadStream(); return await service.UploadDocument(id, checklistItemCode, file.FileName, file.ContentType, file.Length, stream, ct); }
     [HttpDelete("applications/{id:long}/documents/{documentId:long}")] public async Task<IActionResult> Remove(long id, long documentId, CancellationToken ct) { await service.RemoveDocument(id, documentId, ct); return NoContent(); }
-    [HttpPost("applications/{id:long}/documents/{documentId:long}/replace"), RequestSizeLimit(10 * 1024 * 1024 + 65536)]
+    [HttpPost("applications/{id:long}/documents/{documentId:long}/replace"), RequestSizeLimit(20 * 1024 * 1024 + 65536)]
     public async Task<object> Replace(long id, long documentId, [FromForm] IFormFile file, CancellationToken ct) { await using var stream = file.OpenReadStream(); return await service.ReplaceDocument(id, documentId, file.FileName, file.ContentType, file.Length, stream, ct); }
     [HttpGet("documents/{documentId:long}/download")] public async Task<IActionResult> Download(long documentId, CancellationToken ct) { var d = await service.DownloadDocument(documentId, ct); return File(d.Stream, d.Mime, d.Name); }
+    [HttpGet("documents/{documentId:long}/preview")] public async Task<IActionResult> Preview(long documentId, CancellationToken ct) { var d = await service.DownloadDocument(documentId, ct); Response.Headers.ContentDisposition = $"inline; filename=\"{d.Name}\""; return File(d.Stream, d.Mime); }
     [HttpGet("applications/{id:long}/review-validation")] public Task<object> Review(long id, CancellationToken ct) => service.ReviewValidation(id, ct);
     [HttpGet("applications/{id:long}/review")] public Task<object> ApplicationReview(long id, CancellationToken ct) => service.ApplicationReview(id, ct);
     [HttpPut("applications/{id:long}/declarations")] public Task<object> Declarations(long id, SaveDeclarationsRequest request, CancellationToken ct) => service.SaveDeclarations(id, request, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);

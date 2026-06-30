@@ -1,5 +1,6 @@
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -7,22 +8,30 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.StatementPayments;
 
-public sealed record ListUserPaymentHistoryQuery
-    : IQuery<IReadOnlyCollection<UserPaymentHistoryResponse>>;
+public sealed record ListUserPaymentHistoryQuery(
+    int Page = 1,
+    int PageSize = 10,
+    string? Status = null,
+    string? SortBy = null,
+    string? SortDirection = null)
+    : IQuery<PageResponse<UserPaymentHistoryResponse>>;
 
 internal sealed class ListUserPaymentHistoryHandler(
     IPaymentCheckoutRepository payments,
     ICurrentUser currentUser)
-    : IQueryHandler<ListUserPaymentHistoryQuery, IReadOnlyCollection<UserPaymentHistoryResponse>>
+    : IQueryHandler<ListUserPaymentHistoryQuery, PageResponse<UserPaymentHistoryResponse>>
 {
-    public async Task<Result<IReadOnlyCollection<UserPaymentHistoryResponse>>> Handle(
+    public async Task<Result<PageResponse<UserPaymentHistoryResponse>>> Handle(
         ListUserPaymentHistoryQuery query,
         CancellationToken cancellationToken)
     {
         long personId = currentUser.PersonId ?? 0;
         if (!currentUser.IsAuthenticated || personId <= 0)
-            return Result<IReadOnlyCollection<UserPaymentHistoryResponse>>.Failure(
+            return Result<PageResponse<UserPaymentHistoryResponse>>.Failure(
                 PaymentApplicationErrors.StudentRequired);
+
+        int page = Math.Max(query.Page, 1);
+        int pageSize = Math.Clamp(query.PageSize, 1, 100);
 
         IReadOnlyCollection<Payment> history =
             await payments.ListPaymentsForPersonAsync(personId, cancellationToken);
@@ -99,13 +108,65 @@ internal sealed class ListUserPaymentHistoryHandler(
                 [ToFasSettlementResponse(settlement)]))
             .ToArray();
 
-        return Result<IReadOnlyCollection<UserPaymentHistoryResponse>>.Success(
-            paymentRows
+        IEnumerable<UserPaymentHistoryResponse> filteredRows = paymentRows
                 .Concat(fasRows)
-                .OrderByDescending(row => row.CompletedAtUtc ?? row.FailedAtUtc ?? row.InitiatedAtUtc)
-                .Take(150)
-                .ToArray());
+                .Where(row => MatchesStatus(row, query.Status));
+
+        UserPaymentHistoryResponse[] orderedRows = ApplySort(filteredRows, query.SortBy, query.SortDirection)
+            .ToArray();
+
+        long totalCount = orderedRows.LongLength;
+        UserPaymentHistoryResponse[] pageRows = orderedRows
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArray();
+
+        return Result<PageResponse<UserPaymentHistoryResponse>>.Success(
+            new PageResponse<UserPaymentHistoryResponse>(pageRows, page, pageSize, totalCount));
     }
+
+    private static bool MatchesStatus(UserPaymentHistoryResponse row, string? status)
+    {
+        string normalized = (status ?? "ALL").Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized == "ALL") return true;
+
+        string group = row.PaymentStatusCode.ToUpperInvariant() switch
+        {
+            PaymentStatusCodes.Successful or PaymentStatusCodes.PartiallyRefunded or PaymentStatusCodes.Refunded => "SUCCESS",
+            PaymentStatusCodes.Initiated or PaymentStatusCodes.PendingOnlinePayment => "PENDING",
+            PaymentStatusCodes.Failed or PaymentStatusCodes.Cancelled or PaymentStatusCodes.Expired => "FAILED",
+            _ => row.PaymentStatusCode.ToUpperInvariant()
+        };
+
+        return group == normalized;
+    }
+
+    private static IEnumerable<UserPaymentHistoryResponse> ApplySort(
+        IEnumerable<UserPaymentHistoryResponse> rows,
+        string? sortBy,
+        string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        IOrderedEnumerable<UserPaymentHistoryResponse> ordered = key switch
+        {
+            "paymentnumber" => Order(rows, row => row.PaymentNumber, descending),
+            "educationaccountamount" => Order(rows, row => row.EducationAccountAmount, descending),
+            "onlinepaymentamount" => Order(rows, row => row.OnlinePaymentAmount, descending),
+            "paymentamount" => Order(rows, row => row.PaymentAmount, descending),
+            "reference" => Order(rows, row => row.ReceiptNumber ?? string.Empty, descending),
+            _ => Order(rows, row => row.CompletedAtUtc ?? row.FailedAtUtc ?? row.InitiatedAtUtc, true)
+        };
+
+        return ordered.ThenBy(row => row.PaymentId);
+    }
+
+    private static IOrderedEnumerable<UserPaymentHistoryResponse> Order<TKey>(
+        IEnumerable<UserPaymentHistoryResponse> rows,
+        Func<UserPaymentHistoryResponse, TKey> keySelector,
+        bool descending)
+        => descending ? rows.OrderByDescending(keySelector) : rows.OrderBy(keySelector);
 
     private static UserPaymentHistoryFasSettlementResponse ToFasSettlementResponse(UserFasSettlement settlement)
         => new(

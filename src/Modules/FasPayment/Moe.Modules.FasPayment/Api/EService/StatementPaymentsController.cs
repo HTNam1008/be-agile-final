@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Contracts.Payments;
+using Moe.Modules.FasPayment.Domain.Payments;
 
 namespace Moe.Modules.FasPayment.Api.EService;
 
@@ -38,6 +40,29 @@ public sealed class StatementPaymentsController(ICommandDispatcher commands, IQu
 
     [HttpPost("defer")]
     public async Task<IActionResult> Defer(long statementId, [FromBody] DeferBillingStatementRequest request, CancellationToken ct)
-        => this.ToPaymentResponse(await commands.Send(new DeferBillingStatementCommand(statementId, request), ct));
+    {
+        var result = await commands.Send(new DeferBillingStatementCommand(statementId, request), ct);
+        if (result.IsFailure)
+        {
+            return this.ToPaymentResponse(result);
+        }
+
+        DeferBillingStatementResponse response = result.Value;
+        if (!response.Deferred &&
+            response.BlockedReasonCode == PaymentDomainErrors.EducationAccountCanCoverDeferral.Code)
+        {
+            return new ObjectResult(ApiResponse<DeferBillingStatementResponse>.Fail(
+                PaymentDomainErrors.EducationAccountCanCoverDeferral.Message,
+                [PaymentDomainErrors.EducationAccountCanCoverDeferral.Code],
+                ApiResponseCodes.BadRequest,
+                HttpContext.TraceIdentifier,
+                response))
+            {
+                StatusCode = ApiResponseCodes.BadRequest
+            };
+        }
+
+        return ApiResponseFactory.Ok(response, HttpContext.TraceIdentifier);
+    }
 
 }

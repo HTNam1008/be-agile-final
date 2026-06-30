@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
@@ -16,7 +17,8 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock,
-    ITopUpAccountSelectionResolver selectionResolver)
+    ITopUpAccountSelectionResolver selectionResolver,
+    IAuditService audit)
     : ICommandHandler<UpsertFixedRecipientsCommand, UpsertFixedRecipientsResponse>
 {
     public async Task<Result<UpsertFixedRecipientsResponse>> Handle(
@@ -114,6 +116,19 @@ internal sealed class UpsertFixedRecipientsCommandHandler(
                 await campaigns.AddRecipientAsync(newRec, cancellationToken);
             }
         }
+
+        await audit.RecordSchoolActionAsync(
+            new SchoolAuditContext(
+                AuditActionCodes.TopUpFixedRecipientsUpdated,
+                "TopUpCampaign",
+                campaign.Id,
+                campaign.OrganizationId,
+                new SchoolAuditDetails(
+                    "Fixed-recipient edits",
+                    EntityDisplayName: campaign.CampaignName,
+                    RelatedIds: new Dictionary<string, long> { ["campaignId"] = campaign.Id },
+                    Count: resolution.TotalSelected)),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

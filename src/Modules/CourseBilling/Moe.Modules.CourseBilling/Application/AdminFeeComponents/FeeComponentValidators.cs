@@ -14,7 +14,7 @@ internal sealed class CreateFeeComponentRequestValidator : AbstractValidator<Cre
             .NotEmpty()
             .MaximumLength(30)
             .Must(value => FeeComponentTypeCodes.All.Contains(value.Trim().ToUpperInvariant()))
-            .WithMessage("Fee component type must be TUITION, MATERIAL or TAX.");
+            .WithMessage("Fee component type must be BASE, ADDON or TAX.");
         RuleFor(x => x.CalculationTypeCode).NotEmpty().MaximumLength(30);
         RuleFor(x => x.DefaultValue).GreaterThanOrEqualTo(0m);
     }
@@ -30,7 +30,7 @@ internal sealed class UpdateFeeComponentRequestValidator : AbstractValidator<Upd
             .NotEmpty()
             .MaximumLength(30)
             .Must(value => FeeComponentTypeCodes.All.Contains(value.Trim().ToUpperInvariant()))
-            .WithMessage("Fee component type must be TUITION, MATERIAL or TAX.");
+            .WithMessage("Fee component type must be BASE, ADDON or TAX.");
         RuleFor(x => x.CalculationTypeCode).NotEmpty().MaximumLength(30);
         RuleFor(x => x.DefaultValue).GreaterThanOrEqualTo(0m);
     }

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.IGateway.Repositories;
 using Moe.SharedKernel.Results;
@@ -12,7 +13,8 @@ namespace Moe.Modules.FasPayment.Application.Applications.Reject;
 internal sealed class RejectApplicationHandler(
     IFasApplicationRepository repository,
     ICurrentUser currentUser,
-    IUnitOfWork unitOfWork) : ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>
+    IUnitOfWork unitOfWork,
+    FasEmailNotificationService fasEmails) : ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>
 {
     public async Task<Result<RejectApplicationResponse>> Handle(RejectApplicationCommand command, CancellationToken cancellationToken)
     {
@@ -35,6 +37,7 @@ internal sealed class RejectApplicationHandler(
         await repository.AddDecisionAsync(decision, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await fasEmails.SendApplicationRejectedAsync(application.Id, command.RejectionReasonCode, cancellationToken);
 
         return Result<RejectApplicationResponse>.Success(
             new RejectApplicationResponse(application.Id, application.StatusCode, decision.Decision, command.RejectionReasonCode)
