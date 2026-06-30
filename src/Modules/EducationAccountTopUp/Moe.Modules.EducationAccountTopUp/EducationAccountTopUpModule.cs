@@ -29,6 +29,7 @@ using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetAccountTaxonomy;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;
@@ -137,6 +138,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetCampaignByIdQuery, CampaignListItem?>, GetCampaignByIdQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();
         services.AddScoped<IQueryHandler<GetFixedRecipientsQuery, IReadOnlyList<FixedRecipientDto>>, GetFixedRecipientsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetAccountTaxonomyQuery, GetAccountTaxonomyResponse>, GetAccountTaxonomyHandler>();
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();
         services.AddScoped<IQueryHandler<GetRunSummaryQuery, RunSummaryResponse>, GetRunSummaryQueryHandler>();
         services.AddScoped<IQueryHandler<GetTopUpTransactionResultsQuery, PageResponse<TopUpTransactionResultItem>>, GetTopUpTransactionResultsHandler>();
