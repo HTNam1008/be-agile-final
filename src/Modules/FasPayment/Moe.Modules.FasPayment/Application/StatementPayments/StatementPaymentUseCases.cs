@@ -356,9 +356,8 @@ internal sealed class PayBillingStatementHandler(
                 true));
         }
 
-        DateTime expiresAtUtc = checkout is null
-            ? activePayment.InitiatedAtUtc.Add(PaymentCheckoutPolicy.Lifetime)
-            : checkout.ExpiresAtUtc ?? now;
+        DateTime expiresAtUtc = checkout?.ExpiresAtUtc
+            ?? activePayment.InitiatedAtUtc.Add(PaymentCheckoutPolicy.Lifetime);
         if (expiresAtUtc > now)
             return Result<PayBillingStatementResponse?>.Failure(PaymentDomainErrors.StatementPaymentInProgress);
 
