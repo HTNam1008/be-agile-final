@@ -34,7 +34,8 @@ internal sealed class GetCampaignContractsHandler(
                 x.TotalReceived,
                 x.CyclesCompleted,
                 x.NextPaymentDate,
-                x.ContractStatus))
+                x.ContractStatus,
+                x.CreatedAtUtc))
             .ToArray();
 
         return Result<PageResponse<CampaignContractItem>>.Success(

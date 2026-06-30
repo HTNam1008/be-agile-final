@@ -27,5 +27,6 @@ internal sealed record ContractStatusProjection(
     int? CyclesCompleted,
     DateTime? NextPaymentDate,
     string ContractStatus,
+    DateTime CreatedAtUtc,
     string? MaskedAccountNumber,
     string? StudentDisplayName);
