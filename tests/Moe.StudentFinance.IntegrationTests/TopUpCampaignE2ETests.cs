@@ -198,13 +198,19 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
             throw new Exception($"Activate failed: {activateResponse.StatusCode} - {err}");
         }
 
-        // 5. DynamicRules campaigns cannot be manually triggered — verify rejection
-        var runResponse = await _client.PostAsJsonAsync(
-            $"/api/admin/v1/top-up-campaigns/{campaignId}/runs",
-            new { idempotencyKey = $"dynamic:{campaignId}:{Guid.NewGuid():N}", note = "Should fail" });
-        Assert.False(runResponse.IsSuccessStatusCode, "DynamicRules campaigns must not allow manual runs");
-        var runError = await runResponse.Content.ReadAsStringAsync();
-        Assert.Contains("ManualRunDisabled", runError);
+        // DynamicRules uses the same preview-gated execution path as fixed recipients.
+        var idempotencyKey = $"dynamic:{campaignId}:{Guid.NewGuid():N}";
+        var runId = await RequestManualRunAsync(campaignId, idempotencyKey);
+        var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
+        Assert.Equal(runId, duplicateRunId);
+
+        using JsonDocument summary = await WaitForRunSummaryAsync(runId);
+        JsonElement data = summary.RootElement.GetProperty("data");
+        Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
+        Assert.True(data.GetProperty("matchedCount").GetInt32() > 0);
+        Assert.Equal(
+            data.GetProperty("matchedCount").GetInt32(),
+            data.GetProperty("processedCount").GetInt32());
     }
 
     private async Task<long> RequestManualRunAsync(long campaignId, string idempotencyKey)

@@ -54,8 +54,8 @@ public static class TopUpErrors
     public static readonly Error PreviewNoRules =
         new("TopUp.PreviewNoRules", "Cannot preview a dynamic campaign that has no rules configured.");
 
-    public static readonly Error ManualRunDisabled =
-        new("TopUp.ManualRunDisabled", "Manual runs are currently disabled for DYNAMIC_RULES campaigns.");
+    public static readonly Error ActiveRunInProgress =
+        new("TopUp.ActiveRunInProgress", "A run for this campaign is already queued or processing.");
 
     public static readonly Error CampaignAlreadyExecuted =
         new("TopUp.CampaignAlreadyExecuted", "Immediate campaign has already been executed successfully.");
