@@ -9,7 +9,9 @@ public sealed record AdminStudentListCriteria(
     AdminStudentPortalAccessStatusFilter PortalAccessStatus,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
-    int PageSize)
+    int PageSize,
+    string? SortBy,
+    string? SortDirection)
 {
     public static AdminStudentListCriteria Default(
         long? organizationId = null,
@@ -21,7 +23,9 @@ public sealed record AdminStudentListCriteria(
         AdminStudentPortalAccessStatusFilter portalAccessStatus = AdminStudentPortalAccessStatusFilter.All,
         AdminStudentEnrollmentStatusFilter enrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
         int page = 1,
-        int pageSize = 10)
+        int pageSize = 10,
+        string? sortBy = null,
+        string? sortDirection = null)
         => new(
             organizationId,
             search,
@@ -31,7 +35,9 @@ public sealed record AdminStudentListCriteria(
             portalAccessStatus,
             enrollmentStatus,
             page,
-            pageSize);
+            pageSize,
+            sortBy,
+            sortDirection);
 }
 
 public enum AdminStudentAccountStatusFilter

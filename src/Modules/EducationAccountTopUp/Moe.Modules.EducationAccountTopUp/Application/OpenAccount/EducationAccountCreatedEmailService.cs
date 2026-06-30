@@ -14,12 +14,22 @@ internal sealed class EducationAccountCreatedEmailService(
     IPersonDirectory people,
     IEmailRecipientResolver recipientResolver,
     IEmailDeliveryGateway mailGateway,
+    IEmailDeliverySwitch mailSwitch,
     ILogger<EducationAccountCreatedEmailService> logger)
 {
     private const string EServicePortalUrl = "http://localhost:5173/portal/account";
 
     public async Task SendAsync(EducationAccount account, CancellationToken cancellationToken)
     {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Education Account created email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
+                account.PersonId,
+                account.Id);
+            return;
+        }
+
         EmailRecipient? recipient;
         try
         {
@@ -88,10 +98,7 @@ internal sealed class EducationAccountCreatedEmailService(
     private static string BuildHtmlBody(string studentName, long accountId, string activationDate)
     {
         StringBuilder builder = new();
-        builder.Append("<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head>");
-        builder.Append("<body bgcolor=\"#eef4fb\" style=\"margin:0;padding:0;background-color:#eef4fb;font-family:Arial,Helvetica,sans-serif;color:#172033;\">");
-        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#eef4fb\"><tr><td align=\"center\" style=\"padding:28px 12px;\">");
-        builder.Append("<table role=\"presentation\" width=\"640\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#ffffff\" style=\"width:640px;max-width:100%;background-color:#ffffff;border:1px solid #dce3ee;\">");
+        EmailTemplateBranding.AppendShellStart(builder);
         EmailTemplateBranding.AppendHeader(builder, "Education Account created");
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")

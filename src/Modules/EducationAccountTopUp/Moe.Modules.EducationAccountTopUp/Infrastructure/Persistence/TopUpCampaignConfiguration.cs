@@ -27,7 +27,11 @@ internal sealed class TopUpCampaignConfiguration : IEntityTypeConfiguration<TopU
         builder.Property(x => x.NextRunAtUtc).HasColumnName("NextRunAt");
         builder.Property(x => x.CampaignStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.CampaignVersion).IsConcurrencyToken();
+        builder.Property(x => x.DeliveryTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired().HasDefaultValue(DeliveryType.Instant);
+        builder.Property(x => x.MaxTotalAmount).HasPrecision(19, 2);
+        builder.Property(x => x.BudgetReserved).HasPrecision(19, 2).HasDefaultValue(0);
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAt");
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
+        builder.Property(x => x.PausedAtUtc).HasColumnName("PausedAt");
     }
 }

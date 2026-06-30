@@ -350,7 +350,7 @@ public sealed class StudentFasApplicationService(
     public async Task<object> Activate(long itemId, CancellationToken ct)
     { var (person, actor) = Identity(); return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () => { await using var tx = await db.Database.BeginTransactionAsync(ct); var item = await (from i in db.Set<FasApplicationScheme>() join a in db.Set<FasApplication>() on i.FasApplicationId equals a.Id where i.Id == itemId && a.StudentPersonId == person select i).SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND"); if (item.ValidFrom == null || item.ValidTo == null) throw new InvalidOperationException("FAS.APPROVAL_VALIDITY_REQUIRED"); if (await db.Set<FasActiveScheme>().AnyAsync(x => x.FasApplicationSchemeId == item.Id && x.StatusCode == "ACTIVE", ct)) return new { applicationSchemeId = item.Id, status = "ACTIVE", item.ValidFrom, item.ValidTo }; var now = DateTime.UtcNow; item.Activate(now); db.Add(FasActiveScheme.Activate(person, item.Id, item.FasSchemeId, item.ValidFrom.Value, item.ValidTo.Value, actor, now)); db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "APPROVED", "ACTIVE", null, actor, "STUDENT", now)); await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new { applicationSchemeId = item.Id, status = "ACTIVE", item.ValidFrom, item.ValidTo }; }); }
 
-    private static void ValidateFile(string name, string mime, long size) { var extensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" }; var mimes = new[] { "application/pdf", "image/jpeg", "image/png" }; if (size <= 0 || size > 10 * 1024 * 1024) throw new ArgumentException("FAS.FILE_SIZE_INVALID"); if (!extensions.Contains(Path.GetExtension(name).ToLowerInvariant()) || !mimes.Contains(mime.ToLowerInvariant())) throw new ArgumentException("FAS.FILE_TYPE_INVALID"); }
+    private static void ValidateFile(string name, string mime, long size) { var extensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" }; var mimes = new[] { "application/pdf", "image/jpeg", "image/png" }; if (size <= 0 || size > 20 * 1024 * 1024) throw new ArgumentException("FAS.FILE_SIZE_INVALID"); if (!extensions.Contains(Path.GetExtension(name).ToLowerInvariant()) || !mimes.Contains(mime.ToLowerInvariant())) throw new ArgumentException("FAS.FILE_TYPE_INVALID"); }
 
     public async Task<object> AdminApplications(
         string? status,
@@ -799,7 +799,7 @@ public sealed class StudentFasApplicationService(
     }
 
 
-    public async Task<object> MyApplications(int page, int pageSize, CancellationToken ct)
+    public async Task<object> MyApplications(int page, int pageSize, string? search, string? status, string? sortBy, string? sortDirection, CancellationToken ct)
     {
         var (person, _) = Identity();
         page = Math.Max(1, page);
@@ -808,7 +808,6 @@ public sealed class StudentFasApplicationService(
                     join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId
                     join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id
                     where a.StudentPersonId == person
-                    orderby a.SubmittedAtUtc descending, a.CreatedAt descending, i.Id
                     select new
                     {
                         applicationId = a.Id,
@@ -832,11 +831,16 @@ public sealed class StudentFasApplicationService(
                         redeemedAt = i.RedeemedAtUtc
                     };
 
-        var totalCount = await query.LongCountAsync(ct);
-        var rows = await query
+        var allRows = await query.ToListAsync(ct);
+        var filteredRows = allRows
+            .Where(x => MatchesMyApplicationSearch(x.applicationReference, x.schemeName, search))
+            .Where(x => MatchesMyApplicationStatus(StudentVisibleStatus(x.itemStatus, x.schemeStatus), status))
+            .ToArray();
+        var totalCount = filteredRows.LongLength;
+        var rows = ApplyMyApplicationSort(filteredRows, sortBy, sortDirection)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync(ct);
+            .ToList();
 
         var items = rows.Select(x => new
         {
@@ -868,6 +872,47 @@ public sealed class StudentFasApplicationService(
 
         return new { items, page, pageSize, totalCount };
     }
+
+    private static bool MatchesMyApplicationSearch(string? applicationReference, string? schemeName, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return true;
+
+        string value = search.Trim();
+        return (applicationReference?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
+               || (schemeName?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private static bool MatchesMyApplicationStatus(string visibleStatus, string? status)
+    {
+        string normalized = status?.Trim().ToUpperInvariant() ?? "ALL";
+        return string.IsNullOrWhiteSpace(normalized) || normalized == "ALL" || string.Equals(visibleStatus, normalized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<T> ApplyMyApplicationSort<T>(IReadOnlyCollection<T> rows, string? sortBy, string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        IOrderedEnumerable<T> ordered = key switch
+        {
+            "applicationreference" => OrderByObject(rows, "applicationReference", descending),
+            "schemename" => OrderByObject(rows, "schemeName", descending),
+            "submitteddate" => OrderByObject(rows, "submittedDate", descending),
+            "status" => OrderByObject(rows, "itemStatus", descending),
+            "benefit" => OrderByObject(rows, "ApprovedAmount", descending),
+            _ => OrderByObject(rows, "submittedDate", true)
+        };
+
+        return ordered.ThenBy(x => ReadObjectProperty(x, "applicationSchemeId"));
+    }
+
+    private static IOrderedEnumerable<T> OrderByObject<T>(IEnumerable<T> rows, string propertyName, bool descending)
+        => descending
+            ? rows.OrderByDescending(x => ReadObjectProperty(x, propertyName))
+            : rows.OrderBy(x => ReadObjectProperty(x, propertyName));
+
+    private static object? ReadObjectProperty<T>(T row, string propertyName)
+        => row?.GetType().GetProperty(propertyName)?.GetValue(row);
 
     public async Task<object> ApplicableActiveSchemesForCourse(long courseId, CancellationToken ct)
     {

@@ -58,6 +58,7 @@ public sealed class FasEmailNotificationServiceTests
             db,
             recipients,
             mailGateway,
+            new FixedEmailDeliverySwitch(),
             NullLogger<FasEmailNotificationService>.Instance);
 
         await service.SendSubmissionAcknowledgementAsync(application.Id, CancellationToken.None);
@@ -65,6 +66,25 @@ public sealed class FasEmailNotificationServiceTests
         recipients.ProvidedEmail.Should().Be("fas-applicant@example.com");
         mailGateway.Messages.Should().ContainSingle();
         mailGateway.Messages.Single().ToEmail.Should().Be("fas-applicant@example.com");
+    }
+
+    [Fact]
+    public async Task SubmissionAcknowledgement_WhenMailDeliveryDisabled_DoesNotCallRecipientResolverOrGateway()
+    {
+        await using MoeDbContext db = CreateDbContext();
+        RecordingRecipientResolver recipients = new();
+        RecordingEmailGateway mailGateway = new();
+        FasEmailNotificationService service = new(
+            db,
+            recipients,
+            mailGateway,
+            new FixedEmailDeliverySwitch(isEnabled: false),
+            NullLogger<FasEmailNotificationService>.Instance);
+
+        await service.SendSubmissionAcknowledgementAsync(999, CancellationToken.None);
+
+        recipients.ProvidedEmail.Should().BeNull();
+        mailGateway.Messages.Should().BeEmpty();
     }
 
     private static MoeDbContext CreateDbContext()
@@ -106,5 +126,10 @@ public sealed class FasEmailNotificationServiceTests
             Messages.Add(message);
             return Task.FromResult(Result.Success());
         }
+    }
+
+    private sealed class FixedEmailDeliverySwitch(bool isEnabled = true) : IEmailDeliverySwitch
+    {
+        public bool IsEnabled { get; } = isEnabled;
     }
 }

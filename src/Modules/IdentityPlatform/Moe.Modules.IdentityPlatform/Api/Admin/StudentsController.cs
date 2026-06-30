@@ -43,7 +43,9 @@ public sealed class StudentsController(
                 request.PortalAccessStatus,
                 request.EnrollmentStatus,
                 request.Page,
-                request.PageSize),
+                request.PageSize,
+                request.SortBy,
+                request.SortDirection),
             cancellationToken);
 
         return result.IsFailure

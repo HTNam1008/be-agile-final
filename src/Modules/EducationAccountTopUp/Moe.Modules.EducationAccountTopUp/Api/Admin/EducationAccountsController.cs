@@ -1,12 +1,14 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Api;
 using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
+using Moe.Modules.EducationAccountTopUp.Application.History.AccountFlatHistory;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 using Moe.Modules.EducationAccountTopUp.Application.TransactionHistory;
 
@@ -68,5 +70,27 @@ public sealed class EducationAccountsController(
         return result.IsFailure
             ? TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext)
             : result.ToApiResponse(this);
+    }
+
+    [HttpGet("{educationAccountId:long}/flat-history")]
+    [Authorize(Policy = AuthorizationPolicies.ViewAccountDetails)]
+    [ProducesResponseType(typeof(ApiResponse<AccountFlatHistoryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetFlatHistory(
+        [FromRoute] long educationAccountId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetAccountFlatHistoryQuery(
+            educationAccountId,
+            page,
+            pageSize);
+
+        var result = await queries.Send(query, cancellationToken);
+        return result.IsFailure
+            ? TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext)
+            : result.ToApiResponse(this, successMessage: "Account flat history retrieved.");
     }
 }

@@ -148,6 +148,9 @@ public sealed class CreateFasSchemeValidationTests
     [InlineData("schemeName", "asc", true)]
     [InlineData("createdDate", "desc", true)]
     [InlineData("status", "asc", true)]
+    [InlineData("schemeCode", "asc", true)]
+    [InlineData("duration", "desc", true)]
+    [InlineData("applicationCount", "asc", true)]
     [InlineData("grantCode", "asc", false)]
     [InlineData("schemeName", "descending", false)]
     public void List_sort_validation_is_explicit(string? sortBy, string? sortDirection, bool valid)
