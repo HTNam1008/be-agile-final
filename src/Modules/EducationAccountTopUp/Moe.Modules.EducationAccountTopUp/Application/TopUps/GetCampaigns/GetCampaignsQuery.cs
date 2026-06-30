@@ -38,4 +38,5 @@ public sealed record CampaignListItem(
     long CreatedByLoginAccountId,
     long? UpdatedByLoginAccountId,
     DateTime CreatedAtUtc,
-    DateTime? UpdatedAtUtc);
+    DateTime? UpdatedAtUtc,
+    int TotalStudentsToppedUp);
