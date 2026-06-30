@@ -10,7 +10,7 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Storage;
 
 internal sealed class RedisCourseMaterialPreviewCache(
     IConfiguration configuration,
-    ILogger<RedisCourseMaterialPreviewCache> logger) : ICourseMaterialPreviewCache
+    ILogger<RedisCourseMaterialPreviewCache> logger) : ICourseMaterialPreviewRedisCache
 {
     private readonly string? _connectionString = configuration["Redis:ConnectionString"];
     private readonly TimeSpan _ttl = TimeSpan.FromMinutes(

@@ -8,7 +8,7 @@ using Moe.Modules.CourseBilling.IGateway.Storage;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Storage;
 
-internal sealed class AzureBlobCourseMaterialPreviewCache : ICourseMaterialPreviewCache
+internal sealed class AzureBlobCourseMaterialPreviewCache : ICourseMaterialPreviewBlobCache
 {
     private readonly BlobContainerClient container;
     private readonly ILogger<AzureBlobCourseMaterialPreviewCache> logger;
