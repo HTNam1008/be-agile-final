@@ -33,6 +33,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.CampaignVersion,
                 c.DeliveryTypeCode,
                 c.MaxTotalAmount,
+                c.CreatedByLoginAccountId,
+                c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc))
             .SingleOrDefaultAsync(cancellationToken);
@@ -94,6 +96,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.CampaignVersion,
                 c.DeliveryTypeCode,
                 c.MaxTotalAmount,
+                c.CreatedByLoginAccountId,
+                c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
