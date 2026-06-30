@@ -35,5 +35,7 @@ public sealed record CampaignListItem(
     int CampaignVersion,
     string DeliveryTypeCode,
     decimal MaxTotalAmount,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    long CreatedByLoginAccountId,
+    long? UpdatedByLoginAccountId,
+    DateTime CreatedAtUtc,
+    DateTime? UpdatedAtUtc);
