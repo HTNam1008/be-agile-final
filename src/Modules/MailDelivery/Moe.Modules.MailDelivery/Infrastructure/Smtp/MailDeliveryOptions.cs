@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+using System.Net.Mail;
 
 namespace Moe.Modules.MailDelivery.Infrastructure.Smtp;
 
@@ -6,29 +6,70 @@ public sealed class MailDeliveryOptions
 {
     public const string SectionName = "MailDelivery";
 
-    [Required]
+    public bool Enabled { get; init; } = true;
+
     public string AppName { get; init; } = "MOE SEEDS";
 
-    [Required]
     public string Host { get; init; } = "smtp.gmail.com";
 
-    [Range(1, 65535)]
     public int Port { get; init; } = 587;
 
     public bool EnableSsl { get; init; } = true;
 
-    [Required]
     public string UserName { get; init; } = string.Empty;
 
     public string Password { get; init; } = string.Empty;
 
-    [Required]
-    [EmailAddress]
     public string FromEmail { get; init; } = string.Empty;
 
-    [Required]
     public string FromDisplayName { get; init; } = "MOE SEEDS";
 
-    [EmailAddress]
+    public string? FallbackUserName { get; init; }
+
+    public string? FallbackPassword { get; init; }
+
+    public string? FallbackFromEmail { get; init; }
+
+    public string? FallbackFromDisplayName { get; init; }
+
     public string? DevelopmentFallbackRecipient { get; init; }
+
+    public static bool IsValid(MailDeliveryOptions options)
+    {
+        if (!options.Enabled)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(options.AppName)
+            && !string.IsNullOrWhiteSpace(options.Host)
+            && options.Port is >= 1 and <= 65535
+            && !string.IsNullOrWhiteSpace(options.UserName)
+            && IsValidEmail(options.FromEmail)
+            && !string.IsNullOrWhiteSpace(options.FromDisplayName)
+            && IsValidFallback(options)
+            && (string.IsNullOrWhiteSpace(options.DevelopmentFallbackRecipient)
+                || IsValidEmail(options.DevelopmentFallbackRecipient));
+    }
+
+    private static bool IsValidFallback(MailDeliveryOptions options)
+    {
+        bool hasAnyFallback = !string.IsNullOrWhiteSpace(options.FallbackUserName)
+            || !string.IsNullOrWhiteSpace(options.FallbackPassword)
+            || !string.IsNullOrWhiteSpace(options.FallbackFromEmail)
+            || !string.IsNullOrWhiteSpace(options.FallbackFromDisplayName);
+
+        if (!hasAnyFallback)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(options.FallbackUserName)
+            && !string.IsNullOrWhiteSpace(options.FallbackPassword)
+            && IsValidEmail(options.FallbackFromEmail);
+    }
+
+    private static bool IsValidEmail(string? emailAddress)
+        => !string.IsNullOrWhiteSpace(emailAddress)
+            && MailAddress.TryCreate(emailAddress.Trim(), out _);
 }

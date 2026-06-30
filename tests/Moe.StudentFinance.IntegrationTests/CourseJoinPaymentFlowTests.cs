@@ -701,6 +701,41 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task SplitPayment_SecondRequestDuringProviderCreation_DoesNotExpirePendingCheckout()
+    {
+        TestStudent student = await CreateStudentAsync(balance: 40m);
+        TestCourse course = await CreateCourseAsync(
+            fee: 100m,
+            plans: [("Full payment", "FULL_PAYMENT", 1)]);
+        await JoinSuccessfullyAsync(student, course, "FULL_PAYMENT-1");
+        StatementInfo statement = await GetStatementAsync(student, DateTime.UtcNow.Year, DateTime.UtcNow.Month);
+
+        IntegrationTestStripeGateway.DelayNextCheckout(TimeSpan.FromSeconds(2));
+        Task<HttpResponseMessage> firstPayTask = PayStatementAsync(student, statement.StatementId);
+        await WaitForCheckoutBeforeProviderAssignmentAsync(statement.StatementId);
+
+        using HttpResponseMessage parallelPay = await PayStatementAsync(student, statement.StatementId);
+        await AssertStatusAsync(HttpStatusCode.Conflict, parallelPay);
+        Assert.Contains("PAYMENT.STATEMENT_PAYMENT_IN_PROGRESS", await parallelPay.Content.ReadAsStringAsync());
+
+        using HttpResponseMessage firstPay = await firstPayTask;
+        await AssertStatusAsync(HttpStatusCode.Created, firstPay);
+        JsonElement firstPayment = await ReadDataAsync(firstPay);
+        long paymentId = firstPayment.GetProperty("paymentId").GetInt64();
+        long checkoutId = firstPayment.GetProperty("paymentCheckoutSessionId").GetInt64();
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Payment payment = await db.Set<Payment>().SingleAsync(x => x.Id == paymentId);
+        PaymentCheckoutSession checkout = await db.Set<PaymentCheckoutSession>().SingleAsync(x => x.Id == checkoutId);
+
+        Assert.Equal(PaymentStatusCodes.PendingOnlinePayment, payment.PaymentStatusCode);
+        Assert.Equal(CheckoutStatusCodes.Pending, checkout.CheckoutStatusCode);
+        Assert.NotNull(checkout.CheckoutUrl);
+        Assert.NotNull(checkout.ExpiresAtUtc);
+    }
+
+    [Fact]
     public async Task CancelPendingCheckout_ReleasesEducationAccountHold_AndAllowsNewPayment()
     {
         TestStudent student = await CreateStudentAsync(balance: 40m);
@@ -1419,6 +1454,30 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Fail(
             $"Expected {(int)expected} {expected}, got {(int)response.StatusCode} " +
             $"{response.StatusCode}. Body: {await response.Content.ReadAsStringAsync()}");
+    }
+
+    private async Task WaitForCheckoutBeforeProviderAssignmentAsync(long statementId)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+            MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+            bool exists = await (
+                from payment in db.Set<Payment>()
+                join checkout in db.Set<PaymentCheckoutSession>() on payment.Id equals checkout.PaymentId
+                where payment.BillingStatementId == statementId &&
+                    payment.PaymentStatusCode == PaymentStatusCodes.PendingOnlinePayment &&
+                    checkout.ProviderCheckoutSessionId == null &&
+                    checkout.CheckoutUrl == null &&
+                    checkout.ExpiresAtUtc == null
+                select checkout.Id)
+                .AnyAsync();
+            if (exists) return;
+            await Task.Delay(25);
+        }
+
+        Assert.Fail("Timed out waiting for checkout to be persisted before provider assignment.");
     }
 
     private static string NewSuffix()

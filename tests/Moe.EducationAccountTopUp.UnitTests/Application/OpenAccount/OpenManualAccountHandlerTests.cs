@@ -70,6 +70,21 @@ public sealed class OpenManualAccountHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenMailDeliveryDisabled_StillCreatesAccountAndSkipsEmail()
+    {
+        OpenManualAccountHandler handler = CreateHandler(
+            new ThrowingEmailRecipientResolver(),
+            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
+
+        var result = await handler.Handle(CreateCommand(personId: 5006), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _audit.Calls.Should().ContainSingle();
+        _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_OnDuplicateAccount_DoesNotCallAuditService()
     {
         _educationAccounts.DuplicatePersonIds.Add(5003);
@@ -108,7 +123,9 @@ public sealed class OpenManualAccountHandlerTests
         _unitOfWork.SaveCalls.Should().Be(0);
     }
 
-    private OpenManualAccountHandler CreateHandler()
+    private OpenManualAccountHandler CreateHandler(
+        IEmailRecipientResolver? recipientResolver = null,
+        IEmailDeliverySwitch? mailSwitch = null)
     {
         return new OpenManualAccountHandler(
             _educationAccounts,
@@ -119,8 +136,9 @@ public sealed class OpenManualAccountHandlerTests
             _audit,
             new EducationAccountCreatedEmailService(
                 _people,
-                new TestDoubles.FixedEmailRecipientResolver(),
+                recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
                 _mailGateway,
+                mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
                 NullLogger<EducationAccountCreatedEmailService>.Instance));
     }
 
@@ -264,5 +282,16 @@ public sealed class OpenManualAccountHandlerTests
             Messages.Add(message);
             return Task.FromResult(Result.Success());
         }
+    }
+
+    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
+    {
+        public Task<EmailRecipient?> ResolveForPersonAsync(
+            long personId,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
+
+        public EmailRecipient? ResolveProvided(string? providedEmail)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
     }
 }

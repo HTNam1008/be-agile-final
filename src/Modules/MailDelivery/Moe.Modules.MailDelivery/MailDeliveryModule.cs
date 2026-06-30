@@ -15,9 +15,10 @@ public sealed class MailDeliveryModule : IModule
     {
         services.AddOptions<MailDeliveryOptions>()
             .BindConfiguration(MailDeliveryOptions.SectionName)
-            .ValidateDataAnnotations()
+            .Validate(MailDeliveryOptions.IsValid, "MailDelivery configuration is invalid.")
             .ValidateOnStart();
 
+        services.AddSingleton<IEmailDeliverySwitch, EmailDeliverySwitch>();
         services.AddSingleton<IEmailDeliveryGateway, SmtpEmailDeliveryGateway>();
     }
 

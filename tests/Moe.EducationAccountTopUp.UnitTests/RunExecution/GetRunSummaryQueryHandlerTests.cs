@@ -144,7 +144,10 @@ public sealed class GetRunSummaryQueryHandlerTests
         => new(
             RunId: 123,
             CampaignId: 456,
+            CampaignCode: "TEST-01",
+            CampaignName: "Test Campaign",
             OrganizationId: organizationId,
+            CampaignMaxTotalAmount: 500m,
             RunDateUtc,
             TriggerType: TopUpRunTriggerTypes.Manual,
             Status: TopUpRunStatusCodes.Partial,

@@ -41,7 +41,7 @@ internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducatio
         }
 
         MyEducationAccountTransactionsPage transactions =
-            await GetTransactionsAsync(personId, 1, 10, null, cancellationToken)
+            await GetTransactionsAsync(personId, 1, 10, null, null, null, cancellationToken)
             ?? new MyEducationAccountTransactionsPage(
                 Array.Empty<MyEducationAccountTransactionDto>(),
                 1,
@@ -56,6 +56,8 @@ internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducatio
         int page,
         int pageSize,
         string? category,
+        string? sortBy,
+        string? sortDirection,
         CancellationToken cancellationToken = default)
     {
         long? educationAccountId = await dbContext.Set<EducationAccount>()
@@ -77,9 +79,7 @@ internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducatio
 
         long totalCount = await query.LongCountAsync(cancellationToken);
 
-        AccountTransaction[] transactions = await query
-            .OrderByDescending(transaction => transaction.TransactionAtUtc)
-            .ThenByDescending(transaction => transaction.Id)
+        AccountTransaction[] transactions = await ApplyTransactionSort(query, sortBy, sortDirection)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToArrayAsync(cancellationToken);
@@ -100,6 +100,35 @@ internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducatio
             .ToArray();
 
         return new MyEducationAccountTransactionsPage(items, page, pageSize, totalCount);
+    }
+
+    private static IQueryable<AccountTransaction> ApplyTransactionSort(
+        IQueryable<AccountTransaction> query,
+        string? sortBy,
+        string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        return key switch
+        {
+            "transactionatutc" => descending
+                ? query.OrderByDescending(x => x.TransactionAtUtc).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.TransactionAtUtc).ThenBy(x => x.Id),
+            "category" => descending
+                ? query.OrderByDescending(x => x.TransactionTypeCode).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.TransactionTypeCode).ThenBy(x => x.Id),
+            "description" => descending
+                ? query.OrderByDescending(x => x.Description).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.Description).ThenBy(x => x.Id),
+            "amount" => descending
+                ? query.OrderByDescending(x => x.Amount).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.Amount).ThenBy(x => x.Id),
+            "balanceafter" => descending
+                ? query.OrderByDescending(x => x.BalanceAfter).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.BalanceAfter).ThenBy(x => x.Id),
+            _ => query.OrderByDescending(transaction => transaction.TransactionAtUtc).ThenByDescending(transaction => transaction.Id)
+        };
     }
 
     private static IQueryable<AccountTransaction> ApplyCategoryFilter(

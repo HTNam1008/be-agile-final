@@ -12,6 +12,8 @@ public sealed class TopUpCampaignRecipient : Entity<long>
     public bool IsActive { get; private set; }
     public long AddedByLoginAccountId { get; private set; }
     public DateTime AddedAtUtc { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
+    public long? DeletedByLoginAccountId { get; private set; }
 
     public static TopUpCampaignRecipient Create(
         long topUpCampaignId,
@@ -34,5 +36,17 @@ public sealed class TopUpCampaignRecipient : Entity<long>
     public void UpdateAmountOverride(decimal? amountOverride)
     {
         AmountOverride = amountOverride;
+    }
+
+    public void SoftDelete(long userId, DateTime nowUtc)
+    {
+        DeletedAtUtc = nowUtc;
+        DeletedByLoginAccountId = userId;
+    }
+
+    public void Undelete()
+    {
+        DeletedAtUtc = null;
+        DeletedByLoginAccountId = null;
     }
 }
