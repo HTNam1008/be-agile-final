@@ -17,6 +17,7 @@ public sealed record StudentManagementReferenceDataResponse(
 
 public sealed record StudentListFilterReferenceData(
     IReadOnlyList<ReferenceOption> AccountStatuses,
+    IReadOnlyList<ReferenceOption> PortalAccessStatuses,
     IReadOnlyList<ReferenceOption> EnrollmentStatuses,
     IReadOnlyList<ReferenceOption> Levels);
 
@@ -43,6 +44,11 @@ internal sealed class GetStudentManagementReferenceDataHandler(
                     Option(nameof(AdminStudentAccountStatusFilter.PendingClosure), "Pending closure"),
                     Option(nameof(AdminStudentAccountStatusFilter.Closed), "Closed"),
                     Option(nameof(AdminStudentAccountStatusFilter.NoAccount), "No account")
+                ],
+                PortalAccessStatuses:
+                [
+                    Option(nameof(AdminStudentPortalAccessStatusFilter.Active), "Active"),
+                    Option(nameof(AdminStudentPortalAccessStatusFilter.Disabled), "Disabled")
                 ],
                 EnrollmentStatuses:
                 [
