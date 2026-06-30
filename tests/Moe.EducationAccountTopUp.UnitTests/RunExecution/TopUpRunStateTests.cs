@@ -93,14 +93,16 @@ public sealed class TopUpRunStateTests
     }
 
     [Fact]
-    public void Should_Reject_Invalid_Transition()
+    public void Should_Transition_From_Processing_To_Cancelled()
     {
         TopUpRun run = CreateProcessingRun();
 
         var result = run.Cancel(_utcNow);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(TopUpErrors.InvalidRunTransition);
+        result.IsSuccess.Should().BeTrue();
+        run.RunStatusCode.Should().Be(TopUpRunStatusCodes.Cancelled);
+        run.CompletedAtUtc.Should().Be(_utcNow);
+        run.DomainEvents.OfType<TopUpRunCancelledEvent>().Should().ContainSingle();
     }
 
     [Fact]
@@ -172,7 +174,7 @@ public sealed class TopUpRunStateTests
 
     private static TopUpRun CreateRun()
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
 

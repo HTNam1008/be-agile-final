@@ -74,6 +74,31 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             .ToDictionary(x => x.PersonId);
     }
 
+    public async Task<IReadOnlyList<AccountTaxonomyLevel>> GetAccountTaxonomyAsync(
+        IReadOnlyCollection<long> scopedOrganizationIds,
+        CancellationToken cancellationToken)
+    {
+        var taxonomy = await dbContext.Set<SchoolEnrollment>().AsNoTracking()
+            .Where(x => scopedOrganizationIds.Count == 0 || scopedOrganizationIds.Contains(x.OrganizationId))
+            .GroupBy(x => x.LevelCode)
+            .Select(g => new
+            {
+                LevelCode = g.Key,
+                Classes = g
+                    .Where(x => x.ClassCode != null)
+                    .Select(x => x.ClassCode!)
+                    .Distinct()
+                    .OrderBy(c => c)
+                    .ToList()
+            })
+            .Where(x => x.LevelCode != null)
+            .OrderBy(x => x.LevelCode)
+            .Select(x => new AccountTaxonomyLevel(x.LevelCode, x.Classes.AsReadOnly()))
+            .ToListAsync(cancellationToken);
+
+        return taxonomy.AsReadOnly();
+    }
+
     private IQueryable<TopUpStudentSearchSummary> BuildTopUpSearchQuery(
         TopUpStudentSearchCriteria criteria,
         IReadOnlyCollection<long> scopedOrganizationIds)

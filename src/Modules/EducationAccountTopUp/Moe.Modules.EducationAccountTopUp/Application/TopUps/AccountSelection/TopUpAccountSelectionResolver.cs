@@ -153,7 +153,7 @@ internal sealed class TopUpAccountSelectionResolver(
             candidatePersonIds,
             accountSearchPersonIds,
             page: 1,
-            pageSize: 1);
+            pageSize: int.MaxValue);
 
         return await students.FindMatchingPersonIdsForTopUpAsync(
             criteria,
@@ -173,5 +173,5 @@ internal sealed class TopUpAccountSelectionResolver(
             null,
             null,
             1,
-            1);
+            int.MaxValue);
 }
