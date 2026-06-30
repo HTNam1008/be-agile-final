@@ -2786,7 +2786,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.ToTable("FASDocument", "fas", t =>
                         {
-                            t.HasCheckConstraint("CK_FASDocument_Size", "[FileSizeBytes] > 0 AND [FileSizeBytes] <= 10485760");
+                            t.HasCheckConstraint("CK_FASDocument_Size", "[FileSizeBytes] > 0 AND [FileSizeBytes] <= 20971520");
 
                             t.HasCheckConstraint("CK_FASDocument_Status", "[UploadStatusCode] IN ('UPLOADED','REMOVED','SCAN_PENDING','SCAN_PASSED','SCAN_FAILED')");
 

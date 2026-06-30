@@ -55,6 +55,9 @@ public sealed class AdminFasApplicationsController(ICommandDispatcher commands, 
     [HttpGet("documents/{documentId:long}/download")]
     public async Task<IActionResult> DownloadDocument(long documentId, CancellationToken cancellationToken) { var d = await (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminDownloadDocument(documentId, cancellationToken); return File(d.Stream, d.Mime, d.Name); }
 
+    [HttpGet("documents/{documentId:long}/preview")]
+    public async Task<IActionResult> PreviewDocument(long documentId, CancellationToken cancellationToken) { var d = await (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminDownloadDocument(documentId, cancellationToken); Response.Headers.ContentDisposition = $"inline; filename=\"{d.Name}\""; return File(d.Stream, d.Mime); }
+
     [HttpPost("documents/{documentId:long}/scan-result")]
     public Task<object> RecordScanResult(long documentId, DocumentScanResultRequest request, CancellationToken cancellationToken) => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).RecordScanResult(documentId, request.Passed, cancellationToken);
     [HttpGet("schemes/{schemeId}/applications")]
