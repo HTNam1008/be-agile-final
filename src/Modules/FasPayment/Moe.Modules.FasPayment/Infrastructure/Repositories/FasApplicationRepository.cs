@@ -88,7 +88,7 @@ internal sealed class FasApplicationRepository(MoeDbContext dbContext) : IFasApp
 
         var scheme = await dbContext.Set<FasScheme>().FirstOrDefaultAsync(x => x.Id == application.FasSchemeId, cancellationToken);
         var decisions = await dbContext.Set<FasApplicationReviewDecision>()
-            .Where(x => x.Id == applicationId)
+            .Where(x => x.FasApplicationId == applicationId)
             .OrderBy(x => x.ReviewedAtUtc)
             .ToListAsync(cancellationToken);
 

@@ -22,7 +22,15 @@ public sealed class AdminFasSchemesController(ICommandDispatcher commands, IQuer
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] ListFasSchemesRequest request, CancellationToken cancellationToken)
-        => Map(await queries.Send(new ListFasSchemesQuery(request.Status, request.Search, request.Page, request.PageSize, request.SortBy, request.SortDirection), cancellationToken));
+        => Map(await queries.Send(new ListFasSchemesQuery(
+            request.Status,
+            request.Search,
+            request.Page,
+            request.PageSize,
+            request.SortBy,
+            request.SortDirection,
+            request.DurationFrom,
+            request.DurationTo), cancellationToken));
 
     [HttpGet("{schemeId:long}")]
     public async Task<IActionResult> Get(long schemeId, CancellationToken cancellationToken)
