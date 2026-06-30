@@ -73,6 +73,24 @@ public sealed class CloseManualAccountHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenMailDeliveryDisabled_StillClosesAccountAndSkipsEmail()
+    {
+        EducationAccount account = AddAccount(1008, personId: 5008);
+        _people.OrganizationByPersonId[5008] = 10;
+        CloseManualAccountHandler handler = CreateHandler(
+            new ThrowingEmailRecipientResolver(),
+            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
+
+        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        account.StatusCode.Should().Be(AccountStatuses.Closed);
+        _audit.Calls.Should().ContainSingle();
+        _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_OnAccountNotFound_DoesNotCallAuditService()
     {
         CloseManualAccountHandler handler = CreateHandler();
@@ -181,7 +199,9 @@ public sealed class CloseManualAccountHandlerTests
         return account;
     }
 
-    private CloseManualAccountHandler CreateHandler()
+    private CloseManualAccountHandler CreateHandler(
+        IEmailRecipientResolver? recipientResolver = null,
+        IEmailDeliverySwitch? mailSwitch = null)
         => new(
             _educationAccounts,
             _people,
@@ -192,8 +212,9 @@ public sealed class CloseManualAccountHandlerTests
             _audit,
             new EducationAccountClosureEmailService(
                 _people,
-                new TestDoubles.FixedEmailRecipientResolver(),
+                recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
                 _mailGateway,
+                mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
                 NullLogger<EducationAccountClosureEmailService>.Instance));
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)
@@ -344,6 +365,17 @@ public sealed class CloseManualAccountHandlerTests
             Messages.Add(message);
             return Task.FromResult(Result.Success());
         }
+    }
+
+    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
+    {
+        public Task<EmailRecipient?> ResolveForPersonAsync(
+            long personId,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
+
+        public EmailRecipient? ResolveProvided(string? providedEmail)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
     }
 
     private sealed record AuditCall(string ActionCode, string EntityTypeCode, string EntityId, string? DetailsJson);

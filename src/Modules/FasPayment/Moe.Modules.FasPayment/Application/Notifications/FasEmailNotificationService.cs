@@ -15,12 +15,18 @@ public sealed class FasEmailNotificationService(
     MoeDbContext dbContext,
     IEmailRecipientResolver recipientResolver,
     IEmailDeliveryGateway mailGateway,
+    IEmailDeliverySwitch mailSwitch,
     ILogger<FasEmailNotificationService> logger)
 {
     private const string FasPortalUrl = "http://localhost:5173/portal/fas";
 
     public async Task SendSubmissionAcknowledgementAsync(long applicationId, CancellationToken cancellationToken)
     {
+        if (IsDisabled("FAS application received", applicationId))
+        {
+            return;
+        }
+
         FasEmailProjection? projection = await GetApplicationProjectionAsync(applicationId, cancellationToken);
         if (projection is null)
         {
@@ -53,6 +59,11 @@ public sealed class FasEmailNotificationService(
 
     public async Task SendApplicationApprovedAsync(long applicationId, CancellationToken cancellationToken)
     {
+        if (IsDisabled("FAS application approved", applicationId))
+        {
+            return;
+        }
+
         FasEmailProjection? projection = await GetApplicationProjectionAsync(applicationId, cancellationToken);
         if (projection is null)
         {
@@ -67,6 +78,11 @@ public sealed class FasEmailNotificationService(
         string rejectionReason,
         CancellationToken cancellationToken)
     {
+        if (IsDisabled("FAS application update", applicationId))
+        {
+            return;
+        }
+
         FasEmailProjection? projection = await GetApplicationProjectionAsync(applicationId, cancellationToken);
         if (projection is null)
         {
@@ -78,6 +94,11 @@ public sealed class FasEmailNotificationService(
 
     public async Task SendSchemeApprovedAsync(long applicationSchemeId, CancellationToken cancellationToken)
     {
+        if (IsDisabled("FAS scheme approved", applicationSchemeId))
+        {
+            return;
+        }
+
         FasSchemeEmailProjection? projection = await GetSchemeProjectionAsync(applicationSchemeId, cancellationToken);
         if (projection is null)
         {
@@ -99,6 +120,11 @@ public sealed class FasEmailNotificationService(
         string rejectionReason,
         CancellationToken cancellationToken)
     {
+        if (IsDisabled("FAS scheme rejected", applicationSchemeId))
+        {
+            return;
+        }
+
         FasSchemeEmailProjection? projection = await GetSchemeProjectionAsync(applicationSchemeId, cancellationToken);
         if (projection is null)
         {
@@ -193,6 +219,20 @@ public sealed class FasEmailNotificationService(
             personId,
             recipientEmail,
             cancellationToken);
+    }
+
+    private bool IsDisabled(string title, long entityId)
+    {
+        if (mailSwitch.IsEnabled)
+        {
+            return false;
+        }
+
+        logger.LogInformation(
+            "FAS email skipped because MailDelivery is disabled. Title={Title} EntityId={EntityId}",
+            title,
+            entityId);
+        return true;
     }
 
     private async Task<FasEmailProjection?> GetApplicationProjectionAsync(
@@ -290,11 +330,7 @@ public sealed class FasEmailNotificationService(
         string? buttonLabel)
     {
         StringBuilder builder = new();
-        builder.Append("<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head>");
-        builder.Append("<body bgcolor=\"#eef4fb\" style=\"margin:0;padding:0;background-color:#eef4fb;font-family:Arial,Helvetica,sans-serif;color:#172033;\">");
-        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#eef4fb\" style=\"background-color:#eef4fb;\">");
-        builder.Append("<tr><td align=\"center\" style=\"padding:28px 12px;\">");
-        builder.Append("<table role=\"presentation\" width=\"640\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#ffffff\" style=\"width:640px;max-width:100%;background-color:#ffffff;border:1px solid #dce3ee;\">");
+        EmailTemplateBranding.AppendShellStart(builder);
         EmailTemplateBranding.AppendHeader(builder, title);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")

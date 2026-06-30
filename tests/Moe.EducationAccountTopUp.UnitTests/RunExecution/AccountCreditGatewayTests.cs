@@ -9,6 +9,7 @@ using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
+using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -210,6 +211,29 @@ public sealed class AccountCreditGatewayTests
         mailGateway.Messages.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Should_Credit_Account_Without_Email_When_MailDelivery_Disabled()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        FakeEmailDeliveryGateway mailGateway = new();
+        EducationAccount account = await AddAccountAsync(dbContext, personId: 5009, balance: 100m);
+        AccountCreditGateway gateway = CreateGateway(
+            dbContext,
+            mailGateway,
+            new ThrowingEmailRecipientResolver(),
+            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
+
+        var result = await gateway.CreditAccountForTopUpAsync(
+            account.Id,
+            25m,
+            "topup:9:5009",
+            "Government campaign");
+
+        result.IsSuccess.Should().BeTrue();
+        account.CachedBalance.Should().Be(125m);
+        mailGateway.Messages.Should().BeEmpty();
+    }
+
     private static MoeDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<MoeDbContext>()
@@ -248,13 +272,16 @@ public sealed class AccountCreditGatewayTests
 
     private AccountCreditGateway CreateGateway(
         MoeDbContext dbContext,
-        FakeEmailDeliveryGateway? mailGateway = null)
+        FakeEmailDeliveryGateway? mailGateway = null,
+        IEmailRecipientResolver? recipientResolver = null,
+        IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
             _clock,
             new FakeTopUpExecutionMetrics(),
-            new TestDoubles.FixedEmailRecipientResolver(),
+            recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
             mailGateway ?? new FakeEmailDeliveryGateway(),
+            mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<AccountCreditGateway>.Instance);
 
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
@@ -314,5 +341,16 @@ public sealed class AccountCreditGatewayTests
             Messages.Add(message);
             return Task.FromResult(ResultToReturn);
         }
+    }
+
+    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
+    {
+        public Task<EmailRecipient?> ResolveForPersonAsync(
+            long personId,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
+
+        public EmailRecipient? ResolveProvided(string? providedEmail)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
     }
 }

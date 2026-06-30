@@ -7,6 +7,7 @@ using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -93,6 +94,31 @@ public sealed class CoursePaymentGatewayEmailTests
         mailGateway.Messages.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ApplySuccessfulPaymentAsync_WhenMailDeliveryDisabled_Should_Not_Call_RecipientResolver_Or_Gateway()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        FakeEmailDeliveryGateway mailGateway = new();
+        (CourseEnrollment enrollment, Bill bill) = await SeedEnrollmentAsync(
+            dbContext,
+            CourseEnrollmentSourceCodes.SelfJoin);
+        CoursePaymentGateway gateway = CreateGateway(
+            dbContext,
+            mailGateway,
+            new ThrowingEmailRecipientResolver(),
+            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
+
+        await gateway.ApplySuccessfulPaymentAsync(
+            bill.Id,
+            120m,
+            paidInFull: true,
+            Now,
+            CancellationToken.None);
+
+        enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.PaidInFull);
+        mailGateway.Messages.Should().BeEmpty();
+    }
+
     private static async Task<(CourseEnrollment Enrollment, Bill Bill)> SeedEnrollmentAsync(
         MoeDbContext dbContext,
         string sourceCode)
@@ -150,11 +176,14 @@ public sealed class CoursePaymentGatewayEmailTests
 
     private static CoursePaymentGateway CreateGateway(
         MoeDbContext dbContext,
-        FakeEmailDeliveryGateway mailGateway)
+        FakeEmailDeliveryGateway mailGateway,
+        IEmailRecipientResolver? recipientResolver = null,
+        IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
-            new TestDoubles.FixedEmailRecipientResolver(),
+            recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
             mailGateway,
+            mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<CoursePaymentGateway>.Instance);
 
     private sealed class TestModelConfiguration : IModelConfigurationContributor
@@ -177,5 +206,16 @@ public sealed class CoursePaymentGatewayEmailTests
             Messages.Add(message);
             return Task.FromResult(ResultToReturn);
         }
+    }
+
+    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
+    {
+        public Task<EmailRecipient?> ResolveForPersonAsync(
+            long personId,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
+
+        public EmailRecipient? ResolveProvided(string? providedEmail)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
     }
 }

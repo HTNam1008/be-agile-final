@@ -111,6 +111,8 @@ public sealed class EducationAccountLifecycleWorker(
         AutomaticEducationAccountClosureSummary closureSummary;
         try
         {
+            await SendAge30AccountLockRemindersAsync(today, cancellationToken);
+
             using (IServiceScope closureScope = scopeFactory.CreateScope())
             {
                 IAutomaticEducationAccountCloser closer =
@@ -186,6 +188,26 @@ public sealed class EducationAccountLifecycleWorker(
                 today,
                 triggerTypeCode);
             throw;
+        }
+    }
+
+    private async Task SendAge30AccountLockRemindersAsync(
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using IServiceScope reminderScope = scopeFactory.CreateScope();
+            IAge30AccountLockReminderEmailService reminderEmails =
+                reminderScope.ServiceProvider.GetRequiredService<IAge30AccountLockReminderEmailService>();
+            await reminderEmails.SendDueRemindersAsync(today, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                exception,
+                "Age-30 account lock reminder email processing failed for {RunDateUtc}. Lifecycle processing will continue.",
+                today);
         }
     }
 
