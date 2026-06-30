@@ -9,6 +9,7 @@ using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Application;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -210,7 +211,8 @@ internal sealed class PayBillingStatementHandler(
     IEducationAccountPaymentGateway accounts,
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
+    IClock clock,
+    PaymentFailedEmailService paymentFailedEmails) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
 {
     public async Task<Result<PayBillingStatementResponse>> Handle(PayBillingStatementCommand command, CancellationToken ct)
     {
@@ -322,6 +324,10 @@ internal sealed class PayBillingStatementHandler(
         {
             if (educationPart?.AccountHoldId is long holdId) await accounts.ReleaseAsync(holdId, ct);
             payment.MarkFailed(now);
+            await paymentFailedEmails.SendStatementPaymentFailedAsync(
+                payment,
+                "The payment gateway was unavailable. Please try again.",
+                ct);
             await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
             return Result<PayBillingStatementResponse>.Failure(PaymentDomainErrors.ProviderUnavailable);
         }
@@ -388,6 +394,10 @@ internal sealed class PayBillingStatementHandler(
         onlinePart?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
         checkout?.ExpireBeforePayment(now);
         activePayment.MarkExpired(now);
+        await paymentFailedEmails.SendStatementPaymentFailedAsync(
+            activePayment,
+            "The payment session expired before completion. Please try again.",
+            cancellationToken);
         await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, cancellationToken);
         return Result<PayBillingStatementResponse?>.Success(null);
     }

@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
-using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 using Moe.StudentFinance.Persistence;
@@ -19,28 +18,14 @@ public sealed class EmailRecipientResolver(
         long personId,
         CancellationToken cancellationToken)
     {
-        RecipientCandidates? candidates = await db.Set<Person>()
+        string? contactEmail = await db.Set<UserAccount>()
             .AsNoTracking()
-            .Where(person => person.Id == personId)
-            .Select(person => new RecipientCandidates(
-                person.PreferredEmail,
-                db.Set<UserAccount>()
-                    .AsNoTracking()
-                    .Where(account => account.PersonId == person.Id && account.RoleCode == RoleCodes.Student)
-                    .OrderByDescending(account => account.Id)
-                    .Select(account => account.ContactEmail)
-                    .FirstOrDefault(),
-                person.OfficialEmail))
-            .SingleOrDefaultAsync(cancellationToken);
+            .Where(account => account.PersonId == personId && account.RoleCode == RoleCodes.Student)
+            .OrderByDescending(account => account.Id)
+            .Select(account => account.ContactEmail)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (candidates is null)
-        {
-            return DevelopmentFallback();
-        }
-
-        return ValidRecipient(candidates.PreferredEmail, EmailRecipientSourceCodes.Preferred)
-            ?? ValidRecipient(candidates.ContactEmail, EmailRecipientSourceCodes.Contact)
-            ?? ValidRecipient(candidates.OfficialEmail, EmailRecipientSourceCodes.Official)
+        return ValidRecipient(contactEmail, EmailRecipientSourceCodes.Contact)
             ?? DevelopmentFallback();
     }
 
@@ -69,8 +54,4 @@ public sealed class EmailRecipientResolver(
                 : null;
     }
 
-    private sealed record RecipientCandidates(
-        string? PreferredEmail,
-        string? ContactEmail,
-        string? OfficialEmail);
 }
