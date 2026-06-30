@@ -66,7 +66,9 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, AzureBlobCourseMaterialStorageService>();
         services.AddScoped<ICourseMaterialPreviewConverter, PowerPointCourseMaterialPreviewConverter>();
-        services.AddSingleton<ICourseMaterialPreviewCache, AzureBlobCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewRedisCache, RedisCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewBlobCache, AzureBlobCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewCache, CompositeCourseMaterialPreviewCache>();
 
         services.AddScoped<IQueryHandler<ListCoursesQuery, PageResponse<CourseSummaryDto>>, ListCoursesQueryHandler>();
         services.AddScoped<IQueryHandler<GetCourseQuery, CourseDetailDto>, GetCourseQueryHandler>();
