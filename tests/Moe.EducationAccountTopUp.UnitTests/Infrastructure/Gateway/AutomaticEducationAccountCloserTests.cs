@@ -135,6 +135,7 @@ public sealed class AutomaticEducationAccountCloserTests
             _personDirectory,
             new TestDoubles.FixedEmailRecipientResolver(),
             _mailGateway,
+            new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<EducationAccountClosureEmailService>.Instance);
 
     private EducationAccount AddManualAccount(long accountId, long personId)

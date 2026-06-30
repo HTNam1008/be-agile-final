@@ -20,6 +20,14 @@ internal sealed class SmtpEmailDeliveryGateway(
     {
         MailDeliveryOptions value = options.Value;
 
+        if (!value.Enabled)
+        {
+            logger.LogDebug(
+                "Email delivery skipped because MailDelivery is disabled. Subject={Subject}",
+                message.Subject);
+            return Result.Success();
+        }
+
         if (string.IsNullOrWhiteSpace(value.Password))
         {
             return Result.Failure(MailDeliveryErrors.MissingSmtpPassword);

@@ -26,6 +26,7 @@ internal sealed class AccountCreditGateway(
     ITopUpExecutionMetrics metrics,
     IEmailRecipientResolver recipientResolver,
     IEmailDeliveryGateway mailGateway,
+    IEmailDeliverySwitch mailSwitch,
     ILogger<AccountCreditGateway> logger) : IAccountCreditGateway
 {
     private const string CreditTransactionTypeCode = "CREDIT";
@@ -163,6 +164,15 @@ internal sealed class AccountCreditGateway(
         DateTime creditedAtUtc,
         CancellationToken cancellationToken)
     {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Top-up email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
+                account.PersonId,
+                account.Id);
+            return;
+        }
+
         EmailRecipient? recipient;
         try
         {
@@ -257,11 +267,7 @@ internal sealed class AccountCreditGateway(
         string encodedUpdatedBalance = WebUtility.HtmlEncode(updatedBalanceDisplay);
 
         StringBuilder builder = new();
-        builder.Append("<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head>");
-        builder.Append("<body bgcolor=\"#eef6f1\" style=\"margin:0;padding:0;background-color:#eef6f1;font-family:Arial,Helvetica,sans-serif;color:#172033;\">");
-        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#eef6f1\" style=\"background-color:#eef6f1;\">");
-        builder.Append("<tr><td align=\"center\" style=\"padding:28px 12px;\">");
-        builder.Append("<table role=\"presentation\" width=\"640\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#ffffff\" style=\"width:640px;max-width:100%;background-color:#ffffff;border:1px solid #d8e7dd;\">");
+        EmailTemplateBranding.AppendShellStart(builder);
         EmailTemplateBranding.AppendHeader(builder, "Funds credited to your Education Account");
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 16px;color:#172033;\">Hello ")
