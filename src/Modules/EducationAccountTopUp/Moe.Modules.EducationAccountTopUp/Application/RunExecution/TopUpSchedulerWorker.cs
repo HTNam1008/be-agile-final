@@ -67,12 +67,12 @@ public sealed class TopUpSchedulerWorker(
                 }
 
                 ITopUpCampaignRepository campaignRepo = innerScope.ServiceProvider.GetRequiredService<ITopUpCampaignRepository>();
-                    ITopUpRunRepository runs = innerScope.ServiceProvider.GetRequiredService<ITopUpRunRepository>();
-                    IUnitOfWork unitOfWork = innerScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                    ITopUpRunDispatcher dispatcher = innerScope.ServiceProvider.GetRequiredService<ITopUpRunDispatcher>();
+                ITopUpRunRepository runs = innerScope.ServiceProvider.GetRequiredService<ITopUpRunRepository>();
+                IUnitOfWork unitOfWork = innerScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                ITopUpRunDispatcher dispatcher = innerScope.ServiceProvider.GetRequiredService<ITopUpRunDispatcher>();
 
-                    TopUpCampaign? campaign = await campaignRepo.GetByIdAsync(campaignId, cancellationToken);
-                    if (campaign is null || !campaign.NextRunAtUtc.HasValue) continue;
+                TopUpCampaign? campaign = await campaignRepo.GetByIdAsync(campaignId, cancellationToken);
+                if (campaign is null || !campaign.NextRunAtUtc.HasValue) continue;
 
                 if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
                 {

@@ -73,7 +73,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         else if (newStatusCode == TopUpCampaignStatusCodes.Cancelled)
         {
             campaign.SetNextRunAt(null);
-            
+
             // Ick 3 fix: clear PausedAtUtc in case it was paused before cancelling.
             // RecordResume normally handles this, but direct cancel bypasses it.
             if (campaign.CampaignStatusCode == TopUpCampaignStatusCodes.Paused)

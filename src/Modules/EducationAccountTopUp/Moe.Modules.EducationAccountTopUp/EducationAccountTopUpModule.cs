@@ -26,10 +26,10 @@ using Moe.Modules.EducationAccountTopUp.Application.RunExecution.TransactionResu
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetAccountTaxonomy;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
-using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetAccountTaxonomy;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.PreviewCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.UpdateCampaign;

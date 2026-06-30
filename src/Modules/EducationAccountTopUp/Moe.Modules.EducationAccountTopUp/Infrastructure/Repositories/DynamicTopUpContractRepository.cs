@@ -53,7 +53,7 @@ internal sealed class DynamicTopUpContractRepository(MoeDbContext dbContext) : I
     {
         // Bulk update is supported in EF Core 7+
         await dbContext.Set<DynamicTopUpContract>()
-            .Where(x => x.TopUpCampaignId == campaignId 
+            .Where(x => x.TopUpCampaignId == campaignId
                      && x.ContractStatus == ContractStatuses.Active
                      && x.DeliveryTypeCode == DeliveryType.ConditionalRecurring
                      && !qualifyingAccountIds.Contains(x.EducationAccountId))
