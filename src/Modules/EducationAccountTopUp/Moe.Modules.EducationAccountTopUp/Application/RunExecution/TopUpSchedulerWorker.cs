@@ -76,7 +76,7 @@ public sealed class TopUpSchedulerWorker(
 
                 if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
                 {
-                    logger.LogWarning("Campaign {CampaignId} is DYNAMIC_RULES — skipping. Contract infrastructure required (Phase 2).", campaign.Id);
+                    logger.LogWarning("Campaign {CampaignId} is DYNAMIC_RULES; scheduled disbursements are handled by the assessment and contract workers.", campaign.Id);
                     continue;
                 }
 
