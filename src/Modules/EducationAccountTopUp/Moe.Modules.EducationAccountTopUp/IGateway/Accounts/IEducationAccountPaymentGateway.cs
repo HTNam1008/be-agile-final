@@ -1,5 +1,7 @@
 namespace Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 
+public sealed class EducationAccountPaymentUnavailableException(string message) : InvalidOperationException(message);
+
 public sealed record EducationAccountPaymentBalance(
     long EducationAccountId,
     decimal CurrentBalance,
