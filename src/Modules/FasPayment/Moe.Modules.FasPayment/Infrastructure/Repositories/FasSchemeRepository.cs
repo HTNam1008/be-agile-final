@@ -197,7 +197,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         }
     }
 
-    public async Task<PageResponse<FasSchemeListItem>> ListAsync(string? status, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<PageResponse<FasSchemeListItem>> ListAsync(string? status, string? search, int page, int pageSize, string? sortBy, string? sortDirection, CancellationToken cancellationToken)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -216,8 +216,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         else query = query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
         if (!string.IsNullOrWhiteSpace(search)) { string value = search.Trim(); query = query.Where(x => x.SchemeCode.Contains(value) || x.GrantCode.Contains(value) || x.Name.Contains(value)); }
         long totalCount = await query.LongCountAsync(cancellationToken);
-        var schemes = await query
-            .OrderByDescending(x => x.CreatedAtUtc)
+        var schemes = await ApplySchemeSort(query, sortBy, sortDirection)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -231,6 +230,39 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         return new PageResponse<FasSchemeListItem>(schemes.Select(x => new FasSchemeListItem(x.Id, x.SchemeCode, x.GrantCode, x.Name,
             x.Description, x.StartDate, x.EndDate, x.StatusCode, courses.Where(c => c.FasSchemeId == x.Id).Select(c => c.CourseId).Order().ToArray(),
             applicationCounts.GetValueOrDefault(x.Id))).ToArray(), page, pageSize, totalCount);
+    }
+
+    private IQueryable<FasScheme> ApplySchemeSort(IQueryable<FasScheme> query, string? sortBy, string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        return key switch
+        {
+            "schemecode" => descending
+                ? query.OrderByDescending(x => x.SchemeCode).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.SchemeCode).ThenBy(x => x.Id),
+            "schemename" => descending
+                ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.Name).ThenBy(x => x.Id),
+            "duration" => descending
+                ? query.OrderByDescending(x => x.StartDate).ThenByDescending(x => x.EndDate).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.StartDate).ThenBy(x => x.EndDate).ThenBy(x => x.Id),
+            "status" => descending
+                ? query.OrderByDescending(x => x.StatusCode).ThenByDescending(x => x.StartDate).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.StatusCode).ThenBy(x => x.StartDate).ThenBy(x => x.Id),
+            "applicationcount" => SortByApplicationCount(query, descending),
+            _ => query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+        };
+    }
+
+    private IQueryable<FasScheme> SortByApplicationCount(IQueryable<FasScheme> query, bool descending)
+    {
+        return descending
+            ? query.OrderByDescending(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+                .ThenByDescending(scheme => scheme.Id)
+            : query.OrderBy(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+                .ThenBy(scheme => scheme.Id);
     }
 
     public async Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken)

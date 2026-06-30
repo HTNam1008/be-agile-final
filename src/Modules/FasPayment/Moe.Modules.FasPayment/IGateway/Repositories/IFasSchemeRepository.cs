@@ -18,6 +18,6 @@ internal interface IFasSchemeRepository
     Task<CreateFasSchemeResponse?> PublishAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<CreateFasSchemeResponse?> DisableAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<CreateFasSchemeResponse?> DeleteAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
-    Task<PageResponse<FasSchemeListItem>> ListAsync(string? status, string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<PageResponse<FasSchemeListItem>> ListAsync(string? status, string? search, int page, int pageSize, string? sortBy, string? sortDirection, CancellationToken cancellationToken);
     Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken);
 }

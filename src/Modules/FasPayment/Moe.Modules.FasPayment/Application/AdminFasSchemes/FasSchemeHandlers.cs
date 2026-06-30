@@ -309,7 +309,7 @@ internal static class FasSchemeAuditWriter
 internal sealed class ListFasSchemesHandler(IFasSchemeRepository repository) : IQueryHandler<ListFasSchemesQuery, PageResponse<FasSchemeListItem>>
 {
     public async Task<Result<PageResponse<FasSchemeListItem>>> Handle(ListFasSchemesQuery query, CancellationToken cancellationToken)
-        => Result<PageResponse<FasSchemeListItem>>.Success(await repository.ListAsync(query.Status, query.Search, query.Page, query.PageSize, cancellationToken));
+        => Result<PageResponse<FasSchemeListItem>>.Success(await repository.ListAsync(query.Status, query.Search, query.Page, query.PageSize, query.SortBy, query.SortDirection, cancellationToken));
 }
 
 internal sealed class GetFasSchemeHandler(IFasSchemeRepository repository) : IQueryHandler<GetFasSchemeQuery, FasSchemeDetail>
