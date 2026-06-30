@@ -24,7 +24,7 @@ internal sealed class TopUpRunConfiguration : IEntityTypeConfiguration<TopUpRun>
             .HasFilter("[ScheduledFor] IS NOT NULL")
             .HasDatabaseName("IX_TopUpRuns_Campaign_ScheduledFor");
         builder.HasIndex(x => x.CancelRequestedAtUtc)
-            .HasFilter("[CancelRequestedAtUtc] IS NOT NULL")
+            .HasFilter("[CancelRequestedAt] IS NOT NULL")
             .HasDatabaseName("IX_TopUpRun_CancelRequested");
         builder.Property(x => x.ScheduledForUtc).HasColumnName("ScheduledFor");
         builder.Property(x => x.TriggerTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();

@@ -33,7 +33,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                 schema: "topup",
                 table: "TopUpRun",
                 column: "CancelRequestedAt",
-                filter: "[CancelRequestedAtUtc] IS NOT NULL");
+                filter: "[CancelRequestedAt] IS NOT NULL");
         }
 
         /// <inheritdoc />

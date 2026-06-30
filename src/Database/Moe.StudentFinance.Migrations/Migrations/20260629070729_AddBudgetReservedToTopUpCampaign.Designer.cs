@@ -2362,7 +2362,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasIndex("CancelRequestedAtUtc")
                         .HasDatabaseName("IX_TopUpRun_CancelRequested")
-                        .HasFilter("[CancelRequestedAtUtc] IS NOT NULL");
+                        .HasFilter("[CancelRequestedAt] IS NOT NULL");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
