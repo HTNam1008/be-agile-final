@@ -24,6 +24,7 @@ using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.TransactionResults;
+using Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
@@ -73,6 +74,8 @@ public sealed class EducationAccountTopUpModule : IModule
             .BindConfiguration(TopUpWorkerOptions.SectionName);
         // Gateways & Repositories
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
+        services.AddScoped<IAccountHoldRepository, AccountHoldRepository>();
+        services.AddScoped<ISettlementPreferenceRepository, SettlementPreferenceRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
         services.AddScoped<IDynamicTopUpContractRepository, DynamicTopUpContractRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
@@ -135,10 +138,12 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();
         services.AddScoped<ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>, OpenManualAccountHandler>();
         services.AddScoped<ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>, CloseManualAccountHandler>();
+        services.AddScoped<ICommandHandler<SetSettlementPreferenceCommand, SettlementPreferenceResponse>, SetSettlementPreferenceHandler>();
 
         // Queries
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
         services.AddScoped<IQueryHandler<GetMyEducationAccountTransactionsQuery, MyEducationAccountTransactionsPage>, GetMyEducationAccountTransactionsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetSettlementPreferenceQuery, SettlementPreferenceResponse>, GetSettlementPreferenceHandler>();
         services.AddScoped<IQueryHandler<GetCampaignsQuery, CampaignListResult>, GetCampaignsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignByIdQuery, CampaignListItem?>, GetCampaignByIdQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();

@@ -12,6 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 
 internal sealed class AutomaticEducationAccountCloser(
     IEducationAccountRepository educationAccounts,
+    IAccountHoldRepository accountHolds,
     IEligiblePersonLookupGateway people,
     IAuditService auditService,
     IUnitOfWork unitOfWork,
@@ -58,6 +59,18 @@ internal sealed class AutomaticEducationAccountCloser(
         DateTimeOffset closedAtUtc,
         CancellationToken cancellationToken)
     {
+        if (await accountHolds.HasPendingHoldAsync(
+            account.Id,
+            closedAtUtc.UtcDateTime,
+            cancellationToken))
+        {
+            return new AutomaticEducationAccountClosureResult(
+                account.Id,
+                account.PersonId,
+                Closed: false,
+                SkipReasonCode: AutomaticEducationAccountClosureSkipReasonCodes.PendingPaymentHold);
+        }
+
         Result<bool> closeResult = account.CloseAutomatically(closedAtUtc);
         if (closeResult.IsFailure)
         {
@@ -69,7 +82,8 @@ internal sealed class AutomaticEducationAccountCloser(
             return new AutomaticEducationAccountClosureResult(
                 account.Id,
                 account.PersonId,
-                Closed: false);
+                Closed: false,
+                SkipReasonCode: AutomaticEducationAccountClosureSkipReasonCodes.AlreadyClosed);
         }
 
         string detailsJson = JsonSerializer.Serialize(new

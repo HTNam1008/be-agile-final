@@ -248,6 +248,48 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
+    public async Task ListAsync_IncludesStudentPortalAccessStatus()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1041, "Disabled Portal", "S1234041T", "CITIZEN", 10, "SEC_1", "1A");
+        SetPersonStatus(dbContext, 1041, "DISABLED");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.Items.Should().ContainSingle();
+        page.Items.Single().PersonStatusCode.Should().Be("DISABLED");
+    }
+
+    [Fact]
+    public async Task ListAsync_FilterByDisabledPortalAccess_ReturnsDisabledUserAccountsOnly()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1042, "Disabled Portal", "S1234042U", "CITIZEN", 10, "SEC_1", "1A");
+        SeedStudent(dbContext, 1043, "Active Portal", "S1234043V", "CITIZEN", 10, "SEC_1", "1A");
+        SetPersonStatus(dbContext, 1042, "DISABLED");
+        SetPersonStatus(dbContext, 1043, "ACTIVE");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(portalAccessStatus: AdminStudentPortalAccessStatusFilter.Disabled, page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.Items.Should().ContainSingle();
+        page.Items.Single().PersonId.Should().Be(1042);
+    }
+
+    [Fact]
     public async Task ListAsync_ReturnsSchoolNameFromEnrollmentOrganization()
     {
         using MoeDbContext dbContext = CreateDbContext();
@@ -444,6 +486,12 @@ public sealed class AdminStudentListReaderTests
         Person person = new(personId, $"P-{personId}", fullName, new DateOnly(2010, 1, 1), "SG", residencyCode);
         SetProperty(person, nameof(Person.IdentityNumberMasked), nricMasked);
         dbContext.Set<Person>().Add(person);
+    }
+
+    private static void SetPersonStatus(MoeDbContext dbContext, long personId, string statusCode)
+    {
+        Person person = dbContext.Set<Person>().Local.Single(x => x.Id == personId);
+        SetProperty(person, nameof(Person.PersonStatusCode), statusCode);
     }
 
     private static void SetId(object entity, long id)
