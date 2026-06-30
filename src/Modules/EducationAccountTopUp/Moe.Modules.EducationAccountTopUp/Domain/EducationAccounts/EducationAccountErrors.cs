@@ -23,4 +23,8 @@ public static class EducationAccountErrors
     public static readonly Error SettlementPreferenceConflict = new(
         "ACCOUNT.SETTLEMENT_PREFERENCE_CONFLICT",
         "The settlement preference was updated by another request.");
+
+    public static readonly Error PendingPaymentInProgress = new(
+        "ACCOUNT.PENDING_PAYMENT_IN_PROGRESS",
+        "A payment is currently in progress for this Education Account. Please retry shortly.");
 }

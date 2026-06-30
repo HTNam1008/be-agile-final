@@ -65,6 +65,7 @@ public sealed class EducationAccountTopUpModule : IModule
             .BindConfiguration(EducationAccountLifecycleOptions.SectionName);
         // Gateways & Repositories
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
+        services.AddScoped<IAccountHoldRepository, AccountHoldRepository>();
         services.AddScoped<ISettlementPreferenceRepository, SettlementPreferenceRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();

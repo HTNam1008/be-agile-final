@@ -80,4 +80,15 @@ internal sealed class EducationAccountProvisioningGateway(
     {
         return educationAccounts.ExistsForPersonAsync(personId, cancellationToken);
     }
+
+    public Task<bool> HasActiveAccountAsync(long personId, CancellationToken cancellationToken)
+    {
+        return HasActiveAccountCoreAsync(personId, cancellationToken);
+    }
+
+    private async Task<bool> HasActiveAccountCoreAsync(long personId, CancellationToken cancellationToken)
+    {
+        EducationAccount? account = await educationAccounts.FindByPersonIdAsync(personId, cancellationToken);
+        return account?.StatusCode == AccountStatuses.Active;
+    }
 }
