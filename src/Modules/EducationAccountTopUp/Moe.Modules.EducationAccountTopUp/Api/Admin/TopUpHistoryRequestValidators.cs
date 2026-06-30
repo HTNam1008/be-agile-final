@@ -86,6 +86,22 @@ public sealed class AccountTransactionHistoryRequestValidator : AbstractValidato
     }
 }
 
+public sealed class AllTransactionsRequestValidator : AbstractValidator<AllTransactionsRequest>
+{
+    public AllTransactionsRequestValidator()
+    {
+        RuleFor(x => x.CampaignSearch).MaximumLength(100);
+        RuleFor(x => x.OrganizationId).GreaterThan(0).When(x => x.OrganizationId.HasValue);
+        RuleFor(x => x.Page).InclusiveBetween(1, TopUpHistoryValidationRules.MaxPageNumber);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, TopUpHistoryValidationRules.MaxPageSize);
+        RuleFor(x => x)
+            .Must(x => TopUpHistoryValidationRules.HasValidDateRange(
+                x.DateFromUtc,
+                x.DateToUtc))
+            .WithMessage("DateFromUtc must be earlier than DateToUtc.");
+    }
+}
+
 internal static class TopUpHistoryValidationRules
 {
     internal const int MaxPageSize = 100;

@@ -12,6 +12,7 @@ using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEduca
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.History.AccountFlatHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.AccountTopUpTransactionHistory;
+using Moe.Modules.EducationAccountTopUp.Application.History.AllTransactionsHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignTransactionHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.ContractStatus;
@@ -146,6 +147,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetRunHistoryQuery, PageResponse<RunHistoryItem>>, GetRunHistoryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignTransactionHistoryQuery, PageResponse<CampaignTransactionHistoryItem>>, GetCampaignTransactionHistoryHandler>();
         services.AddScoped<IQueryHandler<GetAccountTopUpTransactionHistoryQuery, PageResponse<AccountTopUpTransactionHistoryItem>>, GetAccountTopUpTransactionHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetAllTransactionsQuery, PageResponse<AllTransactionsItem>>, GetAllTransactionsHandler>();
         services.AddScoped<IQueryHandler<GetCampaignContractsQuery, PageResponse<CampaignContractItem>>, GetCampaignContractsHandler>();
         services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunsQuery, PageResponse<EducationAccountLifecycleRunListItem>>, GetEducationAccountLifecycleRunsHandler>();
         services.AddScoped<IQueryHandler<GetEducationAccountLifecycleRunDetailQuery, EducationAccountLifecycleRunDetail>, GetEducationAccountLifecycleRunDetailHandler>();
@@ -162,6 +164,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<RunHistoryRequest>, RunHistoryRequestValidator>();
         services.AddScoped<IValidator<CampaignTransactionHistoryRequest>, CampaignTransactionHistoryRequestValidator>();
         services.AddScoped<IValidator<AccountTransactionHistoryRequest>, AccountTransactionHistoryRequestValidator>();
+        services.AddScoped<IValidator<AllTransactionsRequest>, AllTransactionsRequestValidator>();
         services.AddScoped<IValidator<TopUpTransactionResultsRequest>, TopUpTransactionResultsRequestValidator>();
         services.AddScoped<IValidator<SearchTopUpAccountsQuery>, SearchTopUpAccountsValidator>();
         services.AddScoped<IValidator<TopUpAccountSelection>, TopUpAccountSelectionValidator>();
