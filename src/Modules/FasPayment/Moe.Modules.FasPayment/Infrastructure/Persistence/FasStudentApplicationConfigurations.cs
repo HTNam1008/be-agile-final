@@ -16,7 +16,7 @@ internal sealed class FasDocumentConfiguration : IEntityTypeConfiguration<FasDoc
 {
     public void Configure(EntityTypeBuilder<FasDocument> b)
     {
-        b.ToTable("FASDocument", "fas", t => { t.HasCheckConstraint("CK_FASDocument_Type", "[DocumentTypeCode] IN ('PAYSLIP','CPF_STATEMENT','NOA','WELFARE_LETTER','OTHER','INCOME_PROOF')"); t.HasCheckConstraint("CK_FASDocument_Status", "[UploadStatusCode] IN ('UPLOADED','REMOVED','SCAN_PENDING','SCAN_PASSED','SCAN_FAILED')"); t.HasCheckConstraint("CK_FASDocument_Size", "[FileSizeBytes] > 0 AND [FileSizeBytes] <= 10485760"); });
+        b.ToTable("FASDocument", "fas", t => { t.HasCheckConstraint("CK_FASDocument_Type", "[DocumentTypeCode] IN ('PAYSLIP','CPF_STATEMENT','NOA','WELFARE_LETTER','OTHER','INCOME_PROOF')"); t.HasCheckConstraint("CK_FASDocument_Status", "[UploadStatusCode] IN ('UPLOADED','REMOVED','SCAN_PENDING','SCAN_PASSED','SCAN_FAILED')"); t.HasCheckConstraint("CK_FASDocument_Size", "[FileSizeBytes] > 0 AND [FileSizeBytes] <= 20971520"); });
         b.HasKey(x => x.Id); b.Property(x => x.Id).HasColumnName("FASDocumentId").UseIdentityColumn(); b.Property(x => x.DocumentTypeCode).HasMaxLength(50).IsUnicode(false); b.Property(x => x.ChecklistItemCode).HasMaxLength(100).IsUnicode(false); b.Property(x => x.FileName).HasMaxLength(255); b.Property(x => x.BlobKey).HasMaxLength(1000); b.Property(x => x.MimeType).HasMaxLength(100).IsUnicode(false); b.Property(x => x.UploadStatusCode).HasMaxLength(30).IsUnicode(false); b.HasIndex(x => x.FasApplicationId); b.HasOne<FasApplication>().WithMany().HasForeignKey(x => x.FasApplicationId).OnDelete(DeleteBehavior.Cascade); b.HasOne<FasDocument>().WithMany().HasForeignKey(x => x.ReplacedByDocumentId).OnDelete(DeleteBehavior.Restrict);
     }
 }
