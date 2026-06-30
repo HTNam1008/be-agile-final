@@ -36,7 +36,13 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.CreatedByLoginAccountId,
                 c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
-                c.UpdatedAtUtc))
+                c.UpdatedAtUtc,
+                dbContext.Set<TopUpRun>()
+                    .Where(r => r.TopUpCampaignId == c.Id)
+                    .SelectMany(r => dbContext.Set<TopUpTransaction>().Where(t => t.TopUpRunId == r.Id && t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed))
+                    .Select(t => t.EducationAccountId)
+                    .Distinct()
+                    .Count()))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -99,7 +105,13 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.CreatedByLoginAccountId,
                 c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
-                c.UpdatedAtUtc))
+                c.UpdatedAtUtc,
+                dbContext.Set<TopUpRun>()
+                    .Where(r => r.TopUpCampaignId == c.Id)
+                    .SelectMany(r => dbContext.Set<TopUpTransaction>().Where(t => t.TopUpRunId == r.Id && t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed))
+                    .Select(t => t.EducationAccountId)
+                    .Distinct()
+                    .Count()))
             .ToListAsync(cancellationToken);
 
         return new CampaignListResult(items, totalCount, pageNumber, pageSize);
