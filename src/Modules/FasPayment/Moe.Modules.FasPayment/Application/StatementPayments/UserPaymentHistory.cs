@@ -11,7 +11,9 @@ namespace Moe.Modules.FasPayment.Application.StatementPayments;
 public sealed record ListUserPaymentHistoryQuery(
     int Page = 1,
     int PageSize = 10,
-    string? Status = null)
+    string? Status = null,
+    string? SortBy = null,
+    string? SortDirection = null)
     : IQuery<PageResponse<UserPaymentHistoryResponse>>;
 
 internal sealed class ListUserPaymentHistoryHandler(
@@ -106,11 +108,12 @@ internal sealed class ListUserPaymentHistoryHandler(
                 [ToFasSettlementResponse(settlement)]))
             .ToArray();
 
-        UserPaymentHistoryResponse[] orderedRows = paymentRows
+        IEnumerable<UserPaymentHistoryResponse> filteredRows = paymentRows
                 .Concat(fasRows)
-                .OrderByDescending(row => row.CompletedAtUtc ?? row.FailedAtUtc ?? row.InitiatedAtUtc)
-                .Where(row => MatchesStatus(row, query.Status))
-                .ToArray();
+                .Where(row => MatchesStatus(row, query.Status));
+
+        UserPaymentHistoryResponse[] orderedRows = ApplySort(filteredRows, query.SortBy, query.SortDirection)
+            .ToArray();
 
         long totalCount = orderedRows.LongLength;
         UserPaymentHistoryResponse[] pageRows = orderedRows
@@ -137,6 +140,33 @@ internal sealed class ListUserPaymentHistoryHandler(
 
         return group == normalized;
     }
+
+    private static IEnumerable<UserPaymentHistoryResponse> ApplySort(
+        IEnumerable<UserPaymentHistoryResponse> rows,
+        string? sortBy,
+        string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        IOrderedEnumerable<UserPaymentHistoryResponse> ordered = key switch
+        {
+            "paymentnumber" => Order(rows, row => row.PaymentNumber, descending),
+            "educationaccountamount" => Order(rows, row => row.EducationAccountAmount, descending),
+            "onlinepaymentamount" => Order(rows, row => row.OnlinePaymentAmount, descending),
+            "paymentamount" => Order(rows, row => row.PaymentAmount, descending),
+            "reference" => Order(rows, row => row.ReceiptNumber ?? string.Empty, descending),
+            _ => Order(rows, row => row.CompletedAtUtc ?? row.FailedAtUtc ?? row.InitiatedAtUtc, true)
+        };
+
+        return ordered.ThenBy(row => row.PaymentId);
+    }
+
+    private static IOrderedEnumerable<UserPaymentHistoryResponse> Order<TKey>(
+        IEnumerable<UserPaymentHistoryResponse> rows,
+        Func<UserPaymentHistoryResponse, TKey> keySelector,
+        bool descending)
+        => descending ? rows.OrderByDescending(keySelector) : rows.OrderBy(keySelector);
 
     private static UserPaymentHistoryFasSettlementResponse ToFasSettlementResponse(UserFasSettlement settlement)
         => new(

@@ -25,9 +25,11 @@ public sealed class EServicePaymentsController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? status = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         CancellationToken cancellationToken = default)
         => this.ToPaymentResponse(await queries.Send(
-            new ListUserPaymentHistoryQuery(page, pageSize, status),
+            new ListUserPaymentHistoryQuery(page, pageSize, status, sortBy, sortDirection),
             cancellationToken));
 
 }
