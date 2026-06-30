@@ -121,8 +121,8 @@ internal sealed class ListFasSchemesRequestValidator : AbstractValidator<ListFas
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
         RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
         RuleFor(x => x.SortBy)
-            .Must(sortBy => string.IsNullOrWhiteSpace(sortBy) || sortBy is "schemeName" or "createdDate" or "status")
-            .WithMessage("SortBy must be schemeName, createdDate, or status.");
+            .Must(sortBy => string.IsNullOrWhiteSpace(sortBy) || sortBy is "createdDate" or "schemeName" or "schemeCode" or "duration" or "status" or "applicationCount")
+            .WithMessage("SortBy must be createdDate, schemeName, schemeCode, duration, status, or applicationCount.");
         RuleFor(x => x.SortDirection)
             .Must(direction => string.IsNullOrWhiteSpace(direction) || direction is "asc" or "desc")
             .WithMessage("SortDirection must be asc or desc.");

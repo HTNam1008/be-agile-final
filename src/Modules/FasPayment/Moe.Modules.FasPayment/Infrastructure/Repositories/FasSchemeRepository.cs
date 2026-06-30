@@ -260,23 +260,37 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         return query;
     }
 
-    private static IOrderedQueryable<FasScheme> ApplySorting(IQueryable<FasScheme> query, string? sortBy, string? sortDirection, DateOnly today)
+    private IOrderedQueryable<FasScheme> ApplySorting(IQueryable<FasScheme> query, string? sortBy, string? sortDirection, DateOnly today)
     {
         bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(sortDirection);
         Expression<Func<FasScheme, int>> statusOrder = StatusSortOrder(today);
         return sortBy?.Trim() switch
         {
+            "schemeCode" => descending
+                ? query.OrderByDescending(x => x.SchemeCode).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.SchemeCode).ThenBy(x => x.Id),
             "schemeName" => descending
                 ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.Name).ThenByDescending(x => x.Id),
+                : query.OrderBy(x => x.Name).ThenBy(x => x.Id),
+            "duration" => descending
+                ? query.OrderByDescending(x => x.StartDate).ThenByDescending(x => x.EndDate).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.StartDate).ThenBy(x => x.EndDate).ThenBy(x => x.Id),
             "status" => descending
                 ? query.OrderByDescending(statusOrder).ThenByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
                 : query.OrderBy(statusOrder).ThenByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id),
+            "applicationCount" => SortByApplicationCount(query, descending),
             "createdDate" or _ => descending
                 ? query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
         };
     }
+
+    private IOrderedQueryable<FasScheme> SortByApplicationCount(IQueryable<FasScheme> query, bool descending)
+        => descending
+            ? query.OrderByDescending(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+                .ThenByDescending(scheme => scheme.Id)
+            : query.OrderBy(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+                .ThenBy(scheme => scheme.Id);
 
     private static Expression<Func<FasScheme, int>> StatusSortOrder(DateOnly today)
         => scheme => scheme.StatusCode == FasSchemeStatusCodes.Active && scheme.StartDate <= today ? 1

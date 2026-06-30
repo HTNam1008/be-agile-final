@@ -11,4 +11,6 @@ internal sealed record ListAdminStudentsQuery(
     AdminStudentAccountStatusFilter AccountStatus,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
-    int PageSize) : IQuery<AdminStudentListPage>;
+    int PageSize,
+    string? SortBy,
+    string? SortDirection) : IQuery<AdminStudentListPage>;
