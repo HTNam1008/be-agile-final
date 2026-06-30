@@ -169,14 +169,6 @@ public sealed class TopUpSchedulerWorker(
                 var campaign = await campaignRepo.GetByIdAsync(group.Key, ct);
                 if (campaign is null) continue;
 
-                if (campaign.EndDate.HasValue && campaign.EndDate.Value < DateOnly.FromDateTime(nowUtc))
-                {
-                    logger.LogInformation(
-                        "Skipping contract dispatch for campaign {CampaignId} — campaign expired on {EndDate}.",
-                        group.Key, campaign.EndDate.Value);
-                    continue;
-                }
-
                 bool activeRunExists = await runs.HasActiveRunsForCampaignAsync(group.Key, ct);
                 if (activeRunExists)
                 {
