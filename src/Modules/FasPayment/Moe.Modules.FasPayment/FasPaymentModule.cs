@@ -58,6 +58,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
         services.AddScoped<StudentFasApplicationService>();
         services.AddScoped<FasEmailNotificationService>();
+        services.AddScoped<PaymentFailedEmailService>();
         services.AddScoped<FasApiExceptionFilter>();
         services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"]) && string.IsNullOrWhiteSpace(configuration["AzureBlob:ConnectionString"])
             ? new PrivateFileFasDocumentStorage()
@@ -74,6 +75,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IEnrollmentRefundPreviewRepository, EnrollmentRefundPreviewRepository>();
         services.AddScoped<IEnrollmentCancellationRepository, EnrollmentCancellationRepository>();
         services.AddScoped<IEnrollmentRefundProcessor, EnrollmentRefundProcessor>();
+        services.AddScoped<CourseWithdrawalEmailService>();
         services.AddScoped<IPaymentPersistenceTracker, PaymentPersistenceTracker>();
         services.AddScoped<IStripePaymentGateway, StripePaymentGateway>();
         services.AddSingleton<IStripeWebhookCoordinator, StripeWebhookCoordinator>();
