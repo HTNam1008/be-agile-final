@@ -39,4 +39,38 @@ public sealed class MailDeliveryOptionsTests
 
         MailDeliveryOptions.IsValid(options).Should().BeFalse();
     }
+
+    [Fact]
+    public void IsValid_WhenFallbackIsConfigured_RequiresCompleteFallbackConfiguration()
+    {
+        MailDeliveryOptions validOptions = new()
+        {
+            Enabled = true,
+            AppName = "MOE SEEDS",
+            Host = "smtp.gmail.com",
+            Port = 587,
+            UserName = "primary@example.com",
+            FromEmail = "primary@example.com",
+            FromDisplayName = "MOE SEEDS",
+            FallbackUserName = "fallback@example.com",
+            FallbackPassword = "fallback-password",
+            FallbackFromEmail = "fallback@example.com"
+        };
+        MailDeliveryOptions invalidOptions = new()
+        {
+            Enabled = true,
+            AppName = "MOE SEEDS",
+            Host = "smtp.gmail.com",
+            Port = 587,
+            UserName = "primary@example.com",
+            FromEmail = "primary@example.com",
+            FromDisplayName = "MOE SEEDS",
+            FallbackUserName = "fallback@example.com",
+            FallbackPassword = "fallback-password",
+            FallbackFromEmail = "not-an-email"
+        };
+
+        MailDeliveryOptions.IsValid(validOptions).Should().BeTrue();
+        MailDeliveryOptions.IsValid(invalidOptions).Should().BeFalse();
+    }
 }

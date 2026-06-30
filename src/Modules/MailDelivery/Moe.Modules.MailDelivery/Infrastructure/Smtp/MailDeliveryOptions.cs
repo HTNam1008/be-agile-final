@@ -24,6 +24,14 @@ public sealed class MailDeliveryOptions
 
     public string FromDisplayName { get; init; } = "MOE SEEDS";
 
+    public string? FallbackUserName { get; init; }
+
+    public string? FallbackPassword { get; init; }
+
+    public string? FallbackFromEmail { get; init; }
+
+    public string? FallbackFromDisplayName { get; init; }
+
     public string? DevelopmentFallbackRecipient { get; init; }
 
     public static bool IsValid(MailDeliveryOptions options)
@@ -39,8 +47,26 @@ public sealed class MailDeliveryOptions
             && !string.IsNullOrWhiteSpace(options.UserName)
             && IsValidEmail(options.FromEmail)
             && !string.IsNullOrWhiteSpace(options.FromDisplayName)
+            && IsValidFallback(options)
             && (string.IsNullOrWhiteSpace(options.DevelopmentFallbackRecipient)
                 || IsValidEmail(options.DevelopmentFallbackRecipient));
+    }
+
+    private static bool IsValidFallback(MailDeliveryOptions options)
+    {
+        bool hasAnyFallback = !string.IsNullOrWhiteSpace(options.FallbackUserName)
+            || !string.IsNullOrWhiteSpace(options.FallbackPassword)
+            || !string.IsNullOrWhiteSpace(options.FallbackFromEmail)
+            || !string.IsNullOrWhiteSpace(options.FallbackFromDisplayName);
+
+        if (!hasAnyFallback)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(options.FallbackUserName)
+            && !string.IsNullOrWhiteSpace(options.FallbackPassword)
+            && IsValidEmail(options.FallbackFromEmail);
     }
 
     private static bool IsValidEmail(string? emailAddress)
