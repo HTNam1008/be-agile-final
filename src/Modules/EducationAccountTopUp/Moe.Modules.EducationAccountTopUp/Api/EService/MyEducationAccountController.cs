@@ -50,6 +50,8 @@ public sealed class MyEducationAccountController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? category = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         CancellationToken cancellationToken = default)
     {
         long? personId = currentUser.PersonId;
@@ -62,7 +64,7 @@ public sealed class MyEducationAccountController(
         }
 
         Result<MyEducationAccountTransactionsPage> result = await queries.Send(
-            new GetMyEducationAccountTransactionsQuery(personId.Value, page, pageSize, category),
+            new GetMyEducationAccountTransactionsQuery(personId.Value, page, pageSize, category, sortBy, sortDirection),
             cancellationToken);
 
         return ToAccountResponse(result);
