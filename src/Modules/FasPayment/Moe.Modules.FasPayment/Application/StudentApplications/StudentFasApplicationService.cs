@@ -705,7 +705,7 @@ public sealed class StudentFasApplicationService(
     }
 
 
-    public async Task<object> MyApplications(int page, int pageSize, string? sortBy, string? sortDirection, CancellationToken ct)
+    public async Task<object> MyApplications(int page, int pageSize, string? search, string? status, string? sortBy, string? sortDirection, CancellationToken ct)
     {
         var (person, _) = Identity();
         page = Math.Max(1, page);
@@ -737,9 +737,13 @@ public sealed class StudentFasApplicationService(
                         redeemedAt = i.RedeemedAtUtc
                     };
 
-        var totalCount = await query.LongCountAsync(ct);
         var allRows = await query.ToListAsync(ct);
-        var rows = ApplyMyApplicationSort(allRows, sortBy, sortDirection)
+        var filteredRows = allRows
+            .Where(x => MatchesMyApplicationSearch(x.applicationReference, x.schemeName, search))
+            .Where(x => MatchesMyApplicationStatus(StudentVisibleStatus(x.itemStatus, x.schemeStatus), status))
+            .ToArray();
+        var totalCount = filteredRows.LongLength;
+        var rows = ApplyMyApplicationSort(filteredRows, sortBy, sortDirection)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToList();
@@ -773,6 +777,21 @@ public sealed class StudentFasApplicationService(
         }).ToList();
 
         return new { items, page, pageSize, totalCount };
+    }
+
+    private static bool MatchesMyApplicationSearch(string? applicationReference, string? schemeName, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return true;
+
+        string value = search.Trim();
+        return (applicationReference?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
+               || (schemeName?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private static bool MatchesMyApplicationStatus(string visibleStatus, string? status)
+    {
+        string normalized = status?.Trim().ToUpperInvariant() ?? "ALL";
+        return string.IsNullOrWhiteSpace(normalized) || normalized == "ALL" || string.Equals(visibleStatus, normalized, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<T> ApplyMyApplicationSort<T>(IReadOnlyCollection<T> rows, string? sortBy, string? sortDirection)
