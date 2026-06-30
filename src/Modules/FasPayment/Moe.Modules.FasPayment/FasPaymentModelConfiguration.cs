@@ -20,6 +20,7 @@ public sealed class FasPaymentModelConfiguration : IModelConfigurationContributo
         modelBuilder.ApplyConfiguration(new FasSchemeConfiguration());
         modelBuilder.ApplyConfiguration(new FasSchemeCourseConfiguration());
         modelBuilder.ApplyConfiguration(new FasTierConfiguration());
+        modelBuilder.ApplyConfiguration(new FasTierCriteriaGroupConfiguration());
         modelBuilder.ApplyConfiguration(new FasTierCriteriaConfiguration());
         modelBuilder.ApplyConfiguration(new FasTierCriteriaNationalityConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentConfiguration());
