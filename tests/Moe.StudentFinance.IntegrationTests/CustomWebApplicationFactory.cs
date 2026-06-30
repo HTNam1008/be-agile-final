@@ -154,18 +154,30 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
 {
     private static readonly ConcurrentDictionary<string, byte> ExpireFailures = new();
+    private static int DelayNextCheckoutMs;
 
     public static void FailNextExpireForSession(string providerSessionId)
         => ExpireFailures[providerSessionId] = 0;
 
-    public Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
+    public static void DelayNextCheckout(TimeSpan delay)
+        => Interlocked.Exchange(ref DelayNextCheckoutMs, (int)delay.TotalMilliseconds);
+
+    public async Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
         StripeCheckoutGatewayRequest request,
         CancellationToken cancellationToken)
-        => Task.FromResult(new StripeCheckoutGatewayResult(
+    {
+        int delayMs = Interlocked.Exchange(ref DelayNextCheckoutMs, 0);
+        if (delayMs > 0)
+        {
+            await Task.Delay(delayMs, cancellationToken);
+        }
+
+        return new StripeCheckoutGatewayResult(
             $"cs_test_{request.CheckoutId}",
             request.ProviderPriceId ?? $"price_test_{request.CheckoutId}",
             $"https://stripe.test/checkout/{request.CheckoutId}",
-            request.ExpiresAtUtc));
+            request.ExpiresAtUtc);
+    }
 
     public Task ExpireCheckoutAsync(
         string providerSessionId,
