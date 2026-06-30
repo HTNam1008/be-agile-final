@@ -11,3 +11,12 @@ public sealed class SelfJoinCourseRequestValidator : AbstractValidator<SelfJoinC
         RuleFor(x => x.CoursePaymentPlanId).GreaterThan(0);
     }
 }
+
+public sealed class PreviewCoursePaymentPlanBillRequestValidator : AbstractValidator<PreviewCoursePaymentPlanBillRequest>
+{
+    public PreviewCoursePaymentPlanBillRequestValidator()
+    {
+        RuleFor(x => x.CourseId).GreaterThan(0);
+        RuleFor(x => x.CoursePaymentPlanId).GreaterThan(0);
+    }
+}
