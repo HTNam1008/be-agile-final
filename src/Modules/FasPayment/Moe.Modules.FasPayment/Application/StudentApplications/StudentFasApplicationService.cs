@@ -352,15 +352,109 @@ public sealed class StudentFasApplicationService(
 
     private static void ValidateFile(string name, string mime, long size) { var extensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" }; var mimes = new[] { "application/pdf", "image/jpeg", "image/png" }; if (size <= 0 || size > 10 * 1024 * 1024) throw new ArgumentException("FAS.FILE_SIZE_INVALID"); if (!extensions.Contains(Path.GetExtension(name).ToLowerInvariant()) || !mimes.Contains(mime.ToLowerInvariant())) throw new ArgumentException("FAS.FILE_TYPE_INVALID"); }
 
-    public async Task<object> AdminApplications(string? status, long? schemeId, string? keyword, DateOnly? submittedFrom, DateOnly? submittedTo, int page, int pageSize, CancellationToken ct)
+    public async Task<object> AdminApplications(
+        string? status,
+        long? schemeId,
+        string? keyword,
+        DateOnly? submittedFrom,
+        DateOnly? submittedTo,
+        string? sortBy,
+        string? sortDirection,
+        int page,
+        int pageSize,
+        CancellationToken ct)
     {
-        page = Math.Max(1, page); pageSize = Math.Clamp(pageSize, 1, 100);
-        var q = from a in db.Set<FasApplication>().AsNoTracking() join i in db.Set<FasApplicationScheme>().AsNoTracking() on a.Id equals i.FasApplicationId join s in db.Set<FasScheme>().AsNoTracking() on i.FasSchemeId equals s.Id select new { a, i, s };
-        if (!string.IsNullOrWhiteSpace(status)) q = q.Where(x => x.i.StatusCode == status.ToUpper()); if (schemeId.HasValue) q = q.Where(x => x.s.Id == schemeId);
-        if (!string.IsNullOrWhiteSpace(keyword)) q = q.Where(x => x.a.StudentName.Contains(keyword) || x.a.ApplicationNo.Contains(keyword) || x.a.StudentId.Contains(keyword));
-        if (submittedFrom.HasValue) { var d = submittedFrom.Value.ToDateTime(TimeOnly.MinValue); q = q.Where(x => x.a.SubmittedAtUtc >= d); }
-        if (submittedTo.HasValue) { var d = submittedTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue); q = q.Where(x => x.a.SubmittedAtUtc < d); }
-        var total = await q.CountAsync(ct); var items = await q.OrderByDescending(x => x.a.SubmittedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).Select(x => new { applicationId = x.a.Id, applicationSchemeId = x.i.Id, applicationReference = x.a.ApplicationNo, studentName = x.a.StudentName, studentId = x.a.StudentId, schemeId = x.s.Id, schemeName = x.s.Name, submittedAt = x.a.SubmittedAtUtc, status = x.i.StatusCode }).ToListAsync(ct); return new { items, page, pageSize, total, totalPages = (int)Math.Ceiling(total / (double)pageSize) };
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query =
+            from application in db.Set<FasApplication>().AsNoTracking()
+            join selection in db.Set<FasApplicationScheme>().AsNoTracking() on application.Id equals selection.FasApplicationId
+            join scheme in db.Set<FasScheme>().AsNoTracking() on selection.FasSchemeId equals scheme.Id
+            join account in db.Set<EducationAccount>().AsNoTracking() on application.StudentPersonId equals account.PersonId into accounts
+            from account in accounts.DefaultIfEmpty()
+            select new { application, selection, scheme, account };
+
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.selection.StatusCode == status.Trim().ToUpperInvariant());
+        if (schemeId.HasValue) query = query.Where(x => x.scheme.Id == schemeId);
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            string value = keyword.Trim();
+            query = query.Where(x => x.application.StudentName.Contains(value) ||
+                                     x.application.ApplicationNo.Contains(value) ||
+                                     x.application.StudentId.Contains(value) ||
+                                     (x.account != null && x.account.AccountNumber.Contains(value)));
+        }
+        if (submittedFrom.HasValue)
+        {
+            DateTime fromUtc = submittedFrom.Value.ToDateTime(TimeOnly.MinValue);
+            query = query.Where(x => x.application.SubmittedAtUtc >= fromUtc);
+        }
+        if (submittedTo.HasValue)
+        {
+            DateTime toUtc = submittedTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            query = query.Where(x => x.application.SubmittedAtUtc < toUtc);
+        }
+
+        int total = await query.CountAsync(ct);
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(sortDirection);
+        var sortedQuery = sortBy?.Trim() switch
+        {
+            "applicationId" => descending
+                ? query.OrderByDescending(x => x.application.ApplicationNo).ThenByDescending(x => x.application.Id)
+                : query.OrderBy(x => x.application.ApplicationNo).ThenByDescending(x => x.application.Id),
+            "studentName" => descending
+                ? query.OrderByDescending(x => x.application.StudentName).ThenByDescending(x => x.application.Id)
+                : query.OrderBy(x => x.application.StudentName).ThenByDescending(x => x.application.Id),
+            "schemeName" => descending
+                ? query.OrderByDescending(x => x.scheme.Name).ThenByDescending(x => x.application.Id)
+                : query.OrderBy(x => x.scheme.Name).ThenByDescending(x => x.application.Id),
+            "status" => descending
+                ? query.OrderByDescending(x => x.selection.StatusCode).ThenByDescending(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id)
+                : query.OrderBy(x => x.selection.StatusCode).ThenByDescending(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id),
+            "submittedDate" or _ => descending
+                ? query.OrderByDescending(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id)
+                : query.OrderBy(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id)
+        };
+
+        var pageRows = await sortedQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        long[] schemeIds = pageRows.Select(x => x.selection.FasSchemeId).Distinct().ToArray();
+        var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
+        var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+
+        var items = pageRows.Select(row =>
+        {
+            string? approvedTier = ExtractApprovedTierLabel(row.selection.ApprovedComponentsJson);
+            string? recommendedTier = tiers
+                .Where(t => t.FasSchemeId == row.selection.FasSchemeId)
+                .OrderBy(t => t.DisplayOrder)
+                .Where(t => TierMatches(t.Id, row.application, criteria, categorical))
+                .Select(t => t.Label)
+                .FirstOrDefault();
+
+            return new
+            {
+                applicationId = row.application.Id,
+                applicationSchemeId = row.selection.Id,
+                applicationReference = row.application.ApplicationNo,
+                studentName = row.application.StudentName,
+                studentId = row.application.StudentId,
+                accountNumber = row.account?.AccountNumber,
+                schemeId = row.scheme.Id,
+                schemeName = row.scheme.Name,
+                schemeTier = approvedTier ?? recommendedTier,
+                submittedAt = row.application.SubmittedAtUtc,
+                status = row.selection.StatusCode
+            };
+        }).ToArray();
+
+        return new { items, page, pageSize, total, totalPages = (int)Math.Ceiling(total / (double)pageSize) };
     }
 
     public async Task<object> AdminApplication(long id, CancellationToken ct)
@@ -1156,6 +1250,21 @@ public sealed class StudentFasApplicationService(
         return result;
     }
     private static string[] ParseParentNationalities(string? json) => string.IsNullOrWhiteSpace(json) ? Array.Empty<string>() : JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
+    private static string? ExtractApprovedTierLabel(string? approvedComponentsJson)
+    {
+        if (string.IsNullOrWhiteSpace(approvedComponentsJson)) return null;
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(approvedComponentsJson);
+            return document.RootElement.TryGetProperty("tierLabel", out JsonElement label) && label.ValueKind == JsonValueKind.String
+                ? label.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);
     private sealed record ChecklistItem(string ChecklistItemCode, string Label, bool IsMandatory, object? Document, bool IsComplete);
 }

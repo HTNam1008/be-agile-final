@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Moe.Infrastructure.Shared.Api;
+using System.Linq.Expressions;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.Domain.Fas;
@@ -197,26 +198,26 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         }
     }
 
-    public async Task<PageResponse<FasSchemeListItem>> ListAsync(string? status, string? search, int page, int pageSize, string? sortBy, string? sortDirection, CancellationToken cancellationToken)
+    public async Task<PageResponse<FasSchemeListItem>> ListAsync(
+        string? status,
+        string? search,
+        int page,
+        int pageSize,
+        string? sortBy,
+        string? sortDirection,
+        DateOnly? durationFrom,
+        DateOnly? durationTo,
+        CancellationToken cancellationToken)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            string normalized = status.Trim().ToUpperInvariant();
-            if (normalized == "NOT_STARTED")
-            {
-                DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
-                query = query.Where(x => x.StatusCode == FasSchemeStatusCodes.Active && x.StartDate > today);
-            }
-            else if (normalized == "CLOSED") query = query.Where(x => x.StatusCode == FasSchemeStatusCodes.Retired);
-            else query = query.Where(x => x.StatusCode == normalized);
-        }
-        else query = query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
-        if (!string.IsNullOrWhiteSpace(search)) { string value = search.Trim(); query = query.Where(x => x.SchemeCode.Contains(value) || x.GrantCode.Contains(value) || x.Name.Contains(value)); }
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        query = ApplyStatusFilter(query, status, today);
+        query = ApplySearchFilter(query, search);
+        query = ApplyDurationFilter(query, durationFrom, durationTo);
         long totalCount = await query.LongCountAsync(cancellationToken);
-        var schemes = await ApplySchemeSort(query, sortBy, sortDirection)
+        var schemes = await ApplySorting(query, sortBy, sortDirection, today)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -228,42 +229,76 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
             .Select(x => new { SchemeId = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.SchemeId, x => x.Count, cancellationToken);
         return new PageResponse<FasSchemeListItem>(schemes.Select(x => new FasSchemeListItem(x.Id, x.SchemeCode, x.GrantCode, x.Name,
-            x.Description, x.StartDate, x.EndDate, x.StatusCode, courses.Where(c => c.FasSchemeId == x.Id).Select(c => c.CourseId).Order().ToArray(),
+            x.Description, x.StartDate, x.EndDate, x.CreatedAtUtc, x.StatusCode, courses.Where(c => c.FasSchemeId == x.Id).Select(c => c.CourseId).Order().ToArray(),
             applicationCounts.GetValueOrDefault(x.Id))).ToArray(), page, pageSize, totalCount);
     }
 
-    private IQueryable<FasScheme> ApplySchemeSort(IQueryable<FasScheme> query, string? sortBy, string? sortDirection)
+    private static IQueryable<FasScheme> ApplyStatusFilter(IQueryable<FasScheme> query, string? status, DateOnly today)
     {
-        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
-        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(status)) return query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
 
-        return key switch
+        string normalized = status.Trim().ToUpperInvariant();
+        return normalized switch
         {
-            "schemecode" => descending
+            "NOT_STARTED" => query.Where(x => x.StatusCode == FasSchemeStatusCodes.Active && x.StartDate > today),
+            "CLOSED" => query.Where(x => x.StatusCode == FasSchemeStatusCodes.Retired),
+            _ => query.Where(x => x.StatusCode == normalized)
+        };
+    }
+
+    private static IQueryable<FasScheme> ApplySearchFilter(IQueryable<FasScheme> query, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return query;
+        string value = search.Trim();
+        return query.Where(x => x.SchemeCode.Contains(value) || x.GrantCode.Contains(value) || x.Name.Contains(value));
+    }
+
+    private static IQueryable<FasScheme> ApplyDurationFilter(IQueryable<FasScheme> query, DateOnly? durationFrom, DateOnly? durationTo)
+    {
+        if (durationFrom.HasValue) query = query.Where(x => x.EndDate >= durationFrom.Value);
+        if (durationTo.HasValue) query = query.Where(x => x.StartDate <= durationTo.Value);
+        return query;
+    }
+
+    private IOrderedQueryable<FasScheme> ApplySorting(IQueryable<FasScheme> query, string? sortBy, string? sortDirection, DateOnly today)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(sortDirection);
+        Expression<Func<FasScheme, int>> statusOrder = StatusSortOrder(today);
+        return sortBy?.Trim() switch
+        {
+            "schemeCode" => descending
                 ? query.OrderByDescending(x => x.SchemeCode).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.SchemeCode).ThenBy(x => x.Id),
-            "schemename" => descending
+            "schemeName" => descending
                 ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.Name).ThenBy(x => x.Id),
             "duration" => descending
                 ? query.OrderByDescending(x => x.StartDate).ThenByDescending(x => x.EndDate).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.StartDate).ThenBy(x => x.EndDate).ThenBy(x => x.Id),
             "status" => descending
-                ? query.OrderByDescending(x => x.StatusCode).ThenByDescending(x => x.StartDate).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.StatusCode).ThenBy(x => x.StartDate).ThenBy(x => x.Id),
-            "applicationcount" => SortByApplicationCount(query, descending),
-            _ => query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+                ? query.OrderByDescending(statusOrder).ThenByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+                : query.OrderBy(statusOrder).ThenByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id),
+            "applicationCount" => SortByApplicationCount(query, descending),
+            "createdDate" or _ => descending
+                ? query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
         };
     }
 
-    private IQueryable<FasScheme> SortByApplicationCount(IQueryable<FasScheme> query, bool descending)
-    {
-        return descending
+    private IOrderedQueryable<FasScheme> SortByApplicationCount(IQueryable<FasScheme> query, bool descending)
+        => descending
             ? query.OrderByDescending(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
                 .ThenByDescending(scheme => scheme.Id)
             : query.OrderBy(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
                 .ThenBy(scheme => scheme.Id);
-    }
+
+    private static Expression<Func<FasScheme, int>> StatusSortOrder(DateOnly today)
+        => scheme => scheme.StatusCode == FasSchemeStatusCodes.Active && scheme.StartDate <= today ? 1
+            : scheme.StatusCode == FasSchemeStatusCodes.Active ? 2
+            : scheme.StatusCode == FasSchemeStatusCodes.Disabled ? 3
+            : scheme.StatusCode == FasSchemeStatusCodes.Draft ? 4
+            : scheme.StatusCode == FasSchemeStatusCodes.Retired ? 5
+            : 6;
 
     public async Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken)
     {

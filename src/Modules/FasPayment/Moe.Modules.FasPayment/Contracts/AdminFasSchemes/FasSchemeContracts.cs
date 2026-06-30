@@ -6,7 +6,9 @@ public sealed record ListFasSchemesRequest(
     int Page = 1,
     int PageSize = 10,
     string? SortBy = null,
-    string? SortDirection = null);
+    string? SortDirection = null,
+    DateOnly? DurationFrom = null,
+    DateOnly? DurationTo = null);
 
 public sealed record CreateFasSchemeRequest(
     string SchemeCode, string GrantCode, string Name, string? Description,
@@ -27,7 +29,7 @@ public sealed record FasTierCriteriaValue(
 
 public sealed record CreateFasSchemeResponse(long SchemeId, string SchemeCode, string GrantCode, string Status);
 public sealed record FasSchemeListItem(long SchemeId, string SchemeCode, string GrantCode, string Name,
-    string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds,
+    string? Description, DateOnly StartDate, DateOnly EndDate, DateTime CreatedAtUtc, string Status, IReadOnlyList<long> CourseIds,
     int ApplicationCount);
 public sealed record FasSchemeDetail(long SchemeId, string SchemeCode, string GrantCode, string Name,
     string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds,

@@ -27,8 +27,18 @@ namespace Moe.Modules.FasPayment.Api.Admin;
 public sealed class AdminFasApplicationsController(ICommandDispatcher commands, IQueryDispatcher queries, StudentFasApplicationService? studentApplications = null) : ControllerBase
 {
     [HttpGet("applications")]
-    public Task<object> GetApplications([FromQuery] string? status, [FromQuery] long? schemeId, [FromQuery] string? keyword, [FromQuery] DateOnly? submittedFrom, [FromQuery] DateOnly? submittedTo, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
-        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplications(status, schemeId, keyword, submittedFrom, submittedTo, page, pageSize, cancellationToken);
+    public Task<object> GetApplications(
+        [FromQuery] string? status,
+        [FromQuery] long? schemeId,
+        [FromQuery] string? keyword,
+        [FromQuery] DateOnly? submittedFrom,
+        [FromQuery] DateOnly? submittedTo,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDirection,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+        => (studentApplications ?? throw new InvalidOperationException("FAS service is unavailable.")).AdminApplications(status, schemeId, keyword, submittedFrom, submittedTo, sortBy, sortDirection, page, pageSize, cancellationToken);
 
     [HttpGet("applications/{applicationId:long}/full")]
     public Task<object> GetFullApplication(long applicationId, CancellationToken cancellationToken)
