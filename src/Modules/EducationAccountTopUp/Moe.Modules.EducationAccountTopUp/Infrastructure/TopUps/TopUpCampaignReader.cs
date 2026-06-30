@@ -10,17 +10,10 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.TopUps;
 
 internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampaignReader
 {
-    public async Task<IReadOnlyList<CampaignListItem>> GetCampaignsAsync(
-        IReadOnlyCollection<long>? accessibleOrgIds,
-        CancellationToken cancellationToken = default)
+    public async Task<CampaignListItem?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Set<TopUpCampaign>().AsNoTracking();
-
-        if (accessibleOrgIds != null && accessibleOrgIds.Count > 0)
-            query = query.Where(c => accessibleOrgIds.Contains(c.OrganizationId));
-
-        return await query
-            .OrderByDescending(c => c.Id)
+        return await dbContext.Set<TopUpCampaign>().AsNoTracking()
+            .Where(c => c.Id == id)
             .Select(c => new CampaignListItem(
                 c.Id,
                 c.OrganizationId,
@@ -38,9 +31,78 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.NextRunAtUtc,
                 c.CampaignStatusCode,
                 c.CampaignVersion,
+                c.DeliveryTypeCode,
+                c.MaxTotalAmount,
+                c.CreatedByLoginAccountId,
+                c.UpdatedByLoginAccountId,
+                c.CreatedAtUtc,
+                c.UpdatedAtUtc))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<CampaignListResult> GetCampaignsAsync(
+        IReadOnlyCollection<long>? accessibleOrgIds,
+        int pageNumber = 1,
+        int pageSize = 50,
+        string? search = null,
+        string? status = null,
+        DateOnly? dateFrom = null,
+        DateOnly? dateTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.Set<TopUpCampaign>().AsNoTracking();
+
+        if (accessibleOrgIds != null && accessibleOrgIds.Count > 0)
+            query = query.Where(c => accessibleOrgIds.Contains(c.OrganizationId));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var lowerSearch = search.ToLower();
+            query = query.Where(c => c.CampaignCode.ToLower().Contains(lowerSearch)
+                                  || c.CampaignName.ToLower().Contains(lowerSearch));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(c => c.CampaignStatusCode == status);
+
+        if (dateFrom.HasValue)
+            query = query.Where(c => c.StartDate >= dateFrom.Value);
+
+        if (dateTo.HasValue)
+            query = query.Where(c => c.StartDate <= dateTo.Value);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(c => c.Id)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Select(c => new CampaignListItem(
+                c.Id,
+                c.OrganizationId,
+                c.CampaignCode,
+                c.CampaignName,
+                c.Description,
+                c.RecipientModeCode,
+                c.DefaultTopUpAmount,
+                c.Reason,
+                c.ScheduleTypeCode,
+                c.StartDate,
+                c.EndDate,
+                c.FrequencyCode,
+                c.FrequencyInterval,
+                c.NextRunAtUtc,
+                c.CampaignStatusCode,
+                c.CampaignVersion,
+                c.DeliveryTypeCode,
+                c.MaxTotalAmount,
+                c.CreatedByLoginAccountId,
+                c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
+
+        return new CampaignListResult(items, totalCount, pageNumber, pageSize);
     }
 
     public async Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)

@@ -8,6 +8,8 @@ using Moe.SharedKernel.Results;
 namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 
 public sealed class RunReconciliationService(
+    ITopUpCampaignRepository campaigns,
+    IDynamicTopUpContractRepository contracts,
     ITopUpRunRepository runs,
     ITopUpTransactionRepository transactions,
     IUnitOfWork unitOfWork,
@@ -56,6 +58,7 @@ public sealed class RunReconciliationService(
                 return Result<ReconciliationResult>.Failure(finalize.Error);
             }
 
+            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(run, campaigns, contracts, clock.UtcNow.UtcDateTime, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
             return Result<ReconciliationResult>.Success(
@@ -72,6 +75,19 @@ public sealed class RunReconciliationService(
 
             return Result<ReconciliationResult>.Success(
                 ReconciliationResult.Mismatch(topUpRunId, run.RunStatusCode, summary, mismatch));
+        }
+
+        TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, cancellationToken);
+        if (campaign is not null && campaign.MaxTotalAmount > 0 && summary.TotalAmount > campaign.MaxTotalAmount)
+        {
+            string budgetExceeded = $"Budget ceiling exceeded: run total {summary.TotalAmount} > campaign cap {campaign.MaxTotalAmount}";
+            logger.LogWarning(
+                "Top-up run {TopUpRunId} exceeded MaxTotalAmount cap: {BudgetExceeded}",
+                topUpRunId,
+                budgetExceeded);
+
+            return Result<ReconciliationResult>.Success(
+                ReconciliationResult.Mismatch(topUpRunId, run.RunStatusCode, summary, budgetExceeded));
         }
 
         return Result<ReconciliationResult>.Success(

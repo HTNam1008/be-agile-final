@@ -30,6 +30,7 @@ public static class DependencyInjection
             options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<MoeDbContext>());
+        services.AddScoped<IDistributedLock, SqlDistributedLock>();
         services.AddScoped<ITransactionalExecutor>(sp => sp.GetRequiredService<MoeDbContext>());
         return services;
     }

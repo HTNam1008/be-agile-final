@@ -8,6 +8,7 @@ using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.History;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution.CancelRun;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.GetRunSummary;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -80,5 +81,31 @@ public sealed class TopUpRunsController(
                 $"Reconciliation: {result.Value.ReconciliationStatus}");
     }
 
+    [HttpPost("{runId:long}/cancel")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CancelRun(
+        long campaignId,
+        long runId,
+        CancellationToken cancellationToken)
+    {
+        Result<RunSummaryResponse> accessResult = await queries.Send(
+            new GetRunSummaryQuery(runId, campaignId),
+            cancellationToken);
 
+        if (accessResult.IsFailure)
+        {
+            return TopUpErrorResponseMapper.ToFailureResponse(accessResult.Error, HttpContext);
+        }
+
+        Result result = await commands.Send(new CancelTopUpRunCommand(runId), cancellationToken);
+
+        return result.IsFailure
+            ? TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext)
+            : ApiResponseFactory.Ok(
+                new { },
+                HttpContext.TraceIdentifier,
+                "Run cancelled successfully.");
+    }
 }

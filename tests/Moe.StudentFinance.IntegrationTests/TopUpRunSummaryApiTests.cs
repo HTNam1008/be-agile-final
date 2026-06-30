@@ -115,6 +115,8 @@ public sealed class TopUpRunSummaryApiTests : IClassFixture<CustomWebApplication
             null,
             null,
             null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 100m,
             currentUserId: 1,
             now);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 1, now);
