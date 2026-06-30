@@ -59,7 +59,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<StudentFasApplicationService>();
         services.AddScoped<FasEmailNotificationService>();
         services.AddScoped<FasApiExceptionFilter>();
-        services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"])
+        services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"]) && string.IsNullOrWhiteSpace(configuration["AzureBlob:ConnectionString"])
             ? new PrivateFileFasDocumentStorage()
             : new AzureBlobFasDocumentStorage(configuration));
         services.AddSingleton<IFasDocumentScanner, ConfiguredFasDocumentScanner>();
