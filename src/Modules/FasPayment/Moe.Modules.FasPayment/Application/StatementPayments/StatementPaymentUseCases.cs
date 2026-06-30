@@ -1,9 +1,12 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Application;
 using Moe.Modules.FasPayment.Contracts.Payments;
@@ -18,7 +21,7 @@ internal sealed record PreviewStatementPaymentQuery(
     IReadOnlyCollection<long>? BillIds = null) : IQuery<StatementPaymentPreviewResponse>;
 internal sealed record PayBillingStatementCommand(long StatementId, PayBillingStatementRequest Request) : ICommand<PayBillingStatementResponse>;
 internal sealed record CancelBillingStatementPaymentCommand(long StatementId, long PaymentId) : ICommand;
-internal sealed record DeferBillingStatementCommand(long StatementId, DeferBillingStatementRequest Request) : ICommand;
+internal sealed record DeferBillingStatementCommand(long StatementId, DeferBillingStatementRequest Request) : ICommand<DeferBillingStatementResponse>;
 internal sealed record GetPendingEnrollmentPaymentQuery(long CourseEnrollmentId) : IQuery<PendingEnrollmentPaymentResponse?>;
 
 internal sealed class PayBillingStatementRequestValidator : AbstractValidator<PayBillingStatementRequest>
@@ -38,7 +41,10 @@ internal sealed class PayBillingStatementRequestValidator : AbstractValidator<Pa
 
 internal sealed class GetPendingEnrollmentPaymentHandler(
     IPaymentCheckoutRepository payments,
-    ICurrentUser currentUser) : IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>
+    IBillingStatementRepository billingStatements,
+    StatementPaymentPreviewBuilder previewBuilder,
+    ICurrentUser currentUser,
+    IClock clock) : IQueryHandler<GetPendingEnrollmentPaymentQuery, PendingEnrollmentPaymentResponse?>
 {
     public async Task<Result<PendingEnrollmentPaymentResponse?>> Handle(
         GetPendingEnrollmentPaymentQuery query,
@@ -51,28 +57,75 @@ internal sealed class GetPendingEnrollmentPaymentHandler(
             query.CourseEnrollmentId,
             personId,
             ct);
-        if (payment is null || payment.BillingStatementId is not long statementId)
-            return Result<PendingEnrollmentPaymentResponse?>.Success(null);
 
-        IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, ct);
-        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
+        PendingEnrollmentBill? pendingBill = await payments.FindPendingEnrollmentBillAsync(
+            query.CourseEnrollmentId,
+            personId,
+            ct);
+        if (pendingBill is null)
+        {
+            return Result<PendingEnrollmentPaymentResponse?>.Success(null);
+        }
+
+        int year = pendingBill.CurrentDueDate.Year;
+        int month = pendingBill.CurrentDueDate.Month;
+        var statement = await billingStatements.GetOrCreateAsync(
+            personId,
+            year,
+            month,
+            clock.UtcNow.UtcDateTime,
+            ct);
+        IReadOnlyCollection<PendingEnrollmentFasReservation> reservations =
+            await payments.ListPendingFasReservationsForEnrollmentAsync(query.CourseEnrollmentId, personId, ct);
+
+        long[] billIds = payment is null
+            ? [pendingBill.BillId]
+            : (await payments.ListPaymentAllocationsAsync(payment.Id, ct))
+                .Select(x => x.BillId)
+                .Distinct()
+                .ToArray();
+        if (billIds.Length == 0)
+        {
+            billIds = [pendingBill.BillId];
+        }
+        BillingStatementItemResponse? billItem = statement.Items
+            .FirstOrDefault(item => billIds.Contains(item.BillId));
+        Result<StatementPaymentPreviewResponse> previewResult = await previewBuilder.BuildAsync(
+            personId,
+            payment?.BillingStatementId ?? statement.BillingStatementId,
+            billIds,
+            ct);
+        if (previewResult.IsFailure)
+            return Result<PendingEnrollmentPaymentResponse?>.Failure(previewResult.Error);
+
+        StatementPaymentCheckoutSession? checkout = payment is null
+            ? null
+            : await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
         return Result<PendingEnrollmentPaymentResponse?>.Success(new(
             query.CourseEnrollmentId,
-            statementId,
-            payment.Id,
-            payment.PaymentStatusCode,
-            payment.EducationAccountAmount,
-            payment.OnlinePaymentAmount,
+            payment?.BillingStatementId ?? statement.BillingStatementId,
+            year,
+            month,
+            payment?.Id,
+            payment?.PaymentStatusCode,
+            payment?.EducationAccountAmount ?? 0m,
+            payment?.OnlinePaymentAmount ?? 0m,
             checkout?.CheckoutUrl,
             checkout?.Id,
             checkout?.ExpiresAtUtc,
-            allocations.Select(x => x.BillId).Distinct().ToArray()));
+            billIds,
+            reservations.Select(x => new PendingEnrollmentFasSubsidyResponse(
+                x.FasApplicationSchemeId,
+                x.SchemeName,
+                x.AppliedAmount,
+                x.StatusCode)).ToArray(),
+            billItem,
+            previewResult.Value));
     }
 }
 
 internal sealed class PreviewStatementPaymentHandler(
-    ICoursePaymentGateway billing,
-    IEducationAccountPaymentGateway accounts,
+    StatementPaymentPreviewBuilder previewBuilder,
     ICurrentUser currentUser)
     : IQueryHandler<PreviewStatementPaymentQuery, StatementPaymentPreviewResponse>
 {
@@ -81,11 +134,25 @@ internal sealed class PreviewStatementPaymentHandler(
         if (!currentUser.TryGetStudent(out long personId))
             return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.StudentRequired);
 
-        PayableStatement? statement = await billing.FindPayableStatementAsync(query.StatementId, personId, ct);
+        return await previewBuilder.BuildAsync(personId, query.StatementId, query.BillIds, ct);
+    }
+}
+
+internal sealed class StatementPaymentPreviewBuilder(
+    ICoursePaymentGateway billing,
+    IEducationAccountPaymentGateway accounts)
+{
+    public async Task<Result<StatementPaymentPreviewResponse>> BuildAsync(
+        long personId,
+        long statementId,
+        IReadOnlyCollection<long>? billIds,
+        CancellationToken ct)
+    {
+        PayableStatement? statement = await billing.FindPayableStatementAsync(statementId, personId, ct);
         if (statement is null) return Result<StatementPaymentPreviewResponse>.Failure(PaymentApplicationErrors.BillNotFound);
         Result<IReadOnlyCollection<PayableStatementBill>> selectedBillsResult = StatementBillSelection.Select(
             statement,
-            query.BillIds);
+            billIds);
         if (selectedBillsResult.IsFailure)
             return Result<StatementPaymentPreviewResponse>.Failure(selectedBillsResult.Error);
 
@@ -223,7 +290,7 @@ internal sealed class PayBillingStatementHandler(
                 ct);
             educationPart.AssignAccountHold(holdId);
         }
-        PaymentCheckoutSession checkout = PaymentCheckoutSession.CreateForStatement(
+        StatementPaymentCheckoutSession checkout = StatementPaymentCheckoutSession.Create(
             payment.Id, statement.BillingStatementId, personId, onlineAmount, now);
         await payments.AddCheckoutAsync(checkout, ct);
         try
@@ -273,7 +340,7 @@ internal sealed class PayBillingStatementHandler(
             return Result<PayBillingStatementResponse?>.Success(null);
 
         DateTime now = clock.UtcNow.UtcDateTime;
-        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(
+        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(
             activePayment.Id,
             cancellationToken);
         if (checkout?.CanResume(now) == true)
@@ -289,9 +356,8 @@ internal sealed class PayBillingStatementHandler(
                 true));
         }
 
-        DateTime expiresAtUtc = checkout is null
-            ? activePayment.InitiatedAtUtc.Add(PaymentCheckoutPolicy.Lifetime)
-            : checkout.ExpiresAtUtc ?? now;
+        DateTime expiresAtUtc = checkout?.ExpiresAtUtc
+            ?? activePayment.InitiatedAtUtc.Add(PaymentCheckoutPolicy.Lifetime);
         if (expiresAtUtc > now)
             return Result<PayBillingStatementResponse?>.Failure(PaymentDomainErrors.StatementPaymentInProgress);
 
@@ -386,7 +452,7 @@ internal sealed class CancelBillingStatementPaymentHandler(
         if (payment.PaymentStatusCode is not (PaymentStatusCodes.Initiated or PaymentStatusCodes.PendingOnlinePayment))
             return Result.Success();
 
-        PaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
+        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(payment.Id, ct);
         if (!string.IsNullOrWhiteSpace(checkout?.ProviderCheckoutSessionId))
         {
             try
@@ -415,7 +481,14 @@ internal sealed class CancelBillingStatementPaymentHandler(
             ?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
         checkout?.CancelBeforePayment(now);
         payment.MarkCancelled(now);
-        await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
+        try
+        {
+            await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Success();
+        }
         return Result.Success();
     }
 }
@@ -450,55 +523,75 @@ internal static class StatementBillSelection
 }
 
 internal sealed class DeferBillingStatementHandler(
-    IPaymentCheckoutRepository payments,
     ICoursePaymentGateway billing,
     IEducationAccountPaymentGateway accounts,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<DeferBillingStatementCommand>
+    IClock clock) : ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>
 {
-    public async Task<Result> Handle(DeferBillingStatementCommand command, CancellationToken ct)
+    public async Task<Result<DeferBillingStatementResponse>> Handle(DeferBillingStatementCommand command, CancellationToken ct)
     {
         if (!currentUser.TryGetStudent(out long personId) || currentUser.UserAccountId is not long actorId)
-            return Result.Failure(PaymentApplicationErrors.StudentRequired);
-
-        Payment? payment = await payments.FindPaymentAsync(command.Request.FailedPaymentId, ct);
-        if (payment is null || payment.BillingStatementId != command.StatementId ||
-            payment.PayerPersonId != personId ||
-            payment.PaymentStatusCode is not (PaymentStatusCodes.Failed or PaymentStatusCodes.Expired or PaymentStatusCodes.Cancelled))
-            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentApplicationErrors.StudentRequired);
 
         PayableStatement? statement = await billing.FindPayableStatementAsync(command.StatementId, personId, ct);
         if (statement is null)
-            return Result.Failure(PaymentApplicationErrors.BillNotFound);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentApplicationErrors.BillNotFound);
 
         long[] requestedBillIds = command.Request.BillIds?
             .Where(id => id > 0)
             .Distinct()
             .ToArray() ?? [];
-        PayableStatementBill[] selectedBills = requestedBillIds.Length == 0
-            ? statement.Bills.Where(bill => bill.IsInstallment).ToArray()
-            : statement.Bills.Where(bill => requestedBillIds.Contains(bill.BillId)).ToArray();
+        if (requestedBillIds.Length == 0)
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.NoDeferrableBills);
 
-        if (requestedBillIds.Length > 0 && selectedBills.Length != requestedBillIds.Length)
-            return Result.Failure(PaymentDomainErrors.InvalidDeferral);
+        PayableStatementBill[] selectedBills = statement.Bills
+            .Where(bill => requestedBillIds.Contains(bill.BillId))
+            .ToArray();
+
+        if (selectedBills.Length != requestedBillIds.Length)
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
         if (selectedBills.Any(bill => !bill.IsInstallment))
-            return Result.Failure(PaymentDomainErrors.FullPaymentCannotBeDeferred);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.FullPaymentCannotBeDeferred);
         if (selectedBills.Length == 0)
-            return Result.Failure(PaymentDomainErrors.NoDeferrableBills);
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.NoDeferrableBills);
 
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
-        decimal selectedOutstandingAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
-        if (balance?.AvailableBalance >= selectedOutstandingAmount)
-            return Result.Failure(PaymentDomainErrors.EducationAccountCanCoverDeferral);
+        decimal availableBalance = balance?.AvailableBalance ?? 0m;
+        DeferCoverableBillResponse[] coverableBills = selectedBills
+            .Where(bill => availableBalance >= bill.OutstandingAmount)
+            .OrderBy(bill => bill.OutstandingAmount)
+            .ThenBy(bill => bill.CurrentDueDate)
+            .ThenBy(bill => bill.BillId)
+            .Select(bill => new DeferCoverableBillResponse(
+                bill.BillId,
+                bill.BillingStatementItemId,
+                bill.OutstandingAmount,
+                bill.CurrentDueDate,
+                bill.CourseCode,
+                bill.CourseName))
+            .ToArray();
+        if (coverableBills.Length > 0)
+        {
+            return Result<DeferBillingStatementResponse>.Success(new DeferBillingStatementResponse(
+                Deferred: false,
+                BlockedReasonCode: PaymentDomainErrors.EducationAccountCanCoverDeferral.Code,
+                AvailableBalance: availableBalance,
+                CoverableBillIds: coverableBills.Select(bill => bill.BillId).ToArray(),
+                CoverableBills: coverableBills));
+        }
 
-        await billing.DeferStatementAsync(
+        Result deferResult = await billing.DeferStatementAsync(
             command.StatementId,
             personId,
-            payment.Id,
             selectedBills.Select(bill => bill.BillId).ToArray(),
             actorId,
             clock.UtcNow.UtcDateTime,
             ct);
-        return Result.Success();
+        if (deferResult.IsFailure)
+        {
+            return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
+        }
+
+        return Result<DeferBillingStatementResponse>.Success(new DeferBillingStatementResponse(Deferred: true));
     }
 }

@@ -8,7 +8,9 @@ public sealed record CourseQueryRequest(
     DateOnly? StartDate = null,
     DateOnly? EndDate = null,
     int Page = 1,
-    int PageSize = 20);
+    int PageSize = 10,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record CreateCourseRequest(
     long OrganizationId,

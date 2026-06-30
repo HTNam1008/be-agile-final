@@ -510,7 +510,7 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         {
             componentCode,
             componentName = componentCode,
-            componentTypeCode = "TUITION",
+            componentTypeCode = "BASE",
             calculationTypeCode = "FIXED",
             isTaxComponent = false,
             isActive = true

@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.Lifecycle;
@@ -17,8 +19,6 @@ public sealed class EducationAccountLifecycleWorker(
     ILogger<EducationAccountLifecycleWorker> logger,
     IClock clock) : BackgroundService
 {
-    private DateOnly? _lastRunDate;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Education Account lifecycle worker started");
@@ -29,12 +29,23 @@ public sealed class EducationAccountLifecycleWorker(
             {
                 await RunIfDueAsync(stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception exception)
             {
                 logger.LogError(exception, "Unhandled error while running Education Account lifecycle processing.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
@@ -56,7 +67,7 @@ public sealed class EducationAccountLifecycleWorker(
         DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
         TimeOnly currentTime = TimeOnly.FromDateTime(now.UtcDateTime);
 
-        if (_lastRunDate == today || currentTime < runAtUtc)
+        if (currentTime < runAtUtc)
         {
             return;
         }
@@ -66,7 +77,6 @@ public sealed class EducationAccountLifecycleWorker(
             now,
             EducationAccountLifecycleRunTriggerTypes.Scheduled,
             cancellationToken);
-        _lastRunDate = today;
     }
 
     internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
@@ -89,16 +99,31 @@ public sealed class EducationAccountLifecycleWorker(
         IEducationAccountLifecycleRunRepository runs =
             runScope.ServiceProvider.GetRequiredService<IEducationAccountLifecycleRunRepository>();
         IUnitOfWork unitOfWork = runScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        EducationAccountLifecycleRun run = EducationAccountLifecycleRun.Start(
-            today,
-            lifecycleAtUtc,
-            triggerTypeCode);
-        await runs.AddAsync(run, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        EducationAccountLifecycleRun run;
+        try
+        {
+            run = EducationAccountLifecycleRun.Start(
+                today,
+                lifecycleAtUtc,
+                triggerTypeCode);
+            await runs.AddAsync(run, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (
+            triggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled
+            && IsUniqueConstraintViolation(exception))
+        {
+            logger.LogInformation(
+                "Scheduled lifecycle run already claimed for {RunDateUtc}, skipping.",
+                today);
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true);
+        }
 
         AutomaticEducationAccountClosureSummary closureSummary;
         try
         {
+            await SendAge30AccountLockRemindersAsync(today, cancellationToken);
+
             using (IServiceScope closureScope = scopeFactory.CreateScope())
             {
                 IAutomaticEducationAccountCloser closer =
@@ -164,6 +189,10 @@ public sealed class EducationAccountLifecycleWorker(
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return new EducationAccountLifecycleRunResult(createdCount, closureSummary.ClosedCount);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
             run.Fail(exception.Message, clock.UtcNow);
@@ -176,4 +205,28 @@ public sealed class EducationAccountLifecycleWorker(
             throw;
         }
     }
+
+    private async Task SendAge30AccountLockRemindersAsync(
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using IServiceScope reminderScope = scopeFactory.CreateScope();
+            IAge30AccountLockReminderEmailService reminderEmails =
+                reminderScope.ServiceProvider.GetRequiredService<IAge30AccountLockReminderEmailService>();
+            await reminderEmails.SendDueRemindersAsync(today, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                exception,
+                "Age-30 account lock reminder email processing failed for {RunDateUtc}. Lifecycle processing will continue.",
+                today);
+        }
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        => exception.InnerException is SqlException sqlException
+           && sqlException.Errors.Cast<SqlError>().Any(error => error.Number is 2601 or 2627);
 }

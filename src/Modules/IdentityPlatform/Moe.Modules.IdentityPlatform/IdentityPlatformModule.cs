@@ -12,6 +12,7 @@ using Moe.Modules.IdentityPlatform.Api.Admin;
 using Moe.Modules.IdentityPlatform.Api.EService;
 using Moe.Modules.IdentityPlatform.Application.Access.AssignAccessScope;
 using Moe.Modules.IdentityPlatform.Application.Access.RevokeAccessScope;
+using Moe.Modules.IdentityPlatform.Application.Audit;
 using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile;
 using Moe.Modules.IdentityPlatform.Application.AdminProfile.GetMyAdminProfile;
@@ -62,6 +63,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IClaimsTransformation, LocalClaimsTransformation>();
         services.AddScoped<IStudentAccessControl, StudentAccessControl>();
         services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<ISchoolAuditLogReader, SchoolAuditLogReader>();
         services.AddScoped<IEServiceLoginResolver, EServiceLoginResolver>();
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         if (services.All(x => x.ServiceType != typeof(ISingpassLoginGateway)))
@@ -76,6 +78,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IAdminStudentListReader, AdminStudentListReader>();
         services.AddScoped<IStudentBulkImportWorkbookReader, ClosedXmlStudentBulkImportWorkbookReader>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
+        services.AddScoped<IEmailRecipientResolver, EmailRecipientResolver>();
         services.AddScoped<IEligiblePersonReader, EligiblePersonReader>();
         services.AddScoped<ILifecyclePersonDisplayReader, LifecyclePersonDisplayReader>();
         services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();

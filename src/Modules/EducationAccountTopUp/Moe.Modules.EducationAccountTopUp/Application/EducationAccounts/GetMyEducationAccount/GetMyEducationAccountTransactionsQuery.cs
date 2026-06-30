@@ -6,4 +6,6 @@ public sealed record GetMyEducationAccountTransactionsQuery(
     long PersonId,
     int Page,
     int PageSize,
-    string? Category) : IQuery<MyEducationAccountTransactionsPage>;
+    string? Category,
+    string? SortBy,
+    string? SortDirection) : IQuery<MyEducationAccountTransactionsPage>;

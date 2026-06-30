@@ -1,3 +1,4 @@
+using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 
 namespace Moe.Modules.FasPayment.IGateway.Repositories;
@@ -17,6 +18,15 @@ internal interface IFasSchemeRepository
     Task<CreateFasSchemeResponse?> PublishAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<CreateFasSchemeResponse?> DisableAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
     Task<CreateFasSchemeResponse?> DeleteAsync(long schemeId, long actorId, DateTime utcNow, CancellationToken cancellationToken);
-    Task<FasSchemeListResponse> ListAsync(string? status, string? search, CancellationToken cancellationToken);
+    Task<PageResponse<FasSchemeListItem>> ListAsync(
+        string? status,
+        string? search,
+        int page,
+        int pageSize,
+        string? sortBy,
+        string? sortDirection,
+        DateOnly? durationFrom,
+        DateOnly? durationTo,
+        CancellationToken cancellationToken);
     Task<FasSchemeDetail?> GetAsync(long schemeId, CancellationToken cancellationToken);
 }

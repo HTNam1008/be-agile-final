@@ -7,3 +7,8 @@ public sealed record ChangePaymentPlanRequest(
 public sealed record PreviewPaymentPlanBillRequest(
     long CoursePaymentPlanId,
     IReadOnlyCollection<long>? FasApplicationSchemeIds = null);
+
+public sealed record PreviewCoursePaymentPlanBillRequest(
+    long CourseId,
+    long CoursePaymentPlanId,
+    IReadOnlyCollection<long>? FasApplicationSchemeIds = null);

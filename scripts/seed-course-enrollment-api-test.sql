@@ -81,7 +81,7 @@ BEGIN TRY
         (
             @FeeComponentCode,
             N'API Test Tuition Fee',
-            'TUITION',
+            'BASE',
             'FIXED',
             0,
             1
@@ -93,7 +93,7 @@ BEGIN TRY
     BEGIN
         UPDATE [course].[FeeComponent]
         SET [ComponentName] = N'API Test Tuition Fee',
-            [ComponentTypeCode] = 'TUITION',
+            [ComponentTypeCode] = 'BASE',
             [CalculationTypeCode] = 'FIXED',
             [IsTaxComponent] = 0,
             [IsActive] = 1

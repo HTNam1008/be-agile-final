@@ -1,5 +1,6 @@
 using System.Reflection;
 using FluentAssertions;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution.RequestManualRun;
@@ -19,6 +20,7 @@ public sealed class RequestManualRunCommandHandlerTests
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 17, 4, 0, 0, TimeSpan.Zero));
+    private readonly FakeAuditService _audit = new();
 
     [Fact]
     public async Task Should_Create_Run_When_Campaign_Active_And_Key_Unique()
@@ -206,7 +208,24 @@ public sealed class RequestManualRunCommandHandlerTests
             _dispatcher,
             _currentUser,
             adminAccess ?? new AllowAllAdminAccess(),
-            _clock);
+            _clock,
+            _audit);
+    }
+
+    private sealed class FakeAuditService : IAuditService
+    {
+        public Task RecordAsync(
+            string actionCode,
+            string entityTypeCode,
+            string entityId,
+            string? detailsJson = null,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 
     private sealed class FakeUnitOfWork : Moe.Application.Abstractions.Persistence.IUnitOfWork

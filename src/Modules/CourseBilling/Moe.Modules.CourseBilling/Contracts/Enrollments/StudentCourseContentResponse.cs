@@ -19,3 +19,7 @@ public sealed record StudentCourseMaterialResponse(
     long FileSizeBytes,
     int DisplayOrder,
     bool IsRequired);
+
+public sealed record StudentCourseMaterialOfficePreviewResponse(
+    string PreviewUrl,
+    DateTimeOffset ExpiresAtUtc);

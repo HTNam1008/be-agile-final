@@ -1,3 +1,5 @@
+using Moe.SharedKernel.Results;
+
 namespace Moe.Modules.CourseBilling.IGateway.Payments;
 
 public sealed record PayableCourseBill(
@@ -29,10 +31,13 @@ public sealed record PayableStatement(
 public sealed record PayableStatementBill(
     long BillingStatementItemId,
     long BillId,
+    long OrganizationId,
     decimal OutstandingAmount,
     DateOnly CurrentDueDate,
     DateOnly OriginalDueDate,
-    bool IsInstallment);
+    bool IsInstallment,
+    string? CourseCode = null,
+    string? CourseName = null);
 
 public sealed record BillPaymentAllocation(long BillId, decimal Amount);
 
@@ -77,13 +82,11 @@ public interface ICoursePaymentGateway
         DateTime paidAtUtc,
         CancellationToken cancellationToken);
 
-    Task DeferStatementAsync(
+    Task<Result> DeferStatementAsync(
         long statementId,
         long personId,
-        long failedPaymentId,
         IReadOnlyCollection<long> billIds,
         long actorLoginAccountId,
         DateTime utcNow,
         CancellationToken cancellationToken);
-
 }

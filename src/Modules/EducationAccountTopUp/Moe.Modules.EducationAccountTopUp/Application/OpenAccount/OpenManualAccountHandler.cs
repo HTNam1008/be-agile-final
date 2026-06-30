@@ -17,13 +17,15 @@ internal sealed class OpenManualAccountHandler(
     ICurrentUser currentUser,
     IClock clock,
     IUnitOfWork unitOfWork,
-    IAuditService auditService) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
+    IAuditService auditService,
+    EducationAccountCreatedEmailService accountCreatedEmails) : ICommandHandler<OpenManualAccountCommand, OpenManualAccountResponse>
 {
     public async Task<Result<OpenManualAccountResponse>> Handle(
         OpenManualAccountCommand command,
         CancellationToken cancellationToken)
     {
-        if (await people.FindAsync(command.PersonId, cancellationToken) is null)
+        PersonSummary? person = await people.FindAsync(command.PersonId, cancellationToken);
+        if (person is null)
         {
             return Result<OpenManualAccountResponse>.Failure(AccountErrors.InvalidPerson);
         }
@@ -68,7 +70,26 @@ internal sealed class OpenManualAccountHandler(
             detailsJson,
             cancellationToken);
 
+        if (person.OrganizationId is long schoolOrganizationId)
+        {
+            await auditService.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.EducationAccountCreatedManually,
+                    "EducationAccount",
+                    accountResult.Value.Id,
+                    schoolOrganizationId,
+                    new SchoolAuditDetails(
+                        "Education account opened manually",
+                        RelatedIds: new Dictionary<string, long>
+                        {
+                            ["studentPersonId"] = command.PersonId
+                        },
+                        ReasonCode: command.ReasonCode)),
+                cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await accountCreatedEmails.SendAsync(accountResult.Value, cancellationToken);
 
         OpenManualAccountResponse response = new(
             accountResult.Value.Id,

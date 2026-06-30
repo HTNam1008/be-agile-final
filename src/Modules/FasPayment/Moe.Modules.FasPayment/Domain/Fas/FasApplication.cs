@@ -32,7 +32,7 @@ internal sealed class FasApplication : Entity<long>
     public DateOnly SubmittedDate { get; private set; }
     public DateTime? SubmittedAtUtc { get; private set; }
     public DateTime? LockedAtUtc { get; private set; }
-    public string StatusCode { get; private set; } = "DRAFT";
+    public string StatusCode { get; private set; } = FasApplicationStatuses.Draft;
     public DateTime CreatedAt { get; private set; }
     public long CreatedByLoginAccountId { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -63,28 +63,12 @@ internal sealed class FasApplication : Entity<long>
             SchoolOrganizationId = schoolId,
             AccountTypeCode = accountTypeCode is "EDUCATION_ACCOUNT" ? accountTypeCode : "PERSONAL_ACCOUNT",
             SchoolName = schoolName,
-            StatusCode = "DRAFT",
+            StatusCode = FasApplicationStatuses.Draft,
             CreatedByLoginAccountId = actorId,
             CreatedAt = now,
             SubmittedDate = DateOnly.FromDateTime(now)
         };
     }
-
-    // Compatibility factory used by the existing scheme-scoped admin flow.
-    public static FasApplication Submit(string applicationNo, long fasSchemeId, string studentId,
-        string studentName, DateOnly submittedDate) => new()
-        {
-            ApplicationNo = applicationNo,
-            FasSchemeId = fasSchemeId,
-            StudentId = studentId,
-            StudentNumber = studentId,
-            StudentName = studentName,
-            SubmittedDate = submittedDate,
-            SubmittedAtUtc = submittedDate.ToDateTime(TimeOnly.MinValue),
-            LockedAtUtc = DateTime.UtcNow,
-            StatusCode = FasApplicationStatuses.PendingReview,
-            CreatedAt = DateTime.UtcNow
-        };
 
     public void ReplacePrimaryScheme(long schemeId, long actorId, DateTime now)
     { EnsureDraft(); FasSchemeId = schemeId; Touch(actorId, now); }
@@ -113,21 +97,21 @@ internal sealed class FasApplication : Entity<long>
     }
 
     public void SubmitDraft(long actorId, DateTime now)
-    { EnsureDraft(); StatusCode = "SUBMITTED"; SubmittedAtUtc = now; SubmittedDate = DateOnly.FromDateTime(now); LockedAtUtc = now; Touch(actorId, now); }
+    { EnsureDraft(); StatusCode = FasApplicationStatuses.Submitted; SubmittedAtUtc = now; SubmittedDate = DateOnly.FromDateTime(now); LockedAtUtc = now; Touch(actorId, now); }
 
     public void Withdraw(long actorId, DateTime now)
     {
-        if (StatusCode != "SUBMITTED")
+        if (StatusCode != FasApplicationStatuses.Submitted && StatusCode != FasApplicationStatuses.PendingReview)
         {
             throw new DomainException("Only a pending submitted application can be withdrawn.");
         }
 
-        StatusCode = "WITHDRAWN";
+        StatusCode = FasApplicationStatuses.Withdrawn;
         Touch(actorId, now);
     }
 
-    public void Approve() { if (StatusCode is not (FasApplicationStatuses.PendingReview or "SUBMITTED")) throw new DomainException($"Cannot approve application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Approved; UpdatedAt = DateTime.UtcNow; }
-    public void Reject() { if (StatusCode is not (FasApplicationStatuses.PendingReview or "SUBMITTED")) throw new DomainException($"Cannot reject application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Rejected; UpdatedAt = DateTime.UtcNow; }
-    private void EnsureDraft() { if (StatusCode != "DRAFT") throw new DomainException("Only a draft application can be changed."); }
+    public void Approve() { if (StatusCode is not (FasApplicationStatuses.PendingReview or FasApplicationStatuses.Submitted)) throw new DomainException($"Cannot approve application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Approved; UpdatedAt = DateTime.UtcNow; }
+    public void Reject() { if (StatusCode is not (FasApplicationStatuses.PendingReview or FasApplicationStatuses.Submitted)) throw new DomainException($"Cannot reject application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Rejected; UpdatedAt = DateTime.UtcNow; }
+    private void EnsureDraft() { if (StatusCode != FasApplicationStatuses.Draft) throw new DomainException("Only a draft application can be changed."); }
     private void Touch(long actorId, DateTime now) { UpdatedByLoginAccountId = actorId; UpdatedAt = now; }
 }

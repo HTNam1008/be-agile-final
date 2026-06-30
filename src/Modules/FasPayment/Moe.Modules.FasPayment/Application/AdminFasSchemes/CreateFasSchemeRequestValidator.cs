@@ -17,7 +17,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         RuleFor(x => x.Description).MaximumLength(2000);
         RuleFor(x => x.StartDate).NotEqual(default(DateOnly)).GreaterThanOrEqualTo(_ => Today()).WithMessage("Start date cannot be before today.");
         RuleFor(x => x.EndDate).NotEqual(default(DateOnly));
-        RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate);
+        RuleFor(x => x.EndDate).GreaterThan(x => x.StartDate).WithMessage("End date must be after start date.");
         RuleFor(x => x.CourseIds).NotNull();
         RuleFor(x => x.CourseIds).Must(x => x is not null && x.Count <= 500).WithMessage("A scheme can target at most 500 courses.");
         RuleFor(x => x.CourseIds).Must(x => x is not null && x.All(id => id > 0) && x.Distinct().Count() == x.Count).WithMessage("Course IDs must be positive and unique.");
@@ -115,8 +115,19 @@ internal sealed class ListFasSchemesRequestValidator : AbstractValidator<ListFas
     public ListFasSchemesRequestValidator()
     {
         RuleFor(x => x.Status)
-            .Must(status => status is null or "DRAFT" or "ACTIVE" or "RETIRED" or "DISABLED")
-            .WithMessage("Status must be DRAFT, ACTIVE, RETIRED, or DISABLED.");
+            .Must(status => status is null or "DRAFT" or "ACTIVE" or "NOT_STARTED" or "RETIRED" or "DISABLED" or "CLOSED")
+            .WithMessage("Status must be DRAFT, ACTIVE, NOT_STARTED, RETIRED, DISABLED, or CLOSED.");
         RuleFor(x => x.Search).MaximumLength(255);
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
+        RuleFor(x => x.SortBy)
+            .Must(sortBy => string.IsNullOrWhiteSpace(sortBy) || sortBy is "createdDate" or "schemeName" or "schemeCode" or "duration" or "status" or "applicationCount")
+            .WithMessage("SortBy must be createdDate, schemeName, schemeCode, duration, status, or applicationCount.");
+        RuleFor(x => x.SortDirection)
+            .Must(direction => string.IsNullOrWhiteSpace(direction) || direction is "asc" or "desc")
+            .WithMessage("SortDirection must be asc or desc.");
+        RuleFor(x => x)
+            .Must(x => !x.DurationFrom.HasValue || !x.DurationTo.HasValue || x.DurationFrom.Value <= x.DurationTo.Value)
+            .WithMessage("Duration from must be on or before duration to.");
     }
 }

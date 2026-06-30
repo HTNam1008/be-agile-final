@@ -21,7 +21,7 @@ internal sealed class Payment : Entity<long>
         PaymentNumber = $"PAY-{initiatedAtUtc:yyyyMMdd}-{Guid.NewGuid():N}"[..30].ToUpperInvariant();
         PaymentAmount = amount;
         SuccessfulAmount = amount;
-        PaymentStatusCode = PaymentStatusCodes.Completed;
+        PaymentStatusCode = PaymentStatusCodes.Successful;
         InitiatedAtUtc = initiatedAtUtc;
         CompletedAtUtc = initiatedAtUtc;
         IdempotencyKey = idempotencyKey;
@@ -174,8 +174,6 @@ internal sealed class Payment : Entity<long>
 
 public static class PaymentStatusCodes
 {
-    public const string Pending = "PENDING";
-    public const string Completed = "COMPLETED";
     public const string Failed = "FAILED";
     public const string PartiallyRefunded = "PARTIALLY_REFUNDED";
     public const string Refunded = "REFUNDED";

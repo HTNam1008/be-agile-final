@@ -1,7 +1,10 @@
 using FluentAssertions;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.IGateway.Courses;
+using Moe.Modules.FasPayment.Application.Audit;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.IGateway.Repositories;
@@ -17,12 +20,17 @@ public sealed class CreateFasSchemeHandlerTests
     private readonly Mock<ICourseReferenceDirectory> _courses = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IClock> _clock = new();
+    private readonly Mock<IFasSchoolAuditResolver> _schoolResolver = new();
+    private readonly Mock<IAuditService> _audit = new();
+    private readonly Mock<IUnitOfWork> _unitOfWork = new();
 
     public CreateFasSchemeHandlerTests()
     {
         _currentUser.SetupGet(x => x.UserAccountId).Returns(77);
         _clock.SetupGet(x => x.UtcNow).Returns(Now);
         _courses.Setup(x => x.FindUnknownCourseIdsAsync(It.IsAny<IReadOnlyCollection<long>>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _schoolResolver.Setup(x => x.ResolveFromCourseIdsAsync(It.IsAny<IReadOnlyCollection<long>>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _unitOfWork.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _repository.Setup(x => x.CreateAsync(It.IsAny<CreateFasSchemeRequest>(), It.IsAny<long>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CreateFasSchemeResponse(1, "MOE-FAS-2026", "GRANT-MOE-FAS-2026", "ACTIVE"));
     }
@@ -80,5 +88,12 @@ public sealed class CreateFasSchemeHandlerTests
         result.Error.Code.Should().Be("FAS.DUPLICATE_GRANT_CODE");
     }
 
-    private CreateFasSchemeHandler Handler() => new(_repository.Object, _courses.Object, _currentUser.Object, _clock.Object);
+    private CreateFasSchemeHandler Handler() => new(
+        _repository.Object,
+        _courses.Object,
+        _currentUser.Object,
+        _clock.Object,
+        _schoolResolver.Object,
+        _audit.Object,
+        _unitOfWork.Object);
 }

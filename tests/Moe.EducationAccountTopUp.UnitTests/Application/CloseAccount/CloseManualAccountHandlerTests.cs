@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
@@ -9,6 +10,7 @@ using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Xunit;
 
@@ -23,6 +25,7 @@ public sealed class CloseManualAccountHandlerTests
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 6, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeAuditService _audit = new();
+    private readonly FakeEmailDeliveryGateway _mailGateway = new();
 
     [Fact]
     public async Task Handle_OnSuccess_CallsAuditServiceWithReasonAndActor()
@@ -49,6 +52,9 @@ public sealed class CloseManualAccountHandlerTests
         root.GetProperty("closedByLoginAccountId").GetInt64().Should().Be(42);
         root.TryGetProperty("remarks", out _).Should().BeFalse();
         _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().ContainSingle();
+        _mailGateway.Messages.Single().ToEmail.Should().Be("student.real@example.com");
+        _mailGateway.Messages.Single().Subject.Should().Be("Your Education Account Has Been Closed");
     }
 
     [Fact]
@@ -64,6 +70,24 @@ public sealed class CloseManualAccountHandlerTests
         account.StatusCode.Should().Be(AccountStatuses.Closed);
         _audit.Calls.Should().ContainSingle();
         _unitOfWork.SaveCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_WhenMailDeliveryDisabled_StillClosesAccountAndSkipsEmail()
+    {
+        EducationAccount account = AddAccount(1008, personId: 5008);
+        _people.OrganizationByPersonId[5008] = 10;
+        CloseManualAccountHandler handler = CreateHandler(
+            new ThrowingEmailRecipientResolver(),
+            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
+
+        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        account.StatusCode.Should().Be(AccountStatuses.Closed);
+        _audit.Calls.Should().ContainSingle();
+        _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().BeEmpty();
     }
 
     [Fact]
@@ -175,7 +199,9 @@ public sealed class CloseManualAccountHandlerTests
         return account;
     }
 
-    private CloseManualAccountHandler CreateHandler()
+    private CloseManualAccountHandler CreateHandler(
+        IEmailRecipientResolver? recipientResolver = null,
+        IEmailDeliverySwitch? mailSwitch = null)
         => new(
             _educationAccounts,
             _people,
@@ -183,7 +209,13 @@ public sealed class CloseManualAccountHandlerTests
             _adminAccess,
             _clock,
             _unitOfWork,
-            _audit);
+            _audit,
+            new EducationAccountClosureEmailService(
+                _people,
+                recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
+                _mailGateway,
+                mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+                NullLogger<EducationAccountClosureEmailService>.Instance));
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)
         => new(
@@ -294,6 +326,7 @@ public sealed class CloseManualAccountHandlerTests
     private sealed class FakeAuditService : IAuditService
     {
         public List<AuditCall> Calls { get; } = [];
+        public List<SchoolAuditContext> SchoolCalls { get; } = [];
         public Exception? ExceptionToThrow { get; set; }
 
         public Task RecordAsync(
@@ -311,6 +344,38 @@ public sealed class CloseManualAccountHandlerTests
             Calls.Add(new AuditCall(actionCode, entityTypeCode, entityId, detailsJson));
             return Task.CompletedTask;
         }
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+        {
+            SchoolCalls.Add(context);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
+    {
+        public List<EmailDeliveryMessage> Messages { get; } = [];
+
+        public Task<Result> SendAsync(
+            EmailDeliveryMessage message,
+            CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.FromResult(Result.Success());
+        }
+    }
+
+    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
+    {
+        public Task<EmailRecipient?> ResolveForPersonAsync(
+            long personId,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
+
+        public EmailRecipient? ResolveProvided(string? providedEmail)
+            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
     }
 
     private sealed record AuditCall(string ActionCode, string EntityTypeCode, string EntityId, string? DetailsJson);
