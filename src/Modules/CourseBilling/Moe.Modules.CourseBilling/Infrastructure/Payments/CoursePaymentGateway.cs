@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
@@ -16,10 +15,8 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Payments;
 
 internal sealed class CoursePaymentGateway(
     MoeDbContext dbContext,
-    IEmailNotificationQueue mailQueue,
-    IEmailDeliverySwitch mailSwitch,
-    IEmailBrandingProvider branding,
-    ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
+    IEmailNotificationScheduler mailScheduler,
+    IEmailBrandingProvider branding) : ICoursePaymentGateway
 {
     public Task<PayableCourseBill?> FindPayableBillAsync(
         long billId,
@@ -334,15 +331,6 @@ internal sealed class CoursePaymentGateway(
         string footer,
         CancellationToken cancellationToken)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Course enrollment email skipped because MailDelivery is disabled. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}",
-                enrollment.PersonId,
-                enrollment.Id);
-            return;
-        }
-
         Course course = await dbContext.Set<Course>()
             .AsNoTracking()
             .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
@@ -379,34 +367,15 @@ internal sealed class CoursePaymentGateway(
             footer,
             branding.AppName);
 
-        try
-        {
-            Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    "NOTI-03",
-                    enrollment.PersonId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    "CourseEnrollment",
-                    enrollment.Id.ToString(CultureInfo.InvariantCulture)),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Course enrollment success email enqueue failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
-                    enrollment.Id,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Course enrollment success email threw an exception. CourseEnrollmentId={CourseEnrollmentId}",
-                enrollment.Id);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            "NOTI-03",
+            enrollment.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "CourseEnrollment",
+            enrollment.Id.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private async Task SendPaymentFailedEmailAsync(
@@ -415,15 +384,6 @@ internal sealed class CoursePaymentGateway(
         string failureReason,
         CancellationToken cancellationToken)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Payment failure email skipped because MailDelivery is disabled. PersonId={PersonId} BillId={BillId}",
-                enrollment.PersonId,
-                bill.Id);
-            return;
-        }
-
         Course course = await dbContext.Set<Course>()
             .AsNoTracking()
             .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
@@ -437,7 +397,7 @@ internal sealed class CoursePaymentGateway(
         string itemName = string.IsNullOrWhiteSpace(course.CourseName)
             ? bill.BillNumber
             : course.CourseName.Trim();
-        string amountDisplay = $"SGD {bill.OutstandingAmount:N2}";
+        string amountDisplay = EmailTemplateBranding.FormatMoney(bill.OutstandingAmount);
         string reason = string.IsNullOrWhiteSpace(failureReason)
             ? "Payment could not be processed."
             : failureReason.Trim();
@@ -454,31 +414,15 @@ internal sealed class CoursePaymentGateway(
         ]);
         string htmlBody = BuildPaymentFailedHtmlBody(studentName, amountDisplay, itemName, reason, branding.AppName, branding.PaymentDashboardUrl);
 
-        try
-        {
-            Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    "NOTI-09",
-                    enrollment.PersonId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    "Bill",
-                    bill.Id.ToString(CultureInfo.InvariantCulture)),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Payment failure email enqueue failed. BillId={BillId} ErrorCode={ErrorCode}",
-                    bill.Id,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Payment failure email threw an exception. BillId={BillId}", bill.Id);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            "NOTI-09",
+            enrollment.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "Bill",
+            bill.Id.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private static string BuildPaymentFailedHtmlBody(
@@ -490,10 +434,6 @@ internal sealed class CoursePaymentGateway(
         string paymentDashboardUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
-        string encodedAmount = WebUtility.HtmlEncode(amountDisplay);
-        string encodedItemName = WebUtility.HtmlEncode(itemName);
-        string encodedReason = WebUtility.HtmlEncode(failureReason);
-
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
         EmailTemplateBranding.AppendHeader(builder, "Action required: payment failed", appName);
@@ -502,9 +442,9 @@ internal sealed class CoursePaymentGateway(
             .Append(encodedStudentName)
             .Append(", your payment could not be processed.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Amount", encodedAmount, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
-        AppendSummaryRow(builder, "Course/Bill", encodedItemName, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Reason", encodedReason, "#fff7ed", "#9a3412");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Amount", amountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Course/Bill", itemName);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Reason", failureReason, "#fff7ed", "#9a3412");
         builder.Append("</table>");
         EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Retry Payment");
         builder.Append("</td></tr>");
@@ -523,7 +463,6 @@ internal sealed class CoursePaymentGateway(
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedCourseName = WebUtility.HtmlEncode(courseName);
-        string encodedStartDate = WebUtility.HtmlEncode(startDateDisplay);
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
@@ -537,8 +476,8 @@ internal sealed class CoursePaymentGateway(
             .Append(WebUtility.HtmlEncode(leadText))
             .Append("</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Course", encodedCourseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
-        AppendSummaryRow(builder, "Course Start Date", encodedStartDate, "#f8fafc", "#334155");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Course", courseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Course Start Date", startDateDisplay);
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">You can view the course details and start preparing from your Dashboard.</p>");
         EmailTemplateBranding.AppendButton(builder, courseUrl, "View Course");
@@ -550,28 +489,5 @@ internal sealed class CoursePaymentGateway(
         builder.Append("</td></tr></table>");
         builder.Append("</body></html>");
         return builder.ToString();
-    }
-
-    private static void AppendSummaryRow(
-        StringBuilder builder,
-        string label,
-        string value,
-        string backgroundColor,
-        string valueColor)
-    {
-        builder.Append("<tr><td bgcolor=\"")
-            .Append(backgroundColor)
-            .Append("\" style=\"background-color:")
-            .Append(backgroundColor)
-            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
-        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
-            .Append(WebUtility.HtmlEncode(label))
-            .Append("</div>");
-        builder.Append("<div style=\"font-size:22px;line-height:28px;color:")
-            .Append(valueColor)
-            .Append(";font-weight:bold;padding-top:4px;\">")
-            .Append(value)
-            .Append("</div>");
-        builder.Append("</td></tr>");
     }
 }

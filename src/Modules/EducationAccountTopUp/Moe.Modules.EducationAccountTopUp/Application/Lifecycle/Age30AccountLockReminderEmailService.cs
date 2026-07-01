@@ -7,15 +7,13 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
-using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 
 internal sealed class Age30AccountLockReminderEmailService(
     MoeDbContext dbContext,
-    IEmailNotificationQueue mailQueue,
-    IEmailDeliverySwitch mailSwitch,
+    IEmailNotificationScheduler mailScheduler,
     IAccountLockReminderOutstandingReader outstandingReader,
     IEmailBrandingProvider branding,
     ILogger<Age30AccountLockReminderEmailService> logger) : IAge30AccountLockReminderEmailService
@@ -31,14 +29,6 @@ internal sealed class Age30AccountLockReminderEmailService(
 
     public async Task SendDueRemindersAsync(DateOnly today, CancellationToken cancellationToken)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Age-30 account lock reminder emails skipped because MailDelivery is disabled. Today={Today}",
-                today);
-            return;
-        }
-
         AccountLockReminderCandidate[] candidates = await (
                 from account in dbContext.Set<EducationAccount>().AsNoTracking()
                 join person in dbContext.Set<Person>().AsNoTracking()
@@ -77,9 +67,9 @@ internal sealed class Age30AccountLockReminderEmailService(
         string studentName = string.IsNullOrWhiteSpace(candidate.StudentName)
             ? "Student"
             : candidate.StudentName.Trim();
-        string lockDateDisplay = lockDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+        string lockDateDisplay = EmailTemplateBranding.FormatDate(lockDate);
         string? outstandingAmountDisplay = outstandingAmount is > 0m
-            ? $"SGD {outstandingAmount.Value:N2}"
+            ? EmailTemplateBranding.FormatMoney(outstandingAmount.Value)
             : null;
 
         string subject = $"Reminder: Your {branding.AppName} account will be locked soon";
@@ -98,36 +88,15 @@ internal sealed class Age30AccountLockReminderEmailService(
             branding.AppName,
             branding.PaymentDashboardUrl);
 
-        try
-        {
-            Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    "AGE-30-LOCK-REMINDER",
-                    candidate.PersonId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    "EducationAccount",
-                    candidate.EducationAccountId.ToString(CultureInfo.InvariantCulture)),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Age-30 account lock reminder email enqueue failed. PersonId={PersonId} EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
-                    candidate.PersonId,
-                    candidate.EducationAccountId,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Age-30 account lock reminder email threw an exception. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                candidate.PersonId,
-                candidate.EducationAccountId);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            "AGE-30-LOCK-REMINDER",
+            candidate.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "EducationAccount",
+            candidate.EducationAccountId.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private async Task<decimal?> ResolveOutstandingAmountAsync(
@@ -200,11 +169,11 @@ internal sealed class Age30AccountLockReminderEmailService(
             .Append(WebUtility.HtmlEncode(appName))
             .Append(" Education Account and portal account may be locked when you turn 30.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Account lock date", lockDateDisplay);
-        AppendSummaryRow(builder, "Reminder window", reminderWindowLabel);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Account lock date", lockDateDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Reminder window", reminderWindowLabel, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
         if (outstandingAmountDisplay is not null)
         {
-            AppendSummaryRow(builder, "Outstanding Amount", outstandingAmountDisplay);
+            EmailTemplateBranding.AppendSummaryRow(builder, "Outstanding Amount", outstandingAmountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
         }
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please review and settle any outstanding charges before your account is locked.</p>");
@@ -213,23 +182,6 @@ internal sealed class Age30AccountLockReminderEmailService(
         EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName}.");
         return builder.ToString();
     }
-
-    private static void AppendSummaryRow(StringBuilder builder, string label, string value)
-    {
-        builder.Append("<tr><td bgcolor=\"")
-            .Append(EmailTemplateBranding.PrimarySoftColor)
-            .Append("\" style=\"background-color:")
-            .Append(EmailTemplateBranding.PrimarySoftColor)
-            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
-        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
-            .Append(WebUtility.HtmlEncode(label))
-            .Append("</div><div style=\"font-size:20px;line-height:28px;color:")
-            .Append(EmailTemplateBranding.PrimaryTextColor)
-            .Append(";font-weight:bold;padding-top:4px;\">")
-            .Append(WebUtility.HtmlEncode(value))
-            .Append("</div></td></tr>");
-    }
-
     private sealed record ReminderWindow(
         string Label,
         Func<DateOnly, DateOnly> ReminderDate);

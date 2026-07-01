@@ -23,8 +23,7 @@ internal sealed class AccountCreditGateway(
     MoeDbContext dbContext,
     IClock clock,
     ITopUpExecutionMetrics metrics,
-    IEmailNotificationQueue mailQueue,
-    IEmailDeliverySwitch mailSwitch,
+    IEmailNotificationScheduler mailScheduler,
     IEmailBrandingProvider branding,
     ILogger<AccountCreditGateway> logger) : IAccountCreditGateway
 {
@@ -162,15 +161,6 @@ internal sealed class AccountCreditGateway(
         DateTime creditedAtUtc,
         CancellationToken cancellationToken)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Top-up email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                account.PersonId,
-                account.Id);
-            return;
-        }
-
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == account.PersonId, cancellationToken);
@@ -178,12 +168,12 @@ internal sealed class AccountCreditGateway(
         string studentName = string.IsNullOrWhiteSpace(person?.OfficialFullName)
             ? "Student"
             : person.OfficialFullName.Trim();
-        string amountDisplay = FormatMoney(amount);
-        string updatedBalanceDisplay = FormatMoney(updatedBalance);
+        string amountDisplay = EmailTemplateBranding.FormatMoney(amount);
+        string updatedBalanceDisplay = EmailTemplateBranding.FormatMoney(updatedBalance);
         string campaignDisplay = string.IsNullOrWhiteSpace(campaignReason)
             ? "Government top-up"
             : campaignReason.Trim();
-        string creditedDateDisplay = creditedAtUtc.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture);
+        string creditedDateDisplay = EmailTemplateBranding.FormatDate(creditedAtUtc);
 
         const string subject = "Funds Credited to Your Education Account";
         string plainTextBody = string.Join(Environment.NewLine, [
@@ -211,36 +201,15 @@ internal sealed class AccountCreditGateway(
             branding.AppName,
             branding.AccountPortalUrl);
 
-        try
-        {
-            Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    "NOTI-02",
-                    account.PersonId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    "EducationAccount",
-                    account.Id.ToString(CultureInfo.InvariantCulture)),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Top-up credited email enqueue failed. EducationAccountId={EducationAccountId} AccountTransactionDate={CreditedAtUtc} ErrorCode={ErrorCode}",
-                    account.Id,
-                    creditedAtUtc,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Top-up credited email notification threw an exception. EducationAccountId={EducationAccountId} AccountTransactionDate={CreditedAtUtc}",
-                account.Id,
-                creditedAtUtc);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            "NOTI-02",
+            account.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "EducationAccount",
+            account.Id.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private static string BuildTopUpCreditedHtmlBody(
@@ -254,9 +223,6 @@ internal sealed class AccountCreditGateway(
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedAmount = WebUtility.HtmlEncode(amountDisplay);
-        string encodedCampaign = WebUtility.HtmlEncode(campaignDisplay);
-        string encodedCreditedDate = WebUtility.HtmlEncode(creditedDateDisplay);
-        string encodedUpdatedBalance = WebUtility.HtmlEncode(updatedBalanceDisplay);
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
@@ -269,39 +235,14 @@ internal sealed class AccountCreditGateway(
             .Append(encodedAmount)
             .Append("</strong> has been credited to your Education Account.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Amount Credited", encodedAmount, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
-        AppendSummaryRow(builder, "Updated Balance", encodedUpdatedBalance, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Reason/Campaign", encodedCampaign, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Date Credited", encodedCreditedDate, "#fff7ed", "#9a3412");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Amount Credited", amountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Updated Balance", updatedBalanceDisplay);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Reason/Campaign", campaignDisplay);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Date Credited", creditedDateDisplay, "#fff7ed", "#9a3412");
         builder.Append("</table>");
         EmailTemplateBranding.AppendButton(builder, accountPortalUrl, "View My Account");
         builder.Append("</td></tr>");
         EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after a completed Education Account top-up.");
         return builder.ToString();
     }
-
-    private static void AppendSummaryRow(
-        StringBuilder builder,
-        string label,
-        string value,
-        string backgroundColor,
-        string valueColor)
-    {
-        builder.Append("<tr><td bgcolor=\"")
-            .Append(backgroundColor)
-            .Append("\" style=\"background-color:")
-            .Append(backgroundColor)
-            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
-        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
-            .Append(WebUtility.HtmlEncode(label))
-            .Append("</div>");
-        builder.Append("<div style=\"font-size:22px;line-height:28px;color:")
-            .Append(valueColor)
-            .Append(";font-weight:bold;padding-top:4px;\">")
-            .Append(value)
-            .Append("</div>");
-        builder.Append("</td></tr>");
-    }
-
-    private static string FormatMoney(decimal amount) => $"SGD {amount:N2}";
 }

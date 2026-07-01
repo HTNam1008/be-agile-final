@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
@@ -10,17 +9,14 @@ using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
-using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Application.Notifications;
 
 internal sealed class PaymentNotificationEmailService(
     MoeDbContext dbContext,
-    IEmailNotificationQueue mailQueue,
-    IEmailDeliverySwitch mailSwitch,
-    IEmailBrandingProvider branding,
-    ILogger<PaymentNotificationEmailService> logger)
+    IEmailNotificationScheduler mailScheduler,
+    IEmailBrandingProvider branding)
 {
     private const string ExpiredReason = "The payment session expired before completion. Please try again.";
 
@@ -62,7 +58,7 @@ internal sealed class PaymentNotificationEmailService(
                 actionLabel: "View Payments",
                 footer: $"This message was sent by {branding.AppName} after a completed installment payment.",
                 statusLabel: "Paid On",
-                statusValue: FormatDate(completedAtUtc),
+                statusValue: EmailTemplateBranding.FormatDate(completedAtUtc),
                 cancellationToken: cancellationToken,
                 itemNameOverride: receipt.ItemName);
             return;
@@ -77,7 +73,7 @@ internal sealed class PaymentNotificationEmailService(
             actionLabel: "View Payments",
             footer: $"This message was sent by {branding.AppName} after a completed full payment.",
             statusLabel: "Paid On",
-            statusValue: FormatDate(completedAtUtc),
+            statusValue: EmailTemplateBranding.FormatDate(completedAtUtc),
             cancellationToken: cancellationToken,
             itemNameOverride: receipt.ItemName);
     }
@@ -101,7 +97,7 @@ internal sealed class PaymentNotificationEmailService(
             actionLabel: "View Payments",
             footer: $"This message was sent by {branding.AppName} after a payment attempt was cancelled.",
             statusLabel: "Cancelled On",
-            statusValue: FormatDate(cancelledAtUtc),
+            statusValue: EmailTemplateBranding.FormatDate(cancelledAtUtc),
             cancellationToken);
     }
 
@@ -115,15 +111,6 @@ internal sealed class PaymentNotificationEmailService(
         if (selectedBills.Count == 0) return;
         const string notificationType = "NOTI-14-DEFERRED";
         const string subject = "Installment Payment Deferred";
-
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Payment defer email skipped because MailDelivery is disabled. PersonId={PersonId} StatementId={StatementId}",
-                personId,
-                statementId);
-            return;
-        }
 
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
@@ -142,7 +129,7 @@ internal sealed class PaymentNotificationEmailService(
             .Select(bill =>
             {
                 string itemName = FormatBillName(bill);
-                return $"- {itemName}: {EmailTemplateBranding.FormatMoney(bill.OutstandingAmount)}, due {FormatDate(bill.CurrentDueDate)} -> {FormatDate(bill.CurrentDueDate.AddMonths(1))}";
+                return $"- {itemName}: {EmailTemplateBranding.FormatMoney(bill.OutstandingAmount)}, due {EmailTemplateBranding.FormatDate(bill.CurrentDueDate)} -> {EmailTemplateBranding.FormatDate(bill.CurrentDueDate.AddMonths(1))}";
             })
             .ToArray();
 
@@ -155,9 +142,9 @@ internal sealed class PaymentNotificationEmailService(
             $"Billing Statement: {statementId}",
             $"Total Deferred Amount: {totalDisplay}",
             $"Deferred Bills: {selectedBills.Count}",
-            $"Earliest Original Due Date: {FormatDate(earliestOriginalDueDate)}",
-            $"Earliest New Due Date: {FormatDate(earliestNewDueDate)}",
-            $"Deferred On: {FormatDate(deferredAtUtc)}",
+            $"Earliest Original Due Date: {EmailTemplateBranding.FormatDate(earliestOriginalDueDate)}",
+            $"Earliest New Due Date: {EmailTemplateBranding.FormatDate(earliestNewDueDate)}",
+            $"Deferred On: {EmailTemplateBranding.FormatDate(deferredAtUtc)}",
             string.Empty,
             "Deferred bill details:",
             .. billLines,
@@ -201,16 +188,6 @@ internal sealed class PaymentNotificationEmailService(
         CancellationToken cancellationToken,
         string? itemNameOverride = null)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Payment notification email skipped because MailDelivery is disabled. NotificationType={NotificationType} PersonId={PersonId} PaymentId={PaymentId}",
-                notificationType,
-                payment.PayerPersonId,
-                payment.Id);
-            return;
-        }
-
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == payment.PayerPersonId, cancellationToken);
@@ -345,35 +322,15 @@ internal sealed class PaymentNotificationEmailService(
             ? payment.Id.ToString(CultureInfo.InvariantCulture)
             : payment.PaymentNumber;
 
-        try
-        {
-            Result result = await EnqueueJobAsync(
-                notificationType,
-                payment.PayerPersonId,
-                subject,
-                plainTextBody,
-                htmlBody,
-                "Payment",
-                entityId,
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Payment notification email enqueue failed. NotificationType={NotificationType} PaymentId={PaymentId} ErrorCode={ErrorCode}",
-                    notificationType,
-                    payment.Id,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Payment notification email threw an exception. NotificationType={NotificationType} PaymentId={PaymentId}",
-                notificationType,
-                payment.Id);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            notificationType,
+            payment.PayerPersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "Payment",
+            entityId,
+            cancellationToken);
     }
 
     private async Task EnqueueForPersonAsync(
@@ -386,58 +343,16 @@ internal sealed class PaymentNotificationEmailService(
         string entityId,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            Result result = await EnqueueJobAsync(
-                notificationType,
-                personId,
-                subject,
-                plainTextBody,
-                htmlBody,
-                entityType,
-                entityId,
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Payment notification email enqueue failed. NotificationType={NotificationType} EntityType={EntityType} EntityId={EntityId} ErrorCode={ErrorCode}",
-                    notificationType,
-                    entityType,
-                    entityId,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Payment notification email threw an exception. NotificationType={NotificationType} EntityType={EntityType} EntityId={EntityId}",
-                notificationType,
-                entityType,
-                entityId);
-        }
-    }
-
-    private async Task<Result> EnqueueJobAsync(
-        string notificationType,
-        long personId,
-        string subject,
-        string plainTextBody,
-        string htmlBody,
-        string entityType,
-        string entityId,
-        CancellationToken cancellationToken)
-        => await mailQueue.EnqueueAsync(
-            EmailNotificationJob.ForPerson(
-                notificationType,
-                personId,
-                subject,
-                plainTextBody,
-                htmlBody,
-                entityType,
-                entityId),
+        await mailScheduler.EnqueueForPersonAsync(
+            notificationType,
+            personId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            entityType,
+            entityId,
             cancellationToken);
+    }
 
     private static string BuildHtmlBody(
         string title,
@@ -496,9 +411,9 @@ internal sealed class PaymentNotificationEmailService(
         EmailTemplateBranding.AppendSummaryRow(builder, "Total Deferred Amount", totalDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
         EmailTemplateBranding.AppendSummaryRow(builder, "Billing Statement", statementId.ToString(CultureInfo.InvariantCulture));
         EmailTemplateBranding.AppendSummaryRow(builder, "Deferred Bills", selectedBills.Count.ToString(CultureInfo.InvariantCulture));
-        EmailTemplateBranding.AppendSummaryRow(builder, "Original Due Date", FormatDate(earliestOriginalDueDate), "#fff7ed", "#9a3412");
-        EmailTemplateBranding.AppendSummaryRow(builder, "New Due Date", FormatDate(earliestNewDueDate), "#ecfdf5", "#047857");
-        EmailTemplateBranding.AppendSummaryRow(builder, "Deferred On", FormatDate(deferredAtUtc));
+        EmailTemplateBranding.AppendSummaryRow(builder, "Original Due Date", EmailTemplateBranding.FormatDate(earliestOriginalDueDate), "#fff7ed", "#9a3412");
+        EmailTemplateBranding.AppendSummaryRow(builder, "New Due Date", EmailTemplateBranding.FormatDate(earliestNewDueDate), "#ecfdf5", "#047857");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Deferred On", EmailTemplateBranding.FormatDate(deferredAtUtc));
         builder.Append("</table>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
         foreach (PayableStatementBill bill in selectedBills.OrderBy(bill => bill.CurrentDueDate).ThenBy(bill => bill.BillId))
@@ -510,9 +425,9 @@ internal sealed class PaymentNotificationEmailService(
             builder.Append("<div style=\"font-size:13px;line-height:19px;color:#64748b;\">")
                 .Append(WebUtility.HtmlEncode(EmailTemplateBranding.FormatMoney(bill.OutstandingAmount)))
                 .Append(" · Due ")
-                .Append(WebUtility.HtmlEncode(FormatDate(bill.CurrentDueDate)))
+                .Append(WebUtility.HtmlEncode(EmailTemplateBranding.FormatDate(bill.CurrentDueDate)))
                 .Append(" -> ")
-                .Append(WebUtility.HtmlEncode(FormatDate(bill.CurrentDueDate.AddMonths(1))))
+                .Append(WebUtility.HtmlEncode(EmailTemplateBranding.FormatDate(bill.CurrentDueDate.AddMonths(1))))
                 .Append("</div>");
             builder.Append("</td></tr>");
         }
@@ -525,12 +440,6 @@ internal sealed class PaymentNotificationEmailService(
 
     private static string NormalizeReason(string reason, string fallback)
         => string.IsNullOrWhiteSpace(reason) ? fallback : reason.Trim();
-
-    private static string FormatDate(DateTime utcDate)
-        => utcDate.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture);
-
-    private static string FormatDate(DateOnly date)
-        => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
 
     private static string FormatBillName(PayableStatementBill bill)
         => string.IsNullOrWhiteSpace(bill.CourseName)
