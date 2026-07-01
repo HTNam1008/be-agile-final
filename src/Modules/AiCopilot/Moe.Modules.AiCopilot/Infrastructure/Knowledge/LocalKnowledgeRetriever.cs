@@ -17,6 +17,14 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             "Refund explanations must use the enrollment's snapshotted refund policy and actual refund status. The assistant must not invent eligibility, amounts, timelines, or documentation.", "/portal/courses", [], false),
         new("PROTO-WITHDRAW-001", "Prototype Finance Guidance", "Education Account withdrawal", "PAYMENT", "PROTOTYPE", "1.0", new DateOnly(2026, 6, 24),
             "Withdrawal policy is not represented by a live transactional tool in this prototype. Direct users to the Education Account page and Admin Center for authoritative eligibility, limits, and timelines.", "/portal/account", [], false),
+        new("FAS-GLOSSARY-001", "Financial Assistance Schemes", "FAS overview and terminology", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 6, 25),
+            "Financial Assistance Schemes help eligible students with school fees, bursaries, and education-related costs. Eligibility commonly uses monthly gross household income (GHI), per-capita income (PCI), student level, school, and parent or guardian nationality. The FAS page remains the source of truth for live application status and available schemes.", "/portal/fas", ["financial assistance", "fas", "scheme", "aid"], false),
+        new("FAS-JC-CI-001", "MOE FAS", "JC/CI eligibility and benefits", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 1, 1),
+            "At Junior College or Centralised Institute level, MOE FAS eligibility can be based on monthly GHI of $4,000 or less, or monthly PCI of $1,000 or less. Benefits may include subsidy of school, miscellaneous, and examination fees, plus bursary support. Students should apply through the FAS application journey and review the final form before submission.", "/portal/fas", ["jc fas", "ci fas", "moe fas", "financial assistance scheme"], false),
+        new("FAS-TIERED-SUBSIDY-001", "Tiered Fee Subsidy", "Income-tiered subsidy guidance", "FAS", "GUIDE", "1.0", new DateOnly(2026, 1, 1),
+            "The Tiered Fee Subsidy uses income bands such as GHI and PCI to determine fee support. Higher support applies to lower-income tiers. Scheme names and exact subsidy values may vary by level and school, so students should use the FAS page to check live eligible schemes and submit only after reviewing the form.", "/portal/fas", ["tiered fee subsidy", "income tier", "subsidy", "isb"], false),
+        new("FAS-BURSARY-FULLTIME-001", "Government Bursary", "Full-time higher education bursary guidance", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 8, 1),
+            "Government bursaries for full-time ITE, polytechnic, arts institution, and autonomous university students use income tiers such as GHI and PCI. Examples include Higher Education Community Bursary and Higher Education Bursary. Amounts vary by course type and tier; students should confirm live eligibility and selected schemes in the FAS application.", "/portal/fas", ["bursary", "hecb", "heb", "government bursary", "university bursary", "polytechnic bursary"], false),
     ];
 
     private static readonly KnowledgeDocument[] FasChunks = LoadFasChunksFromAssembly();
@@ -140,15 +148,22 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private static (string frontmatter, string body) SplitFrontmatter(string raw)
     {
-        const string separator = "---\n";
-        if (!raw.StartsWith(separator, StringComparison.Ordinal))
+        if (!raw.StartsWith("---", StringComparison.Ordinal))
             return ("", raw);
 
-        int endIndex = raw.IndexOf(separator, 4, StringComparison.Ordinal);
+        int firstLineEnd = raw.IndexOf('\n');
+        if (firstLineEnd < 0 || raw[..firstLineEnd].Trim() != "---")
+            return ("", raw);
+
+        int endIndex = raw.IndexOf("\n---", firstLineEnd + 1, StringComparison.Ordinal);
         if (endIndex < 0)
             return ("", raw);
 
-        return (raw[4..endIndex], raw[(endIndex + 4)..]);
+        int bodyStart = raw.IndexOf('\n', endIndex + 1);
+        if (bodyStart < 0)
+            return (raw[(firstLineEnd + 1)..endIndex], "");
+
+        return (raw[(firstLineEnd + 1)..endIndex], raw[(bodyStart + 1)..]);
     }
 
     private static Dictionary<string, string> ParseFrontmatter(string yaml)

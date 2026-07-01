@@ -24,11 +24,24 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
-    public async Task Financial_assistance_guidance_starts_fas_interview()
+    public async Task Financial_assistance_definition_stays_general()
     {
         JsonElement response = await Chat("Tell me about financial assistance", personId: 2101);
-        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
-        Assert.True(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Theory]
+    [InlineData("Explain the MOE FAS Bursary")]
+    [InlineData("What is the Tiered Fee Subsidy scheme?")]
+    [InlineData("How does the JC/CI FAS scheme work?")]
+    public async Task Fas_scheme_information_routes_to_knowledge_base(string message)
+    {
+        JsonElement response = await Chat(message, personId: 2101);
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.True(response.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        Assert.NotEmpty(response.GetProperty("grounding").GetProperty("citations").EnumerateArray());
+        Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]
@@ -103,7 +116,6 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     [InlineData("help me with fas")]
     [InlineData("i want to apply for financial assistance")]
     [InlineData("can you guide me through fas")]
-    [InlineData("tell me about fas")]
     [InlineData("how do i do fas")]
     [InlineData("i have a question about fas")]
     public async Task Natural_fas_phrasing_routes_to_fas_interview(string message)
