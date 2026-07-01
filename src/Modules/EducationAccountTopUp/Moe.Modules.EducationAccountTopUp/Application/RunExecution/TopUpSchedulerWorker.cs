@@ -74,9 +74,10 @@ public sealed class TopUpSchedulerWorker(
                 TopUpCampaign? campaign = await campaignRepo.GetByIdAsync(campaignId, cancellationToken);
                 if (campaign is null || !campaign.NextRunAtUtc.HasValue) continue;
 
-                if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(campaign.RecipientModeCode, RecipientModeCode.DynamicRules.ToString(), StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(campaign.DeliveryTypeCode, DeliveryType.Instant, StringComparison.OrdinalIgnoreCase))
                 {
-                    logger.LogWarning("Campaign {CampaignId} is DYNAMIC_RULES; scheduled disbursements are handled by the assessment and contract workers.", campaign.Id);
+                    logger.LogWarning("Campaign {CampaignId} is a contract-based dynamic campaign; disbursements are handled by the assessment and contract workers.", campaign.Id);
                     continue;
                 }
 

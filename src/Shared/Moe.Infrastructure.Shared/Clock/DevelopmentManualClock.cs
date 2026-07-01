@@ -18,6 +18,8 @@ public sealed class DevelopmentManualClock : IClock
         }
     }
 
+    public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
+
     public bool IsOverridden
     {
         get
