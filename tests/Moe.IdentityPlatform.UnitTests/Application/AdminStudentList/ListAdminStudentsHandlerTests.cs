@@ -137,5 +137,7 @@ public sealed class ListAdminStudentsHandlerTests
     private sealed class TestClock : IClock
     {
         public DateTimeOffset UtcNow => new(2026, 6, 22, 8, 0, 0, TimeSpan.Zero);
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 }
