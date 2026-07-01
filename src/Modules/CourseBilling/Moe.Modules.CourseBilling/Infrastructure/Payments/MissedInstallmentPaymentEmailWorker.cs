@@ -136,7 +136,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         string courseName = string.IsNullOrWhiteSpace(candidate.CourseName)
             ? "your course"
             : candidate.CourseName.Trim();
-        string amountDisplay = $"SGD {candidate.OutstandingAmount:N2}";
+        string amountDisplay = $"SGD {candidate.OutstandingAmount.ToString("N2", CultureInfo.InvariantCulture)}";
         string dueDateDisplay = candidate.DueDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
         const string consequence = "Your course access or enrolment may remain restricted until payment is received.";
 
