@@ -18,4 +18,20 @@ public static class MailDeliveryErrors
     public static readonly Error QueueFull = new(
         "MAIL_DELIVERY.QUEUE_FULL",
         "The email notification queue is full.");
+
+    public static readonly Error NotificationNotFound = new(
+        "MAIL_DELIVERY.NOTIFICATION_NOT_FOUND",
+        "The email notification was not found.");
+
+    public static readonly Error NotificationCannotBeRetried = new(
+        "MAIL_DELIVERY.NOTIFICATION_CANNOT_BE_RETRIED",
+        "The email notification cannot be retried in its current status.");
+
+    public static readonly Error NotificationCannotBeCancelled = new(
+        "MAIL_DELIVERY.NOTIFICATION_CANNOT_BE_CANCELLED",
+        "The email notification cannot be cancelled in its current status.");
+
+    public static readonly Error NotificationCannotBeSuppressed = new(
+        "MAIL_DELIVERY.NOTIFICATION_CANNOT_BE_SUPPRESSED",
+        "The email notification cannot be suppressed in its current status.");
 }

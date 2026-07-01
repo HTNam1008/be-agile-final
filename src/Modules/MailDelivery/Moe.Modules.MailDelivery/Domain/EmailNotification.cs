@@ -149,6 +149,7 @@ public sealed class EmailNotification
     public void ResetForRetry(DateTime retryAtUtc)
     {
         StatusCode = EmailNotificationStatusCodes.Pending;
+        AttemptCount = 0;
         NextAttemptAtUtc = retryAtUtc;
         LockedUntilUtc = null;
         LastErrorCode = null;
