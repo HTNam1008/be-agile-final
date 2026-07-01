@@ -254,7 +254,7 @@ internal sealed class BillingStatementRepository(
             : person.OfficialFullName.Trim();
         string monthName = billingMonth.ToString("MMMM", CultureInfo.InvariantCulture);
         string monthYear = billingMonth.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
-        string totalAmountDisplay = $"SGD {totalAmountDue:N2}";
+        string totalAmountDisplay = $"SGD {totalAmountDue.ToString("N2", CultureInfo.InvariantCulture)}";
         string dueDateDisplay = dueDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
 
         string subject = $"Your {monthName} Bill Is Ready";

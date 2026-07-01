@@ -447,7 +447,7 @@ internal sealed class CoursePaymentGateway(
         string itemName = string.IsNullOrWhiteSpace(course.CourseName)
             ? bill.BillNumber
             : course.CourseName.Trim();
-        string amountDisplay = $"SGD {bill.OutstandingAmount:N2}";
+        string amountDisplay = $"SGD {bill.OutstandingAmount.ToString("N2", CultureInfo.InvariantCulture)}";
         string reason = string.IsNullOrWhiteSpace(failureReason)
             ? "Payment could not be processed."
             : failureReason.Trim();
