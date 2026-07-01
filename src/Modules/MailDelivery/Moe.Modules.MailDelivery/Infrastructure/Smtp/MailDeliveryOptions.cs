@@ -6,7 +6,7 @@ public sealed class MailDeliveryOptions
 {
     public const string SectionName = "MailDelivery";
     public const string DefaultAppName = "Ministry of Education - Singapore";
-    public const string DefaultPortalBaseUrl = "http://localhost:5173";
+    public const string DefaultPortalBaseUrl = "https://femoegovsg.azurewebsites.net";
 
     public bool Enabled { get; init; } = true;
 
