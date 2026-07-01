@@ -3,6 +3,8 @@ using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Moe.Modules.CourseBilling.Domain.Billing;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
@@ -46,17 +48,38 @@ internal sealed class PaymentNotificationEmailService(
         Payment payment,
         DateTime completedAtUtc,
         CancellationToken cancellationToken)
-        => await SendPaymentStatusAsync(
+    {
+        PaymentReceiptContext receipt = await ResolvePaymentReceiptContextAsync(payment, cancellationToken);
+        if (receipt.IsInstallment)
+        {
+            await SendPaymentStatusAsync(
+                payment,
+                notificationType: "NOTI-12-INSTALLMENT",
+                subject: "Installment Payment Received",
+                title: "Installment payment received",
+                leadText: "we have received your installment payment.",
+                actionLabel: "View Payments",
+                footer: "This message was sent by MOE SEEDS after a completed installment payment.",
+                statusLabel: "Paid On",
+                statusValue: FormatDate(completedAtUtc),
+                cancellationToken: cancellationToken,
+                itemNameOverride: receipt.ItemName);
+            return;
+        }
+
+        await SendPaymentStatusAsync(
             payment,
-            notificationType: "NOTI-12",
-            subject: "Payment Received",
-            title: "Payment received",
-            leadText: "we have received your payment.",
+            notificationType: "NOTI-12-FULL",
+            subject: "Full Payment Received",
+            title: "Full payment received",
+            leadText: "we have received your full payment.",
             actionLabel: "View Payments",
-            footer: "This message was sent by MOE SEEDS after a completed payment.",
+            footer: "This message was sent by MOE SEEDS after a completed full payment.",
             statusLabel: "Paid On",
             statusValue: FormatDate(completedAtUtc),
-            cancellationToken);
+            cancellationToken: cancellationToken,
+            itemNameOverride: receipt.ItemName);
+    }
 
     public async Task SendPaymentCancelledAsync(
         Payment payment,
@@ -91,7 +114,8 @@ internal sealed class PaymentNotificationEmailService(
         string footer,
         string statusLabel,
         string statusValue,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? itemNameOverride = null)
     {
         if (!mailSwitch.IsEnabled)
         {
@@ -111,9 +135,9 @@ internal sealed class PaymentNotificationEmailService(
             ? "Student"
             : person.OfficialFullName.Trim();
         string amountDisplay = EmailTemplateBranding.FormatMoney(payment.PaymentAmount);
-        string itemName = payment.BillingStatementId is long statementId
+        string itemName = itemNameOverride ?? (payment.BillingStatementId is long statementId
             ? $"Monthly billing statement {statementId}"
-            : $"Bill {payment.BillId}";
+            : $"Bill {payment.BillId}");
         string reference = string.IsNullOrWhiteSpace(payment.ReceiptNumber)
             ? payment.PaymentNumber
             : payment.ReceiptNumber;
@@ -146,6 +170,81 @@ internal sealed class PaymentNotificationEmailService(
             footer);
 
         await EnqueueAsync(payment, notificationType, subject, plainTextBody, htmlBody, cancellationToken);
+    }
+
+    private async Task<PaymentReceiptContext> ResolvePaymentReceiptContextAsync(
+        Payment payment,
+        CancellationToken cancellationToken)
+    {
+        if (payment.BillingStatementId is long statementId && payment.Id > 0)
+        {
+            PaymentReceiptBill[] bills = await (
+                    from allocation in dbContext.Set<PaymentAllocation>().AsNoTracking()
+                    join bill in dbContext.Set<Bill>().AsNoTracking() on allocation.BillId equals bill.Id
+                    join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking() on bill.CourseEnrollmentId equals enrollment.Id
+                    join course in dbContext.Set<Course>().AsNoTracking() on enrollment.CourseId equals course.Id
+                    where allocation.PaymentId == payment.Id
+                    select new PaymentReceiptBill(
+                        bill.Id,
+                        bill.CourseEnrollmentId,
+                        bill.SequenceNumber,
+                        course.CourseCode,
+                        course.CourseName))
+                .ToArrayAsync(cancellationToken);
+
+            if (bills.Length > 0)
+            {
+                long[] enrollmentIds = bills.Select(x => x.CourseEnrollmentId).Distinct().ToArray();
+                int installmentEnrollmentCount = await dbContext.Set<Bill>()
+                    .AsNoTracking()
+                    .Where(x => enrollmentIds.Contains(x.CourseEnrollmentId))
+                    .GroupBy(x => x.CourseEnrollmentId)
+                    .CountAsync(group => group.Count() > 1, cancellationToken);
+                bool installment = installmentEnrollmentCount > 0 || bills.Any(x => x.SequenceNumber > 1);
+                string itemName = bills.Select(x => x.CourseName).Distinct().Count() == 1
+                    ? bills[0].CourseName
+                    : $"Monthly billing statement {statementId}";
+                if (bills.Length > 1)
+                    itemName = $"{itemName} ({bills.Length} bill items)";
+                return new PaymentReceiptContext(installment, itemName);
+            }
+
+            return new PaymentReceiptContext(IsInstallment: true, $"Monthly billing statement {statementId}");
+        }
+
+        if (payment.BillId > 0)
+        {
+            PaymentReceiptBill? bill = await (
+                    from candidate in dbContext.Set<Bill>().AsNoTracking()
+                    join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking() on candidate.CourseEnrollmentId equals enrollment.Id
+                    join course in dbContext.Set<Course>().AsNoTracking() on enrollment.CourseId equals course.Id
+                    where candidate.Id == payment.BillId
+                    select new PaymentReceiptBill(
+                        candidate.Id,
+                        candidate.CourseEnrollmentId,
+                        candidate.SequenceNumber,
+                        course.CourseCode,
+                        course.CourseName))
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (bill is not null)
+            {
+                int billCount = await dbContext.Set<Bill>()
+                    .AsNoTracking()
+                    .CountAsync(x => x.CourseEnrollmentId == bill.CourseEnrollmentId, cancellationToken);
+                bool installment = billCount > 1 || bill.SequenceNumber > 1 || payment.InstallmentNumber > 0;
+                string itemName = installment
+                    ? $"{bill.CourseName} - installment {Math.Max(1, bill.SequenceNumber)}"
+                    : bill.CourseName;
+                return new PaymentReceiptContext(installment, itemName);
+            }
+        }
+
+        return new PaymentReceiptContext(
+            payment.BillingStatementId is not null || payment.InstallmentNumber > 0,
+            payment.BillingStatementId is long fallbackStatementId
+                ? $"Monthly billing statement {fallbackStatementId}"
+                : $"Bill {payment.BillId}");
     }
 
     private async Task EnqueueAsync(
@@ -230,4 +329,13 @@ internal sealed class PaymentNotificationEmailService(
 
     private static string FormatDate(DateTime utcDate)
         => utcDate.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture);
+
+    private sealed record PaymentReceiptContext(bool IsInstallment, string ItemName);
+
+    private sealed record PaymentReceiptBill(
+        long BillId,
+        long CourseEnrollmentId,
+        int SequenceNumber,
+        string CourseCode,
+        string CourseName);
 }

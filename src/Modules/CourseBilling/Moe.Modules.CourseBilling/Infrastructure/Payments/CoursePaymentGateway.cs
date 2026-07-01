@@ -81,10 +81,36 @@ internal sealed class CoursePaymentGateway(
             candidate.BillStatusCode == BillStatusCodes.Cancelled);
         enrollment.GrantPaidAccess(allBillsPaid);
 
-        if (ShouldSendSelfJoinEnrollmentSuccessEmail(enrollment, previousStatus))
+        if (ShouldSendSelfJoinFullPaymentEnrollmentSuccessEmail(
+                enrollment,
+                previousStatus,
+                enrollmentBills.Length))
         {
-            await SendCourseEnrollmentSuccessEmailAsync(enrollment, cancellationToken);
+            await SendCourseEnrollmentSuccessEmailAsync(
+                enrollment,
+                "is confirmed and your payment has been received.",
+                "This message was sent by MOE SEEDS after your course payment was received.",
+                cancellationToken);
         }
+    }
+
+    public async Task SendInstallmentEnrollmentConfirmationAsync(
+        long courseEnrollmentId,
+        CancellationToken cancellationToken)
+    {
+        CourseEnrollment? enrollment = await dbContext.Set<CourseEnrollment>()
+            .SingleOrDefaultAsync(candidate => candidate.Id == courseEnrollmentId, cancellationToken);
+        if (enrollment is null ||
+            enrollment.EnrollmentSourceCode != CourseEnrollmentSourceCodes.SelfJoin)
+        {
+            return;
+        }
+
+        await SendCourseEnrollmentSuccessEmailAsync(
+            enrollment,
+            "is confirmed. Your installment bills will be available in the payment dashboard.",
+            "This message was sent by MOE SEEDS after your installment course enrolment was confirmed.",
+            cancellationToken);
     }
 
     public async Task ApplyPaymentFailureAsync(
@@ -192,9 +218,6 @@ internal sealed class CoursePaymentGateway(
         List<CourseEnrollment> enrollments = await dbContext.Set<CourseEnrollment>()
             .Where(x => enrollmentIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
-        Dictionary<long, string> previousStatusByEnrollmentId = enrollments.ToDictionary(
-            x => x.Id,
-            x => x.EnrollmentStatusCode);
         List<Bill> enrollmentBills = await dbContext.Set<Bill>()
             .Where(x => enrollmentIds.Contains(x.CourseEnrollmentId))
             .ToListAsync(cancellationToken);
@@ -206,15 +229,6 @@ internal sealed class CoursePaymentGateway(
                     x.BillStatusCode == BillStatusCodes.Paid ||
                     x.BillStatusCode == BillStatusCodes.Cancelled);
             enrollment.GrantPaidAccess(allBillsPaid);
-        }
-        foreach (CourseEnrollment enrollment in enrollments)
-        {
-            if (ShouldSendSelfJoinEnrollmentSuccessEmail(
-                    enrollment,
-                    previousStatusByEnrollmentId[enrollment.Id]))
-            {
-                await SendCourseEnrollmentSuccessEmailAsync(enrollment, cancellationToken);
-            }
         }
         var statementBillAmounts = await (
                 from item in dbContext.Set<BillingStatementItem>()
@@ -307,15 +321,19 @@ internal sealed class CoursePaymentGateway(
         }
     }
 
-    private static bool ShouldSendSelfJoinEnrollmentSuccessEmail(
+    private static bool ShouldSendSelfJoinFullPaymentEnrollmentSuccessEmail(
         CourseEnrollment enrollment,
-        string previousStatus)
+        string previousStatus,
+        int enrollmentBillCount)
         => enrollment.EnrollmentSourceCode == CourseEnrollmentSourceCodes.SelfJoin
+            && enrollmentBillCount == 1
             && previousStatus != CourseEnrollmentStatusCodes.PaidInFull
             && enrollment.EnrollmentStatusCode == CourseEnrollmentStatusCodes.PaidInFull;
 
     private async Task SendCourseEnrollmentSuccessEmailAsync(
         CourseEnrollment enrollment,
+        string leadText,
+        string footer,
         CancellationToken cancellationToken)
     {
         if (!mailSwitch.IsEnabled)
@@ -346,7 +364,7 @@ internal sealed class CoursePaymentGateway(
             "MOE SEEDS",
             "Course enrollment confirmation",
             string.Empty,
-            $"Hello {studentName}, your enrolment in {courseName} is confirmed and your payment has been received.",
+            $"Hello {studentName}, your enrolment in {courseName} {leadText}",
             string.Empty,
             $"Course Start Date: {startDateDisplay}",
             string.Empty,
@@ -358,7 +376,9 @@ internal sealed class CoursePaymentGateway(
             studentName,
             courseName,
             startDateDisplay,
-            courseUrl);
+            courseUrl,
+            leadText,
+            footer);
 
         try
         {
@@ -496,7 +516,9 @@ internal sealed class CoursePaymentGateway(
         string studentName,
         string courseName,
         string startDateDisplay,
-        string courseUrl)
+        string courseUrl,
+        string leadText,
+        string footer)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedCourseName = WebUtility.HtmlEncode(courseName);
@@ -510,7 +532,9 @@ internal sealed class CoursePaymentGateway(
             .Append(encodedStudentName)
             .Append(", your enrolment in <strong>")
             .Append(encodedCourseName)
-            .Append("</strong> is confirmed and your payment has been received.</p>");
+            .Append("</strong> ")
+            .Append(WebUtility.HtmlEncode(leadText))
+            .Append("</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
         AppendSummaryRow(builder, "Course", encodedCourseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
         AppendSummaryRow(builder, "Course Start Date", encodedStartDate, "#f8fafc", "#334155");
@@ -518,7 +542,9 @@ internal sealed class CoursePaymentGateway(
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">You can view the course details and start preparing from your Dashboard.</p>");
         EmailTemplateBranding.AppendButton(builder, courseUrl, "View Course");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after your course payment was received.</td></tr>");
+        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">")
+            .Append(WebUtility.HtmlEncode(footer))
+            .Append("</td></tr>");
         builder.Append("</table>");
         builder.Append("</td></tr></table>");
         builder.Append("</body></html>");
