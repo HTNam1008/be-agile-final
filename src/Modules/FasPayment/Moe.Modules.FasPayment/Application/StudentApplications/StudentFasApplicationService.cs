@@ -68,6 +68,50 @@ public sealed class StudentFasApplicationService(
         };
     }
 
+    public async Task<EligibilityCriteriaPlan> EligibilityCriteriaPlan(CancellationToken ct)
+    {
+        var p = await Profile(ct);
+        var accountType = await ResolveAccountType(p.PersonId, ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var openSchemes = await db.Set<FasScheme>()
+            .AsNoTracking()
+            .Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id))
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(ct);
+
+        long[] schemeIds = openSchemes.Select(x => x.Id).ToArray();
+        string[] requiredCriteriaTypes = schemeIds.Length == 0
+            ? []
+            : await (
+                from tier in db.Set<FasTier>().AsNoTracking()
+                join criteria in db.Set<FasTierCriteria>().AsNoTracking()
+                    on tier.Id equals criteria.FasTierId
+                where schemeIds.Contains(tier.FasSchemeId)
+                select criteria.CriteriaType)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToArrayAsync(ct);
+
+        List<string> profileFacts = [$"school: {p.SchoolName}", $"student nationality: {p.NationalityCode}", $"account type: {accountType}", "date of birth"];
+        if (!string.IsNullOrWhiteSpace(p.Email)) profileFacts.Add("email");
+
+        List<string> userRequiredFacts = ["welfare home status"];
+        if (requiredCriteriaTypes.Any(IsIncomeCriterion))
+        {
+            userRequiredFacts.Add("monthly household income");
+            userRequiredFacts.Add("household member count");
+            userRequiredFacts.Add("other monthly income");
+        }
+        userRequiredFacts.Add("parent or guardian nationality");
+
+        return new EligibilityCriteriaPlan(
+            openSchemes.Select(x => x.Name).OrderBy(x => x).ToArray(),
+            requiredCriteriaTypes,
+            profileFacts,
+            userRequiredFacts.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
     public async Task<object> ListSchemes(int page, int pageSize, string? search, CancellationToken ct)
     {
         if (page < 1 || pageSize is < 1 or > 100) throw new ArgumentException("FAS.INVALID_PAGING");
@@ -1106,6 +1150,7 @@ public sealed class StudentFasApplicationService(
     }
 
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";
+    private static bool IsIncomeCriterion(string criteriaType) => criteriaType is "GDP" or "GHI" or "PCI";
     private static string SchemeAvailabilityStatus(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? "AVAILABLE" : "NOT_AVAILABLE";
     private static string? SchemeAvailabilityMessage(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? null : "This FAS scheme is no longer available.";
     private static string StudentVisibleStatus(string itemStatus, string schemeStatus) => !SchemeIsAvailable(schemeStatus) && itemStatus is "DRAFT" or "PENDING" or "CANCELLED" ? "NOT_AVAILABLE" : itemStatus;
