@@ -23,6 +23,7 @@ public sealed class MailDeliveryModule : IModule
         services.AddSingleton<IEmailBrandingProvider, EmailBrandingProvider>();
         services.AddSingleton<IEmailDeliveryGateway, SmtpEmailDeliveryGateway>();
         services.AddSingleton<IEmailNotificationQueue, InMemoryEmailNotificationQueue>();
+        services.AddSingleton<IEmailNotificationScheduler, EmailNotificationScheduler>();
         if (IsBackgroundJobEnabled(configuration, "MailDelivery:QueueWorker"))
         {
             services.AddHostedService<QueuedEmailDeliveryWorker>();
