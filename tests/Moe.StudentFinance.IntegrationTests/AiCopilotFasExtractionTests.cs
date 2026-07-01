@@ -470,6 +470,16 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task First_turn_fieldKey_help_asks_for_requested_field()
+    {
+        JsonElement prompt = await SendFas("Help me choose the parent or guardian nationality for the particulars section of my FAS application.", null, new { fieldKey = "parentNationalities" });
+
+        Assert.Equal("COLLECTING", GetInterviewStatus(prompt));
+        Assert.Contains("parent or guardian", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("welfare home? Please answer yes or no", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Scheme_guidance_does_not_count_as_bad_answer_to_pending_field()
     {
         Guid cid = await StartInterview();
