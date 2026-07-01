@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
@@ -101,6 +102,87 @@ internal sealed class PaymentNotificationEmailService(
             footer: "This message was sent by MOE SEEDS after a payment attempt was cancelled.",
             statusLabel: "Cancelled On",
             statusValue: FormatDate(cancelledAtUtc),
+            cancellationToken);
+    }
+
+    public async Task SendPaymentDeferredAsync(
+        long personId,
+        long statementId,
+        IReadOnlyCollection<PayableStatementBill> selectedBills,
+        DateTime deferredAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (selectedBills.Count == 0) return;
+        const string notificationType = "NOTI-14-DEFERRED";
+        const string subject = "Installment Payment Deferred";
+
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Payment defer email skipped because MailDelivery is disabled. PersonId={PersonId} StatementId={StatementId}",
+                personId,
+                statementId);
+            return;
+        }
+
+        Person? person = await dbContext.Set<Person>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == personId, cancellationToken);
+        string studentName = string.IsNullOrWhiteSpace(person?.OfficialFullName)
+            ? "Student"
+            : person.OfficialFullName.Trim();
+        decimal totalAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
+        DateOnly earliestOriginalDueDate = selectedBills.Min(bill => bill.CurrentDueDate);
+        DateOnly earliestNewDueDate = earliestOriginalDueDate.AddMonths(1);
+        string totalDisplay = EmailTemplateBranding.FormatMoney(totalAmount);
+
+        string[] billLines = selectedBills
+            .OrderBy(bill => bill.CurrentDueDate)
+            .ThenBy(bill => bill.BillId)
+            .Select(bill =>
+            {
+                string itemName = FormatBillName(bill);
+                return $"- {itemName}: {EmailTemplateBranding.FormatMoney(bill.OutstandingAmount)}, due {FormatDate(bill.CurrentDueDate)} -> {FormatDate(bill.CurrentDueDate.AddMonths(1))}";
+            })
+            .ToArray();
+
+        string plainTextBody = string.Join(Environment.NewLine, [
+            "MOE SEEDS",
+            subject,
+            string.Empty,
+            $"Hello {studentName}, your installment payment has been deferred.",
+            string.Empty,
+            $"Billing Statement: {statementId}",
+            $"Total Deferred Amount: {totalDisplay}",
+            $"Deferred Bills: {selectedBills.Count}",
+            $"Earliest Original Due Date: {FormatDate(earliestOriginalDueDate)}",
+            $"Earliest New Due Date: {FormatDate(earliestNewDueDate)}",
+            $"Deferred On: {FormatDate(deferredAtUtc)}",
+            string.Empty,
+            "Deferred bill details:",
+            .. billLines,
+            string.Empty,
+            $"View Payments -> {PaymentDashboardUrl}",
+            string.Empty,
+            "This message was sent by MOE SEEDS after your installment payment was deferred."
+        ]);
+        string htmlBody = BuildPaymentDeferredHtmlBody(
+            studentName,
+            statementId,
+            selectedBills,
+            totalDisplay,
+            earliestOriginalDueDate,
+            earliestNewDueDate,
+            deferredAtUtc);
+
+        await EnqueueForPersonAsync(
+            notificationType,
+            personId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "BillingStatement",
+            statementId.ToString(CultureInfo.InvariantCulture),
             cancellationToken);
     }
 
@@ -261,15 +343,14 @@ internal sealed class PaymentNotificationEmailService(
 
         try
         {
-            Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    notificationType,
-                    payment.PayerPersonId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    "Payment",
-                    entityId),
+            Result result = await EnqueueJobAsync(
+                notificationType,
+                payment.PayerPersonId,
+                subject,
+                plainTextBody,
+                htmlBody,
+                "Payment",
+                entityId,
                 cancellationToken);
 
             if (result.IsFailure)
@@ -290,6 +371,69 @@ internal sealed class PaymentNotificationEmailService(
                 payment.Id);
         }
     }
+
+    private async Task EnqueueForPersonAsync(
+        string notificationType,
+        long personId,
+        string subject,
+        string plainTextBody,
+        string htmlBody,
+        string entityType,
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            Result result = await EnqueueJobAsync(
+                notificationType,
+                personId,
+                subject,
+                plainTextBody,
+                htmlBody,
+                entityType,
+                entityId,
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "Payment notification email enqueue failed. NotificationType={NotificationType} EntityType={EntityType} EntityId={EntityId} ErrorCode={ErrorCode}",
+                    notificationType,
+                    entityType,
+                    entityId,
+                    result.Error.Code);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Payment notification email threw an exception. NotificationType={NotificationType} EntityType={EntityType} EntityId={EntityId}",
+                notificationType,
+                entityType,
+                entityId);
+        }
+    }
+
+    private async Task<Result> EnqueueJobAsync(
+        string notificationType,
+        long personId,
+        string subject,
+        string plainTextBody,
+        string htmlBody,
+        string entityType,
+        string entityId,
+        CancellationToken cancellationToken)
+        => await mailQueue.EnqueueAsync(
+            EmailNotificationJob.ForPerson(
+                notificationType,
+                personId,
+                subject,
+                plainTextBody,
+                htmlBody,
+                entityType,
+                entityId),
+            cancellationToken);
 
     private static string BuildHtmlBody(
         string title,
@@ -324,11 +468,66 @@ internal sealed class PaymentNotificationEmailService(
         return builder.ToString();
     }
 
+    private static string BuildPaymentDeferredHtmlBody(
+        string studentName,
+        long statementId,
+        IReadOnlyCollection<PayableStatementBill> selectedBills,
+        string totalDisplay,
+        DateOnly earliestOriginalDueDate,
+        DateOnly earliestNewDueDate,
+        DateTime deferredAtUtc)
+    {
+        StringBuilder builder = new();
+        EmailTemplateBranding.AppendShellStart(builder);
+        EmailTemplateBranding.AppendHeader(builder, "Installment payment deferred");
+        builder.Append("<tr><td style=\"padding:30px;\">");
+        builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
+            .Append(WebUtility.HtmlEncode(studentName))
+            .Append(", your installment payment has been deferred.</p>");
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Total Deferred Amount", totalDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Billing Statement", statementId.ToString(CultureInfo.InvariantCulture));
+        EmailTemplateBranding.AppendSummaryRow(builder, "Deferred Bills", selectedBills.Count.ToString(CultureInfo.InvariantCulture));
+        EmailTemplateBranding.AppendSummaryRow(builder, "Original Due Date", FormatDate(earliestOriginalDueDate), "#fff7ed", "#9a3412");
+        EmailTemplateBranding.AppendSummaryRow(builder, "New Due Date", FormatDate(earliestNewDueDate), "#ecfdf5", "#047857");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Deferred On", FormatDate(deferredAtUtc));
+        builder.Append("</table>");
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
+        foreach (PayableStatementBill bill in selectedBills.OrderBy(bill => bill.CurrentDueDate).ThenBy(bill => bill.BillId))
+        {
+            builder.Append("<tr><td style=\"padding:12px 0;border-bottom:1px solid #e2e8f0;\">");
+            builder.Append("<div style=\"font-size:14px;line-height:20px;color:#172033;font-weight:bold;\">")
+                .Append(WebUtility.HtmlEncode(FormatBillName(bill)))
+                .Append("</div>");
+            builder.Append("<div style=\"font-size:13px;line-height:19px;color:#64748b;\">")
+                .Append(WebUtility.HtmlEncode(EmailTemplateBranding.FormatMoney(bill.OutstandingAmount)))
+                .Append(" · Due ")
+                .Append(WebUtility.HtmlEncode(FormatDate(bill.CurrentDueDate)))
+                .Append(" -> ")
+                .Append(WebUtility.HtmlEncode(FormatDate(bill.CurrentDueDate.AddMonths(1))))
+                .Append("</div>");
+            builder.Append("</td></tr>");
+        }
+        builder.Append("</table>");
+        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "View Payments");
+        builder.Append("</td></tr>");
+        EmailTemplateBranding.AppendFooter(builder, "This message was sent by MOE SEEDS after your installment payment was deferred.");
+        return builder.ToString();
+    }
+
     private static string NormalizeReason(string reason, string fallback)
         => string.IsNullOrWhiteSpace(reason) ? fallback : reason.Trim();
 
     private static string FormatDate(DateTime utcDate)
         => utcDate.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture);
+
+    private static string FormatDate(DateOnly date)
+        => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+
+    private static string FormatBillName(PayableStatementBill bill)
+        => string.IsNullOrWhiteSpace(bill.CourseName)
+            ? $"Bill {bill.BillId}"
+            : bill.CourseName.Trim();
 
     private sealed record PaymentReceiptContext(bool IsInstallment, string ItemName);
 

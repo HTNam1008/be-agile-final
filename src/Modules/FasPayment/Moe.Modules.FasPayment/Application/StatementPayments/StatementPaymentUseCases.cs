@@ -537,7 +537,8 @@ internal sealed class DeferBillingStatementHandler(
     ICoursePaymentGateway billing,
     IEducationAccountPaymentGateway accounts,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>
+    IClock clock,
+    PaymentNotificationEmailService paymentNotifications) : ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>
 {
     public async Task<Result<DeferBillingStatementResponse>> Handle(DeferBillingStatementCommand command, CancellationToken ct)
     {
@@ -591,17 +592,25 @@ internal sealed class DeferBillingStatementHandler(
                 CoverableBills: coverableBills));
         }
 
+        DateTime deferredAtUtc = clock.UtcNow.UtcDateTime;
         Result deferResult = await billing.DeferStatementAsync(
             command.StatementId,
             personId,
             selectedBills.Select(bill => bill.BillId).ToArray(),
             actorId,
-            clock.UtcNow.UtcDateTime,
+            deferredAtUtc,
             ct);
         if (deferResult.IsFailure)
         {
             return Result<DeferBillingStatementResponse>.Failure(PaymentDomainErrors.InvalidDeferral);
         }
+
+        await paymentNotifications.SendPaymentDeferredAsync(
+            personId,
+            command.StatementId,
+            selectedBills,
+            deferredAtUtc,
+            ct);
 
         return Result<DeferBillingStatementResponse>.Success(new DeferBillingStatementResponse(Deferred: true));
     }
