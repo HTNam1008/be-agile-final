@@ -38,6 +38,8 @@ public sealed class MailDeliveryOptions
 
     public string? DevelopmentFallbackRecipient { get; init; }
 
+    public MailDeliveryWorkerOptions Worker { get; init; } = new();
+
     public bool HasFallbackSender
         => !string.IsNullOrWhiteSpace(FallbackUserName)
             && !string.IsNullOrWhiteSpace(FallbackPassword)
@@ -75,4 +77,19 @@ public sealed class MailDeliveryOptions
     private static bool IsValidEmail(string? emailAddress)
         => !string.IsNullOrWhiteSpace(emailAddress)
             && MailAddress.TryCreate(emailAddress.Trim(), out _);
+}
+
+public sealed class MailDeliveryWorkerOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public int BatchSize { get; init; } = 20;
+
+    public int PollIntervalSeconds { get; init; } = 10;
+
+    public int MaxAttempts { get; init; } = 3;
+
+    public int MaxEmailsPerMinute { get; init; } = 60;
+
+    public int LockSeconds { get; init; } = 120;
 }
