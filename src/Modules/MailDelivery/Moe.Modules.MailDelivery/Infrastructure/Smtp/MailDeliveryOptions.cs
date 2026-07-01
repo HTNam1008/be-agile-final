@@ -34,6 +34,11 @@ public sealed class MailDeliveryOptions
 
     public string? DevelopmentFallbackRecipient { get; init; }
 
+    public bool HasFallbackSender
+        => !string.IsNullOrWhiteSpace(FallbackUserName)
+            && !string.IsNullOrWhiteSpace(FallbackPassword)
+            && IsValidEmail(FallbackFromEmail);
+
     public static bool IsValid(MailDeliveryOptions options)
     {
         if (!options.Enabled)
@@ -52,16 +57,9 @@ public sealed class MailDeliveryOptions
                 || IsValidEmail(options.DevelopmentFallbackRecipient));
     }
 
-    public bool HasFallbackSender
-        => !string.IsNullOrWhiteSpace(FallbackUserName)
-            && !string.IsNullOrWhiteSpace(FallbackPassword)
-            && IsValidEmail(FallbackFromEmail)
-            && !string.IsNullOrWhiteSpace(FallbackFromDisplayName);
-
     private static bool IsValidFallback(MailDeliveryOptions options)
     {
-        bool hasAnyFallbackValue =
-            !string.IsNullOrWhiteSpace(options.FallbackUserName)
+        bool hasAnyFallbackValue = !string.IsNullOrWhiteSpace(options.FallbackUserName)
             || !string.IsNullOrWhiteSpace(options.FallbackPassword)
             || !string.IsNullOrWhiteSpace(options.FallbackFromEmail)
             || !string.IsNullOrWhiteSpace(options.FallbackFromDisplayName);

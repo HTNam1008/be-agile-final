@@ -117,7 +117,7 @@ internal sealed class EServiceLoginResolver(
                 && (x.EndDate == null || x.EndDate >= today),
                 cancellationToken);
 
-        bool accountHolder = await educationAccounts.HasAccountAsync(person.Id, cancellationToken);
+        bool accountHolder = await educationAccounts.HasActiveAccountAsync(person.Id, cancellationToken);
 
         if (!activeStudent && !accountHolder)
         {

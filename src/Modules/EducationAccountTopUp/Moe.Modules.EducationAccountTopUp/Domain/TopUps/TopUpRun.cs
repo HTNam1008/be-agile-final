@@ -7,6 +7,8 @@ public sealed class TopUpRun : AggregateRoot<long>
 {
     private TopUpRun() : base(0) { }
 
+    public DateTime CreatedAtUtc { get; private set; }
+
     private TopUpRun(
         long id,
         long topUpCampaignId,
@@ -37,6 +39,8 @@ public sealed class TopUpRun : AggregateRoot<long>
     public long? TriggeredByLoginAccountId { get; private set; }
     public string RunStatusCode { get; private set; } = string.Empty;
     public string? RuleSnapshotJson { get; private set; }
+    public bool IsContractDriven { get; private set; }
+    public string? RunTypeCode { get; private set; }
     public int TotalSelected { get; private set; }
     public int TotalProcessed { get; private set; }
     public int TotalSucceeded { get; private set; }
@@ -45,6 +49,7 @@ public sealed class TopUpRun : AggregateRoot<long>
     public decimal TotalAmount { get; private set; }
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? CancelRequestedAtUtc { get; private set; }
     public string IdempotencyKey { get; private set; } = string.Empty;
     public string? Note { get; private set; }
 
@@ -98,6 +103,22 @@ public sealed class TopUpRun : AggregateRoot<long>
             string.IsNullOrWhiteSpace(ruleSnapshotJson) ? null : ruleSnapshotJson);
     }
 
+    public static TopUpRun CreateForContracts(long campaignId, int campaignVersion, DateTime utcNow)
+    {
+        return new TopUpRun
+        {
+            TopUpCampaignId = campaignId,
+            CampaignVersion = campaignVersion,
+            ScheduledForUtc = utcNow,
+            TriggerTypeCode = TopUpRunTriggerTypes.Scheduled,
+            RunStatusCode = TopUpRunStatusCodes.Previewed,
+            IdempotencyKey = $"contract-run-{campaignId}-{utcNow:yyyyMMddHHmmss}",
+            IsContractDriven = true,
+            RunTypeCode = "CONTRACT",
+            CreatedAtUtc = utcNow,
+        };
+    }
+
     public static TopUpRun Rehydrate(
         long id,
         long campaignId,
@@ -137,7 +158,7 @@ public sealed class TopUpRun : AggregateRoot<long>
 
     public Result Cancel(DateTime utcNow)
     {
-        Result transition = ValidateTransition(TopUpRunStatusCodes.Previewed, TopUpRunStatusCodes.Cancelled);
+        Result transition = ValidateTransition(RunStatusCode, TopUpRunStatusCodes.Cancelled);
         if (transition.IsFailure)
         {
             return transition;
@@ -222,6 +243,15 @@ public sealed class TopUpRun : AggregateRoot<long>
         return Result.Success();
     }
 
+    public void ReconcileCounters(int totalProcessed, int totalSucceeded, int totalFailed, int totalSkipped, decimal totalAmount)
+    {
+        TotalProcessed = totalProcessed;
+        TotalSucceeded = totalSucceeded;
+        TotalFailed = totalFailed;
+        TotalSkipped = totalSkipped;
+        TotalAmount = totalAmount;
+    }
+
     public void MarkManualRunRequested(DateTime occurredAtUtc)
     {
         if (TriggeredByLoginAccountId is long requestedByUserId)
@@ -229,6 +259,18 @@ public sealed class TopUpRun : AggregateRoot<long>
             Raise(new ManualRunRequestedEvent(Id, TopUpCampaignId, requestedByUserId, occurredAtUtc));
         }
     }
+
+    public void RequestCancel(DateTime utcNow)
+    {
+        if (IsTerminal || CancelRequestedAtUtc.HasValue)
+        {
+            return;
+        }
+
+        CancelRequestedAtUtc = utcNow;
+    }
+
+    public bool IsCancelRequested => CancelRequestedAtUtc.HasValue;
 
     private Result ValidateTransition(string from, string to)
     {

@@ -7,6 +7,7 @@ using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.DisableUserAccount;
+using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.EnableUserAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.ProvisionStudentSingpassAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.RetryIdentityProvisioning;
 
@@ -62,6 +63,14 @@ public sealed class ExternalIdentityProvisioningController(
     public async Task<IActionResult> DisableAccount(long userAccountId, CancellationToken cancellationToken)
     {
         var result = await commands.Send(new DisableUserAccountCommand(userAccountId), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.NotFound);
+    }
+
+    [HttpPost("user-accounts/{userAccountId:long}/enable")]
+    [Authorize(Policy = AuthorizationPolicies.ManageExternalAccounts)]
+    public async Task<IActionResult> EnableAccount(long userAccountId, CancellationToken cancellationToken)
+    {
+        var result = await commands.Send(new EnableUserAccountCommand(userAccountId), cancellationToken);
         return result.ToApiResponse(this, ApiResponseCodes.NotFound);
     }
 }

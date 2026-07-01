@@ -9,7 +9,7 @@
   "subsidyType": "PERCENTAGE",
   "criteriaTemplate": [
     { "criteriaType": "AGE", "connectorToNext": "AND", "displayOrder": 1 },
-    { "criteriaType": "GDP", "connectorToNext": "OR", "displayOrder": 2 },
+    { "criteriaType": "GHI", "connectorToNext": "AND", "displayOrder": 2 },
     { "criteriaType": "PCI", "connectorToNext": "AND", "displayOrder": 3 },
     { "criteriaType": "NATIONALITY", "connectorToNext": null, "displayOrder": 4 }
   ],
@@ -19,7 +19,7 @@
       "subsidyValue": 100,
       "displayOrder": 1,
       "criteriaValues": [
-        { "displayOrder": 1, "numberFrom": 13, "numberTo": 18, "nationalities": null },
+        { "displayOrder": 1, "numberFrom": 16, "numberTo": 18, "nationalities": null },
         { "displayOrder": 2, "numberFrom": 0, "numberTo": 4000, "nationalities": null },
         { "displayOrder": 3, "numberFrom": 0, "numberTo": 1000, "nationalities": null },
         { "displayOrder": 4, "numberFrom": null, "numberTo": null, "nationalities": ["Singapore Citizen", "Permanent Resident"] }
@@ -30,10 +30,10 @@
       "subsidyValue": 50,
       "displayOrder": 2,
       "criteriaValues": [
-        { "displayOrder": 1, "numberFrom": 13, "numberTo": 21, "nationalities": null },
+        { "displayOrder": 1, "numberFrom": 19, "numberTo": 30, "nationalities": null },
         { "displayOrder": 2, "numberFrom": 4000.01, "numberTo": 7000, "nationalities": null },
         { "displayOrder": 3, "numberFrom": 1000.01, "numberTo": 1750, "nationalities": null },
-        { "displayOrder": 4, "numberFrom": null, "numberTo": null, "nationalities": ["International Student", "Malaysian"] }
+        { "displayOrder": 4, "numberFrom": null, "numberTo": null, "nationalities": ["Foreigner"] }
       ]
     }
   ]

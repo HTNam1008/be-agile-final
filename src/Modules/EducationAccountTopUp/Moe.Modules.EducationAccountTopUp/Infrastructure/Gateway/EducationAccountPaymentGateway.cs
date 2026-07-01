@@ -58,6 +58,8 @@ internal sealed class EducationAccountPaymentGateway(MoeDbContext dbContext)
     {
         AccountHold hold = await dbContext.Set<AccountHold>().SingleAsync(x => x.Id == accountHoldId, cancellationToken);
         EducationAccount account = await dbContext.Set<EducationAccount>().SingleAsync(x => x.Id == hold.EducationAccountId, cancellationToken);
+        if (account.StatusCode != AccountStatuses.Active)
+            throw new EducationAccountPaymentUnavailableException("Education Account is not active.");
         if (account.CachedBalance < hold.HoldAmount) throw new InvalidOperationException("Education Account balance is insufficient.");
         DateTime now = DateTime.UtcNow;
         AccountTransaction transaction = AccountTransaction.Create(

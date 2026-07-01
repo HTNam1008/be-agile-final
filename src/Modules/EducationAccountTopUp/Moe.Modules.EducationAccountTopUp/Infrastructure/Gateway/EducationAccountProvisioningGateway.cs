@@ -1,5 +1,5 @@
-using Moe.Application.Abstractions.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
@@ -79,5 +79,16 @@ internal sealed class EducationAccountProvisioningGateway(
     public Task<bool> HasAccountAsync(long personId, CancellationToken cancellationToken)
     {
         return educationAccounts.ExistsForPersonAsync(personId, cancellationToken);
+    }
+
+    public Task<bool> HasActiveAccountAsync(long personId, CancellationToken cancellationToken)
+    {
+        return HasActiveAccountCoreAsync(personId, cancellationToken);
+    }
+
+    private async Task<bool> HasActiveAccountCoreAsync(long personId, CancellationToken cancellationToken)
+    {
+        EducationAccount? account = await educationAccounts.FindByPersonIdAsync(personId, cancellationToken);
+        return account?.StatusCode == AccountStatuses.Active;
     }
 }

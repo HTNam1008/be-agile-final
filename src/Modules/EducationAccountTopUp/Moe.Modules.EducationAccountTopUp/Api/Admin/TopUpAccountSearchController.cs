@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetAccountTaxonomy;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 
 namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
@@ -46,5 +47,21 @@ public sealed class TopUpAccountSearchController(IQueryDispatcher queries) : Con
         return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
     }
 
+    [HttpGet("taxonomy")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    public async Task<IActionResult> GetTaxonomy(
+        [FromQuery] long? organizationId,
+        CancellationToken cancellationToken)
+    {
+        GetAccountTaxonomyQuery query = new(organizationId);
 
+        var result = await queries.Send(query, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
+        }
+
+        return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
 }

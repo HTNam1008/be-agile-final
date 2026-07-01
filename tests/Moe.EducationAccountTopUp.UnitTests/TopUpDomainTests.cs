@@ -25,6 +25,8 @@ public sealed class TopUpDomainTests
             endDate: null,
             frequencyCode: null,
             frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
             currentUserId: 99,
             nowUtc: now
         );
@@ -33,16 +35,18 @@ public sealed class TopUpDomainTests
         campaign.CampaignStatusCode.Should().Be("DRAFT");
         campaign.CampaignVersion.Should().Be(1);
         campaign.DefaultTopUpAmount.Should().Be(50.0m);
+        campaign.DeliveryTypeCode.Should().Be("INSTANT");
+        campaign.MaxTotalAmount.Should().Be(50);
     }
 
     [Fact]
     public void TopUpCampaign_Update_ShouldIncrementVersion()
     {
         var now = DateTime.UtcNow;
-        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
+        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 50, 99, now);
 
-        campaign.Update("New Name", "New Desc", 100, "New Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
-
+        var result = campaign.Update("New Name", "New Desc", 100, "New Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100, 99, now);
+        result.IsSuccess.Should().BeTrue();
         campaign.CampaignVersion.Should().Be(2);
         campaign.CampaignName.Should().Be("New Name");
         campaign.DefaultTopUpAmount.Should().Be(100);
@@ -52,7 +56,7 @@ public sealed class TopUpDomainTests
     public void TopUpRun_UpdateProgress_ShouldAccumulateCorrectly()
     {
         var now = DateTime.UtcNow;
-        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, now);
+        var campaign = TopUpCampaign.Create(10, "TEST", "Name", null, "FIXED", 50, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 50, 99, now);
         var run = TopUpRun.CreateManual(campaign, "IDEM-1", 99, now, null);
 
         run.StartProcessing(now);
@@ -106,5 +110,208 @@ public sealed class TopUpDomainTests
 
         account.UpdateBalance(-20m);
         account.CachedBalance.Should().Be(30m);
+    }
+
+    [Fact]
+    public void FixedContract_FailedPayment_ShouldStayActiveAndNotAdvanceNextPaymentDate()
+    {
+        var now = new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc);
+        var contract = DynamicTopUpContract.Create(
+            campaignId: 1,
+            accountId: 100,
+            deliveryTypeCode: DeliveryType.FixedContract,
+            amountPerPayment: 300m,
+            maxTotalAmount: 900m,
+            frequencyCode: "MONTHLY",
+            frequencyInterval: 1,
+            qualifiedAtUtc: now,
+            nextPaymentDate: now);
+
+        contract.ContractStatus.Should().Be(ContractStatuses.Active);
+        contract.NextPaymentDate.Should().Be(now);
+
+        var payResult = contract.RecordPayment(300m, now);
+        payResult.IsSuccess.Should().BeTrue();
+        contract.TotalReceived.Should().Be(300m);
+        contract.CyclesCompleted.Should().Be(1);
+
+        var scheduledNext = now.AddMonths(1);
+        contract.SetNextPaymentDate(scheduledNext, now);
+
+        var nextRun = now.AddMonths(1);
+        contract.CanPayAt(nextRun).Should().BeTrue();
+
+        contract.ContractStatus.Should().Be(ContractStatuses.Active);
+        contract.NextPaymentDate.Should().Be(scheduledNext);
+
+        var savedNextPaymentDate = contract.NextPaymentDate;
+
+        contract.SetNextPaymentDate(savedNextPaymentDate, now);
+
+        contract.ContractStatus.Should().Be(ContractStatuses.Active);
+        contract.NextPaymentDate.Should().Be(savedNextPaymentDate);
+        contract.CanPayAt(nextRun.AddMinutes(1)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void TopUpCampaign_CannotChangeMaxTotalAmountAfterActivation()
+    {
+        var now = DateTime.UtcNow;
+        var campaign = TopUpCampaign.Create(
+            organizationId: 10,
+            campaignCode: "TEST-01",
+            campaignName: "Test Campaign",
+            description: "Desc",
+            recipientModeCode: "FIXED_SELECTION",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        var activateResult = campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
+        activateResult.IsSuccess.Should().BeTrue();
+        campaign.CampaignVersion.Should().Be(2);
+
+        var updateResult = campaign.Update(
+            campaignName: "Test Campaign",
+            description: "Desc",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 75m,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        updateResult.IsFailure.Should().BeTrue();
+        updateResult.Error.Code.Should().Be("TopUp.CannotChangeMaxTotalAmountAfterActive");
+        campaign.MaxTotalAmount.Should().Be(50m);
+        campaign.CampaignVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public void TopUpCampaign_CannotUpdateAfterActivation_WithSameMaxTotalAmount()
+    {
+        var now = DateTime.UtcNow;
+        var campaign = TopUpCampaign.Create(
+            organizationId: 10,
+            campaignCode: "TEST-01",
+            campaignName: "Test Campaign",
+            description: "Desc",
+            recipientModeCode: "FIXED_SELECTION",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        var activateResult = campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
+        activateResult.IsSuccess.Should().BeTrue();
+        campaign.CampaignVersion.Should().Be(2);
+
+        var updateResult = campaign.Update(
+            campaignName: "Updated Name",
+            description: "Updated Desc",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50m,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        updateResult.IsFailure.Should().BeTrue();
+        updateResult.Error.Code.Should().Be("TopUp.CannotUpdateActiveCampaign");
+        campaign.CampaignName.Should().Be("Test Campaign");
+        campaign.CampaignVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public void TopUpCampaign_CannotChangeCampaignCodeAfterActivation()
+    {
+        var now = DateTime.UtcNow;
+        var campaign = TopUpCampaign.Create(
+            organizationId: 10,
+            campaignCode: "TEST-01",
+            campaignName: "Test Campaign",
+            description: "Desc",
+            recipientModeCode: "FIXED_SELECTION",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        var codeResult = campaign.UpdateCampaignCode("NEW-CODE");
+        codeResult.IsSuccess.Should().BeTrue();
+        campaign.CampaignCode.Should().Be("NEW-CODE");
+
+        var activateResult = campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, now);
+        activateResult.IsSuccess.Should().BeTrue();
+
+        var lockedResult = campaign.UpdateCampaignCode("ANOTHER-CODE");
+        lockedResult.IsFailure.Should().BeTrue();
+        lockedResult.Error.Code.Should().Be("TopUp.CannotChangeCampaignCodeAfterActive");
+        campaign.CampaignCode.Should().Be("NEW-CODE");
+    }
+
+    [Fact]
+    public void TopUpCampaign_UpdateCampaignCode_RejectsEmpty()
+    {
+        var now = DateTime.UtcNow;
+        var campaign = TopUpCampaign.Create(
+            organizationId: 10,
+            campaignCode: "TEST-01",
+            campaignName: "Test Campaign",
+            description: "Desc",
+            recipientModeCode: "FIXED_SELECTION",
+            defaultTopUpAmount: 50.0m,
+            reason: "Subsidies",
+            scheduleTypeCode: "IMMEDIATE",
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: null,
+            frequencyCode: null,
+            frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50,
+            currentUserId: 99,
+            nowUtc: now
+        );
+
+        var emptyResult = campaign.UpdateCampaignCode("");
+        emptyResult.IsFailure.Should().BeTrue();
+        emptyResult.Error.Code.Should().Be("TopUp.CampaignCodeCannotBeEmpty");
     }
 }

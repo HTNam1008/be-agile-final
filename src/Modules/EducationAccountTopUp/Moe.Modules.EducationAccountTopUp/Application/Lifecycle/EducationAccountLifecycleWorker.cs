@@ -31,12 +31,23 @@ public sealed class EducationAccountLifecycleWorker(
             {
                 await RunIfDueAsync(stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception exception)
             {
                 logger.LogError(exception, "Unhandled error while running Education Account lifecycle processing.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
@@ -195,6 +206,10 @@ public sealed class EducationAccountLifecycleWorker(
             run.Complete(createdCount, closureSummary.ClosedCount, lifecycleAtUtc);
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return new EducationAccountLifecycleRunResult(createdCount, closureSummary.ClosedCount);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception)
         {

@@ -32,4 +32,12 @@ internal sealed class StubRecipientResolver(
     {
         return Task.FromResult(0);
     }
+
+    public Task<decimal> GetTotalResolvedAmountAsync(
+        long campaignId,
+        long runId,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0m);
+    }
 }

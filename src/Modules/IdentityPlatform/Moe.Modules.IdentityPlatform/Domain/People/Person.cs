@@ -87,6 +87,12 @@ public sealed class Person : AggregateRoot<long>
         UpdatedAtUtc = utcNow;
     }
 
+    public void Enable(DateTime utcNow)
+    {
+        PersonStatusCode = PersonStatusCodes.Active;
+        UpdatedAtUtc = utcNow;
+    }
+
     private static string? NormalizeNullable(string? value)
     {
         string? trimmed = value?.Trim();

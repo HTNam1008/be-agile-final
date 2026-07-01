@@ -5,8 +5,15 @@ namespace Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 
 public interface ITopUpCampaignReader
 {
-    Task<IReadOnlyList<CampaignListItem>> GetCampaignsAsync(
+    Task<CampaignListItem?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
+    Task<CampaignListResult> GetCampaignsAsync(
         IReadOnlyCollection<long>? accessibleOrgIds,
+        int pageNumber = 1,
+        int pageSize = 50,
+        string? search = null,
+        string? status = null,
+        DateOnly? dateFrom = null,
+        DateOnly? dateTo = null,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default);

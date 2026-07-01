@@ -244,6 +244,8 @@ public sealed class TopUpHistoryTests : IAsyncLifetime
             endDate: null,
             frequencyCode: null,
             frequencyInterval: null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 50m,
             currentUserId: actorId,
             nowUtc: createdAtUtc);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, actorId, createdAtUtc);
