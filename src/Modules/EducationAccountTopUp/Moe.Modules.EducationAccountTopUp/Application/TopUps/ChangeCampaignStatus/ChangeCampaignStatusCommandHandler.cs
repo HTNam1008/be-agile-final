@@ -6,7 +6,10 @@ using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 
@@ -16,10 +19,17 @@ internal sealed class ChangeCampaignStatusCommandHandler(
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
     IClock clock,
-    IAuditService audit) : ICommandHandler<ChangeCampaignStatusCommand>
+    IAuditService audit,
+    INotificationWriter notificationWriter,
+    ILogger<ChangeCampaignStatusCommandHandler> logger) : ICommandHandler<ChangeCampaignStatusCommand>
 {
     public async Task<Result> Handle(ChangeCampaignStatusCommand command, CancellationToken cancellationToken)
     {
+        logger.LogInformation(
+            "ChangeCampaignStatus started for campaign {TopUpCampaignId} with requested status {NewStatusCode}",
+            command.TopUpCampaignId,
+            command.NewStatusCode);
+
         TopUpCampaign? campaign = await campaigns.GetByIdAsync(command.TopUpCampaignId, cancellationToken);
 
         if (campaign is null)
@@ -81,6 +91,21 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        if (newStatusCode == TopUpCampaignStatusCodes.Active && currentUser.UserAccountId is long userAccountId)
+        {
+            logger.LogInformation(
+                "Campaign {TopUpCampaignId} saved successfully. Preparing activation notifications for user account {UserAccountId}",
+                campaign.Id,
+                userAccountId);
+
+            await NotifyCampaignLaunchAsync(campaign, userAccountId, cancellationToken);
+
+            if (string.Equals(campaign.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                await NotifyRecurringAlertAsync(campaign, userAccountId, cancellationToken);
+            }
+        }
+
         return Result.Success();
     }
 
@@ -95,5 +120,57 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
         DateTime targetDate = campaign.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         campaign.SetNextRunAt(targetDate < utcNow ? utcNow : targetDate);
+    }
+
+    private async Task NotifyCampaignLaunchAsync(
+        TopUpCampaign campaign,
+        long userAccountId,
+        CancellationToken cancellationToken)
+    {
+        logger.LogInformation(
+            "Creating CAMPAIGN_LAUNCH notification for campaign {TopUpCampaignId} and user account {UserAccountId}",
+            campaign.Id,
+            userAccountId);
+
+        await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId,
+                NotificationTypeCode.CampaignLaunch,
+                $"New Support Campaign: {campaign.CampaignCode}",
+                $"{campaign.CampaignName} has been launched for eligible students."),
+            cancellationToken);
+
+        logger.LogInformation(
+            "CAMPAIGN_LAUNCH notification requested for campaign {TopUpCampaignId} and user account {UserAccountId}",
+            campaign.Id,
+            userAccountId);
+    }
+
+    private async Task NotifyRecurringAlertAsync(
+        TopUpCampaign campaign,
+        long userAccountId,
+        CancellationToken cancellationToken)
+    {
+        string nextRunAt = campaign.NextRunAtUtc?.ToString("yyyy-MM-dd HH:mm") ?? "TBD";
+
+        logger.LogInformation(
+            "Creating RECURRING_ALERT notification for campaign {TopUpCampaignId} and user account {UserAccountId}. NextRunAt={NextRunAt}, FrequencyCode={FrequencyCode}",
+            campaign.Id,
+            userAccountId,
+            nextRunAt,
+            campaign.FrequencyCode ?? "N/A");
+
+        await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId,
+                NotificationTypeCode.RecurringAlert,
+                "Recurring Allowance Set",
+                $"Your next support payment is scheduled for {nextRunAt} (Frequency: {campaign.FrequencyCode ?? "N/A"})."),
+            cancellationToken);
+
+        logger.LogInformation(
+            "RECURRING_ALERT notification requested for campaign {TopUpCampaignId} and user account {UserAccountId}",
+            campaign.Id,
+            userAccountId);
     }
 }

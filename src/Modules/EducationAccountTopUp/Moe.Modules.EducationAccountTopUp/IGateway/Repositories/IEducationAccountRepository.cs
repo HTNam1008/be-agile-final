@@ -2,7 +2,7 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 
 namespace Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 
-internal interface IEducationAccountRepository
+public interface IEducationAccountRepository
 {
     Task<EducationAccount?> FindByIdAsync(long educationAccountId, CancellationToken cancellationToken);
 

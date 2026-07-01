@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
@@ -10,6 +11,10 @@ using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Application.StudentApplications;
@@ -21,7 +26,10 @@ public sealed class StudentFasApplicationService(
     IFasDocumentScanner scanner,
     IOrganizationUnitRepository organizations,
     IAuditService audit,
-    FasEmailNotificationService fasEmails)
+    FasEmailNotificationService fasEmails,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter,
+    ILogger<StudentFasApplicationService> logger)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
@@ -686,6 +694,7 @@ public sealed class StudentFasApplicationService(
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             await fasEmails.SendSubmissionAcknowledgementAsync(app.Id, ct);
+            await NotifySubmissionAsync(app.Id, ct);
             return await ApplicationReview(id, ct);
         });
     }
@@ -1218,6 +1227,27 @@ public sealed class StudentFasApplicationService(
         catch (JsonException)
         {
             return null;
+        }
+    }
+    private async Task NotifySubmissionAsync(long applicationId, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
+        if (userAccountId is null) return;
+
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.FasSubmitted,
+                "FAS Application Received",
+                $"Application {app.ApplicationNo} for FAS has been submitted."),
+            ct);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning("FAS submit notification failed. ApplicationId={ApplicationId} Error={ErrorCode}", applicationId, result.Error.Code);
         }
     }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);

@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
@@ -14,6 +18,9 @@ public sealed class RecipientProcessingService(
     IRecipientValidator recipientValidator,
     ITopUpExecutionEventPublisher events,
     ITopUpExecutionMetrics metrics,
+    IEducationAccountRepository educationAccounts,
+    IStudentNotificationRecipientResolver notificationRecipientResolver,
+    INotificationWriter notificationWriter,
     IUnitOfWork unitOfWork,
     IClock clock,
     ILogger<RecipientProcessingService> logger) : IRecipientProcessingService
@@ -28,6 +35,13 @@ public sealed class RecipientProcessingService(
         string campaignReason,
         CancellationToken cancellationToken = default)
     {
+        logger.LogInformation(
+            "ProcessRecipientAsync started for run {TopUpRunId}, education account {EducationAccountId}, amount {Amount}, organization unit {OrganizationUnitId}",
+            topUpRunId,
+            educationAccountId,
+            amount,
+            organizationUnitId);
+
         if (amount <= 0)
         {
             return Result<RecipientProcessingResult>.Failure(TopUpErrors.InvalidCreditAmount);
@@ -43,6 +57,11 @@ public sealed class RecipientProcessingService(
         if (transaction is not null
             && transaction.TransactionStatusCode != TopUpTransactionStatusCodes.Pending)
         {
+            logger.LogInformation(
+                "Existing non-pending transaction found for idempotency key {IdempotencyKey}: status {Status}",
+                idempotencyKey,
+                transaction.TransactionStatusCode);
+
             metrics.RecordRecipientProcessed(
                 topUpRunId,
                 transaction.TransactionStatusCode,
@@ -55,6 +74,12 @@ public sealed class RecipientProcessingService(
 
         if (transaction is null)
         {
+            logger.LogInformation(
+                "Creating new top-up transaction for run {TopUpRunId}, education account {EducationAccountId}, idempotency key {IdempotencyKey}",
+                topUpRunId,
+                educationAccountId,
+                idempotencyKey);
+
             transaction = TopUpTransaction.Create(topUpRunId, educationAccountId, amount, utcNow);
             transactions.Add(transaction);
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -67,6 +92,13 @@ public sealed class RecipientProcessingService(
 
         if (validation.IsFailure)
         {
+            logger.LogWarning(
+                "Recipient validation failed for education account {EducationAccountId} in run {TopUpRunId}: {ErrorCode} - {ErrorMessage}",
+                educationAccountId,
+                topUpRunId,
+                validation.Error.Code,
+                validation.Error.Message);
+
             Result skip = transaction.Skip(validation.Error.Message, utcNow);
             if (skip.IsFailure)
             {
@@ -96,6 +128,13 @@ public sealed class RecipientProcessingService(
 
             if (credit.IsFailure)
             {
+                logger.LogWarning(
+                    "Credit gateway failed for education account {EducationAccountId} in run {TopUpRunId}: {ErrorCode} - {ErrorMessage}",
+                    educationAccountId,
+                    topUpRunId,
+                    credit.Error.Code,
+                    credit.Error.Message);
+
                 metrics.RecordRecipientProcessed(
                     topUpRunId,
                     TopUpTransactionStatusCodes.Failed,
@@ -104,6 +143,7 @@ public sealed class RecipientProcessingService(
 
                 return await FailTransactionAsync(
                     transaction,
+                    educationAccountId,
                     credit.Error.Message,
                     utcNow,
                     cancellationToken);
@@ -114,6 +154,13 @@ public sealed class RecipientProcessingService(
             {
                 return Result<RecipientProcessingResult>.Failure(complete.Error);
             }
+
+            logger.LogInformation(
+                "Transaction completed for education account {EducationAccountId} in run {TopUpRunId}. AccountTransactionId={AccountTransactionId}, AlreadyProcessed={AlreadyProcessed}",
+                educationAccountId,
+                topUpRunId,
+                credit.Value.AccountTransactionId,
+                credit.Value.AlreadyProcessed);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -159,6 +206,7 @@ public sealed class RecipientProcessingService(
 
             return await FailTransactionAsync(
                 transaction,
+                educationAccountId,
                 CreditUnavailableReason,
                 utcNow,
                 cancellationToken);
@@ -167,10 +215,17 @@ public sealed class RecipientProcessingService(
 
     private async Task<Result<RecipientProcessingResult>> FailTransactionAsync(
         TopUpTransaction transaction,
+        long educationAccountId,
         string reason,
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation(
+            "FailTransactionAsync started for run {TopUpRunId}, education account {EducationAccountId}, reason {Reason}",
+            transaction.TopUpRunId,
+            educationAccountId,
+            reason);
+
         Result fail = transaction.Fail(reason, utcNow);
         if (fail.IsFailure)
         {
@@ -179,7 +234,63 @@ public sealed class RecipientProcessingService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await CreateTopUpFailureNotificationAsync(
+            transaction.TopUpRunId,
+            educationAccountId,
+            reason,
+            cancellationToken);
+
         return Result<RecipientProcessingResult>.Success(
             RecipientProcessingResult.Failed(transaction.Id, reason));
     }
+
+    private async Task CreateTopUpFailureNotificationAsync(
+        long topUpRunId,
+        long educationAccountId,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        EducationAccount? account = await educationAccounts.FindByIdAsync(
+            educationAccountId,
+            cancellationToken);
+
+        if (account is null)
+        {
+            logger.LogWarning(
+                "Skipping TOP_UP_FAILURE notification for education account {EducationAccountId}; account not found",
+                educationAccountId);
+            return;
+        }
+
+        long? userAccountId = await notificationRecipientResolver.FindUserAccountIdByPersonIdAsync(
+            account.PersonId,
+            cancellationToken);
+
+        if (userAccountId is null)
+        {
+            logger.LogWarning(
+                "Skipping TOP_UP_FAILURE notification for education account {EducationAccountId}; no user account found for person {PersonId}",
+                educationAccountId,
+                account.PersonId);
+            return;
+        }
+
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.TopUpFailure,
+                "Top-up Transfer Failed",
+                $"Reason: {reason}. Please contact the administrator."),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "Failed to create TOP_UP_FAILURE notification for user account {UserAccountId} on education account {EducationAccountId}: {ErrorCode}",
+                userAccountId.Value,
+                educationAccountId,
+                result.Error.Code);
+        }
+    }
 }
+

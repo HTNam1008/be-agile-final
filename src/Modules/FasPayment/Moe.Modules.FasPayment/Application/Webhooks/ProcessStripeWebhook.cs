@@ -4,6 +4,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.SharedKernel.Results;
@@ -18,6 +19,7 @@ internal sealed class ProcessStripeWebhookHandler(
     ICoursePaymentGateway courses,
     IFasCourseSubsidyGateway fasSubsidies,
     IEducationAccountPaymentGateway accounts,
+    FasInAppNotificationService fasNotifications,
     IClock clock,
     IPaymentPersistenceTracker persistenceTracker,
     IStripeWebhookCoordinator coordinator,
@@ -190,6 +192,7 @@ internal sealed class ProcessStripeWebhookHandler(
             cancellationToken);
         payment.MarkSuccessful(webhook.CreatedAtUtc);
         checkout.RecordSuccessfulPayment(webhook.CreatedAtUtc);
+        await fasNotifications.SendPaymentSucceededAsync(payment.Id, cancellationToken);
         await CancelCompetingStatementPaymentsAsync(payment, webhook.CreatedAtUtc, cancellationToken);
     }
 
@@ -260,6 +263,7 @@ internal sealed class ProcessStripeWebhookHandler(
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Failed, failedAtUtc);
         payment.MarkFailed(failedAtUtc);
         checkout.RecordPaymentFailure(failedAtUtc);
+        await fasNotifications.SendPaymentFailedAsync(payment.Id, cancellationToken);
     }
 
     private async Task RecordStatementExpirationAsync(

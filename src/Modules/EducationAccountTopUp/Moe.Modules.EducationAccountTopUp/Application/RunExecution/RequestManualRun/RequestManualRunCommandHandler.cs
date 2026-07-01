@@ -91,6 +91,8 @@ public sealed class RequestManualRunCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await dispatcher.EnqueueAsync(run.Id, cancellationToken);
 
+        Console.WriteLine($"[TopUp][RequestManualRun] Enqueued run {run.Id} for campaign {campaign.Id} by user {requestedByUserId}");
+
         return Result<RequestManualRunResponse>.Success(Map(run));
     }
 
