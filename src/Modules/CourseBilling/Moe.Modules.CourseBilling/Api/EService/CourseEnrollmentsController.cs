@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Api;
@@ -18,7 +19,8 @@ namespace Moe.Modules.CourseBilling.Api.EService;
 [EnableCors("EServiceCors")]
 public sealed class CourseEnrollmentsController(
     ICommandDispatcher commands,
-    IQueryDispatcher queries) : ControllerBase
+    IQueryDispatcher queries,
+    ILogger<CourseEnrollmentsController> logger) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> JoinCourse(
@@ -90,9 +92,19 @@ public sealed class CourseEnrollmentsController(
                 courseMaterialId,
                 string.Equals(preview, "pdf", StringComparison.OrdinalIgnoreCase)),
             cancellationToken);
-        return result.IsFailure
-            ? this.ToCourseBillingResponse(result)
-            : File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+        if (result.IsFailure)
+            return this.ToCourseBillingResponse(result);
+
+        FileStreamResult file = File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+        file.EnableRangeProcessing = result.Value.Content.CanSeek;
+        logger.LogInformation(
+            "Course material stream prepared. EnrollmentId={EnrollmentId}, CourseMaterialId={CourseMaterialId}, PreviewAsPdf={PreviewAsPdf}, CanSeek={CanSeek}, SizeBytes={SizeBytes}.",
+            enrollmentId,
+            courseMaterialId,
+            string.Equals(preview, "pdf", StringComparison.OrdinalIgnoreCase),
+            result.Value.Content.CanSeek,
+            result.Value.Content.CanSeek ? result.Value.Content.Length : (long?)null);
+        return file;
     }
 
     [HttpGet("{enrollmentId:long}/materials/{courseMaterialId:long}/office-preview")]

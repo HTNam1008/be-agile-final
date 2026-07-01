@@ -4,6 +4,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
+using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.SharedKernel.Results;
@@ -21,6 +22,7 @@ internal sealed class ProcessStripeWebhookHandler(
     IClock clock,
     IPaymentPersistenceTracker persistenceTracker,
     IStripeWebhookCoordinator coordinator,
+    PaymentFailedEmailService paymentFailedEmails,
     ILogger<ProcessStripeWebhookHandler> logger) : ICommandHandler<ProcessStripeWebhookCommand>
 {
     public async Task<Result> Handle(
@@ -129,7 +131,10 @@ internal sealed class ProcessStripeWebhookHandler(
                 if (checkout is StatementPaymentCheckoutSession statementCheckout)
                     await RecordStatementFailureAsync(statementCheckout, webhook.CreatedAtUtc, cancellationToken);
                 else if (checkout is BillPaymentCheckoutSession billCheckout && billCheckout.RecordPaymentFailure(webhook.CreatedAtUtc))
-                    await courses.ApplyPaymentFailureAsync(billCheckout.BillId, cancellationToken);
+                    await courses.ApplyPaymentFailureAsync(
+                        billCheckout.BillId,
+                        "The payment provider reported a failed payment. Please try again.",
+                        cancellationToken);
                 break;
             }
             case PaymentWebhookKind.CheckoutExpired:
@@ -137,7 +142,10 @@ internal sealed class ProcessStripeWebhookHandler(
                 if (checkout is StatementPaymentCheckoutSession statementCheckout)
                     await RecordStatementExpirationAsync(statementCheckout, webhook.CreatedAtUtc, cancellationToken);
                 else if (checkout is BillPaymentCheckoutSession billCheckout && billCheckout.ExpireBeforePayment(webhook.CreatedAtUtc))
-                    await courses.ApplyPaymentFailureAsync(billCheckout.BillId, cancellationToken);
+                    await courses.ApplyPaymentFailureAsync(
+                        billCheckout.BillId,
+                        "The payment session expired before completion. Please try again.",
+                        cancellationToken);
                 break;
             }
             case PaymentWebhookKind.SubscriptionDeleted:
@@ -165,12 +173,30 @@ internal sealed class ProcessStripeWebhookHandler(
 
         IReadOnlyCollection<PaymentPart> parts = await payments.ListPaymentPartsAsync(payment.Id, cancellationToken);
         PaymentPart? educationPart = parts.SingleOrDefault(x => x.PaymentMethodCode == PaymentMethodCodes.EducationAccount);
+        PaymentPart onlinePart = parts.Single(x => x.PaymentMethodCode == PaymentMethodCodes.OnlinePayment);
         if (educationPart?.AccountHoldId is long holdId)
         {
-            long accountTransactionId = await accounts.CaptureAsync(holdId, null, cancellationToken);
+            long accountTransactionId;
+            try
+            {
+                accountTransactionId = await accounts.CaptureAsync(holdId, null, cancellationToken);
+            }
+            catch (EducationAccountPaymentUnavailableException exception)
+            {
+                logger.LogWarning(
+                    exception,
+                    "Statement payment {PaymentId} could not capture Education Account hold {AccountHoldId}.",
+                    payment.Id,
+                    holdId);
+                educationPart.MarkCompleted(PaymentPartStatusCodes.Failed, webhook.CreatedAtUtc);
+                onlinePart.MarkCompleted(PaymentPartStatusCodes.Successful, webhook.CreatedAtUtc);
+                payment.MarkFailed(webhook.CreatedAtUtc);
+                checkout.RecordPaymentFailure(webhook.CreatedAtUtc);
+                return;
+            }
+
             educationPart.MarkCompleted(PaymentPartStatusCodes.Captured, webhook.CreatedAtUtc, accountTransactionId);
         }
-        PaymentPart onlinePart = parts.Single(x => x.PaymentMethodCode == PaymentMethodCodes.OnlinePayment);
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Successful, webhook.CreatedAtUtc);
         payment.AttachProviderReferences(
             webhook.ProviderPaymentIntentId,
@@ -260,6 +286,10 @@ internal sealed class ProcessStripeWebhookHandler(
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Failed, failedAtUtc);
         payment.MarkFailed(failedAtUtc);
         checkout.RecordPaymentFailure(failedAtUtc);
+        await paymentFailedEmails.SendStatementPaymentFailedAsync(
+            payment,
+            "The payment provider reported a failed payment. Please try again.",
+            cancellationToken);
     }
 
     private async Task RecordStatementExpirationAsync(
@@ -284,6 +314,10 @@ internal sealed class ProcessStripeWebhookHandler(
             .MarkCompleted(PaymentPartStatusCodes.Failed, expiredAtUtc);
         payment.MarkExpired(expiredAtUtc);
         checkout.ExpireBeforePayment(expiredAtUtc);
+        await paymentFailedEmails.SendStatementPaymentFailedAsync(
+            payment,
+            "The payment session expired before completion. Please try again.",
+            cancellationToken);
     }
 
     private async Task ApplyRefundAsync(ParsedPaymentWebhook webhook, CancellationToken cancellationToken)

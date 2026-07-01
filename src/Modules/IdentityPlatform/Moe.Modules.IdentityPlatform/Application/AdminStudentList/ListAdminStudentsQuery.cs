@@ -9,6 +9,7 @@ internal sealed record ListAdminStudentsQuery(
     IReadOnlyCollection<string> LevelCodes,
     string? ClassCode,
     AdminStudentAccountStatusFilter AccountStatus,
+    AdminStudentPortalAccessStatusFilter PortalAccessStatus,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
     int PageSize,

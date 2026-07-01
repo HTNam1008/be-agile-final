@@ -24,6 +24,7 @@ public sealed class CloseManualAccountHandlerTests
     private readonly FakeAdminAccessControl _adminAccess = new();
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 6, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly FakeUnitOfWork _unitOfWork = new();
+    private readonly FakeAccountHoldRepository _accountHolds = new();
     private readonly FakeAuditService _audit = new();
     private readonly FakeEmailDeliveryGateway _mailGateway = new();
 
@@ -171,6 +172,26 @@ public sealed class CloseManualAccountHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenPendingHoldExists_ReturnsPendingPaymentInProgressAndLeavesAccountOpen()
+    {
+        EducationAccount account = AddAccount(1008, personId: 5008);
+        _people.OrganizationByPersonId[5008] = 10;
+        _accountHolds.PendingHoldAccountIds.Add(account.Id);
+        CloseManualAccountHandler handler = CreateHandler();
+
+        var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(EducationAccountErrors.PendingPaymentInProgress);
+        account.StatusCode.Should().Be(AccountStatuses.Active);
+        _audit.Calls.Should().BeEmpty();
+        _unitOfWork.SaveCalls.Should().Be(0);
+        _mailGateway.Messages.Should().BeEmpty();
+        _accountHolds.CheckedAccountIds.Should().ContainSingle().Which.Should().Be(account.Id);
+        _accountHolds.CheckedUtcNow.Should().ContainSingle().Which.Should().Be(_clock.UtcNow.UtcDateTime);
+    }
+
+    [Fact]
     public async Task Handle_WhenAuditServiceThrows_PropagatesAndDoesNotSwallow()
     {
         EducationAccount account = AddAccount(1006, personId: 5006);
@@ -204,6 +225,7 @@ public sealed class CloseManualAccountHandlerTests
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             _educationAccounts,
+            _accountHolds,
             _people,
             _currentUser,
             _adminAccess,
@@ -273,6 +295,23 @@ public sealed class CloseManualAccountHandlerTests
         }
     }
 
+    private sealed class FakeAccountHoldRepository : IAccountHoldRepository
+    {
+        public HashSet<long> PendingHoldAccountIds { get; } = [];
+        public List<long> CheckedAccountIds { get; } = [];
+        public List<DateTime> CheckedUtcNow { get; } = [];
+
+        public Task<bool> HasPendingHoldAsync(
+            long educationAccountId,
+            DateTime utcNow,
+            CancellationToken cancellationToken)
+        {
+            CheckedAccountIds.Add(educationAccountId);
+            CheckedUtcNow.Add(utcNow);
+            return Task.FromResult(PendingHoldAccountIds.Contains(educationAccountId));
+        }
+    }
+
     private sealed class FakeCurrentUser : ICurrentUser
     {
         public long? UserAccountId => 42;
@@ -311,6 +350,8 @@ public sealed class CloseManualAccountHandlerTests
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

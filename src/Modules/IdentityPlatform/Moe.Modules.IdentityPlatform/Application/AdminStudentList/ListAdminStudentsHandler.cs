@@ -29,6 +29,7 @@ internal sealed class ListAdminStudentsHandler(
             query.LevelCodes,
             query.ClassCode,
             query.AccountStatus,
+            query.PortalAccessStatus,
             query.EnrollmentStatus,
             Math.Max(query.Page, 1),
             Math.Clamp(query.PageSize, 1, 100),

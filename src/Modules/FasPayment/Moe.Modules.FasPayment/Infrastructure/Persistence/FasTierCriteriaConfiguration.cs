@@ -17,6 +17,7 @@ internal sealed class FasTierCriteriaConfiguration : IEntityTypeConfiguration<Fa
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("FASTierCriteriaId").UseIdentityColumn();
         builder.Property(x => x.FasTierId).HasColumnName("FASTierId");
+        builder.Property(x => x.FasTierCriteriaGroupId).HasColumnName("FASTierCriteriaGroupId");
         builder.Property(x => x.CriteriaType).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.NumberFrom).HasPrecision(18, 2);
         builder.Property(x => x.NumberTo).HasPrecision(18, 2);
@@ -25,5 +26,6 @@ internal sealed class FasTierCriteriaConfiguration : IEntityTypeConfiguration<Fa
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("UpdatedAt");
         builder.HasIndex(x => new { x.FasTierId, x.DisplayOrder }).IsUnique();
         builder.HasOne<FasTier>().WithMany().HasForeignKey(x => x.FasTierId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<FasTierCriteriaGroup>().WithMany().HasForeignKey(x => x.FasTierCriteriaGroupId).OnDelete(DeleteBehavior.Restrict);
     }
 }

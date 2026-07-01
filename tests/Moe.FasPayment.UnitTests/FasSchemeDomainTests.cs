@@ -13,10 +13,31 @@ public sealed class FasSchemeDomainTests
     {
         Action emptyGrant = () => FasScheme.CreateDraft("S", " ", "Name", null, Today().AddDays(1), Today().AddMonths(6), 1, Now);
         Action reversed = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddMonths(6), Today().AddDays(1), 1, Now);
+        Action equalDates = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(1), Today().AddDays(1), 1, Now);
         Action pastStart = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(-1), Today().AddMonths(6), 1, Now);
         emptyGrant.Should().Throw<ArgumentException>();
         reversed.Should().Throw<ArgumentException>();
+        equalDates.Should().Throw<ArgumentException>().WithMessage("*End date must be after start date.*");
         pastStart.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void CreateDraft_rejects_start_date_before_singapore_business_day()
+    {
+        DateTime sgtEarlyMorning = new(2026, 6, 30, 16, 30, 0, DateTimeKind.Utc);
+
+        Action act = () => FasScheme.CreateDraft(
+            "S-SGT",
+            "G-SGT",
+            "Singapore day scheme",
+            null,
+            new DateOnly(2026, 6, 30),
+            new DateOnly(2026, 8, 1),
+            1,
+            sgtEarlyMorning);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Start date cannot be before today.*");
     }
 
     [Fact]

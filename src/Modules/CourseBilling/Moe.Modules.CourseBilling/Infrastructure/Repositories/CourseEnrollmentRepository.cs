@@ -552,7 +552,7 @@ internal sealed class CourseEnrollmentRepository(
             .First();
 
         return new AdminAddedEnrollmentPaymentDisplays(
-            $"SGD {feePayable:N2}",
+            $"SGD {feePayable.ToString("N2", CultureInfo.InvariantCulture)}",
             dueDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture));
     }
 

@@ -1873,7 +1873,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EducationAccountId", "IsActive");
+                    b.HasIndex("EducationAccountId")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.ToTable("SettlementPreference", "account");
                 });
@@ -3151,6 +3153,10 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("int");
 
+                    b.Property<long>("FasTierCriteriaGroupId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASTierCriteriaGroupId");
+
                     b.Property<long>("FasTierId")
                         .HasColumnType("bigint")
                         .HasColumnName("FASTierId");
@@ -3169,6 +3175,8 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FasTierCriteriaGroupId");
+
                     b.HasIndex("FasTierId", "DisplayOrder")
                         .IsUnique();
 
@@ -3180,6 +3188,38 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                             t.HasCheckConstraint("CK_FASTierCriteria_Type", "[CriteriaType] IN ('AGE','GDP','GHI','PCI','NATIONALITY','PARENT_NATIONALITY','ACCOUNT_TYPE')");
                         });
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaGroup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASTierCriteriaGroupId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<long>("FasTierId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("FASTierId");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FasTierId", "DisplayOrder")
+                        .IsUnique();
+
+                    b.ToTable("FASTierCriteriaGroup", "fas");
                 });
 
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaNationality", b =>
@@ -10585,6 +10625,15 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasDiscriminator().HasValue("STATEMENT");
                 });
 
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.SettlementPreference", b =>
+                {
+                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount", null)
+                        .WithMany()
+                        .HasForeignKey("EducationAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRunItem", b =>
                 {
                     b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts.EducationAccount", null)
@@ -10705,6 +10754,21 @@ namespace Moe.StudentFinance.Migrations.Migrations
                 });
 
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteria", b =>
+                {
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaGroup", null)
+                        .WithMany()
+                        .HasForeignKey("FasTierCriteriaGroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasTier", null)
+                        .WithMany()
+                        .HasForeignKey("FasTierId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Fas.FasTierCriteriaGroup", b =>
                 {
                     b.HasOne("Moe.Modules.FasPayment.Domain.Fas.FasTier", null)
                         .WithMany()

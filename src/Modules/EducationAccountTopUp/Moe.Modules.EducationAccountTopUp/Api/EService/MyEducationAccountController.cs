@@ -8,6 +8,7 @@ using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
+using Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.SharedKernel.Results;
 
@@ -20,7 +21,8 @@ namespace Moe.Modules.EducationAccountTopUp.Api.EService;
 [EnableCors("EServiceCors")]
 public sealed class MyEducationAccountController(
     ICurrentUser currentUser,
-    IQueryDispatcher queries) : ControllerBase
+    IQueryDispatcher queries,
+    ICommandDispatcher commands) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
@@ -70,6 +72,65 @@ public sealed class MyEducationAccountController(
         return ToAccountResponse(result);
     }
 
+    [HttpGet("settlement-preference")]
+    [ProducesResponseType(typeof(ApiResponse<SettlementPreferenceResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSettlementPreference(CancellationToken cancellationToken)
+    {
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
+        {
+            return ApiResponseFactory.Failure(
+                EducationAccountErrors.AuthenticatedStudentRequired,
+                ApiResponseCodes.Unauthorized,
+                HttpContext.TraceIdentifier);
+        }
+
+        Result<SettlementPreferenceResponse> result = await queries.Send(
+            new GetSettlementPreferenceQuery(personId.Value),
+            cancellationToken);
+
+        return ToAccountResponse(result);
+    }
+
+    [HttpPut("settlement-preference")]
+    [ProducesResponseType(typeof(ApiResponse<SettlementPreferenceResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SetSettlementPreference(
+        [FromBody] SetSettlementPreferenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return ApiResponseFactory.Failure(
+                EducationAccountErrors.InvalidSettlementPreference,
+                ApiResponseCodes.BadRequest,
+                HttpContext.TraceIdentifier);
+        }
+
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
+        {
+            return ApiResponseFactory.Failure(
+                EducationAccountErrors.AuthenticatedStudentRequired,
+                ApiResponseCodes.Unauthorized,
+                HttpContext.TraceIdentifier);
+        }
+
+        Result<SettlementPreferenceResponse> result = await commands.Send(
+            new SetSettlementPreferenceCommand(
+                personId.Value,
+                request.DestinationTypeCode,
+                request.BankName,
+                request.BankAccountNumber,
+                request.ExpectedUpdatedAtUtc),
+            cancellationToken);
+
+        return ToAccountResponse(result);
+    }
+
     private IActionResult ToAccountResponse<T>(Result<T> result)
     {
         if (result.IsSuccess)
@@ -81,7 +142,9 @@ public sealed class MyEducationAccountController(
             ? ApiResponseCodes.NotFound
             : result.Error == EducationAccountErrors.AuthenticatedStudentRequired
                 ? ApiResponseCodes.Unauthorized
-                : ApiResponseCodes.BadRequest;
+                : result.Error == EducationAccountErrors.SettlementPreferenceConflict
+                    ? ApiResponseCodes.Conflict
+                    : ApiResponseCodes.BadRequest;
 
         return ApiResponseFactory.Failure(
             result.Error,

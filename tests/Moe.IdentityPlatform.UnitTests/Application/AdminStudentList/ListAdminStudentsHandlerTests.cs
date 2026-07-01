@@ -25,6 +25,7 @@ public sealed class ListAdminStudentsHandlerTests
                 LevelCodes: [],
                 ClassCode: null,
                 AccountStatus: AdminStudentAccountStatusFilter.All,
+                PortalAccessStatus: AdminStudentPortalAccessStatusFilter.All,
                 EnrollmentStatus: AdminStudentEnrollmentStatusFilter.All,
                 Page: 1,
                 PageSize: 20,
@@ -51,6 +52,7 @@ public sealed class ListAdminStudentsHandlerTests
                 LevelCodes: [],
                 ClassCode: null,
                 AccountStatus: AdminStudentAccountStatusFilter.All,
+                PortalAccessStatus: AdminStudentPortalAccessStatusFilter.All,
                 EnrollmentStatus: AdminStudentEnrollmentStatusFilter.All,
                 Page: 1,
                 PageSize: 20,
@@ -135,5 +137,7 @@ public sealed class ListAdminStudentsHandlerTests
     private sealed class TestClock : IClock
     {
         public DateTimeOffset UtcNow => new(2026, 6, 22, 8, 0, 0, TimeSpan.Zero);
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 }
