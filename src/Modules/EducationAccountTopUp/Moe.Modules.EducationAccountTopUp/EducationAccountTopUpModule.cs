@@ -122,11 +122,23 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IRunReconciliationService, RunReconciliationService>();
         services.AddScoped<IPendingTransactionRecoveryService, PendingTransactionRecoveryService>();
         // Workers
-        services.AddHostedService<TopUpRunWorker>();
-        services.AddHostedService<TopUpSchedulerWorker>();
-        services.AddHostedService<TopUpAssessmentWorker>();
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:RunWorker"))
+        {
+            services.AddHostedService<TopUpRunWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Scheduler"))
+        {
+            services.AddHostedService<TopUpSchedulerWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Assessment"))
+        {
+            services.AddHostedService<TopUpAssessmentWorker>();
+        }
         services.AddSingleton<EducationAccountLifecycleWorker>();
-        services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Lifecycle"))
+        {
+            services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
+        }
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
 
         // Commands
@@ -184,4 +196,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandValidator>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }
