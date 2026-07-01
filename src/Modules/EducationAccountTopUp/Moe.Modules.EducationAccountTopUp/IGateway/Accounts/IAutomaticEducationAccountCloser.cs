@@ -5,7 +5,14 @@ namespace Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 public sealed record AutomaticEducationAccountClosureResult(
     long EducationAccountId,
     long PersonId,
-    bool Closed);
+    bool Closed,
+    string? SkipReasonCode = null);
+
+public static class AutomaticEducationAccountClosureSkipReasonCodes
+{
+    public const string AlreadyClosed = "ALREADY_CLOSED";
+    public const string PendingPaymentHold = "PENDING_PAYMENT_HOLD";
+}
 
 public sealed record AutomaticEducationAccountClosureSummary(
     int ActiveAccountCount,

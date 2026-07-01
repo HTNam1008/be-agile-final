@@ -276,6 +276,9 @@ public sealed class AdminAccountDetailsHandlerTests
         string? preferredEmail = "student@example.sg")
         => new(
             personId,
+            "ACTIVE",
+            9001,
+            "ACTIVE",
             "S****123A",
             "Student One",
             new DateOnly(2010, 1, 1),
@@ -359,6 +362,8 @@ public sealed class AdminAccountDetailsHandlerTests
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

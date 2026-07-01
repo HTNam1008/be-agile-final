@@ -23,6 +23,7 @@ internal sealed class CoursePaymentGateway(
     ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
 {
     private const string CourseDetailUrl = "http://localhost:5173/portal/courses";
+    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
 
     public Task<PayableCourseBill?> FindPayableBillAsync(
         long billId,
@@ -88,15 +89,18 @@ internal sealed class CoursePaymentGateway(
         }
     }
 
-    public async Task ApplyPaymentFailureAsync(long billId, CancellationToken cancellationToken)
+    public async Task ApplyPaymentFailureAsync(
+        long billId,
+        string failureReason,
+        CancellationToken cancellationToken)
     {
-        long enrollmentId = await dbContext.Set<Bill>()
-            .Where(bill => bill.Id == billId)
-            .Select(bill => bill.CourseEnrollmentId)
-            .SingleAsync(cancellationToken);
+        Bill bill = await dbContext.Set<Bill>()
+            .SingleAsync(candidate => candidate.Id == billId, cancellationToken);
         CourseEnrollment enrollment = await dbContext.Set<CourseEnrollment>()
-            .SingleAsync(candidate => candidate.Id == enrollmentId, cancellationToken);
+            .SingleAsync(candidate => candidate.Id == bill.CourseEnrollmentId, cancellationToken);
         enrollment.LockForPaymentFailure();
+
+        await SendPaymentFailedEmailAsync(bill, enrollment, failureReason, cancellationToken);
     }
 
     public async Task ApplyFullRefundAsync(long billId, DateTime refundedAtUtc, CancellationToken cancellationToken)
@@ -396,6 +400,118 @@ internal sealed class CoursePaymentGateway(
                 "Course enrollment success email threw an exception. CourseEnrollmentId={CourseEnrollmentId}",
                 enrollment.Id);
         }
+    }
+
+    private async Task SendPaymentFailedEmailAsync(
+        Bill bill,
+        CourseEnrollment enrollment,
+        string failureReason,
+        CancellationToken cancellationToken)
+    {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Payment failure email skipped because MailDelivery is disabled. PersonId={PersonId} BillId={BillId}",
+                enrollment.PersonId,
+                bill.Id);
+            return;
+        }
+
+        EmailRecipient? recipient;
+        try
+        {
+            recipient = await recipientResolver.ResolveForPersonAsync(enrollment.PersonId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Payment failure email recipient resolution failed. PersonId={PersonId} BillId={BillId}", enrollment.PersonId, bill.Id);
+            return;
+        }
+
+        if (recipient is null)
+        {
+            logger.LogWarning("Payment failure email skipped because no valid recipient was found. PersonId={PersonId} BillId={BillId}", enrollment.PersonId, bill.Id);
+            return;
+        }
+
+        Course course = await dbContext.Set<Course>()
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
+        Person? person = await dbContext.Set<Person>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == enrollment.PersonId, cancellationToken);
+
+        string studentName = string.IsNullOrWhiteSpace(person?.OfficialFullName)
+            ? "Student"
+            : person.OfficialFullName.Trim();
+        string itemName = string.IsNullOrWhiteSpace(course.CourseName)
+            ? bill.BillNumber
+            : course.CourseName.Trim();
+        string amountDisplay = $"SGD {bill.OutstandingAmount.ToString("N2", CultureInfo.InvariantCulture)}";
+        string reason = string.IsNullOrWhiteSpace(failureReason)
+            ? "Payment could not be processed."
+            : failureReason.Trim();
+
+        const string subject = "Action Required: Your Payment Failed";
+        string plainTextBody = string.Join(Environment.NewLine, [
+            "MOE SEEDS",
+            "Payment failed",
+            string.Empty,
+            $"Hello {studentName}, your payment of {amountDisplay} for {itemName} could not be processed.",
+            $"Reason: {reason}.",
+            string.Empty,
+            $"Retry Payment -> {PaymentDashboardUrl}"
+        ]);
+        string htmlBody = BuildPaymentFailedHtmlBody(studentName, amountDisplay, itemName, reason);
+
+        try
+        {
+            Result result = await mailGateway.SendAsync(
+                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "Payment failure email failed. BillId={BillId} ErrorCode={ErrorCode}",
+                    bill.Id,
+                    result.Error.Code);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Payment failure email threw an exception. BillId={BillId}", bill.Id);
+        }
+    }
+
+    private static string BuildPaymentFailedHtmlBody(
+        string studentName,
+        string amountDisplay,
+        string itemName,
+        string failureReason)
+    {
+        string encodedStudentName = WebUtility.HtmlEncode(studentName);
+        string encodedAmount = WebUtility.HtmlEncode(amountDisplay);
+        string encodedItemName = WebUtility.HtmlEncode(itemName);
+        string encodedReason = WebUtility.HtmlEncode(failureReason);
+
+        StringBuilder builder = new();
+        EmailTemplateBranding.AppendShellStart(builder);
+        EmailTemplateBranding.AppendHeader(builder, "Action required: payment failed");
+        builder.Append("<tr><td style=\"padding:30px;\">");
+        builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
+            .Append(encodedStudentName)
+            .Append(", your payment could not be processed.</p>");
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
+        AppendSummaryRow(builder, "Amount", encodedAmount, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        AppendSummaryRow(builder, "Course/Bill", encodedItemName, "#f8fafc", "#334155");
+        AppendSummaryRow(builder, "Reason", encodedReason, "#fff7ed", "#9a3412");
+        builder.Append("</table>");
+        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Retry Payment");
+        builder.Append("</td></tr>");
+        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after a failed payment attempt.</td></tr>");
+        builder.Append("</table></td></tr></table></body></html>");
+        return builder.ToString();
     }
 
     private static string BuildCourseEnrollmentSuccessHtmlBody(

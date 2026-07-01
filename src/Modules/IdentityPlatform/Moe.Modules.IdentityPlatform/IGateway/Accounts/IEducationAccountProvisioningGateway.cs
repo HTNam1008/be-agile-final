@@ -18,4 +18,6 @@ public interface IEducationAccountProvisioningGateway
         bool saveChanges = true);
 
     Task<bool> HasAccountAsync(long personId, CancellationToken cancellationToken);
+
+    Task<bool> HasActiveAccountAsync(long personId, CancellationToken cancellationToken);
 }

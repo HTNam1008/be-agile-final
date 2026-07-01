@@ -1,4 +1,5 @@
 using FluentValidation;
+using Moe.Application.Abstractions.Clock;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
@@ -7,10 +8,13 @@ namespace Moe.Modules.FasPayment.Application.AdminFasSchemes;
 
 internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<CreateFasSchemeRequest>, IValidationFailureStatusCodeProvider
 {
+    private readonly IClock? _clock;
+
     public int ValidationFailureStatusCode => ApiResponseCodes.UnprocessableEntity;
 
-    public CreateFasSchemeRequestValidator()
+    public CreateFasSchemeRequestValidator(IClock? clock = null)
     {
+        _clock = clock;
         RuleFor(x => x.SchemeCode).NotEmpty().MaximumLength(50).Must(BeTrimmed).WithMessage("Scheme code cannot contain leading or trailing spaces.");
         RuleFor(x => x.GrantCode).MaximumLength(100).Must(BeTrimmedOrEmpty).WithMessage("Grant code cannot contain leading or trailing spaces.");
         RuleFor(x => x.Name).NotEmpty().MaximumLength(255).Must(BeTrimmed).WithMessage("Name cannot contain leading or trailing spaces.");
@@ -22,8 +26,9 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         RuleFor(x => x.CourseIds).Must(x => x is not null && x.Count <= 500).WithMessage("A scheme can target at most 500 courses.");
         RuleFor(x => x.CourseIds).Must(x => x is not null && x.All(id => id > 0) && x.Distinct().Count() == x.Count).WithMessage("Course IDs must be positive and unique.");
         RuleFor(x => x.SubsidyType).Must(x => x is "FIXED" or "PERCENTAGE");
-        RuleFor(x => x.CriteriaTemplate).NotNull().NotEmpty();
-        RuleFor(x => x.CriteriaTemplate).Must(x => x is not null && x.Count <= 10).WithMessage("A scheme can have at most 10 criteria.");
+        RuleFor(x => x).Must(HasCriteria).WithMessage("A scheme requires at least one criterion.");
+        RuleFor(x => x.CriteriaTemplate).Must(x => x is null || x.Count <= 10).WithMessage("A scheme can have at most 10 criteria.");
+        RuleFor(x => x.CriteriaGroups).Must(x => x is null || x.Count <= 10).WithMessage("A scheme can have at most 10 criteria groups.");
         RuleFor(x => x.Tiers).NotNull().NotEmpty();
         RuleFor(x => x.Tiers).Must(x => x is not null && x.Count <= 20).WithMessage("A scheme can have at most 20 tiers.");
         RuleFor(x => x).Custom(ValidateStructure);
@@ -31,17 +36,35 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
 
     private static void ValidateStructure(CreateFasSchemeRequest request, ValidationContext<CreateFasSchemeRequest> context)
     {
-        if (request.CriteriaTemplate is null || request.Tiers is null) return;
-        if (request.CriteriaTemplate.Any(item => item is null))
+        if (request.Tiers is null) return;
+        if (request.CriteriaTemplate is not null && request.CriteriaTemplate.Any(item => item is null))
         {
             context.AddFailure("CriteriaTemplate", "Criteria template entries cannot be null.");
             return;
         }
-        ValidateOrders(request.CriteriaTemplate.Select(x => x.DisplayOrder), "criteriaTemplate", context);
+        if (request.CriteriaGroups is not null && request.CriteriaGroups.Any(group => group is null || group.Criteria is null || group.Criteria.Any(item => item is null)))
+        {
+            context.AddFailure("CriteriaGroups", "Criteria groups and criteria entries cannot be null.");
+            return;
+        }
+
+        if (request.CriteriaGroups is null or { Count: 0 })
+        {
+            ValidateLegacyConnectorShape(request.CriteriaTemplate, context);
+        }
+
+        IReadOnlyList<FasCriteriaGroupRequest> groups = FasCriteriaGroupNormalizer.Normalize(request);
+        ValidateGroups(groups, context);
+        FasCriteriaTemplateItem[] template = FasCriteriaGroupNormalizer.Flatten(groups).OrderBy(x => x.DisplayOrder).ToArray();
+        if (template.Length > 10) context.AddFailure("CriteriaTemplate", "A scheme can have at most 10 criteria.");
+        ValidateOrders(template.Select(x => x.DisplayOrder), "criteriaTemplate", context);
+        ValidateRequiredCriteria(template, context);
         ValidateOrders(request.Tiers.Where(x => x is not null).Select(x => x.DisplayOrder), "tiers", context);
-        var template = request.CriteriaTemplate.OrderBy(x => x.DisplayOrder).ToArray();
-        var duplicateCriteriaTypes = template.GroupBy(x => x.CriteriaType).Where(x => x.Count() > 1).Select(x => x.Key).ToArray();
-        if (duplicateCriteriaTypes.Length > 0) context.AddFailure("CriteriaTemplate", $"Criteria types must be unique: {string.Join(", ", duplicateCriteriaTypes)}.");
+        foreach (FasCriteriaGroupRequest group in groups)
+        {
+            var duplicateCriteriaTypes = group.Criteria.GroupBy(x => x.CriteriaType).Where(x => x.Count() > 1).Select(x => x.Key).ToArray();
+            if (duplicateCriteriaTypes.Length > 0) context.AddFailure("CriteriaGroups", $"Criteria types must be unique within a group: {string.Join(", ", duplicateCriteriaTypes)}.");
+        }
         var duplicateTierLabels = request.Tiers.Where(x => x is not null).GroupBy(x => x!.Label?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase).Where(x => x.Count() > 1).Select(x => x.Key).ToArray();
         if (duplicateTierLabels.Length > 0) context.AddFailure("Tiers", $"Tier labels must be unique: {string.Join(", ", duplicateTierLabels)}.");
         for (int i = 0; i < template.Length; i++)
@@ -92,7 +115,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
                 }
                 else if (!value.NumberFrom.HasValue || !value.NumberTo.HasValue || value.NumberFrom > value.NumberTo || value.Nationalities?.Count > 0) context.AddFailure("Tiers", "Numeric criteria require a valid range and no nationalities.");
                 else if (value.NumberFrom < 0 || value.NumberTo < 0) context.AddFailure("Tiers", $"{item.CriteriaType} ranges cannot be negative.");
-                else if (item.CriteriaType == "AGE" && value.NumberTo > 120) context.AddFailure("Tiers", "Age ranges cannot exceed 120.");
+                else if (item.CriteriaType == "AGE" && (value.NumberFrom < 16 || value.NumberTo > 30)) context.AddFailure("Tiers", "Age ranges must be within 16 to 30.");
             }
         }
     }
@@ -103,7 +126,73 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         if (!values.SequenceEqual(Enumerable.Range(1, values.Length))) context.AddFailure(name, "Display orders must be unique and contiguous from 1.");
     }
 
-    private static DateOnly Today() => DateOnly.FromDateTime(DateTime.UtcNow);
+    private static bool HasCriteria(CreateFasSchemeRequest request)
+        => request.CriteriaGroups?.Any(group => group.Criteria?.Count > 0) == true ||
+           request.CriteriaTemplate?.Count > 0;
+
+    private static void ValidateGroups(IReadOnlyList<FasCriteriaGroupRequest> groups, ValidationContext<CreateFasSchemeRequest> context)
+    {
+        if (groups.Count == 0)
+        {
+            context.AddFailure("CriteriaGroups", "A scheme requires at least one criteria group.");
+            return;
+        }
+
+        ValidateOrders(groups.Select(group => group.DisplayOrder), "criteriaGroups", context);
+
+        foreach (FasCriteriaGroupRequest group in groups)
+        {
+            if (group.Criteria.Count == 0)
+            {
+                context.AddFailure("CriteriaGroups", $"Criteria group {group.DisplayOrder} requires at least one criterion.");
+                continue;
+            }
+
+            string[] invalidConnectors = group.Criteria
+                .Where(item => item.ConnectorToNext is not (null or "AND"))
+                .Select(item => item.ConnectorToNext!)
+                .Distinct()
+                .ToArray();
+
+            if (invalidConnectors.Length > 0)
+            {
+                context.AddFailure("CriteriaGroups", "Criteria inside a group may only use AND. Groups are combined with OR.");
+            }
+        }
+    }
+
+    private static void ValidateLegacyConnectorShape(IReadOnlyList<FasCriteriaTemplateItem>? template, ValidationContext<CreateFasSchemeRequest> context)
+    {
+        if (template is null || template.Count == 0)
+        {
+            return;
+        }
+
+        FasCriteriaTemplateItem[] ordered = template.OrderBy(x => x.DisplayOrder).ToArray();
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            bool last = i == ordered.Length - 1;
+            if (last ? ordered[i].ConnectorToNext is not null : ordered[i].ConnectorToNext is not ("AND" or "OR"))
+            {
+                context.AddFailure("CriteriaTemplate", "Only the final connector may be null; earlier connectors must be AND or OR.");
+            }
+        }
+    }
+
+    private static void ValidateRequiredCriteria(IReadOnlyList<FasCriteriaTemplateItem> template, ValidationContext<CreateFasSchemeRequest> context)
+    {
+        string[] requiredCriteria = ["GHI", "PCI"];
+        string[] missing = requiredCriteria
+            .Where(required => template.All(item => item.CriteriaType != required))
+            .ToArray();
+
+        if (missing.Length > 0)
+        {
+            context.AddFailure("CriteriaTemplate", $"Criteria template must include: {string.Join(", ", missing)}.");
+        }
+    }
+
+    private DateOnly Today() => _clock?.TodayInSingapore() ?? SingaporeBusinessDay.FromUtc(DateTime.UtcNow);
     private static bool BeTrimmed(string? value) => value is not null && value == value.Trim();
     private static bool BeTrimmedOrEmpty(string? value) => value is null || value == value.Trim();
 }

@@ -13,6 +13,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 
 internal sealed class CloseManualAccountHandler(
     IEducationAccountRepository educationAccounts,
+    IAccountHoldRepository accountHolds,
     IPersonDirectory people,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
@@ -53,6 +54,14 @@ internal sealed class CloseManualAccountHandler(
         if (currentUser.UserAccountId is not long actorId)
         {
             return Result<CloseManualAccountResponse>.Failure(AccountErrors.ActorRequired);
+        }
+
+        if (await accountHolds.HasPendingHoldAsync(
+            account.Id,
+            clock.UtcNow.UtcDateTime,
+            cancellationToken))
+        {
+            return Result<CloseManualAccountResponse>.Failure(EducationAccountErrors.PendingPaymentInProgress);
         }
 
         Result closeResult = account.CloseManual(
