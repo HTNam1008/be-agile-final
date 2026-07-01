@@ -74,11 +74,11 @@ internal sealed class FasApplication : Entity<long>
     { EnsureDraft(); FasSchemeId = schemeId; Touch(actorId, now); }
 
     public void UpdateEmail(string email, long actorId, DateTime now)
-    { EnsureDraft(); if (string.IsNullOrWhiteSpace(email) || !System.Net.Mail.MailAddress.TryCreate(email, out _)) throw new DomainException("A valid email is required."); Email = email.Trim(); Touch(actorId, now); }
+    { EnsureEditable(); if (string.IsNullOrWhiteSpace(email) || !System.Net.Mail.MailAddress.TryCreate(email, out _)) throw new DomainException("A valid email is required."); Email = email.Trim(); Touch(actorId, now); }
 
     public void UpdateParentNationalities(IEnumerable<string> nationalities, long actorId, DateTime now)
     {
-        EnsureDraft();
+        EnsureEditable();
         string[] values = nationalities.Select(x => x?.Trim()).Where(x => !string.IsNullOrWhiteSpace(x)).Cast<string>().Distinct(StringComparer.Ordinal).ToArray();
         if (values.Length == 0 || values.Any(x => !FasNationalities.All.Contains(x))) throw new DomainException("At least one supported parent nationality is required.");
         ParentNationalitiesJson = System.Text.Json.JsonSerializer.Serialize(values); Touch(actorId, now);
@@ -87,7 +87,7 @@ internal sealed class FasApplication : Entity<long>
     public void UpdateIncome(bool welfareHome, string? employmentStatus, decimal? ghi, int? members,
         decimal otherIncome, long actorId, DateTime now)
     {
-        EnsureDraft();
+        EnsureEditable();
         if (welfareHome) { IsWelfareHomeResident = true; EmploymentStatusCode = null; MonthlyHouseholdIncome = null; HouseholdMemberCount = null; OtherMonthlyIncome = null; PerCapitaIncome = null; Touch(actorId, now); return; }
         if (!ghi.HasValue || !members.HasValue || ghi < 0 || otherIncome < 0 || members <= 0) throw new DomainException("Income and household values are invalid.");
         var status = employmentStatus?.Trim().ToUpperInvariant(); if (status is not ("EMPLOYED" or "SELF_EMPLOYED" or "UNEMPLOYED")) throw new DomainException("Employment status must be EMPLOYED, SELF_EMPLOYED or UNEMPLOYED.");
@@ -113,5 +113,12 @@ internal sealed class FasApplication : Entity<long>
     public void Approve() { if (StatusCode is not (FasApplicationStatuses.PendingReview or FasApplicationStatuses.Submitted)) throw new DomainException($"Cannot approve application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Approved; UpdatedAt = DateTime.UtcNow; }
     public void Reject() { if (StatusCode is not (FasApplicationStatuses.PendingReview or FasApplicationStatuses.Submitted)) throw new DomainException($"Cannot reject application with status {StatusCode}."); StatusCode = FasApplicationStatuses.Rejected; UpdatedAt = DateTime.UtcNow; }
     private void EnsureDraft() { if (StatusCode != FasApplicationStatuses.Draft) throw new DomainException("Only a draft application can be changed."); }
+    private void EnsureEditable()
+    {
+        if (StatusCode is not (FasApplicationStatuses.Draft or FasApplicationStatuses.Submitted or FasApplicationStatuses.PendingReview))
+        {
+            throw new DomainException("Only a draft or pending application can be changed.");
+        }
+    }
     private void Touch(long actorId, DateTime now) { UpdatedByLoginAccountId = actorId; UpdatedAt = now; }
 }
