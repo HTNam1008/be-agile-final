@@ -9,7 +9,6 @@ using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
@@ -20,8 +19,7 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
 internal sealed class CourseEnrollmentRepository(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<CourseEnrollmentRepository> logger) : ICourseEnrollmentRepository
 {
@@ -445,23 +443,6 @@ internal sealed class CourseEnrollmentRepository(
             return;
         }
 
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(enrollment.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Admin-added course enrollment recipient resolution failed. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Admin-added course enrollment email skipped because no valid recipient was found. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
-            return;
-        }
-
         Course course = await dbContext.Set<Course>()
             .AsNoTracking()
             .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
@@ -498,14 +479,21 @@ internal sealed class CourseEnrollmentRepository(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-04",
+                    enrollment.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "CourseEnrollment",
+                    enrollment.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Admin-added course enrollment email failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
+                    "Admin-added course enrollment email enqueue failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
                     enrollment.Id,
                     result.Error.Code);
             }

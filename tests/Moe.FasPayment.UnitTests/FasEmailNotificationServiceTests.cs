@@ -6,7 +6,6 @@ using Moe.Modules.FasPayment;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Fas;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -52,39 +51,36 @@ public sealed class FasEmailNotificationServiceTests
         db.AddRange(scheme, application);
         await db.SaveChangesAsync();
 
-        RecordingRecipientResolver recipients = new();
-        RecordingEmailGateway mailGateway = new();
+        RecordingEmailNotificationQueue mailQueue = new();
         FasEmailNotificationService service = new(
             db,
-            recipients,
-            mailGateway,
+            mailQueue,
             new FixedEmailDeliverySwitch(),
             NullLogger<FasEmailNotificationService>.Instance);
 
         await service.SendSubmissionAcknowledgementAsync(application.Id, CancellationToken.None);
 
-        recipients.ProvidedEmail.Should().Be("fas-applicant@example.com");
-        mailGateway.Messages.Should().ContainSingle();
-        mailGateway.Messages.Single().ToEmail.Should().Be("fas-applicant@example.com");
+        mailQueue.Jobs.Should().ContainSingle();
+        EmailNotificationJob job = mailQueue.Jobs.Single();
+        job.NotificationType.Should().Be("NOTI-05");
+        job.ProvidedEmail.Should().Be("fas-applicant@example.com");
+        job.Subject.Should().Be("We've Received Your FAS Application");
     }
 
     [Fact]
-    public async Task SubmissionAcknowledgement_WhenMailDeliveryDisabled_DoesNotCallRecipientResolverOrGateway()
+    public async Task SubmissionAcknowledgement_WhenMailDeliveryDisabled_DoesNotEnqueueEmail()
     {
         await using MoeDbContext db = CreateDbContext();
-        RecordingRecipientResolver recipients = new();
-        RecordingEmailGateway mailGateway = new();
+        RecordingEmailNotificationQueue mailQueue = new();
         FasEmailNotificationService service = new(
             db,
-            recipients,
-            mailGateway,
+            mailQueue,
             new FixedEmailDeliverySwitch(isEnabled: false),
             NullLogger<FasEmailNotificationService>.Instance);
 
         await service.SendSubmissionAcknowledgementAsync(999, CancellationToken.None);
 
-        recipients.ProvidedEmail.Should().BeNull();
-        mailGateway.Messages.Should().BeEmpty();
+        mailQueue.Jobs.Should().BeEmpty();
     }
 
     private static MoeDbContext CreateDbContext()
@@ -101,30 +97,23 @@ public sealed class FasEmailNotificationServiceTests
     private static void SetId<T>(T entity, long id)
         => typeof(T).GetProperty("Id", BindingFlags.Instance | BindingFlags.Public)!.SetValue(entity, id);
 
-    private sealed class RecordingRecipientResolver : IEmailRecipientResolver
+    private sealed class RecordingEmailNotificationQueue : IEmailNotificationQueue
     {
-        public string? ProvidedEmail { get; private set; }
+        public List<EmailNotificationJob> Jobs { get; } = [];
 
-        public Task<EmailRecipient?> ResolveForPersonAsync(long personId, CancellationToken cancellationToken)
-            => throw new InvalidOperationException("FAS must use the application email.");
-
-        public EmailRecipient? ResolveProvided(string? emailAddress)
+        public ValueTask<Result> EnqueueAsync(
+            EmailNotificationJob job,
+            CancellationToken cancellationToken)
         {
-            ProvidedEmail = emailAddress;
-            return string.IsNullOrWhiteSpace(emailAddress)
-                ? null
-                : new EmailRecipient(emailAddress, EmailRecipientSourceCodes.Provided);
+            Jobs.Add(job);
+            return ValueTask.FromResult(Result.Success());
         }
-    }
 
-    private sealed class RecordingEmailGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Task<Result> SendAsync(EmailDeliveryMessage message, CancellationToken cancellationToken)
+        public async IAsyncEnumerable<EmailNotificationJob> ReadAllAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            Messages.Add(message);
-            return Task.FromResult(Result.Success());
+            await Task.CompletedTask;
+            yield break;
         }
     }
 

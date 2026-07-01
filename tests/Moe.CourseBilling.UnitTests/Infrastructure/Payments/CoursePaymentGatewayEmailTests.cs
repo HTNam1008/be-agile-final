@@ -7,7 +7,6 @@ using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -24,11 +23,11 @@ public sealed class CoursePaymentGatewayEmailTests
     public async Task ApplySuccessfulPaymentAsync_Should_Send_SelfJoin_Enrollment_Success_Email()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         (CourseEnrollment enrollment, Bill bill) = await SeedEnrollmentAsync(
             dbContext,
             CourseEnrollmentSourceCodes.SelfJoin);
-        CoursePaymentGateway gateway = CreateGateway(dbContext, mailGateway);
+        CoursePaymentGateway gateway = CreateGateway(dbContext, mailQueue);
 
         await gateway.ApplySuccessfulPaymentAsync(
             bill.Id,
@@ -38,28 +37,29 @@ public sealed class CoursePaymentGatewayEmailTests
             CancellationToken.None);
 
         enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.PaidInFull);
-        mailGateway.Messages.Should().ContainSingle();
-        EmailDeliveryMessage message = mailGateway.Messages.Single();
-        message.ToEmail.Should().Be("student.real@example.com");
-        message.Subject.Should().Be("You're Enrolled in Design Thinking 101");
-        message.PlainTextBody.Should().Contain("Hello Course Student");
-        message.PlainTextBody.Should().Contain("your enrolment in Design Thinking 101 is confirmed");
-        message.PlainTextBody.Should().Contain("Course Start Date: 12 Aug 2026");
-        message.HtmlBody.Should().Contain("View Course");
+        mailQueue.Jobs.Should().ContainSingle();
+        EmailNotificationJob job = mailQueue.Jobs.Single();
+        job.NotificationType.Should().Be("NOTI-03");
+        job.PersonId.Should().Be(1);
+        job.Subject.Should().Be("You're Enrolled in Design Thinking 101");
+        job.PlainTextBody.Should().Contain("Hello Course Student");
+        job.PlainTextBody.Should().Contain("your enrolment in Design Thinking 101 is confirmed");
+        job.PlainTextBody.Should().Contain("Course Start Date: 12 Aug 2026");
+        job.HtmlBody.Should().Contain("View Course");
     }
 
     [Fact]
     public async Task ApplySuccessfulPaymentAsync_Should_Not_Fail_When_Email_Fails()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new()
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new()
         {
-            ResultToReturn = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
+            Result = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
         };
         (CourseEnrollment enrollment, Bill bill) = await SeedEnrollmentAsync(
             dbContext,
             CourseEnrollmentSourceCodes.SelfJoin);
-        CoursePaymentGateway gateway = CreateGateway(dbContext, mailGateway);
+        CoursePaymentGateway gateway = CreateGateway(dbContext, mailQueue);
 
         Func<Task> act = () => gateway.ApplySuccessfulPaymentAsync(
             bill.Id,
@@ -70,18 +70,18 @@ public sealed class CoursePaymentGatewayEmailTests
 
         await act.Should().NotThrowAsync();
         enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.PaidInFull);
-        mailGateway.Messages.Should().ContainSingle();
+        mailQueue.Jobs.Should().ContainSingle();
     }
 
     [Fact]
     public async Task ApplySuccessfulPaymentAsync_Should_Not_Send_Noti03_For_Admin_Add()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         (CourseEnrollment enrollment, Bill bill) = await SeedEnrollmentAsync(
             dbContext,
             CourseEnrollmentSourceCodes.AdminAdd);
-        CoursePaymentGateway gateway = CreateGateway(dbContext, mailGateway);
+        CoursePaymentGateway gateway = CreateGateway(dbContext, mailQueue);
 
         await gateway.ApplySuccessfulPaymentAsync(
             bill.Id,
@@ -91,21 +91,20 @@ public sealed class CoursePaymentGatewayEmailTests
             CancellationToken.None);
 
         enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.PaidInFull);
-        mailGateway.Messages.Should().BeEmpty();
+        mailQueue.Jobs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ApplySuccessfulPaymentAsync_WhenMailDeliveryDisabled_Should_Not_Call_RecipientResolver_Or_Gateway()
+    public async Task ApplySuccessfulPaymentAsync_WhenMailDeliveryDisabled_Should_Not_Enqueue_Email()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         (CourseEnrollment enrollment, Bill bill) = await SeedEnrollmentAsync(
             dbContext,
             CourseEnrollmentSourceCodes.SelfJoin);
         CoursePaymentGateway gateway = CreateGateway(
             dbContext,
-            mailGateway,
-            new ThrowingEmailRecipientResolver(),
+            mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
 
         await gateway.ApplySuccessfulPaymentAsync(
@@ -116,7 +115,7 @@ public sealed class CoursePaymentGatewayEmailTests
             CancellationToken.None);
 
         enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.PaidInFull);
-        mailGateway.Messages.Should().BeEmpty();
+        mailQueue.Jobs.Should().BeEmpty();
     }
 
     private static async Task<(CourseEnrollment Enrollment, Bill Bill)> SeedEnrollmentAsync(
@@ -176,13 +175,11 @@ public sealed class CoursePaymentGatewayEmailTests
 
     private static CoursePaymentGateway CreateGateway(
         MoeDbContext dbContext,
-        FakeEmailDeliveryGateway mailGateway,
-        IEmailRecipientResolver? recipientResolver = null,
+        IEmailNotificationQueue mailQueue,
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
-            recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
-            mailGateway,
+            mailQueue,
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<CoursePaymentGateway>.Instance);
 
@@ -195,27 +192,4 @@ public sealed class CoursePaymentGatewayEmailTests
         }
     }
 
-    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Result ResultToReturn { get; init; } = Result.Success();
-
-        public Task<Result> SendAsync(EmailDeliveryMessage message, CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(ResultToReturn);
-        }
-    }
-
-    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
-    {
-        public Task<EmailRecipient?> ResolveForPersonAsync(
-            long personId,
-            CancellationToken cancellationToken)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-
-        public EmailRecipient? ResolveProvided(string? providedEmail)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-    }
 }

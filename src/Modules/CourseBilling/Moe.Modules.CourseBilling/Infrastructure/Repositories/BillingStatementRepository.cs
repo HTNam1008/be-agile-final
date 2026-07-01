@@ -7,7 +7,6 @@ using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -20,8 +19,7 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 internal sealed class BillingStatementRepository(
     MoeDbContext dbContext,
     ICoursePaymentPlanGateway paymentPlans,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<BillingStatementRepository> logger) : IBillingStatementRepository
 {
@@ -42,11 +40,13 @@ internal sealed class BillingStatementRepository(
                 x.StatementYear == year &&
                 x.StatementMonth == month,
                 cancellationToken);
+        bool statementCreated = false;
         if (statement is null)
         {
             statement = BillingStatement.Create(personId, year, month, utcNow);
             await dbContext.Set<BillingStatement>().AddAsync(statement, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
+            statementCreated = true;
         }
 
         var candidateBills = await (
@@ -99,6 +99,7 @@ internal sealed class BillingStatementRepository(
         List<BillingStatementItem> existingItems = await dbContext.Set<BillingStatementItem>()
             .Where(x => x.BillingStatementId == statement.Id)
             .ToListAsync(cancellationToken);
+        bool addedStatementItem = false;
         foreach (var row in bills)
         {
             BillingStatementItem? item = existingItems.SingleOrDefault(x => x.BillId == row.Bill.Id);
@@ -107,6 +108,7 @@ internal sealed class BillingStatementRepository(
                 item = new BillingStatementItem(statement.Id, row.Bill.Id, row.Bill.OutstandingAmount, utcNow);
                 await dbContext.Set<BillingStatementItem>().AddAsync(item, cancellationToken);
                 existingItems.Add(item);
+                addedStatementItem = true;
             }
             else
             {
@@ -117,7 +119,7 @@ internal sealed class BillingStatementRepository(
         decimal total = bills.Sum(x => x.Bill.OutstandingAmount);
         statement.Refresh(total, 0m, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
-        if (total > 0m)
+        if (total > 0m && (statementCreated || addedStatementItem))
         {
             await SendMonthlyBillEmailAsync(
                 personId,
@@ -239,12 +241,6 @@ internal sealed class BillingStatementRepository(
             return;
         }
 
-        EmailRecipient? recipient = await ResolveRecipientAsync(personId, billingMonth, cancellationToken);
-        if (recipient is null)
-        {
-            return;
-        }
-
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == personId, cancellationToken);
@@ -280,14 +276,21 @@ internal sealed class BillingStatementRepository(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-01",
+                    personId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "BillingStatement",
+                    $"{billingMonth.Year:D4}-{billingMonth.Month:D2}"),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Monthly bill email notification failed. PersonId={PersonId} BillingMonth={BillingMonth} ErrorCode={ErrorCode}",
+                    "Monthly bill email enqueue failed. PersonId={PersonId} BillingMonth={BillingMonth} ErrorCode={ErrorCode}",
                     personId,
                     monthYear,
                     result.Error.Code);
@@ -300,35 +303,6 @@ internal sealed class BillingStatementRepository(
                 "Monthly bill email notification threw an exception. PersonId={PersonId} BillingMonth={BillingMonth}",
                 personId,
                 monthYear);
-        }
-    }
-
-    private async Task<EmailRecipient?> ResolveRecipientAsync(
-        long personId,
-        DateOnly billingMonth,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            EmailRecipient? recipient = await recipientResolver.ResolveForPersonAsync(personId, cancellationToken);
-            if (recipient is null)
-            {
-                logger.LogWarning(
-                    "Monthly bill email skipped because no valid recipient was found. PersonId={PersonId} BillingMonth={BillingMonth}",
-                    personId,
-                    billingMonth);
-            }
-
-            return recipient;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Monthly bill email recipient resolution failed. PersonId={PersonId} BillingMonth={BillingMonth}",
-                personId,
-                billingMonth);
-            return null;
         }
     }
 

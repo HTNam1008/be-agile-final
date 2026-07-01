@@ -1,9 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moe.Modules.FasPayment.Domain.Fas;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -13,8 +13,7 @@ namespace Moe.Modules.FasPayment.Application.Notifications;
 
 public sealed class FasEmailNotificationService(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<FasEmailNotificationService> logger)
 {
@@ -285,27 +284,23 @@ public sealed class FasEmailNotificationService(
         string? providedEmail,
         CancellationToken cancellationToken)
     {
-        EmailRecipient? recipient = recipientResolver.ResolveProvided(providedEmail);
-        if (recipient is null)
-        {
-            logger.LogWarning(
-                "FAS email skipped because no valid recipient was found. Title={Title} PersonId={PersonId} ApplicationId={ApplicationId}",
-                title,
-                personId,
-                applicationId);
-            return;
-        }
-
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForProvidedEmail(
+                    "NOTI-05",
+                    providedEmail,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "FasApplication",
+                    applicationId.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "FAS email notification failed. Title={Title} ApplicationId={ApplicationId} ErrorCode={ErrorCode}",
+                    "FAS email enqueue failed. Title={Title} ApplicationId={ApplicationId} ErrorCode={ErrorCode}",
                     title,
                     applicationId,
                     result.Error.Code);
@@ -315,7 +310,7 @@ public sealed class FasEmailNotificationService(
         {
             logger.LogWarning(
                 ex,
-                "FAS email notification threw an exception. Title={Title} ApplicationId={ApplicationId}",
+                "FAS email enqueue threw an exception. Title={Title} ApplicationId={ApplicationId}",
                 title,
                 applicationId);
         }

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
-using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 using Moe.StudentFinance.Persistence;
 

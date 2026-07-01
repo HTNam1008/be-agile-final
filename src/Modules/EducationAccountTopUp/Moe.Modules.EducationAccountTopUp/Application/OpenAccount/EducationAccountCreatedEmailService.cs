@@ -12,8 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
 
 internal sealed class EducationAccountCreatedEmailService(
     IPersonDirectory people,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<EducationAccountCreatedEmailService> logger)
 {
@@ -27,23 +26,6 @@ internal sealed class EducationAccountCreatedEmailService(
                 "Education Account created email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
                 account.PersonId,
                 account.Id);
-            return;
-        }
-
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(account.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Education Account created email recipient resolution failed. PersonId={PersonId} EducationAccountId={EducationAccountId}", account.PersonId, account.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Education Account created email skipped because no valid recipient was found. PersonId={PersonId} EducationAccountId={EducationAccountId}", account.PersonId, account.Id);
             return;
         }
 
@@ -74,14 +56,21 @@ internal sealed class EducationAccountCreatedEmailService(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-07",
+                    account.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "EducationAccount",
+                    account.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Education Account created email notification failed. EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
+                    "Education Account created email enqueue failed. EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
                     account.Id,
                     result.Error.Code);
             }

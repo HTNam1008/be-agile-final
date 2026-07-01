@@ -1,9 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -14,8 +14,7 @@ namespace Moe.Modules.FasPayment.Application.EnrollmentCancellations;
 
 internal sealed class CourseWithdrawalEmailService(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<CourseWithdrawalEmailService> logger)
 {
@@ -33,23 +32,6 @@ internal sealed class CourseWithdrawalEmailService(
                 "Course withdrawal email skipped because MailDelivery is disabled. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}",
                 snapshot.Enrollment.PersonId,
                 snapshot.Enrollment.Id);
-            return;
-        }
-
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(snapshot.Enrollment.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Course withdrawal email recipient resolution failed. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", snapshot.Enrollment.PersonId, snapshot.Enrollment.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Course withdrawal email skipped because no valid recipient was found. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", snapshot.Enrollment.PersonId, snapshot.Enrollment.Id);
             return;
         }
 
@@ -78,14 +60,21 @@ internal sealed class CourseWithdrawalEmailService(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-10",
+                    snapshot.Enrollment.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "CourseEnrollment",
+                    snapshot.Enrollment.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Course withdrawal email failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
+                    "Course withdrawal email enqueue failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
                     snapshot.Enrollment.Id,
                     result.Error.Code);
             }

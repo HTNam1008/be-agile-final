@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -15,8 +14,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 
 internal sealed class Age30AccountLockReminderEmailService(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     IAccountLockReminderOutstandingReader outstandingReader,
     ILogger<Age30AccountLockReminderEmailService> logger) : IAge30AccountLockReminderEmailService
@@ -75,12 +73,6 @@ internal sealed class Age30AccountLockReminderEmailService(
         string reminderWindowLabel,
         CancellationToken cancellationToken)
     {
-        EmailRecipient? recipient = await ResolveRecipientAsync(candidate, cancellationToken);
-        if (recipient is null)
-        {
-            return;
-        }
-
         decimal? outstandingAmount = await ResolveOutstandingAmountAsync(candidate, cancellationToken);
         string studentName = string.IsNullOrWhiteSpace(candidate.StudentName)
             ? "Student"
@@ -104,14 +96,21 @@ internal sealed class Age30AccountLockReminderEmailService(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "AGE-30-LOCK-REMINDER",
+                    candidate.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "EducationAccount",
+                    candidate.EducationAccountId.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Age-30 account lock reminder email failed. PersonId={PersonId} EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
+                    "Age-30 account lock reminder email enqueue failed. PersonId={PersonId} EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
                     candidate.PersonId,
                     candidate.EducationAccountId,
                     result.Error.Code);
@@ -124,34 +123,6 @@ internal sealed class Age30AccountLockReminderEmailService(
                 "Age-30 account lock reminder email threw an exception. PersonId={PersonId} EducationAccountId={EducationAccountId}",
                 candidate.PersonId,
                 candidate.EducationAccountId);
-        }
-    }
-
-    private async Task<EmailRecipient?> ResolveRecipientAsync(
-        AccountLockReminderCandidate candidate,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            EmailRecipient? recipient = await recipientResolver.ResolveForPersonAsync(candidate.PersonId, cancellationToken);
-            if (recipient is null)
-            {
-                logger.LogWarning(
-                    "Age-30 account lock reminder email skipped because no valid recipient was found. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                    candidate.PersonId,
-                    candidate.EducationAccountId);
-            }
-
-            return recipient;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Age-30 account lock reminder email recipient resolution failed. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                candidate.PersonId,
-                candidate.EducationAccountId);
-            return null;
         }
     }
 

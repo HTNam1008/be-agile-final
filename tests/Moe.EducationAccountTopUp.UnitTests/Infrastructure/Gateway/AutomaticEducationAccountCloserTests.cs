@@ -31,7 +31,7 @@ public sealed class AutomaticEducationAccountCloserTests
     private readonly FakeAuditService _audit = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakePersonDirectory _personDirectory = new();
-    private readonly FakeEmailDeliveryGateway _mailGateway = new();
+    private readonly TestDoubles.RecordingEmailNotificationQueue _mailQueue = new();
 
     [Fact]
     public async Task CloseEligibleAsync_ClosesActiveAccountsForPeopleAgedAtLeast30_RegardlessOfOpeningMode()
@@ -65,7 +65,7 @@ public sealed class AutomaticEducationAccountCloserTests
         _audit.Calls.Select(x => x.ActionCode).Should()
             .OnlyContain(x => x == AuditActionCodes.EducationAccountClosedAutomatically);
         _unitOfWork.SaveCalls.Should().Be(3);
-        _mailGateway.Messages.Should().HaveCount(3);
+        _mailQueue.Jobs.Should().HaveCount(3);
     }
 
     [Fact]
@@ -133,8 +133,7 @@ public sealed class AutomaticEducationAccountCloserTests
     private EducationAccountClosureEmailService CreateClosureEmails()
         => new(
             _personDirectory,
-            new TestDoubles.FixedEmailRecipientResolver(),
-            _mailGateway,
+            _mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<EducationAccountClosureEmailService>.Instance);
 
@@ -239,19 +238,6 @@ public sealed class AutomaticEducationAccountCloserTests
                 "SG",
                 "CITIZEN",
                 10));
-    }
-
-    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Task<Result> SendAsync(
-            EmailDeliveryMessage message,
-            CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(Result.Success());
-        }
     }
 
     private sealed class FakeAuditService : IAuditService
