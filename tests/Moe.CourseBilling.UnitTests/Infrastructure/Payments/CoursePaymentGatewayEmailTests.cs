@@ -226,10 +226,8 @@ public sealed class CoursePaymentGatewayEmailTests
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
-            mailQueue,
-            mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
-            new TestDoubles.FixedEmailBrandingProvider(),
-            NullLogger<CoursePaymentGateway>.Instance);
+            new TestDoubles.RecordingEmailNotificationScheduler(mailQueue, mailSwitch),
+            new TestDoubles.FixedEmailBrandingProvider());
 
     private sealed class TestModelConfiguration : IModelConfigurationContributor
     {

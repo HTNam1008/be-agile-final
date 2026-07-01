@@ -129,8 +129,7 @@ public sealed class Age30AccountLockReminderEmailServiceTests
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
-            mailQueue,
-            mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.RecordingEmailNotificationScheduler(mailQueue, mailSwitch),
             outstandingReader ?? new FakeOutstandingReader(),
             new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<Age30AccountLockReminderEmailService>.Instance);

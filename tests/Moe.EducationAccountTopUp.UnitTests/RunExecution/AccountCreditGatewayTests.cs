@@ -275,14 +275,16 @@ public sealed class AccountCreditGatewayTests
         MoeDbContext dbContext,
         IEmailNotificationQueue? mailQueue = null,
         IEmailDeliverySwitch? mailSwitch = null)
-        => new(
+    {
+        IEmailNotificationQueue queue = mailQueue ?? new TestDoubles.RecordingEmailNotificationQueue();
+        return new AccountCreditGateway(
             dbContext,
             _clock,
             new FakeTopUpExecutionMetrics(),
-            mailQueue ?? new TestDoubles.RecordingEmailNotificationQueue(),
-            mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.RecordingEmailNotificationScheduler(queue, mailSwitch),
             new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<AccountCreditGateway>.Instance);
+    }
 
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
     {

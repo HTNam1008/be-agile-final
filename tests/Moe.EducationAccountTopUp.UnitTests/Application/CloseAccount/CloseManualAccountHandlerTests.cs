@@ -234,10 +234,8 @@ public sealed class CloseManualAccountHandlerTests
             _audit,
             new EducationAccountClosureEmailService(
                 _people,
-                _mailQueue,
-                mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
-                new TestDoubles.FixedEmailBrandingProvider(),
-                NullLogger<EducationAccountClosureEmailService>.Instance));
+                new TestDoubles.RecordingEmailNotificationScheduler(_mailQueue, mailSwitch),
+                new TestDoubles.FixedEmailBrandingProvider()));
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)
         => new(

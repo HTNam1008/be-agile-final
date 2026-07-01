@@ -177,10 +177,8 @@ public sealed class AutomaticEducationAccountCloserTests
     private EducationAccountClosureEmailService CreateClosureEmails()
         => new(
             _personDirectory,
-            _mailQueue,
-            new TestDoubles.FixedEmailDeliverySwitch(),
-            new TestDoubles.FixedEmailBrandingProvider(),
-            NullLogger<EducationAccountClosureEmailService>.Instance);
+            new TestDoubles.RecordingEmailNotificationScheduler(_mailQueue),
+            new TestDoubles.FixedEmailBrandingProvider());
 
     private EducationAccount AddManualAccount(long accountId, long personId)
     {

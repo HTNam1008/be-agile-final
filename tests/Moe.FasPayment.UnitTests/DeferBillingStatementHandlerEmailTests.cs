@@ -102,10 +102,8 @@ public sealed class DeferBillingStatementHandlerEmailTests
         RecordingEmailNotificationQueue mailQueue = new();
         PaymentNotificationEmailService notifications = new(
             dbContext,
-            mailQueue,
-            new FixedEmailDeliverySwitch(),
-            new FixedEmailBrandingProvider(),
-            NullLogger<PaymentNotificationEmailService>.Instance);
+            new RecordingEmailNotificationScheduler(mailQueue, new FixedEmailDeliverySwitch()),
+            new FixedEmailBrandingProvider());
 
         return new TestContext(
             dbContext,

@@ -136,10 +136,8 @@ public sealed class OpenManualAccountHandlerTests
             _audit,
             new EducationAccountCreatedEmailService(
                 _people,
-                _mailQueue,
-                mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
-                new TestDoubles.FixedEmailBrandingProvider(),
-                NullLogger<EducationAccountCreatedEmailService>.Instance));
+                new TestDoubles.RecordingEmailNotificationScheduler(_mailQueue, mailSwitch),
+                new TestDoubles.FixedEmailBrandingProvider()));
     }
 
     private static OpenManualAccountCommand CreateCommand(long personId)
