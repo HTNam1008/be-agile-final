@@ -54,8 +54,14 @@ public sealed class CourseBillingModule : IModule
 
         services.AddScoped<ICourseEnrollmentRepository, CourseEnrollmentRepository>();
         services.AddScoped<ICoursePaymentGateway, CoursePaymentGateway>();
-        services.AddHostedService<MonthlyBillNotificationWorker>();
-        services.AddHostedService<MissedInstallmentPaymentEmailWorker>();
+        if (IsBackgroundJobEnabled(configuration, "CourseBilling:MonthlyBillNotifications"))
+        {
+            services.AddHostedService<MonthlyBillNotificationWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "CourseBilling:MissedInstallmentPaymentEmails"))
+        {
+            services.AddHostedService<MissedInstallmentPaymentEmailWorker>();
+        }
         services.AddScoped<IAdminCourseRepository, AdminCourseRepository>();
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
         services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
@@ -134,4 +140,8 @@ public sealed class CourseBillingModule : IModule
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }
