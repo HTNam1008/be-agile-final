@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Xunit;
@@ -53,6 +54,23 @@ public sealed class CreateFasSchemeValidationTests
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         DateOnly yesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
         _validator.Validate(source with { StartDate = yesterday, EndDate = yesterday.AddDays(30) }).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Start_date_before_singapore_business_day_fails()
+    {
+        CreateFasSchemeRequestValidator validator = new(
+            new TestClock(new DateTimeOffset(2026, 6, 30, 16, 30, 0, TimeSpan.Zero)));
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+
+        var result = validator.Validate(source with
+        {
+            StartDate = new DateOnly(2026, 6, 30),
+            EndDate = new DateOnly(2026, 8, 1)
+        });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(x => x.ErrorMessage == "Start date cannot be before today.");
     }
 
     [Fact]
@@ -219,4 +237,11 @@ public sealed class CreateFasSchemeValidationTests
         => new ListFasSchemesRequestValidator()
             .Validate(new ListFasSchemesRequest(DurationFrom: DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1), DurationTo: DateOnly.FromDateTime(DateTime.UtcNow)))
             .IsValid.Should().BeFalse();
+
+    private sealed class TestClock(DateTimeOffset utcNow) : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
+    }
 }

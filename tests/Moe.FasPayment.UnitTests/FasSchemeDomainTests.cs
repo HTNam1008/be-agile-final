@@ -22,6 +22,25 @@ public sealed class FasSchemeDomainTests
     }
 
     [Fact]
+    public void CreateDraft_rejects_start_date_before_singapore_business_day()
+    {
+        DateTime sgtEarlyMorning = new(2026, 6, 30, 16, 30, 0, DateTimeKind.Utc);
+
+        Action act = () => FasScheme.CreateDraft(
+            "S-SGT",
+            "G-SGT",
+            "Singapore day scheme",
+            null,
+            new DateOnly(2026, 6, 30),
+            new DateOnly(2026, 8, 1),
+            1,
+            sgtEarlyMorning);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Start date cannot be before today.*");
+    }
+
+    [Fact]
     public void Scheme_follows_draft_active_retired_lifecycle()
     {
         FasScheme scheme = FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(1), Today().AddMonths(6), 1, Now);

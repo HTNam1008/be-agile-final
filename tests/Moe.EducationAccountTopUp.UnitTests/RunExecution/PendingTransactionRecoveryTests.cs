@@ -181,6 +181,8 @@ public sealed class PendingTransactionRecoveryTests
     private sealed class FakeClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 
     private sealed class FakeTopUpExecutionEventPublisher : ITopUpExecutionEventPublisher

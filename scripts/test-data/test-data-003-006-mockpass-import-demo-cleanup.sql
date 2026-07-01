@@ -108,6 +108,9 @@ WHERE
 DELETE FROM account.AccountTransaction
 WHERE EducationAccountId IN (SELECT EducationAccountId FROM @FixtureAccountIds);
 
+DELETE FROM account.SettlementPreference
+WHERE EducationAccountId IN (SELECT EducationAccountId FROM @FixtureAccountIds);
+
 DELETE FROM account.EducationAccount
 WHERE EducationAccountId IN (SELECT EducationAccountId FROM @FixtureAccountIds);
 
@@ -156,6 +159,10 @@ UNION ALL
 SELECT 'account.EducationAccount', COUNT(*)
 FROM account.EducationAccount
 WHERE PersonId IN (SELECT PersonId FROM @FixturePersonIds)
+UNION ALL
+SELECT 'account.SettlementPreference', COUNT(*)
+FROM account.SettlementPreference
+WHERE EducationAccountId IN (SELECT EducationAccountId FROM @FixtureAccountIds)
 UNION ALL
 SELECT 'account.EducationAccountLifecycleRunItem', COUNT(*)
 FROM account.EducationAccountLifecycleRunItem

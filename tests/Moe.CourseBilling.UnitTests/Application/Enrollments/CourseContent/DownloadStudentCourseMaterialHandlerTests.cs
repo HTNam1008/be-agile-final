@@ -175,5 +175,7 @@ public sealed class DownloadStudentCourseMaterialHandlerTests
     private sealed class ClockDouble : IClock
     {
         public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 }
