@@ -470,6 +470,17 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Scheme_guidance_does_not_count_as_bad_answer_to_pending_field()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("Which FAS schemes can I apply for?", cid);
+
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        Assert.DoesNotContain("couldn't safely prefill", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("welfare home", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task FieldKey_can_focus_employment_status()
     {
         Guid cid = await StartNoWelfare();
