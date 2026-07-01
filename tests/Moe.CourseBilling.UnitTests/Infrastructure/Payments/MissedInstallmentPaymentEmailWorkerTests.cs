@@ -216,6 +216,8 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
     private sealed class FixedClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 
     private sealed class PersonOnlyModelConfiguration : IModelConfigurationContributor
