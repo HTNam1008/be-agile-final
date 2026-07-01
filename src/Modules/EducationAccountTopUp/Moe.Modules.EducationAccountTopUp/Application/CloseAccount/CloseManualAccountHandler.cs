@@ -7,6 +7,9 @@ using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
@@ -20,7 +23,9 @@ internal sealed class CloseManualAccountHandler(
     IClock clock,
     IUnitOfWork unitOfWork,
     IAuditService auditService,
-    EducationAccountClosureEmailService closureEmails) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
+    EducationAccountClosureEmailService closureEmails,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
 {
     public async Task<Result<CloseManualAccountResponse>> Handle(
         CloseManualAccountCommand command,
@@ -112,11 +117,32 @@ internal sealed class CloseManualAccountHandler(
             ? command.ReasonCode
             : $"{command.ReasonCode} - {command.Remarks.Trim()}";
         await closureEmails.SendClosedAsync(account, closureReason, cancellationToken);
+        await NotifyAccountClosedAsync(account.PersonId, closureReason, cancellationToken);
 
         return Result<CloseManualAccountResponse>.Success(new CloseManualAccountResponse(
             account.PersonId,
             account.Id,
             account.StatusCode,
             account.ClosedAtUtc));
+    }
+
+    private async Task NotifyAccountClosedAsync(
+        long personId,
+        string closureReason,
+        CancellationToken cancellationToken)
+    {
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(personId, cancellationToken);
+        if (userAccountId is null)
+        {
+            return;
+        }
+
+        await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.AccClosed,
+                "Account Closed",
+                $"Reason: {closureReason}."),
+            cancellationToken);
     }
 }

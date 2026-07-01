@@ -23,6 +23,7 @@ internal sealed class CoursePaymentGateway(
     IEmailRecipientResolver recipientResolver,
     IEmailDeliveryGateway mailGateway,
     IStudentNotificationRecipientResolver notificationRecipients,
+    ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
     INotificationWriter notificationWriter,
     IEmailDeliverySwitch mailSwitch,
     ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
@@ -92,6 +93,12 @@ internal sealed class CoursePaymentGateway(
         {
             await SendCourseEnrollmentSuccessEmailAsync(enrollment, cancellationToken);
         }
+
+        await NotifyPaymentCompletedAsync(
+            enrollment.Id,
+            amount,
+            paidAtUtc,
+            cancellationToken);
     }
 
     public async Task ApplyPaymentFailureAsync(
@@ -223,6 +230,24 @@ internal sealed class CoursePaymentGateway(
                 await SendCourseEnrollmentSuccessEmailAsync(enrollment, cancellationToken);
             }
         }
+
+        Dictionary<long, decimal> paidAmountByBillId = allocations.ToDictionary(x => x.BillId, x => x.Amount);
+        foreach (CourseEnrollment enrollment in enrollments)
+        {
+            decimal paidAmount = bills
+                .Where(bill => bill.CourseEnrollmentId == enrollment.Id)
+                .Sum(bill => paidAmountByBillId.GetValueOrDefault(bill.Id));
+
+            if (paidAmount > 0m)
+            {
+                await NotifyPaymentCompletedAsync(
+                    enrollment.Id,
+                    paidAmount,
+                    paidAtUtc,
+                    cancellationToken);
+            }
+        }
+
         var statementBillAmounts = await (
                 from item in dbContext.Set<BillingStatementItem>()
                 join bill in dbContext.Set<Bill>() on item.BillId equals bill.Id
@@ -620,6 +645,89 @@ internal sealed class CoursePaymentGateway(
                 row.PersonId,
                 billId,
                 result.Error.Code);
+        }
+    }
+
+    private async Task NotifyPaymentCompletedAsync(
+        long enrollmentId,
+        decimal paidAmount,
+        DateTime paidAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var row = await (
+            from enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+            join course in dbContext.Set<Course>().AsNoTracking()
+                on enrollment.CourseId equals course.Id
+            join person in dbContext.Set<Person>().AsNoTracking()
+                on enrollment.PersonId equals person.Id
+            where enrollment.Id == enrollmentId
+            select new
+            {
+                enrollment.PersonId,
+                course.OrganizationId,
+                course.CourseCode,
+                course.CourseName,
+                person.OfficialFullName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return;
+        }
+
+        long? studentUserAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(row.PersonId, cancellationToken);
+        IReadOnlyCollection<long> schoolAdminUserAccountIds = await schoolAdminRecipients.FindUserAccountIdsByOrganizationIdAsync(
+            row.OrganizationId,
+            cancellationToken);
+
+        if (studentUserAccountId is null && schoolAdminUserAccountIds.Count == 0)
+        {
+            return;
+        }
+
+        string studentName = string.IsNullOrWhiteSpace(row.OfficialFullName) ? "Student" : row.OfficialFullName.Trim();
+        string title = $"Payment Completed: {row.CourseCode}";
+        string studentBody = $"Payment of {paidAmount:N2} for {row.CourseName} was completed at {paidAtUtc:yyyy-MM-dd HH:mm}.";
+
+        if (studentUserAccountId is not null)
+        {
+            Result<long> result = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    studentUserAccountId.Value,
+                    NotificationTypeCode.PaymentSuccess,
+                    title,
+                    studentBody),
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "Payment success notification failed for student. EnrollmentId={EnrollmentId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                    enrollmentId,
+                    studentUserAccountId.Value,
+                    result.Error.Code);
+            }
+        }
+
+        foreach (long schoolAdminUserAccountId in schoolAdminUserAccountIds.Distinct())
+        {
+            Result<long> result = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    schoolAdminUserAccountId,
+                    NotificationTypeCode.PaymentSuccess,
+                    title,
+                    $"Student {studentName} completed payment of {paidAmount:N2} for {row.CourseName} at {paidAtUtc:yyyy-MM-dd HH:mm}."),
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "Payment success notification failed for school admin. EnrollmentId={EnrollmentId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                    enrollmentId,
+                    schoolAdminUserAccountId,
+                    result.Error.Code);
+            }
         }
     }
 }

@@ -185,7 +185,7 @@ internal sealed class SelfJoinCourseHandler(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.EnrollSuccess,
-                $"Enrolled: {schoolName}",
+                $"Course Enrollment Completed: {course.CourseCode}",
                 $"Welcome {student.DisplayName}! You are now enrolled in {course.CourseName} at {schoolName}."),
             cancellationToken);
     }

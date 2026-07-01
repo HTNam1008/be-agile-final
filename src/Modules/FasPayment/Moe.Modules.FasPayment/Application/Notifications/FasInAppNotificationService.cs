@@ -30,6 +30,15 @@ public sealed class FasInAppNotificationService(
             "FAS Result: ELIGIBLE",
             cancellationToken);
 
+    public Task SendApplicationRejectedAsync(
+        long applicationId,
+        string rejectionReasonCode,
+        CancellationToken cancellationToken)
+        => SendApplicationRejectedNotificationAsync(
+            applicationId,
+            rejectionReasonCode,
+            cancellationToken);
+
     public Task SendPaymentSucceededAsync(long paymentId, CancellationToken cancellationToken)
         => SendPaymentNotificationAsync(
             paymentId,
@@ -72,12 +81,47 @@ public sealed class FasInAppNotificationService(
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == application.FasSchemeId, cancellationToken);
         string schemeName = scheme?.Name ?? "FAS Scheme";
-        string title = fallbackTitle;
+        string title = notificationTypeCode == NotificationTypeCode.FasSubmitted
+            ? $"FAS Application Submitted: {application.ApplicationNo}"
+            : $"FAS Application Approved: {application.ApplicationNo}";
         string body = notificationTypeCode == NotificationTypeCode.FasSubmitted
-            ? $"Application {application.ApplicationNo} for {schemeName} has been submitted."
-            : $"You qualify for {schemeName} based on the review result.";
+            ? $"New FAS application {application.ApplicationNo} for {schemeName} was submitted."
+            : $"Your FAS application {application.ApplicationNo} for {schemeName} was approved.";
 
         await CreateAsync(userAccountId.Value, notificationTypeCode, title, body, cancellationToken);
+    }
+
+    private async Task SendApplicationRejectedNotificationAsync(
+        long applicationId,
+        string rejectionReasonCode,
+        CancellationToken cancellationToken)
+    {
+        FasApplication? application = await dbContext.Set<FasApplication>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == applicationId, cancellationToken);
+        if (application is null)
+        {
+            logger.LogWarning("FAS rejection notification skipped because application {ApplicationId} was not found.", applicationId);
+            return;
+        }
+
+        long? userAccountId = await recipientResolver.FindUserAccountIdByPersonIdAsync(
+            application.AccountHolderPersonId,
+            cancellationToken);
+        if (userAccountId is null)
+        {
+            logger.LogWarning("FAS rejection notification skipped because no user account was found for person {PersonId}.", application.AccountHolderPersonId);
+            return;
+        }
+
+        FasScheme? scheme = await dbContext.Set<FasScheme>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == application.FasSchemeId, cancellationToken);
+        string schemeName = scheme?.Name ?? "FAS Scheme";
+        string title = $"FAS Application Rejected: {application.ApplicationNo}";
+        string body = $"Your FAS application {application.ApplicationNo} for {schemeName} has been rejected. Reason: {rejectionReasonCode}.";
+
+        await CreateAsync(userAccountId.Value, NotificationTypeCode.FasRejected, title, body, cancellationToken);
     }
 
     private async Task SendPaymentNotificationAsync(

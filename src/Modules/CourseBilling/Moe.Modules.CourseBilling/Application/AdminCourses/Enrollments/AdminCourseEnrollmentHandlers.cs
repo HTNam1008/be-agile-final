@@ -133,8 +133,8 @@ internal sealed class RemoveAdminCourseEnrollmentCommandHandler(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.CourseExit,
-                    "Course Completed",
-                    $"Result: ADMIN_REMOVED. {student.DisplayName} was removed from {courseName}."),
+                    $"Student Removed from Course: {courseName}",
+                    $"Student {student.DisplayName} was removed from {courseName}."),
                 cancellationToken);
         }
     }

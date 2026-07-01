@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
@@ -14,6 +18,9 @@ public sealed class PendingTransactionRecoveryService(
     IAccountCreditGateway accountCreditGateway,
     ITopUpExecutionEventPublisher events,
     ITopUpExecutionMetrics metrics,
+    IEducationAccountRepository educationAccounts,
+    IStudentNotificationRecipientResolver notificationRecipientResolver,
+    INotificationWriter notificationWriter,
     IUnitOfWork unitOfWork,
     IClock clock,
     ILogger<PendingTransactionRecoveryService> logger) : IPendingTransactionRecoveryService
@@ -89,6 +96,16 @@ public sealed class PendingTransactionRecoveryService(
                                     OccurredAtUtc = completedAtUtc
                                 },
                                 cancellationToken);
+
+                            if (!credit.Value.AlreadyProcessed)
+                            {
+                                await CreateTopUpReceivedNotificationAsync(
+                                    topUpRunId,
+                                    transaction.EducationAccountId,
+                                    transaction.Amount,
+                                    completedAtUtc,
+                                    cancellationToken);
+                            }
 
                             metrics.RecordRecipientProcessed(
                                 topUpRunId,
@@ -176,5 +193,76 @@ public sealed class PendingTransactionRecoveryService(
         }
 
         return recovered;
+    }
+
+    private async Task CreateTopUpReceivedNotificationAsync(
+        long topUpRunId,
+        long educationAccountId,
+        decimal amount,
+        DateTime completedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        logger.LogInformation(
+            "CreateTopUpReceivedNotificationAsync started for recovered run {TopUpRunId}, education account {EducationAccountId}",
+            topUpRunId,
+            educationAccountId);
+
+        EducationAccount? account = await educationAccounts.FindByIdAsync(
+            educationAccountId,
+            cancellationToken);
+
+        if (account is null)
+        {
+            logger.LogWarning(
+                "Skipping top-up notification for recovered run {TopUpRunId}; education account {EducationAccountId} not found",
+                topUpRunId,
+                educationAccountId);
+            return;
+        }
+
+        long? userAccountId = await notificationRecipientResolver.FindUserAccountIdByPersonIdAsync(
+            account.PersonId,
+            cancellationToken);
+
+        if (userAccountId is null)
+        {
+            logger.LogWarning(
+                "Skipping top-up notification for recovered run {TopUpRunId}; no user account found for person {PersonId}",
+                topUpRunId,
+                account.PersonId);
+            return;
+        }
+
+        string amountText = amount.ToString("0.00");
+
+        logger.LogInformation(
+            "Creating TOP_UP_RECEIVED notification for recovered run {TopUpRunId} and user account {UserAccountId}",
+            topUpRunId,
+            userAccountId.Value);
+
+        Result<long> create = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.TopUpReceived,
+                $"Top-up Credited: {account.AccountNumber}",
+                $"Amount {amountText} has been credited to account {account.AccountNumber}."),
+            cancellationToken);
+
+        if (create.IsFailure)
+        {
+            logger.LogWarning(
+                "Failed to create top-up notification for recovered run {TopUpRunId} and user account {UserAccountId}: {ErrorCode}",
+                topUpRunId,
+                userAccountId.Value,
+                create.Error.Code);
+        }
+        else
+        {
+            logger.LogInformation(
+                "TOP_UP_RECEIVED notification created successfully with NotificationId {NotificationId} for user account {UserAccountId} in recovered run {TopUpRunId}",
+                create.Value,
+                userAccountId.Value,
+                topUpRunId);
+        }
     }
 }

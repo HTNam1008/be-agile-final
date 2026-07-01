@@ -10,7 +10,9 @@ using Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Xunit;
 
@@ -27,6 +29,8 @@ public sealed class CloseManualAccountHandlerTests
     private readonly FakeAccountHoldRepository _accountHolds = new();
     private readonly FakeAuditService _audit = new();
     private readonly FakeEmailDeliveryGateway _mailGateway = new();
+    private readonly FakeStudentNotificationRecipientResolver _notificationRecipients = new();
+    private readonly FakeNotificationWriter _notificationWriter = new();
 
     [Fact]
     public async Task Handle_OnSuccess_CallsAuditServiceWithReasonAndActor()
@@ -237,7 +241,9 @@ public sealed class CloseManualAccountHandlerTests
                 recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
                 _mailGateway,
                 mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
-                NullLogger<EducationAccountClosureEmailService>.Instance));
+                NullLogger<EducationAccountClosureEmailService>.Instance),
+            _notificationRecipients,
+            _notificationWriter);
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)
         => new(
@@ -415,6 +421,18 @@ public sealed class CloseManualAccountHandlerTests
 
         public EmailRecipient? ResolveProvided(string? providedEmail)
             => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
+    }
+
+    private sealed class FakeStudentNotificationRecipientResolver : IStudentNotificationRecipientResolver
+    {
+        public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<long?>(personId + 1000);
+    }
+
+    private sealed class FakeNotificationWriter : INotificationWriter
+    {
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<long>.Success(1));
     }
 
     private sealed record AuditCall(string ActionCode, string EntityTypeCode, string EntityId, string? DetailsJson);

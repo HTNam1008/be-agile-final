@@ -20,7 +20,8 @@ public sealed class RunExecutionOrchestrator(
     IEducationAccountRepository educationAccounts,
     ITopUpExecutionEventPublisher events,
     ITopUpExecutionMetrics metrics,
-    IStudentNotificationRecipientResolver notificationRecipientResolver,
+    IStudentNotificationRecipientResolver studentNotificationRecipientResolver,
+    ISchoolAdminNotificationRecipientResolver schoolAdminNotificationRecipientResolver,
     INotificationWriter notificationWriter,
     IUnitOfWork unitOfWork,
     IClock clock,
@@ -111,10 +112,6 @@ public sealed class RunExecutionOrchestrator(
                         totalSucceeded++;
                         totalAmount += result.CreditedAmount;
                         successfulAccountIds.Add(recipient.EducationAccountId);
-                        if (!result.AlreadyProcessed)
-                        {
-                            await CreateTopUpReceivedNotificationAsync(topUpRunId, recipient, linkedCts.Token);
-                        }
                         break;
                     case TopUpTransactionStatusCodes.Failed:
                         totalFailed++;
@@ -191,20 +188,14 @@ public sealed class RunExecutionOrchestrator(
                 totalSkipped,
                 duration);
 
-            if (run.TriggeredByLoginAccountId is long triggeredByUserAccountId)
-            {
-                logger.LogInformation(
-                    "Run {TopUpRunId} triggered by user account {UserAccountId}; creating RUN_COMPLETED notification",
-                    run.Id,
-                    triggeredByUserAccountId);
-
-                await NotifyRunCompletedAsync(
-                    run,
-                    triggeredByUserAccountId,
-                    totalSucceeded,
-                    totalAmount,
-                    linkedCts.Token);
-            }
+            await NotifyRunCompletedToSchoolAdminsAsync(
+                run,
+                recipients.Count,
+                totalSucceeded,
+                totalFailed,
+                totalSkipped,
+                totalAmount,
+                linkedCts.Token);
 
             return Result<RunExecutionResult>.Success(new RunExecutionResult
             {
@@ -419,7 +410,7 @@ public sealed class RunExecutionOrchestrator(
             return;
         }
 
-        long? userAccountId = await notificationRecipientResolver.FindUserAccountIdByPersonIdAsync(
+        long? userAccountId = await studentNotificationRecipientResolver.FindUserAccountIdByPersonIdAsync(
             account.PersonId,
             cancellationToken);
 
@@ -445,7 +436,7 @@ public sealed class RunExecutionOrchestrator(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.TopUpReceived,
-                "Student Support Received",
+                $"Top-up Credited: {accountNumber}",
                 $"Amount {amount} has been credited to account {accountNumber}."),
             cancellationToken);
 
@@ -467,43 +458,87 @@ public sealed class RunExecutionOrchestrator(
         }
     }
 
-    private async Task NotifyRunCompletedAsync(
+    private async Task NotifyRunCompletedToSchoolAdminsAsync(
         TopUpRun run,
-        long userAccountId,
+        int totalSelected,
         int totalSucceeded,
+        int totalFailed,
+        int totalSkipped,
         decimal totalAmount,
         CancellationToken cancellationToken)
     {
-        logger.LogInformation(
-            "NotifyRunCompletedAsync started for run {TopUpRunId}, user account {UserAccountId}, totalSucceeded {TotalSucceeded}, totalAmount {TotalAmount}",
-            run.Id,
-            userAccountId,
-            totalSucceeded,
-            totalAmount);
-
-        Result<long> create = await notificationWriter.CreateAsync(
-            new NotificationCreateRequest(
-                userAccountId,
-                NotificationTypeCode.RunCompleted,
-                $"Top-up Run {run.Id} Completed",
-                $"Total Succeeded: {totalSucceeded} student(s). Total amount processed: {totalAmount:0.00}."),
-            cancellationToken);
-
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create RUN_COMPLETED notification for user account {UserAccountId} in run {TopUpRunId}: {ErrorCode}",
-                userAccountId,
-                run.Id,
-                create.Error.Code);
-        }
-        else
+        if (totalSelected <= 0 || totalSucceeded != totalSelected || totalFailed > 0 || totalSkipped > 0)
         {
             logger.LogInformation(
-                "RUN_COMPLETED notification created successfully with NotificationId {NotificationId} for user account {UserAccountId} in run {TopUpRunId}",
-                create.Value,
-                userAccountId,
-                run.Id);
+                "Skipping RUN_COMPLETED notification for run {TopUpRunId}; completion criteria not met (selected={TotalSelected}, succeeded={TotalSucceeded}, failed={TotalFailed}, skipped={TotalSkipped})",
+                run.Id,
+                totalSelected,
+                totalSucceeded,
+                totalFailed,
+                totalSkipped);
+            return;
+        }
+
+        TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, cancellationToken);
+        if (campaign is null)
+        {
+            logger.LogWarning(
+                "Skipping RUN_COMPLETED notification for run {TopUpRunId}; campaign {TopUpCampaignId} not found",
+                run.Id,
+                run.TopUpCampaignId);
+            return;
+        }
+
+        IReadOnlyCollection<long> schoolAdminUserAccountIds = await schoolAdminNotificationRecipientResolver.FindUserAccountIdsByOrganizationIdAsync(
+            campaign.OrganizationId,
+            cancellationToken);
+
+        if (schoolAdminUserAccountIds.Count == 0)
+        {
+            logger.LogWarning(
+                "Skipping RUN_COMPLETED notification for run {TopUpRunId}; no school admin user accounts found for organization {OrganizationId}",
+                run.Id,
+                campaign.OrganizationId);
+            return;
+        }
+
+        logger.LogInformation(
+            "Creating RUN_COMPLETED notification for run {TopUpRunId} for {AdminCount} school admin(s) in organization {OrganizationId}",
+            run.Id,
+            schoolAdminUserAccountIds.Count,
+            campaign.OrganizationId);
+
+        foreach (long userAccountId in schoolAdminUserAccountIds)
+        {
+            Result<long> create = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId,
+                    NotificationTypeCode.RunCompleted,
+                    $"Top-up Run {run.Id} Completed",
+                    $"Run {run.Id} completed with {totalSucceeded} successful student(s), {totalFailed} failed, {totalSkipped} skipped, and total amount {totalAmount:0.00}."),
+                cancellationToken);
+
+            if (create.IsFailure)
+            {
+                logger.LogWarning(
+                    "Failed to create RUN_COMPLETED notification for school admin {UserAccountId} in run {TopUpRunId}: {ErrorCode}",
+                    userAccountId,
+                    run.Id,
+                    create.Error.Code);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "RUN_COMPLETED notification created successfully with NotificationId {NotificationId} for school admin {UserAccountId} in run {TopUpRunId}",
+                    create.Value,
+                    userAccountId,
+                    run.Id);
+            }
         }
     }
 }
+
+
+
+
+

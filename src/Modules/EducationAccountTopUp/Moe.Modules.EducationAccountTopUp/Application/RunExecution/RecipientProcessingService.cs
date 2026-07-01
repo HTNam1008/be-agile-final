@@ -177,6 +177,16 @@ public sealed class RecipientProcessingService(
                 },
                 cancellationToken);
 
+            if (!credit.Value.AlreadyProcessed)
+            {
+                await CreateTopUpReceivedNotificationAsync(
+                    topUpRunId,
+                    educationAccountId,
+                    amount,
+                    utcNow,
+                    cancellationToken);
+            }
+
             metrics.RecordRecipientProcessed(
                 topUpRunId,
                 TopUpTransactionStatusCodes.Completed,
@@ -213,6 +223,77 @@ public sealed class RecipientProcessingService(
         }
     }
 
+    private async Task CreateTopUpReceivedNotificationAsync(
+        long topUpRunId,
+        long educationAccountId,
+        decimal amount,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        logger.LogInformation(
+            "CreateTopUpReceivedNotificationAsync started for run {TopUpRunId}, education account {EducationAccountId}",
+            topUpRunId,
+            educationAccountId);
+
+        EducationAccount? account = await educationAccounts.FindByIdAsync(
+            educationAccountId,
+            cancellationToken);
+
+        if (account is null)
+        {
+            logger.LogWarning(
+                "Skipping top-up notification for education account {EducationAccountId}; account not found",
+                educationAccountId);
+            return;
+        }
+
+        long? userAccountId = await notificationRecipientResolver.FindUserAccountIdByPersonIdAsync(
+            account.PersonId,
+            cancellationToken);
+
+        if (userAccountId is null)
+        {
+            logger.LogWarning(
+                "Skipping top-up notification for education account {EducationAccountId}; no user account found for person {PersonId}",
+                educationAccountId,
+                account.PersonId);
+            return;
+        }
+
+        string amountText = amount.ToString("0.00");
+        string accountNumber = account.AccountNumber;
+
+        logger.LogInformation(
+            "Creating TOP_UP_RECEIVED notification for user account {UserAccountId} from education account {EducationAccountId} in run {TopUpRunId}",
+            userAccountId.Value,
+            educationAccountId,
+            topUpRunId);
+
+        Result<long> create = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.TopUpReceived,
+                $"Top-up Credited: {accountNumber}",
+                $"Amount {amountText} has been credited to account {accountNumber}."),
+            cancellationToken);
+
+        if (create.IsFailure)
+        {
+            logger.LogWarning(
+                "Failed to create top-up notification for user account {UserAccountId} in run {TopUpRunId}: {ErrorCode}",
+                userAccountId.Value,
+                topUpRunId,
+                create.Error.Code);
+        }
+        else
+        {
+            logger.LogInformation(
+                "TOP_UP_RECEIVED notification created successfully with NotificationId {NotificationId} for user account {UserAccountId} in run {TopUpRunId}",
+                create.Value,
+                userAccountId.Value,
+                topUpRunId);
+        }
+    }
     private async Task<Result<RecipientProcessingResult>> FailTransactionAsync(
         TopUpTransaction transaction,
         long educationAccountId,
@@ -275,13 +356,13 @@ public sealed class RecipientProcessingService(
             return;
         }
 
-        Result<long> result = await notificationWriter.CreateAsync(
-            new NotificationCreateRequest(
-                userAccountId.Value,
-                NotificationTypeCode.TopUpFailure,
-                "Top-up Transfer Failed",
-                $"Reason: {reason}. Please contact the administrator."),
-            cancellationToken);
+            Result<long> result = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId.Value,
+                    NotificationTypeCode.TopUpFailure,
+                    "Top-up Transfer Failed",
+                    $"Top-up for account {account.AccountNumber} failed. Reason: {reason}. Please contact the administrator."),
+                cancellationToken);
 
         if (result.IsFailure)
         {
@@ -293,4 +374,5 @@ public sealed class RecipientProcessingService(
         }
     }
 }
+
 

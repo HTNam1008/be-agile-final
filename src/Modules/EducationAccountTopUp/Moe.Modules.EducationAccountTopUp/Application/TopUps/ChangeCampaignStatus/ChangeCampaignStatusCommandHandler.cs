@@ -169,7 +169,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             new NotificationCreateRequest(
                 userAccountId,
                 NotificationTypeCode.CampaignLaunch,
-                $"New Support Campaign: {campaign.CampaignCode}",
+                $"Top-up Campaign Started: {campaign.CampaignCode}",
                 $"{campaign.CampaignName} has been launched for eligible students."),
             cancellationToken);
 
@@ -197,7 +197,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             new NotificationCreateRequest(
                 userAccountId,
                 NotificationTypeCode.RecurringAlert,
-                "Recurring Allowance Set",
+                "Recurring Top-up Scheduled",
                 $"Your next support payment is scheduled for {nextRunAt} (Frequency: {campaign.FrequencyCode ?? "N/A"})."),
             cancellationToken);
 

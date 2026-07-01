@@ -10,6 +10,7 @@ public static class NotificationTypeCode
 
     public const string FasSubmitted = "FAS_SUBMITTED";
     public const string FasEligible = "FAS_ELIGIBLE";
+    public const string FasRejected = "FAS_REJECTED";
     public const string FasApplied = "FAS_APPLIED";
     public const string FasIncomeCheck = "FAS_INCOME_CHECK";
     public const string FasExpiry = "FAS_EXPIRY";
