@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Application.BillingStatements;
@@ -30,16 +31,17 @@ public sealed record AiPaymentHistoryItem(long PaymentId, string PaymentNumber, 
 public sealed class AiFinanceReader(
     IEducationAccountPaymentGateway accounts,
     IQueryDispatcher queries,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IClock clock)
 {
     public async Task<AiFinanceSnapshot> GetSnapshotAsync(CancellationToken ct)
     {
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
 
-        DateTime utcNow = DateTime.UtcNow;
+        DateOnly currentBillingPeriod = clock.TodayInSingapore();
         var statementResult = await queries.Send(
-            new GetBillingStatementQuery(utcNow.Year, utcNow.Month), ct);
+            new GetBillingStatementQuery(currentBillingPeriod.Year, currentBillingPeriod.Month), ct);
         BillingStatementResponse? statement = statementResult.IsSuccess ? statementResult.Value : null;
 
         var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(1, 5), ct);

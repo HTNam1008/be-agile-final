@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Clock;
 using Moe.SharedKernel.Domain;
 
 namespace Moe.Modules.FasPayment.Domain.Fas;
@@ -55,7 +56,7 @@ internal sealed class FasScheme : Entity<long>
     public void UpdateEditable(string schemeCode, string grantCode, string name, string? description,
         DateOnly startDate, DateOnly endDate, long actorId, DateTime utcNow)
     {
-        if (StatusCode == FasSchemeStatusCodes.Active && StartDate <= DateOnly.FromDateTime(utcNow))
+        if (StatusCode == FasSchemeStatusCodes.Active && StartDate <= SingaporeBusinessDay.FromUtc(utcNow))
             throw new InvalidOperationException("Only an active scheme that has not started can be updated.");
         if (StatusCode is not (FasSchemeStatusCodes.Draft or FasSchemeStatusCodes.Active))
             throw new InvalidOperationException("Only a draft or not-started active scheme can be updated.");
@@ -89,7 +90,7 @@ internal sealed class FasScheme : Entity<long>
 
     private static void ValidateDates(DateOnly startDate, DateOnly endDate, DateTime utcNow)
     {
-        DateOnly today = DateOnly.FromDateTime(utcNow);
+        DateOnly today = SingaporeBusinessDay.FromUtc(utcNow);
         if (startDate < today) throw new ArgumentException("Start date cannot be before today.", nameof(startDate));
         if (endDate <= startDate) throw new ArgumentException("End date must be after start date.", nameof(endDate));
     }
