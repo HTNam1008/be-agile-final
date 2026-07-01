@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Moe.Application.Abstractions.Clock;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -86,7 +87,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         JsonElement completed = await SendFasMessage("Singapore Citizen", conversationId);
 
         Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
-        Assert.Contains("prepared", completed.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("welfare-home status", completed.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
         JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
         Assert.True(patch.GetProperty("income").GetProperty("isWelfareHomeResident").GetBoolean());
         Assert.Equal("Singapore Citizen", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
@@ -153,16 +154,17 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             grantCode = $"AI-FAS-NO-GRANT-{suffix}",
             name = $"AI FAS No Match {suffix}",
             description = "AI copilot no-match scheme",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
                 new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
-                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 2 },
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 3 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 4 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 4 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 5 }
             },
             tiers = new object[]
             {
@@ -173,10 +175,11 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 13m, numberTo = 25m, nationalities = (string[]?)null },
-                        new { displayOrder = 2, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null },
-                        new { displayOrder = 3, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
-                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                        new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
+                        new { displayOrder = 3, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null },
+                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
+                        new { displayOrder = 5, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
                     }
                 }
             }
@@ -214,16 +217,17 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             grantCode = $"AI-FAS-GRANT-{suffix}",
             name = $"AI FAS {suffix}",
             description = "AI copilot integration scheme",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
                 new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
-                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 2 },
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 3 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 4 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 4 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 5 }
             },
             tiers = new object[]
             {
@@ -234,10 +238,11 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 13m, numberTo = 25m, nationalities = (string[]?)null },
-                        new { displayOrder = 2, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
-                        new { displayOrder = 3, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
-                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                        new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
+                        new { displayOrder = 3, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
+                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
+                        new { displayOrder = 5, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
                     }
                 }
             }

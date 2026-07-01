@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Moe.Application.Abstractions.Clock;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -538,13 +539,14 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
             grantCode = $"AI-FAS-GRANT-{suffix}",
             name = $"AI FAS {suffix}",
             description = "AI copilot integration scheme",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
-                new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 1 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 1 },
+                new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 2 }
             },
             tiers = new object[]
             {
@@ -555,7 +557,8 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null }
+                        new { displayOrder = 1, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null }
                     }
                 }
             }
