@@ -55,7 +55,7 @@ internal sealed class CancelEnrollmentHandler(
             return Result<EnrollmentCancellationResponse>.Failure(PaymentApplicationErrors.EnrollmentNotFound);
 
         DateTime now = clock.UtcNow.UtcDateTime;
-        DateOnly today = DateOnly.FromDateTime(now);
+        DateOnly today = clock.TodayInSingapore();
         EnrollmentRefundCalculation calculation = EnrollmentRefundPreviewCalculator.Calculate(
             today,
             snapshot.Course.StartDate,

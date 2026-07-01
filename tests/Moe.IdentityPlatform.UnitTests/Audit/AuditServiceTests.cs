@@ -134,6 +134,8 @@ public sealed class AuditServiceTests
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 
     private sealed class FakeCurrentUser : ICurrentUser

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -7,7 +8,7 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.IdentityPlatform.Infrastructure.Students;
 
-internal sealed class StudentDirectory(MoeDbContext dbContext) : IStudentDirectory
+internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : IStudentDirectory
 {
     public async Task<StudentSummary?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
     {
@@ -64,7 +65,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext) : IStudentDirecto
         AdminStudentSearchCriteria criteria,
         CancellationToken cancellationToken)
     {
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = clock.TodayInSingapore();
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()
@@ -120,7 +121,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext) : IStudentDirecto
         AdminStudentSearchCriteria criteria,
         CancellationToken cancellationToken)
     {
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = clock.TodayInSingapore();
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()

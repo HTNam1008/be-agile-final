@@ -1,4 +1,5 @@
 using FluentValidation;
+using Moe.Application.Abstractions.Clock;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Validation;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
@@ -7,10 +8,13 @@ namespace Moe.Modules.FasPayment.Application.AdminFasSchemes;
 
 internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<CreateFasSchemeRequest>, IValidationFailureStatusCodeProvider
 {
+    private readonly IClock? _clock;
+
     public int ValidationFailureStatusCode => ApiResponseCodes.UnprocessableEntity;
 
-    public CreateFasSchemeRequestValidator()
+    public CreateFasSchemeRequestValidator(IClock? clock = null)
     {
+        _clock = clock;
         RuleFor(x => x.SchemeCode).NotEmpty().MaximumLength(50).Must(BeTrimmed).WithMessage("Scheme code cannot contain leading or trailing spaces.");
         RuleFor(x => x.GrantCode).MaximumLength(100).Must(BeTrimmedOrEmpty).WithMessage("Grant code cannot contain leading or trailing spaces.");
         RuleFor(x => x.Name).NotEmpty().MaximumLength(255).Must(BeTrimmed).WithMessage("Name cannot contain leading or trailing spaces.");
@@ -188,7 +192,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         }
     }
 
-    private static DateOnly Today() => DateOnly.FromDateTime(DateTime.UtcNow);
+    private DateOnly Today() => _clock?.TodayInSingapore() ?? SingaporeBusinessDay.FromUtc(DateTime.UtcNow);
     private static bool BeTrimmed(string? value) => value is not null && value == value.Trim();
     private static bool BeTrimmedOrEmpty(string? value) => value is null || value == value.Trim();
 }
