@@ -106,6 +106,7 @@ public sealed class StudentFasApplicationService(
         userRequiredFacts.Add("parent or guardian nationality");
 
         return new EligibilityCriteriaPlan(
+            openSchemes.Select(x => new EligibilitySchemeOption(x.Id, x.Name)).OrderBy(x => x.Name).ToArray(),
             openSchemes.Select(x => x.Name).OrderBy(x => x).ToArray(),
             requiredCriteriaTypes,
             profileFacts,
