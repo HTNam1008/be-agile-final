@@ -23,6 +23,7 @@ public sealed class RunExecutionOrchestratorTests
     private readonly FakeTopUpExecutionMetrics _metrics = new();
     private readonly FakeEducationAccountRepository _educationAccounts = new();
     private readonly FakeStudentNotificationRecipientResolver _notificationRecipientResolver = new();
+    private readonly FakeSchoolAdminNotificationRecipientResolver _schoolAdminNotificationRecipientResolver = new();
     private readonly FakeNotificationWriter _notificationWriter = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 18, 4, 0, 0, TimeSpan.Zero));
@@ -242,6 +243,7 @@ public sealed class RunExecutionOrchestratorTests
             _events,
             _metrics,
             _notificationRecipientResolver,
+            _schoolAdminNotificationRecipientResolver,
             _notificationWriter,
             _unitOfWork,
             _clock,
@@ -583,6 +585,12 @@ public sealed class RunExecutionOrchestratorTests
             Requests.Add(request);
             return Task.FromResult(Result<long>.Success(Requests.Count));
         }
+    }
+
+    private sealed class FakeSchoolAdminNotificationRecipientResolver : ISchoolAdminNotificationRecipientResolver
+    {
+        public Task<IReadOnlyCollection<long>> FindUserAccountIdsByOrganizationIdAsync(long organizationId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<long>>([9001L]);
     }
 
     private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository

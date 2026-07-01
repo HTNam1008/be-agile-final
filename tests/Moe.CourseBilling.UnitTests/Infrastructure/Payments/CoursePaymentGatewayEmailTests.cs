@@ -186,6 +186,7 @@ public sealed class CoursePaymentGatewayEmailTests
             recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
             mailGateway,
             new FakeStudentNotificationRecipientResolver(),
+            new FakeSchoolAdminNotificationRecipientResolver(),
             new FakeNotificationWriter(),
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<CoursePaymentGateway>.Instance);
@@ -216,6 +217,12 @@ public sealed class CoursePaymentGatewayEmailTests
     {
         public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken)
             => Task.FromResult<long?>(1001);
+    }
+
+    private sealed class FakeSchoolAdminNotificationRecipientResolver : ISchoolAdminNotificationRecipientResolver
+    {
+        public Task<IReadOnlyCollection<long>> FindUserAccountIdsByOrganizationIdAsync(long organizationId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<long>>([2001L]);
     }
 
     private sealed class FakeNotificationWriter : INotificationWriter

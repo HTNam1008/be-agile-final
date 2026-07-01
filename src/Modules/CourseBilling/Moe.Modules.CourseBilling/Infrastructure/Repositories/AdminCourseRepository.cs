@@ -18,6 +18,7 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 internal sealed class AdminCourseRepository(
     MoeDbContext dbContext,
     IStudentNotificationRecipientResolver notificationRecipients,
+    ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
     INotificationWriter notificationWriter,
     ILogger<AdminCourseRepository> logger) : IAdminCourseRepository
 {
@@ -595,6 +596,30 @@ internal sealed class AdminCourseRepository(
                 personId,
                 billNumber,
                 result.Error.Code);
+        }
+
+        IReadOnlyCollection<long> schoolAdminUserAccountIds = await schoolAdminRecipients.FindUserAccountIdsByOrganizationIdAsync(
+            course.OrganizationId,
+            cancellationToken);
+
+        foreach (long schoolAdminUserAccountId in schoolAdminUserAccountIds.Distinct())
+        {
+            Result<long> adminResult = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    schoolAdminUserAccountId,
+                    NotificationTypeCode.BillIssued,
+                    $"Bill Issued: {billNumber}",
+                    $"New bill for {course.CourseName}. Net Payable: {netPayableAmount:N2}. Due: {dueDate:yyyy-MM-dd}."),
+                cancellationToken);
+
+            if (adminResult.IsFailure)
+            {
+                logger.LogWarning(
+                    "Bill issued notification failed for school admin. OrganizationId={OrganizationId} BillNumber={BillNumber} Error={ErrorCode}",
+                    course.OrganizationId,
+                    billNumber,
+                    adminResult.Error.Code);
+            }
         }
     }
 }

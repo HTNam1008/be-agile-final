@@ -6,6 +6,10 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
+using Microsoft.Extensions.Logging;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
@@ -16,7 +20,10 @@ internal sealed class AutomaticEducationAccountCloser(
     IEligiblePersonLookupGateway people,
     IAuditService auditService,
     IUnitOfWork unitOfWork,
-    EducationAccountClosureEmailService closureEmails) : IAutomaticEducationAccountCloser
+    EducationAccountClosureEmailService closureEmails,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter,
+    ILogger<AutomaticEducationAccountCloser> logger) : IAutomaticEducationAccountCloser
 {
     private const int ClosingAge = 30;
 
@@ -105,10 +112,42 @@ internal sealed class AutomaticEducationAccountCloser(
             account,
             "Automatic closure when the account holder reached age 30",
             cancellationToken);
+        await NotifyAccountClosedAsync(account, cancellationToken);
 
         return new AutomaticEducationAccountClosureResult(
             account.Id,
             account.PersonId,
             Closed: true);
+    }
+
+    private async Task NotifyAccountClosedAsync(EducationAccount account, CancellationToken cancellationToken)
+    {
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(account.PersonId, cancellationToken);
+        if (userAccountId is null)
+        {
+            logger.LogWarning(
+                "Skipping ACC_CLOSED notification for education account {EducationAccountId}; no user account found for person {PersonId}",
+                account.Id,
+                account.PersonId);
+            return;
+        }
+
+        string closingReason = "Automatic closure when the account holder reached age 30";
+        Result<long> create = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.AccClosed,
+                "Account Closed",
+                $"Reason: {closingReason}."),
+            cancellationToken);
+
+        if (create.IsFailure)
+        {
+            logger.LogWarning(
+                "Failed to create ACC_CLOSED notification for user account {UserAccountId} in education account {EducationAccountId}: {ErrorCode}",
+                userAccountId.Value,
+                account.Id,
+                create.Error.Code);
+        }
     }
 }

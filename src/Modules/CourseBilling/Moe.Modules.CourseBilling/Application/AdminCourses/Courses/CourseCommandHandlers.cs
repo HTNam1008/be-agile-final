@@ -328,7 +328,7 @@ internal sealed class PublishCourseCommandHandler(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.EnrollOpen,
-                    $"Enrollment Open: {course.CourseCode}",
+                    $"Course Enrollment Open: {course.CourseCode}",
                     $"Registration for {course.CourseName} is open until {course.EnrollmentCloseAtUtc:yyyy-MM-dd HH:mm}."),
                 cancellationToken);
         }
@@ -358,13 +358,13 @@ internal sealed class DisableCourseCommandHandler(
                 cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await NotifyCourseDisabledAsync(result.Value.CourseId, result.Value.CourseName, cancellationToken);
+            await NotifyCourseDisabledAsync(result.Value.CourseId, result.Value.CourseCode, result.Value.CourseName, cancellationToken);
         }
 
         return result;
     }
 
-    private async Task NotifyCourseDisabledAsync(long courseId, string courseName, CancellationToken cancellationToken)
+    private async Task NotifyCourseDisabledAsync(long courseId, string courseCode, string courseName, CancellationToken cancellationToken)
     {
         IReadOnlyList<AdminCourseEnrollmentDto> enrollments = await access.Courses.ListEnrollmentsAsync(courseId, cancellationToken);
         if (enrollments.Count == 0)
@@ -384,8 +384,8 @@ internal sealed class DisableCourseCommandHandler(
                 new NotificationCreateRequest(
                     userAccountId.Value,
                     NotificationTypeCode.CourseDisabled,
-                    "Course Suspended",
-                    $"Reason: MOE administrative action. The course {courseName} is currently unavailable."),
+                    $"Course Disabled: {courseCode}",
+                    $"Reason: MOE administrative action. The course {courseCode} ({courseName}) is currently unavailable."),
                 cancellationToken);
         }
     }
