@@ -317,6 +317,7 @@ public sealed class PaymentNotificationEmailServiceTests
             dbContext,
             mailQueue,
             mailSwitch ?? new FixedEmailDeliverySwitch(),
+            new FixedEmailBrandingProvider(),
             NullLogger<PaymentNotificationEmailService>.Instance);
 
     private static MoeDbContext CreateDbContext()

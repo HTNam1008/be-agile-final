@@ -20,10 +20,18 @@ public sealed class MailDeliveryModule : IModule
             .ValidateOnStart();
 
         services.AddSingleton<IEmailDeliverySwitch, EmailDeliverySwitch>();
+        services.AddSingleton<IEmailBrandingProvider, EmailBrandingProvider>();
         services.AddSingleton<IEmailDeliveryGateway, SmtpEmailDeliveryGateway>();
         services.AddSingleton<IEmailNotificationQueue, InMemoryEmailNotificationQueue>();
-        services.AddHostedService<QueuedEmailDeliveryWorker>();
+        if (IsBackgroundJobEnabled(configuration, "MailDelivery:QueueWorker"))
+        {
+            services.AddHostedService<QueuedEmailDeliveryWorker>();
+        }
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }

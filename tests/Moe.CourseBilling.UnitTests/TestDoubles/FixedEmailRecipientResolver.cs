@@ -12,8 +12,4 @@ internal sealed class FixedEmailRecipientResolver(
             ? null
             : new EmailRecipient(emailAddress, EmailRecipientSourceCodes.Contact));
 
-    public EmailRecipient? ResolveProvided(string? providedEmail)
-        => string.IsNullOrWhiteSpace(providedEmail)
-            ? null
-            : new EmailRecipient(providedEmail, EmailRecipientSourceCodes.Provided);
 }

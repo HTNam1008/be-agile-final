@@ -281,6 +281,7 @@ public sealed class AccountCreditGatewayTests
             new FakeTopUpExecutionMetrics(),
             mailQueue ?? new TestDoubles.RecordingEmailNotificationQueue(),
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<AccountCreditGateway>.Instance);
 
     private sealed class TestClock(DateTimeOffset utcNow) : IClock

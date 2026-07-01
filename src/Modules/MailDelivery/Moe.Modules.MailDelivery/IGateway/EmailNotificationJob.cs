@@ -4,8 +4,7 @@ public sealed record EmailNotificationJob
 {
     private EmailNotificationJob(
         string notificationType,
-        long? personId,
-        string? providedEmail,
+        long personId,
         string subject,
         string plainTextBody,
         string? htmlBody,
@@ -14,7 +13,6 @@ public sealed record EmailNotificationJob
     {
         NotificationType = notificationType;
         PersonId = personId;
-        ProvidedEmail = providedEmail;
         Subject = subject;
         PlainTextBody = plainTextBody;
         HtmlBody = htmlBody;
@@ -24,9 +22,7 @@ public sealed record EmailNotificationJob
 
     public string NotificationType { get; }
 
-    public long? PersonId { get; }
-
-    public string? ProvidedEmail { get; }
+    public long PersonId { get; }
 
     public string Subject { get; }
 
@@ -49,25 +45,6 @@ public sealed record EmailNotificationJob
         => new(
             notificationType,
             personId,
-            null,
-            subject,
-            plainTextBody,
-            htmlBody,
-            entityType,
-            entityId);
-
-    public static EmailNotificationJob ForProvidedEmail(
-        string notificationType,
-        string? providedEmail,
-        string subject,
-        string plainTextBody,
-        string? htmlBody = null,
-        string? entityType = null,
-        string? entityId = null)
-        => new(
-            notificationType,
-            null,
-            providedEmail,
             subject,
             plainTextBody,
             htmlBody,

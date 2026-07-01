@@ -50,7 +50,7 @@ public sealed class Age30AccountLockReminderEmailServiceTests
             && job.PlainTextBody.Contains("22 Jan 2026", StringComparison.Ordinal));
         mailQueue.Jobs.Should().OnlyContain(job =>
             job.NotificationType == "AGE-30-LOCK-REMINDER"
-            && job.Subject == "Reminder: Your MOE SEEDS account will be locked soon"
+            && job.Subject == "Reminder: Your Ministry of Education - Singapore account will be locked soon"
             && job.PlainTextBody.Contains("Go to Payment Dashboard", StringComparison.Ordinal)
             && job.HtmlBody != null
             && job.HtmlBody.Contains("#DC343B", StringComparison.Ordinal));
@@ -132,6 +132,7 @@ public sealed class Age30AccountLockReminderEmailServiceTests
             mailQueue,
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             outstandingReader ?? new FakeOutstandingReader(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<Age30AccountLockReminderEmailService>.Instance);
 
     private static void SeedAccountHolder(

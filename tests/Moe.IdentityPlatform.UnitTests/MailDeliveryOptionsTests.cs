@@ -1,11 +1,34 @@
 using FluentAssertions;
 using Moe.Modules.MailDelivery.Infrastructure.Smtp;
+using Moe.Modules.MailDelivery.Templates;
+using System.Text;
 using Xunit;
 
 namespace Moe.IdentityPlatform.UnitTests;
 
 public sealed class MailDeliveryOptionsTests
 {
+    [Fact]
+    public void Defaults_UseMinistryBrandAndSenderDisplayName()
+    {
+        MailDeliveryOptions options = new();
+
+        options.AppName.Should().Be("Ministry of Education - Singapore");
+        options.FromDisplayName.Should().Be("Ministry of Education - Singapore");
+        options.PortalBaseUrl.Should().Be("http://localhost:5173");
+    }
+
+    [Fact]
+    public void AppendHeader_UsesConfiguredAppName()
+    {
+        StringBuilder builder = new();
+
+        EmailTemplateBranding.AppendHeader(builder, "Payment Received", "Configured Brand");
+
+        builder.ToString().Should().Contain("Configured Brand");
+        builder.ToString().Should().NotContain("MOE SEEDS");
+    }
+
     [Fact]
     public void IsValid_WhenDisabled_DoesNotRequireSmtpConfiguration()
     {
@@ -29,12 +52,12 @@ public sealed class MailDeliveryOptionsTests
         MailDeliveryOptions options = new()
         {
             Enabled = true,
-            AppName = "MOE SEEDS",
+            AppName = "Ministry of Education - Singapore",
             Host = string.Empty,
             Port = 587,
             UserName = "sender@example.com",
             FromEmail = "sender@example.com",
-            FromDisplayName = "MOE SEEDS"
+            FromDisplayName = "Ministry of Education - Singapore"
         };
 
         MailDeliveryOptions.IsValid(options).Should().BeFalse();
@@ -46,12 +69,12 @@ public sealed class MailDeliveryOptionsTests
         MailDeliveryOptions validOptions = new()
         {
             Enabled = true,
-            AppName = "MOE SEEDS",
+            AppName = "Ministry of Education - Singapore",
             Host = "smtp.gmail.com",
             Port = 587,
             UserName = "primary@example.com",
             FromEmail = "primary@example.com",
-            FromDisplayName = "MOE SEEDS",
+            FromDisplayName = "Ministry of Education - Singapore",
             FallbackUserName = "fallback@example.com",
             FallbackPassword = "fallback-password",
             FallbackFromEmail = "fallback@example.com"
@@ -59,12 +82,12 @@ public sealed class MailDeliveryOptionsTests
         MailDeliveryOptions invalidOptions = new()
         {
             Enabled = true,
-            AppName = "MOE SEEDS",
+            AppName = "Ministry of Education - Singapore",
             Host = "smtp.gmail.com",
             Port = 587,
             UserName = "primary@example.com",
             FromEmail = "primary@example.com",
-            FromDisplayName = "MOE SEEDS",
+            FromDisplayName = "Ministry of Education - Singapore",
             FallbackUserName = "fallback@example.com",
             FallbackPassword = "fallback-password",
             FallbackFromEmail = "not-an-email"

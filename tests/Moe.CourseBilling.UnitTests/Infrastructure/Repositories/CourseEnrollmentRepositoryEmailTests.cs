@@ -209,6 +209,7 @@ public sealed class CourseEnrollmentRepositoryEmailTests
             dbContext,
             mailQueue,
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<CourseEnrollmentRepository>.Instance);
 
     private sealed class TestModelConfiguration : IModelConfigurationContributor

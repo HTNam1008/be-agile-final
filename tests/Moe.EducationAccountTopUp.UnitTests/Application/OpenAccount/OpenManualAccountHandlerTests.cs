@@ -138,6 +138,7 @@ public sealed class OpenManualAccountHandlerTests
                 _people,
                 _mailQueue,
                 mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+                new TestDoubles.FixedEmailBrandingProvider(),
                 NullLogger<EducationAccountCreatedEmailService>.Instance));
     }
 

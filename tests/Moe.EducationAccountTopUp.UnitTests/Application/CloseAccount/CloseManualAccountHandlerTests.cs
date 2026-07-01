@@ -187,7 +187,7 @@ public sealed class CloseManualAccountHandlerTests
         account.StatusCode.Should().Be(AccountStatuses.Active);
         _audit.Calls.Should().BeEmpty();
         _unitOfWork.SaveCalls.Should().Be(0);
-        _mailGateway.Messages.Should().BeEmpty();
+        _mailQueue.Jobs.Should().BeEmpty();
         _accountHolds.CheckedAccountIds.Should().ContainSingle().Which.Should().Be(account.Id);
         _accountHolds.CheckedUtcNow.Should().ContainSingle().Which.Should().Be(_clock.UtcNow.UtcDateTime);
     }
@@ -236,6 +236,7 @@ public sealed class CloseManualAccountHandlerTests
                 _people,
                 _mailQueue,
                 mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+                new TestDoubles.FixedEmailBrandingProvider(),
                 NullLogger<EducationAccountClosureEmailService>.Instance));
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)

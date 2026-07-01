@@ -19,9 +19,9 @@ internal sealed class PaymentNotificationEmailService(
     MoeDbContext dbContext,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<PaymentNotificationEmailService> logger)
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
     private const string ExpiredReason = "The payment session expired before completion. Please try again.";
 
     public async Task SendStatementPaymentFailedAsync(
@@ -35,7 +35,7 @@ internal sealed class PaymentNotificationEmailService(
             title: "Action required: payment failed",
             leadText: "your payment could not be processed.",
             actionLabel: "Retry Payment",
-            footer: "This message was sent by MOE SEEDS after a failed payment attempt.",
+            footer: $"This message was sent by {branding.AppName} after a failed payment attempt.",
             statusLabel: "Reason",
             statusValue: NormalizeReason(failureReason, "Payment could not be processed."),
             cancellationToken);
@@ -60,7 +60,7 @@ internal sealed class PaymentNotificationEmailService(
                 title: "Installment payment received",
                 leadText: "we have received your installment payment.",
                 actionLabel: "View Payments",
-                footer: "This message was sent by MOE SEEDS after a completed installment payment.",
+                footer: $"This message was sent by {branding.AppName} after a completed installment payment.",
                 statusLabel: "Paid On",
                 statusValue: FormatDate(completedAtUtc),
                 cancellationToken: cancellationToken,
@@ -75,7 +75,7 @@ internal sealed class PaymentNotificationEmailService(
             title: "Full payment received",
             leadText: "we have received your full payment.",
             actionLabel: "View Payments",
-            footer: "This message was sent by MOE SEEDS after a completed full payment.",
+            footer: $"This message was sent by {branding.AppName} after a completed full payment.",
             statusLabel: "Paid On",
             statusValue: FormatDate(completedAtUtc),
             cancellationToken: cancellationToken,
@@ -99,7 +99,7 @@ internal sealed class PaymentNotificationEmailService(
             title: "Payment cancelled",
             leadText: $"your payment attempt was cancelled. {releaseText}",
             actionLabel: "View Payments",
-            footer: "This message was sent by MOE SEEDS after a payment attempt was cancelled.",
+            footer: $"This message was sent by {branding.AppName} after a payment attempt was cancelled.",
             statusLabel: "Cancelled On",
             statusValue: FormatDate(cancelledAtUtc),
             cancellationToken);
@@ -147,7 +147,7 @@ internal sealed class PaymentNotificationEmailService(
             .ToArray();
 
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             subject,
             string.Empty,
             $"Hello {studentName}, your installment payment has been deferred.",
@@ -162,9 +162,9 @@ internal sealed class PaymentNotificationEmailService(
             "Deferred bill details:",
             .. billLines,
             string.Empty,
-            $"View Payments -> {PaymentDashboardUrl}",
+            $"View Payments -> {branding.PaymentDashboardUrl}",
             string.Empty,
-            "This message was sent by MOE SEEDS after your installment payment was deferred."
+            $"This message was sent by {branding.AppName} after your installment payment was deferred."
         ]);
         string htmlBody = BuildPaymentDeferredHtmlBody(
             studentName,
@@ -173,7 +173,9 @@ internal sealed class PaymentNotificationEmailService(
             totalDisplay,
             earliestOriginalDueDate,
             earliestNewDueDate,
-            deferredAtUtc);
+            deferredAtUtc,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
         await EnqueueForPersonAsync(
             notificationType,
@@ -225,7 +227,7 @@ internal sealed class PaymentNotificationEmailService(
             : payment.ReceiptNumber;
 
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             subject,
             string.Empty,
             $"Hello {studentName}, {leadText}",
@@ -235,7 +237,7 @@ internal sealed class PaymentNotificationEmailService(
             $"Reference: {reference}",
             $"{statusLabel}: {statusValue}",
             string.Empty,
-            $"{actionLabel} -> {PaymentDashboardUrl}",
+            $"{actionLabel} -> {branding.PaymentDashboardUrl}",
             string.Empty,
             footer
         ]);
@@ -249,7 +251,9 @@ internal sealed class PaymentNotificationEmailService(
             statusLabel,
             statusValue,
             actionLabel,
-            footer);
+            footer,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
         await EnqueueAsync(payment, notificationType, subject, plainTextBody, htmlBody, cancellationToken);
     }
@@ -445,11 +449,13 @@ internal sealed class PaymentNotificationEmailService(
         string statusLabel,
         string statusValue,
         string actionLabel,
-        string footer)
+        string footer,
+        string appName,
+        string paymentDashboardUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, title);
+        EmailTemplateBranding.AppendHeader(builder, title, appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
@@ -462,7 +468,7 @@ internal sealed class PaymentNotificationEmailService(
         EmailTemplateBranding.AppendSummaryRow(builder, "Reference", reference);
         EmailTemplateBranding.AppendSummaryRow(builder, statusLabel, statusValue, "#fff7ed", "#9a3412");
         builder.Append("</table>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, actionLabel);
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, actionLabel);
         builder.Append("</td></tr>");
         EmailTemplateBranding.AppendFooter(builder, footer);
         return builder.ToString();
@@ -475,11 +481,13 @@ internal sealed class PaymentNotificationEmailService(
         string totalDisplay,
         DateOnly earliestOriginalDueDate,
         DateOnly earliestNewDueDate,
-        DateTime deferredAtUtc)
+        DateTime deferredAtUtc,
+        string appName,
+        string paymentDashboardUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Installment payment deferred");
+        EmailTemplateBranding.AppendHeader(builder, "Installment payment deferred", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
@@ -509,9 +517,9 @@ internal sealed class PaymentNotificationEmailService(
             builder.Append("</td></tr>");
         }
         builder.Append("</table>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "View Payments");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "View Payments");
         builder.Append("</td></tr>");
-        EmailTemplateBranding.AppendFooter(builder, "This message was sent by MOE SEEDS after your installment payment was deferred.");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after your installment payment was deferred.");
         return builder.ToString();
     }
 

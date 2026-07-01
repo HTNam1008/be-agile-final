@@ -165,6 +165,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         ServiceCollection services = new();
         services.AddScoped(_ => new MoeDbContext(options, contributors));
         services.AddSingleton<IEmailDeliverySwitch>(new FixedEmailDeliverySwitch(mailEnabled));
+        services.AddSingleton<IEmailBrandingProvider>(new FixedEmailBrandingProvider());
         services.AddSingleton<IEmailNotificationQueue>(queue);
         services.AddSingleton<ICoursePaymentPlanGateway>(paymentPlans);
         ServiceProvider provider = services.BuildServiceProvider();

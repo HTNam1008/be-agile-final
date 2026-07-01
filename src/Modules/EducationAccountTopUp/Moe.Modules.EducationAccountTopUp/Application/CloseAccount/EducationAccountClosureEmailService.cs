@@ -14,10 +14,9 @@ internal sealed class EducationAccountClosureEmailService(
     IPersonDirectory people,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<EducationAccountClosureEmailService> logger)
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
-
     public async Task SendClosedAsync(
         EducationAccount account,
         string reason,
@@ -48,7 +47,7 @@ internal sealed class EducationAccountClosureEmailService(
 
         const string subject = "Your Education Account Has Been Closed";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Education Account closure",
             string.Empty,
             $"Hello {studentName},",
@@ -65,7 +64,8 @@ internal sealed class EducationAccountClosureEmailService(
             effectiveClosureDate,
             reason,
             remainingBalance,
-            refundDestination);
+            refundDestination,
+            branding.AppName);
 
         await EnqueueAsync(account, subject, plainTextBody, htmlBody, "NOTI-06-CLOSED", "closed", cancellationToken);
     }
@@ -94,7 +94,7 @@ internal sealed class EducationAccountClosureEmailService(
 
         const string subject = "Action Required: Outstanding Balance Before Account Closure";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Education Account pending closure",
             string.Empty,
             $"Hello {studentName},",
@@ -104,13 +104,15 @@ internal sealed class EducationAccountClosureEmailService(
             $"Deadline to settle: {deadlineDisplay}",
             string.Empty,
             "Please log in to the Payment Dashboard to resolve this.",
-            $"Go to Payment Dashboard -> {PaymentDashboardUrl}"
+            $"Go to Payment Dashboard -> {branding.PaymentDashboardUrl}"
         ]);
 
         string htmlBody = BuildPendingClosureHtmlBody(
             studentName,
             outstandingDisplay,
-            deadlineDisplay);
+            deadlineDisplay,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
         await EnqueueAsync(account, subject, plainTextBody, htmlBody, "NOTI-06-PENDING", "pending closure", cancellationToken);
     }
@@ -162,9 +164,10 @@ internal sealed class EducationAccountClosureEmailService(
         string effectiveClosureDate,
         string reason,
         string remainingBalance,
-        string refundDestination)
+        string refundDestination,
+        string appName)
     {
-        StringBuilder builder = StartBody("Education Account closed");
+        StringBuilder builder = StartBody("Education Account closed", appName);
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
             .Append(",</p>");
@@ -179,15 +182,17 @@ internal sealed class EducationAccountClosureEmailService(
             ("Remaining balance", remainingBalance),
             ("Refund destination", refundDestination)
         ]);
-        return EndBody(builder);
+        return EndBody(builder, appName);
     }
 
     private static string BuildPendingClosureHtmlBody(
         string studentName,
         string outstandingAmount,
-        string deadlineDate)
+        string deadlineDate,
+        string appName,
+        string paymentDashboardUrl)
     {
-        StringBuilder builder = StartBody("Action required before closure");
+        StringBuilder builder = StartBody("Action required before closure", appName);
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
             .Append(",</p>");
@@ -197,24 +202,23 @@ internal sealed class EducationAccountClosureEmailService(
             ("Deadline to settle", deadlineDate)
         ]);
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please log in to the Payment Dashboard to resolve this.</p>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Go to Payment Dashboard");
-        return EndBody(builder);
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Go to Payment Dashboard");
+        return EndBody(builder, appName);
     }
 
-    private static StringBuilder StartBody(string title)
+    private static StringBuilder StartBody(string title, string appName)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, title);
+        EmailTemplateBranding.AppendHeader(builder, title, appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         return builder;
     }
 
-    private static string EndBody(StringBuilder builder)
+    private static string EndBody(StringBuilder builder, string appName)
     {
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS.</td></tr>");
-        builder.Append("</table></td></tr></table></body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName}.");
         return builder.ToString();
     }
 

@@ -100,7 +100,7 @@ public sealed class AutomaticEducationAccountCloserTests
         account.StatusCode.Should().Be(AccountStatuses.Active);
         _audit.Calls.Should().BeEmpty();
         _unitOfWork.SaveCalls.Should().Be(0);
-        _mailGateway.Messages.Should().BeEmpty();
+        _mailQueue.Jobs.Should().BeEmpty();
         _accountHolds.CheckedAccountIds.Should().ContainSingle().Which.Should().Be(account.Id);
         _accountHolds.CheckedUtcNow.Should().ContainSingle().Which.Should().Be(Now.UtcDateTime);
     }
@@ -122,7 +122,9 @@ public sealed class AutomaticEducationAccountCloserTests
         account.StatusCode.Should().Be(AccountStatuses.Closed);
         _audit.Calls.Should().ContainSingle();
         _unitOfWork.SaveCalls.Should().Be(1);
-        _mailGateway.Messages.Should().ContainSingle();
+        EmailNotificationJob job = _mailQueue.Jobs.Should().ContainSingle().Which;
+        job.NotificationType.Should().Be("NOTI-06-CLOSED");
+        job.PersonId.Should().Be(3102);
     }
 
     [Fact]
@@ -177,6 +179,7 @@ public sealed class AutomaticEducationAccountCloserTests
             _personDirectory,
             _mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<EducationAccountClosureEmailService>.Instance);
 
     private EducationAccount AddManualAccount(long accountId, long personId)

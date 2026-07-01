@@ -75,6 +75,7 @@ internal sealed class GetPendingEnrollmentPaymentHandler(
             year,
             month,
             clock.UtcNow.UtcDateTime,
+            BillingStatementNotificationMode.Suppress,
             ct);
         IReadOnlyCollection<PendingEnrollmentFasReservation> reservations =
             await payments.ListPendingFasReservationsForEnrollmentAsync(query.CourseEnrollmentId, personId, ct);

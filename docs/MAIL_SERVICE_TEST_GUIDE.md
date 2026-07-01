@@ -312,6 +312,18 @@ Relevant automated test:
 MissedInstallmentPaymentEmailWorkerTests
 ```
 
+### Recipient Policy
+
+All business email jobs must carry a `PersonId`. The queue worker resolves delivery recipients from `iam.LoginAccount.ContactEmail`; form-captured emails such as `fas.FasApplication.Email` are not delivery recipients.
+
+Relevant automated tests:
+
+```text
+EmailRecipientResolverTests
+QueuedEmailDeliveryTests
+FasEmailNotificationServiceTests
+```
+
 The focused NOTI-01/NOTI-11 suite currently has 10 passing tests.
 
 ## Known Gaps

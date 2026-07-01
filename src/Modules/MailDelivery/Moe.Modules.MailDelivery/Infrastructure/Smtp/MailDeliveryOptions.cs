@@ -5,10 +5,14 @@ namespace Moe.Modules.MailDelivery.Infrastructure.Smtp;
 public sealed class MailDeliveryOptions
 {
     public const string SectionName = "MailDelivery";
+    public const string DefaultAppName = "Ministry of Education - Singapore";
+    public const string DefaultPortalBaseUrl = "http://localhost:5173";
 
     public bool Enabled { get; init; } = true;
 
-    public string AppName { get; init; } = "MOE SEEDS";
+    public string AppName { get; init; } = DefaultAppName;
+
+    public string PortalBaseUrl { get; init; } = DefaultPortalBaseUrl;
 
     public string Host { get; init; } = "smtp.gmail.com";
 
@@ -22,7 +26,7 @@ public sealed class MailDeliveryOptions
 
     public string FromEmail { get; init; } = string.Empty;
 
-    public string FromDisplayName { get; init; } = "MOE SEEDS";
+    public string FromDisplayName { get; init; } = DefaultAppName;
 
     public string? FallbackUserName { get; init; }
 
@@ -47,6 +51,7 @@ public sealed class MailDeliveryOptions
         }
 
         return !string.IsNullOrWhiteSpace(options.AppName)
+            && Uri.TryCreate(options.PortalBaseUrl, UriKind.Absolute, out _)
             && !string.IsNullOrWhiteSpace(options.Host)
             && options.Port is >= 1 and <= 65535
             && !string.IsNullOrWhiteSpace(options.UserName)

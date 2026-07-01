@@ -83,6 +83,7 @@ internal sealed class MonthlyBillNotificationWorker(
                     monthStart.Year,
                     monthStart.Month,
                     utcNow,
+                    BillingStatementNotificationMode.SendMonthlyBill,
                     cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

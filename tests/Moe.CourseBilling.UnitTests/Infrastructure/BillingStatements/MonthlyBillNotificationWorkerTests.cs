@@ -50,6 +50,7 @@ public sealed class MonthlyBillNotificationWorkerTests
         await worker.RunIfDueAsync(CancellationToken.None);
 
         statements.PersonIds.Should().Equal(701);
+        statements.NotificationModes.Should().Equal(BillingStatementNotificationMode.SendMonthlyBill);
     }
 
     [Fact]
@@ -67,6 +68,7 @@ public sealed class MonthlyBillNotificationWorkerTests
         await worker.RunIfDueAsync(CancellationToken.None);
 
         statements.PersonIds.Should().Equal(703);
+        statements.NotificationModes.Should().Equal(BillingStatementNotificationMode.SendMonthlyBill);
     }
 
     [Fact]
@@ -172,15 +174,18 @@ public sealed class MonthlyBillNotificationWorkerTests
     private sealed class RecordingBillingStatementRepository : IBillingStatementRepository
     {
         public List<long> PersonIds { get; } = [];
+        public List<BillingStatementNotificationMode> NotificationModes { get; } = [];
 
         public Task<BillingStatementResponse> GetOrCreateAsync(
             long personId,
             int year,
             int month,
             DateTime utcNow,
+            BillingStatementNotificationMode notificationMode,
             CancellationToken cancellationToken)
         {
             PersonIds.Add(personId);
+            NotificationModes.Add(notificationMode);
             return Task.FromResult<BillingStatementResponse>(null!);
         }
     }

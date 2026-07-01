@@ -29,10 +29,6 @@ public sealed class EmailRecipientResolver(
             ?? DevelopmentFallback();
     }
 
-    public EmailRecipient? ResolveProvided(string? emailAddress)
-        => ValidRecipient(emailAddress, EmailRecipientSourceCodes.Provided)
-            ?? DevelopmentFallback();
-
     private EmailRecipient? DevelopmentFallback()
         => environment.IsDevelopment()
             ? ValidRecipient(
