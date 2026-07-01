@@ -12,7 +12,6 @@ using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
-using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Payments;
@@ -55,16 +54,15 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
     internal async Task SendDueNotificationsAsync(CancellationToken cancellationToken)
     {
         using IServiceScope scope = scopeFactory.CreateScope();
-        IEmailDeliverySwitch mailSwitch = scope.ServiceProvider.GetRequiredService<IEmailDeliverySwitch>();
-        if (!mailSwitch.IsEnabled)
+        MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        ICoursePaymentPlanGateway paymentPlans = scope.ServiceProvider.GetRequiredService<ICoursePaymentPlanGateway>();
+        IEmailNotificationScheduler mailScheduler = scope.ServiceProvider.GetRequiredService<IEmailNotificationScheduler>();
+        if (!mailScheduler.IsEnabled)
         {
             logger.LogInformation("Missed installment emails skipped because MailDelivery is disabled.");
             return;
         }
 
-        MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
-        ICoursePaymentPlanGateway paymentPlans = scope.ServiceProvider.GetRequiredService<ICoursePaymentPlanGateway>();
-        IEmailNotificationQueue mailQueue = scope.ServiceProvider.GetRequiredService<IEmailNotificationQueue>();
         IEmailBrandingProvider branding = scope.ServiceProvider.GetRequiredService<IEmailBrandingProvider>();
 
         DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
@@ -109,7 +107,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
                 continue;
             }
 
-            if (await EnqueueEmailAsync(candidate, mailQueue, branding.AppName, branding.PaymentDashboardUrl, cancellationToken))
+            if (await EnqueueEmailAsync(candidate, mailScheduler, branding.AppName, branding.PaymentDashboardUrl, cancellationToken))
             {
                 _processedBillIds.Add(candidate.BillId);
             }
@@ -118,7 +116,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
     private async Task<bool> EnqueueEmailAsync(
         MissedInstallmentCandidate candidate,
-        IEmailNotificationQueue mailQueue,
+        IEmailNotificationScheduler mailScheduler,
         string appName,
         string paymentDashboardUrl,
         CancellationToken cancellationToken)
@@ -127,8 +125,8 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         string courseName = string.IsNullOrWhiteSpace(candidate.CourseName)
             ? "your course"
             : candidate.CourseName.Trim();
-        string amountDisplay = $"SGD {candidate.OutstandingAmount:N2}";
-        string dueDateDisplay = candidate.DueDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+        string amountDisplay = EmailTemplateBranding.FormatMoney(candidate.OutstandingAmount);
+        string dueDateDisplay = EmailTemplateBranding.FormatDate(candidate.DueDate);
         const string consequence = "Your course access or enrolment may remain restricted until payment is received.";
 
         const string subject = "Missed Installment Payment";
@@ -143,35 +141,15 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         ]);
         string htmlBody = BuildHtmlBody(studentName, amountDisplay, courseName, dueDateDisplay, consequence, appName, paymentDashboardUrl);
 
-        try
-        {
-            Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    "NOTI-11",
-                    candidate.PersonId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    "Bill",
-                    candidate.BillId.ToString(CultureInfo.InvariantCulture)),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Missed installment email enqueue failed. BillId={BillId} ErrorCode={ErrorCode}",
-                    candidate.BillId,
-                    result.Error.Code);
-                return false;
-            }
-
-            return true;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Missed installment email threw an exception. BillId={BillId}", candidate.BillId);
-            return false;
-        }
+        return await mailScheduler.EnqueueForPersonAsync(
+            "NOTI-11",
+            candidate.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "Bill",
+            candidate.BillId.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private static string BuildHtmlBody(
@@ -191,9 +169,9 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
             .Append(WebUtility.HtmlEncode(studentName))
             .Append(", your installment was not received by the due date.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Amount", amountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
-        AppendSummaryRow(builder, "Course", courseName, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Due Date", dueDateDisplay, "#f8fafc", "#334155");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Amount", amountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Course", courseName);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Due Date", dueDateDisplay);
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">")
             .Append(WebUtility.HtmlEncode(consequence))
@@ -203,29 +181,6 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after an installment due date passed.");
         return builder.ToString();
     }
-
-    private static void AppendSummaryRow(
-        StringBuilder builder,
-        string label,
-        string value,
-        string backgroundColor,
-        string valueColor)
-    {
-        builder.Append("<tr><td bgcolor=\"")
-            .Append(backgroundColor)
-            .Append("\" style=\"background-color:")
-            .Append(backgroundColor)
-            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
-        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
-            .Append(WebUtility.HtmlEncode(label))
-            .Append("</div>");
-        builder.Append("<div style=\"font-size:20px;line-height:28px;color:")
-            .Append(valueColor)
-            .Append(";font-weight:bold;padding-top:4px;\">")
-            .Append(WebUtility.HtmlEncode(value))
-            .Append("</div></td></tr>");
-    }
-
     private sealed record MissedInstallmentCandidate(
         long BillId,
         long CourseEnrollmentId,

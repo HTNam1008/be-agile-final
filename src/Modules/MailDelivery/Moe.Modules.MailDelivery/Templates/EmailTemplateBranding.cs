@@ -103,4 +103,10 @@ public static class EmailTemplateBranding
     }
 
     public static string FormatMoney(decimal amount) => string.Create(CultureInfo.InvariantCulture, $"SGD {amount:N2}");
+
+    public static string FormatDate(DateOnly date)
+        => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+
+    public static string FormatDate(DateTime utcDate)
+        => utcDate.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture);
 }
