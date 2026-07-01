@@ -39,10 +39,8 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
         _repository = new BillingStatementRepository(
             _dbContext,
             new FixedCoursePaymentPlanGateway(),
-            _mailQueue,
-            new TestDoubles.FixedEmailDeliverySwitch(),
-            new TestDoubles.FixedEmailBrandingProvider(),
-            NullLogger<BillingStatementRepository>.Instance);
+            new TestDoubles.RecordingEmailNotificationScheduler(_mailQueue),
+            new TestDoubles.FixedEmailBrandingProvider());
     }
 
     public async Task InitializeAsync()
@@ -185,10 +183,10 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
         BillingStatementRepository repository = new(
             _dbContext,
             new FixedCoursePaymentPlanGateway(),
-            _mailQueue,
-            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false),
-            new TestDoubles.FixedEmailBrandingProvider(),
-            NullLogger<BillingStatementRepository>.Instance);
+            new TestDoubles.RecordingEmailNotificationScheduler(
+                _mailQueue,
+                new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false)),
+            new TestDoubles.FixedEmailBrandingProvider());
         await SeedStudentWithBillAsync(
             personId: 5004,
             studentName: "Disabled Mail Student",

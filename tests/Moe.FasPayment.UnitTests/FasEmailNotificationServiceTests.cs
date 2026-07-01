@@ -54,10 +54,8 @@ public sealed class FasEmailNotificationServiceTests
         RecordingEmailNotificationQueue mailQueue = new();
         FasEmailNotificationService service = new(
             db,
-            mailQueue,
-            new FixedEmailDeliverySwitch(),
-            new FixedEmailBrandingProvider(),
-            NullLogger<FasEmailNotificationService>.Instance);
+            new RecordingEmailNotificationScheduler(mailQueue, new FixedEmailDeliverySwitch()),
+            new FixedEmailBrandingProvider());
 
         await service.SendSubmissionAcknowledgementAsync(application.Id, CancellationToken.None);
 
@@ -75,10 +73,8 @@ public sealed class FasEmailNotificationServiceTests
         RecordingEmailNotificationQueue mailQueue = new();
         FasEmailNotificationService service = new(
             db,
-            mailQueue,
-            new FixedEmailDeliverySwitch(isEnabled: false),
-            new FixedEmailBrandingProvider(),
-            NullLogger<FasEmailNotificationService>.Instance);
+            new RecordingEmailNotificationScheduler(mailQueue, new FixedEmailDeliverySwitch(isEnabled: false)),
+            new FixedEmailBrandingProvider());
 
         await service.SendSubmissionAcknowledgementAsync(999, CancellationToken.None);
 

@@ -167,6 +167,9 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         services.AddSingleton<IEmailDeliverySwitch>(new FixedEmailDeliverySwitch(mailEnabled));
         services.AddSingleton<IEmailBrandingProvider>(new FixedEmailBrandingProvider());
         services.AddSingleton<IEmailNotificationQueue>(queue);
+        services.AddSingleton<IEmailNotificationScheduler>(sp => new RecordingEmailNotificationScheduler(
+            queue,
+            sp.GetRequiredService<IEmailDeliverySwitch>()));
         services.AddSingleton<ICoursePaymentPlanGateway>(paymentPlans);
         ServiceProvider provider = services.BuildServiceProvider();
         MissedInstallmentPaymentEmailWorker worker = new(

@@ -315,10 +315,8 @@ public sealed class PaymentNotificationEmailServiceTests
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
-            mailQueue,
-            mailSwitch ?? new FixedEmailDeliverySwitch(),
-            new FixedEmailBrandingProvider(),
-            NullLogger<PaymentNotificationEmailService>.Instance);
+            new RecordingEmailNotificationScheduler(mailQueue, mailSwitch),
+            new FixedEmailBrandingProvider());
 
     private static MoeDbContext CreateDbContext()
     {
