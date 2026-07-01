@@ -258,8 +258,15 @@ public sealed class AiOrchestratorService(
 
     private async Task<AiChatResponse> HandleGeneral(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
-        IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, request.PageContext?.Domain);
+        bool isSchemeKbRequest = IsSchemeKbRequest(request.Message);
+        string retrievalDomain = isSchemeKbRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
+        IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
         string sourceText = string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"));
+        if (isSchemeKbRequest && sources.Count > 0)
+        {
+            string deterministicText = BuildKnowledgeAnswer(request.Message, sources);
+            return new(c.Id, 0, deterministicText, "GENERAL", Grounding(sources), [], [], null);
+        }
         var history = new ChatHistory(
             "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
             "Keep the answer under 120 words. Lead with the direct answer. Ask at most one next question.\n" +
@@ -283,6 +290,26 @@ public sealed class AiOrchestratorService(
         return new(c.Id, 0, text, "GENERAL", Grounding(sources), [], [], null);
     }
 
+    private static string BuildKnowledgeAnswer(string question, IReadOnlyList<KnowledgeResult> sources)
+    {
+        KnowledgeResult primary = sources[0];
+        string summary = CleanKnowledgeSnippet(primary.Content);
+        string topic = primary.Citation.Section;
+        return $"Here is the short version on {topic}: {summary}\n\nUse the FAS page to check live eligibility, selected schemes, and the final application before submitting.";
+    }
+
+    private static string CleanKnowledgeSnippet(string content)
+    {
+        string[] lines = content.Split('\n')
+            .Select(line => Regex.Replace(line.Trim(), @"^[#*\-\s|]+", "").Trim())
+            .Where(line => line.Length > 0 && !line.Contains("---", StringComparison.Ordinal) && !line.StartsWith("|", StringComparison.Ordinal))
+            .Take(4)
+            .ToArray();
+        string text = string.Join(" ", lines);
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        return text.Length <= 360 ? text : $"{text[..360].TrimEnd()}...";
+    }
+
     private async Task<AiConversation> GetOrCreateConversation(Guid? id, long personId, DateTime now, CancellationToken ct)
     {
         if (id.HasValue)
@@ -304,12 +331,28 @@ public sealed class AiOrchestratorService(
     {
         string value = $"{domain} {message}".ToUpperInvariant();
         string msgOnly = message.ToUpperInvariant();
+        if (IsSchemeKbRequest(msgOnly)) return "GENERAL";
         if (current == "FAS_INTERVIEW") return "FAS_INTERVIEW";
         if (IsFasInterviewRequest(value)) return "FAS_INTERVIEW";
         bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
         bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
         if (isPaymentDomain || msgHasPaymentKeyword) return "PAYMENT";
         return "GENERAL";
+    }
+
+    private static bool IsSchemeKbRequest(string value)
+    {
+        bool isInfoIntent = Regex.IsMatch(value,
+            @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION)\b",
+            RegexOptions.IgnoreCase);
+        bool isApplicationIntent = Regex.IsMatch(value,
+            @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|DO I|AM I)\b",
+            RegexOptions.IgnoreCase);
+        bool mentionsFas = value.Contains("FAS", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("FINANCIAL ASSISTANCE", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("BURSARY", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase);
+        return mentionsFas && isInfoIntent && !isApplicationIntent;
     }
 
     private static bool IsFasInterviewRequest(string value)
