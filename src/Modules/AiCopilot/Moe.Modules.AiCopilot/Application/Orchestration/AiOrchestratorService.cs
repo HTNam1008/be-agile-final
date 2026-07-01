@@ -168,8 +168,10 @@ public sealed class AiOrchestratorService(
         }
 
         bool isGuidanceTurn = fieldKey is null && LooksLikeFasSchemeGuidanceRequest(request.Message);
-        string? answeredField = isNewInterview || isGuidanceTurn ? null : ResolveTargetField(state, fieldKey);
-        FasExtractionResult extraction = isNewInterview || isGuidanceTurn ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
+        bool isFieldHelpTurn = fieldKey is not null && LooksLikeFieldHelpRequest(request.Message);
+        bool shouldAskNextQuestion = (isNewInterview && fieldKey is null) || isGuidanceTurn || isFieldHelpTurn;
+        string? answeredField = shouldAskNextQuestion ? null : ResolveTargetField(state, fieldKey);
+        FasExtractionResult extraction = shouldAskNextQuestion ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
         if (extraction.Status == "MANUAL_FALLBACK")
         {
             state.Status = "MANUAL_FALLBACK";
@@ -231,9 +233,11 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "COLLECTING";
             string? acknowledgement = extraction.Status == "ACCEPTED" ? AcceptedFieldAcknowledgement(answeredField, state) : null;
-            text = isNewInterview || isGuidanceTurn
-                ? $"{ProfileFactsIntro(state)}\n\n{next}"
-                : acknowledgement is null ? next : $"{acknowledgement}\n\n{next}";
+            text = isFieldHelpTurn
+                ? next
+                : shouldAskNextQuestion
+                    ? $"{ProfileFactsIntro(state)}\n\n{next}"
+                    : acknowledgement is null ? next : $"{acknowledgement}\n\n{next}";
         }
 
         AiInterviewState interview = ToInterviewState(state, next, recommendedSchemes);
@@ -646,6 +650,11 @@ public sealed class AiOrchestratorService(
 
     private static bool LooksLikeFieldHelpRequest(string message)
     {
+        if (Regex.IsMatch(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
+
         return Regex.IsMatch(message, @"\b(what are|what is|options|option|choose|choices|example|examples|not sure|don't know|do not know|idk|help)\b", RegexOptions.IgnoreCase);
     }
 
