@@ -242,6 +242,8 @@ public sealed class DeferBillingStatementHandlerEmailTests
     private sealed class FixedClock(DateTime utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = new(utcNow, TimeSpan.Zero);
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 
     private sealed class FixedEmailDeliverySwitch(bool isEnabled = true) : IEmailDeliverySwitch

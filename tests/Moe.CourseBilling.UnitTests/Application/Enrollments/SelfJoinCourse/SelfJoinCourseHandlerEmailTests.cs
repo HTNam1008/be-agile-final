@@ -290,5 +290,7 @@ public sealed class SelfJoinCourseHandlerEmailTests
     private sealed class FixedClock(DateTime utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = new(utcNow, TimeSpan.Zero);
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 }

@@ -53,13 +53,13 @@ public sealed class SingaporeBusinessDayRedTests
             new DateOnly(2026, 6, 30),
             100m).Value);
         await db.SaveChangesAsync();
-        RecordingEmailGateway mail = new();
+        RecordingScheduler mail = new();
         ServiceProvider services = new ServiceCollection()
             .AddSingleton(db)
             .AddSingleton<IEmailDeliverySwitch>(new EnabledMailSwitch())
             .AddSingleton<ICoursePaymentPlanGateway>(new InstallmentPlanGateway())
-            .AddSingleton<IEmailRecipientResolver>(new FixedRecipientResolver())
-            .AddSingleton<IEmailDeliveryGateway>(mail)
+            .AddSingleton<IEmailNotificationScheduler>(mail)
+            .AddSingleton<IEmailBrandingProvider>(new FixedBrandingProvider())
             .BuildServiceProvider();
         MissedInstallmentPaymentEmailWorker worker = new(
             services.GetRequiredService<IServiceScopeFactory>(),
@@ -71,7 +71,7 @@ public sealed class SingaporeBusinessDayRedTests
 
         await (Task)send.Invoke(worker, [CancellationToken.None])!;
 
-        mail.Messages.Should().ContainSingle();
+        mail.Jobs.Should().ContainSingle();
     }
 
     [Fact]
@@ -82,6 +82,7 @@ public sealed class SingaporeBusinessDayRedTests
         SelfJoinCourseHandler handler = new(
             enrollments,
             new FixedPaymentPlanGateway(),
+            new NoopCoursePaymentGateway(),
             fas,
             new FakeCurrentUser(),
             new FakeStudentAccess(),
@@ -190,10 +191,32 @@ public sealed class SingaporeBusinessDayRedTests
         public bool IsEnabled => true;
     }
 
+    private sealed class FixedBrandingProvider : IEmailBrandingProvider
+    {
+        public string AppName => "Ministry of Education - Singapore";
+        public string PaymentDashboardUrl => "http://localhost:5173/portal/payments";
+        public string FasPortalUrl => "http://localhost:5173/portal/fas";
+        public string AccountPortalUrl => "http://localhost:5173/portal/account";
+        public string CourseDetailUrl(long courseId) => $"http://localhost:5173/portal/courses/{courseId}";
+    }
+
     private sealed class FixedRecipientResolver : IEmailRecipientResolver
     {
-        public Task<EmailRecipient?> ResolveForPersonAsync(long personId, CancellationToken cancellationToken) => Task.FromResult<EmailRecipient?>(new("student@example.com", EmailRecipientSourceCodes.Preferred));
-        public EmailRecipient? ResolveProvided(string? emailAddress) => null;
+        public Task<EmailRecipient?> ResolveForPersonAsync(long personId, CancellationToken cancellationToken) => Task.FromResult<EmailRecipient?>(new("student@example.com", EmailRecipientSourceCodes.Contact));
+    }
+
+    private sealed class NoopCoursePaymentGateway : ICoursePaymentGateway
+    {
+        public Task<PayableCourseBill?> FindPayableBillAsync(long billId, long personId, CancellationToken cancellationToken) => Task.FromResult<PayableCourseBill?>(null);
+        public Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken) => Task.FromResult<long?>(10);
+        public Task ApplySuccessfulPaymentAsync(long billId, decimal amount, bool paidInFull, DateTime paidAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SendInstallmentEnrollmentConfirmationAsync(long courseEnrollmentId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ApplyPaymentFailureAsync(long billId, string failureReason, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ApplyFullRefundAsync(long billId, DateTime refundedAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ApplyFullRefundForBillsAsync(IReadOnlyCollection<long> billIds, DateTime refundedAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<PayableStatement?> FindPayableStatementAsync(long statementId, long personId, CancellationToken cancellationToken) => Task.FromResult<PayableStatement?>(null);
+        public Task ApplyStatementPaymentAsync(long statementId, IReadOnlyCollection<BillPaymentAllocation> allocations, DateTime paidAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<Result> DeferStatementAsync(long statementId, long personId, IReadOnlyCollection<long> billIds, long actorLoginAccountId, DateTime utcNow, CancellationToken cancellationToken) => Task.FromResult(Result.Success());
     }
 
     private sealed class RecordingEmailGateway : IEmailDeliveryGateway
@@ -203,6 +226,34 @@ public sealed class SingaporeBusinessDayRedTests
         {
             Messages.Add(message);
             return Task.FromResult(Result.Success());
+        }
+    }
+
+    private sealed class RecordingScheduler : IEmailNotificationScheduler
+    {
+        public bool IsEnabled => true;
+
+        public List<EmailNotificationJob> Jobs { get; } = [];
+
+        public Task<bool> EnqueueForPersonAsync(
+            string notificationType,
+            long personId,
+            string subject,
+            string plainTextBody,
+            string? htmlBody,
+            string? entityType,
+            string? entityId,
+            CancellationToken cancellationToken)
+        {
+            Jobs.Add(EmailNotificationJob.ForPerson(
+                notificationType,
+                personId,
+                subject,
+                plainTextBody,
+                htmlBody,
+                entityType,
+                entityId));
+            return Task.FromResult(true);
         }
     }
 
