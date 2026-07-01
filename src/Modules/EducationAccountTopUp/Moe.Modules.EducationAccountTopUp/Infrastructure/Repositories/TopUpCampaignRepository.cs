@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
+using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
@@ -45,7 +46,8 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
     {
         return await dbContext.Set<TopUpCampaign>()
             .Where(c => c.CampaignStatusCode == TopUpCampaignStatusCodes.Active
-                && c.RecipientModeCode == "DYNAMIC_RULES"
+                && c.RecipientModeCode == RecipientModeCode.DynamicRules.ToString()
+                && c.DeliveryTypeCode != DeliveryType.Instant
                 && c.StartDate <= today
                 && (c.EndDate == null || c.EndDate >= today))
             .ToListAsync(cancellationToken);
