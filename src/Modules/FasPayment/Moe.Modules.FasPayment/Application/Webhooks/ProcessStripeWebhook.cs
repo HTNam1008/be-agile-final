@@ -22,7 +22,7 @@ internal sealed class ProcessStripeWebhookHandler(
     IClock clock,
     IPaymentPersistenceTracker persistenceTracker,
     IStripeWebhookCoordinator coordinator,
-    PaymentFailedEmailService paymentFailedEmails,
+    PaymentNotificationEmailService paymentNotifications,
     ILogger<ProcessStripeWebhookHandler> logger) : ICommandHandler<ProcessStripeWebhookCommand>
 {
     public async Task<Result> Handle(
@@ -217,6 +217,7 @@ internal sealed class ProcessStripeWebhookHandler(
         payment.MarkSuccessful(webhook.CreatedAtUtc);
         checkout.RecordSuccessfulPayment(webhook.CreatedAtUtc);
         await CancelCompetingStatementPaymentsAsync(payment, webhook.CreatedAtUtc, cancellationToken);
+        await paymentNotifications.SendPaymentSucceededAsync(payment, webhook.CreatedAtUtc, cancellationToken);
     }
 
     private async Task CancelCompetingStatementPaymentsAsync(
@@ -286,7 +287,7 @@ internal sealed class ProcessStripeWebhookHandler(
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Failed, failedAtUtc);
         payment.MarkFailed(failedAtUtc);
         checkout.RecordPaymentFailure(failedAtUtc);
-        await paymentFailedEmails.SendStatementPaymentFailedAsync(
+        await paymentNotifications.SendStatementPaymentFailedAsync(
             payment,
             "The payment provider reported a failed payment. Please try again.",
             cancellationToken);
@@ -314,10 +315,7 @@ internal sealed class ProcessStripeWebhookHandler(
             .MarkCompleted(PaymentPartStatusCodes.Failed, expiredAtUtc);
         payment.MarkExpired(expiredAtUtc);
         checkout.ExpireBeforePayment(expiredAtUtc);
-        await paymentFailedEmails.SendStatementPaymentFailedAsync(
-            payment,
-            "The payment session expired before completion. Please try again.",
-            cancellationToken);
+        await paymentNotifications.SendPaymentExpiredAsync(payment, cancellationToken);
     }
 
     private async Task ApplyRefundAsync(ParsedPaymentWebhook webhook, CancellationToken cancellationToken)
@@ -416,5 +414,6 @@ internal sealed class ProcessStripeWebhookHandler(
             [checkout.BillId],
             webhook.CreatedAtUtc,
             cancellationToken);
+        await paymentNotifications.SendPaymentSucceededAsync(payment, webhook.CreatedAtUtc, cancellationToken);
     }
 }
