@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
@@ -129,15 +130,80 @@ public sealed class PaymentNotificationEmailServiceTests
         mailQueue.Jobs.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task SendPaymentDeferredAsync_EnqueuesDeferNotice()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        RecordingEmailNotificationQueue mailQueue = new();
+        await AddPaymentPersonAsync(dbContext);
+        PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
+
+        await service.SendPaymentDeferredAsync(
+            2001,
+            3001,
+            [CreateStatementBill(501, 100m, new DateOnly(2026, 7, 15), "Payment Course 101")],
+            Now,
+            CancellationToken.None);
+
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.NotificationType.Should().Be("NOTI-14-DEFERRED");
+        job.PersonId.Should().Be(2001);
+        job.Subject.Should().Be("Installment Payment Deferred");
+        job.PlainTextBody.Should().Contain("Payment Course 101");
+        job.PlainTextBody.Should().Contain("SGD 100.00");
+        job.PlainTextBody.Should().Contain("15 Jul 2026 -> 15 Aug 2026");
+        job.HtmlBody.Should().Contain("Installment payment deferred");
+    }
+
+    [Fact]
+    public async Task SendPaymentDeferredAsync_ForMultipleBills_IncludesTotalAndBillCount()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        RecordingEmailNotificationQueue mailQueue = new();
+        await AddPaymentPersonAsync(dbContext);
+        PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
+
+        await service.SendPaymentDeferredAsync(
+            2001,
+            3001,
+            [
+                CreateStatementBill(501, 100m, new DateOnly(2026, 7, 15), "Payment Course 101"),
+                CreateStatementBill(502, 80m, new DateOnly(2026, 7, 20), "Payment Course 102")
+            ],
+            Now,
+            CancellationToken.None);
+
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.PlainTextBody.Should().Contain("Total Deferred Amount: SGD 180.00");
+        job.PlainTextBody.Should().Contain("Deferred Bills: 2");
+        job.PlainTextBody.Should().Contain("Payment Course 102");
+    }
+
+    [Fact]
+    public async Task SendPaymentDeferredAsync_WhenQueueFails_DoesNotThrow()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        RecordingEmailNotificationQueue mailQueue = new()
+        {
+            Result = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
+        };
+        await AddPaymentPersonAsync(dbContext);
+        PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
+
+        Func<Task> act = () => service.SendPaymentDeferredAsync(
+            2001,
+            3001,
+            [CreateStatementBill(501, 100m, new DateOnly(2026, 7, 15), "Payment Course 101")],
+            Now,
+            CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        mailQueue.Jobs.Should().ContainSingle();
+    }
+
     private static async Task<Payment> AddStatementPaymentAsync(MoeDbContext dbContext)
     {
-        dbContext.Set<Person>().Add(new Person(
-            2001,
-            "EXT-PAYMENT-1",
-            "Payment Student",
-            new DateOnly(2008, 2, 1),
-            "SG",
-            null));
+        await AddPaymentPersonAsync(dbContext);
 
         Payment payment = Payment.StartStatementPayment(
             3001,
@@ -152,6 +218,35 @@ public sealed class PaymentNotificationEmailServiceTests
         await dbContext.SaveChangesAsync();
         return payment;
     }
+
+    private static async Task AddPaymentPersonAsync(MoeDbContext dbContext)
+    {
+        if (await dbContext.Set<Person>().AnyAsync(x => x.Id == 2001)) return;
+        dbContext.Set<Person>().Add(new Person(
+            2001,
+            "EXT-PAYMENT-1",
+            "Payment Student",
+            new DateOnly(2008, 2, 1),
+            "SG",
+            null));
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static PayableStatementBill CreateStatementBill(
+        long billId,
+        decimal outstandingAmount,
+        DateOnly currentDueDate,
+        string courseName)
+        => new(
+            BillingStatementItemId: billId + 1000,
+            BillId: billId,
+            OrganizationId: 2,
+            OutstandingAmount: outstandingAmount,
+            CurrentDueDate: currentDueDate,
+            OriginalDueDate: currentDueDate,
+            IsInstallment: true,
+            CourseCode: "PAY101",
+            CourseName: courseName);
 
     private static async Task<Payment> AddDirectBillPaymentAsync(MoeDbContext dbContext, int billCount)
     {
