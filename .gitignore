@@ -22,3 +22,4 @@ appsettings.Development.json
 test_*.ps1
 
 .verification
+src/Hosts/Moe.StudentFinance.Api/appsettings.json

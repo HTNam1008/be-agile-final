@@ -157,11 +157,12 @@ public sealed class AiOrchestratorService(
         catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
         if (!isNewInterview && state.Status == "COMPLETE")
         {
-            AiInterviewState completedInterview = ToInterviewState(state, null);
+            FasRecommendationMatch[] completedSchemes = state.IsWelfareHomeResident == true ? WelfareHomeRecommendationMatches(state) : [];
+            AiInterviewState completedInterview = ToInterviewState(state, null, completedSchemes);
             string completedText = state.IsWelfareHomeResident == true
-                ? "You are marked as living in an approved welfare home. The FAS form will skip household income and household-size questions. Use 'Apply answers to form' to copy your confirmed details, then review the remaining particulars and documents before submitting."
+                ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
                 : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
-            List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
+            List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas", completedInterview.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
             c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
             return new(c.Id, 0, completedText, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
         }
@@ -221,7 +222,10 @@ public sealed class AiOrchestratorService(
         else if (next is null)
         {
             state.Status = "COMPLETE";
-            text = "I have your welfare-home status and parent or guardian nationality. The FAS form will skip household income and household-size questions. Use 'Apply answers to form', then review the remaining particulars before submitting.";
+            recommendedSchemes = WelfareHomeRecommendationMatches(state);
+            text = recommendedSchemes.Length > 0
+                ? $"I have your welfare-home status and parent or guardian nationality. I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school and prepared them for the form. Use 'Apply answers to form', then review before submitting."
+                : "I have your welfare-home status and parent or guardian nationality. The FAS form will skip household income and household-size questions. I could not auto-select a scheme, so choose the scheme manually before submitting.";
         }
         else
         {
@@ -238,9 +242,11 @@ public sealed class AiOrchestratorService(
         Guid? fallbackReview = null;
         if (state.Status == "MANUAL_FALLBACK")
             fallbackReview = await CreateReview(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
-        List<AiAction> actions = state.Status == "COMPLETE" || state.Status == "MANUAL_FALLBACK"
-            ? [new("NAVIGATE", "Open FAS application", "/portal/fas")]
-            : [];
+        List<AiAction> actions = state.Status == "COMPLETE"
+            ? [new("NAVIGATE", "Open FAS application", "/portal/fas", interview.FormPatch)]
+            : state.Status == "MANUAL_FALLBACK"
+                ? [new("NAVIGATE", "Open FAS application", "/portal/fas")]
+                : [];
         if (fallbackReview.HasValue) actions.Add(new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = fallbackReview.Value }));
         if (state.Status == "COMPLETE") actions.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: interview.FormPatch));
         return new(c.Id, 0, text, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), cards, actions, interview, fallbackReview);
@@ -358,6 +364,7 @@ public sealed class AiOrchestratorService(
         {
             Profile = profile,
             Status = "COLLECTING",
+            ApplicableSchemes = criteriaPlan.ApplicableSchemes.Select(x => new FasApplicableSchemeOption(x.Id, x.Name)).ToList(),
             ApplicableSchemeNames = criteriaPlan.ApplicableSchemeNames.ToList(),
             RequiredCriteriaTypes = criteriaPlan.RequiredCriteriaTypes.ToList(),
             ProfileConfirmedFacts = criteriaPlan.ProfileConfirmedFacts.ToList(),
@@ -433,6 +440,14 @@ public sealed class AiOrchestratorService(
         s.ValidationMessage = result.Message;
         return result;
     }
+
+    private static FasRecommendationMatch[] WelfareHomeRecommendationMatches(FasInterviewData state)
+        => state.ApplicableSchemes
+            .GroupBy(x => x.Id)
+            .Select(x => x.First())
+            .Select(x => new FasRecommendationMatch(x.Id, x.Name, 0, "Welfare-home route", "ASSISTANCE", 0m))
+            .ToArray();
+
     private static string? NextQuestion(FasInterviewData s, string? preferred = null)
     {
         string? field = ResolveTargetField(s, preferred);
@@ -509,6 +524,8 @@ public sealed class AiOrchestratorService(
             ? new FasPatchSchemes(recommendedSchemes.Select(x => x.SchemeId).Distinct().ToArray(),
                 recommendedSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
             : null;
+        AddMeta("schemeIds", schemes?.RecommendedSchemeIds, schemes is null ? "UNMAPPED" : "AI_CONFIRMED",
+            schemes is null ? null : "Recommended from open schemes for your school.");
         return new FasFormPatch(particulars, income, schemes, meta);
     }
     private static string? NextMissingField(FasInterviewData s, string? preferred = null)
@@ -886,6 +903,7 @@ public sealed class AiOrchestratorService(
         public int? HouseholdMemberCount { get; set; }
         public decimal? OtherMonthlyIncome { get; set; }
         public List<string> ParentNationalities { get; set; } = [];
+        public List<FasApplicableSchemeOption> ApplicableSchemes { get; set; } = [];
         public List<string> ApplicableSchemeNames { get; set; } = [];
         public List<string> RequiredCriteriaTypes { get; set; } = [];
         public List<string> ProfileConfirmedFacts { get; set; } = [];
@@ -901,4 +919,6 @@ public sealed class AiOrchestratorService(
         public static FasExtractionResult Clarify(string message) => new("CLARIFY", Message: message);
         public static FasExtractionResult ManualFallback(string message) => new("MANUAL_FALLBACK", Message: message);
     }
+
+    private sealed record FasApplicableSchemeOption(long Id, string Name);
 }

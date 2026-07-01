@@ -34,7 +34,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
 
-        JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+        JsonElement completed = await SendFasMessage("Foreigner", conversationId);
 
         Assert.Equal("MANUAL_FALLBACK", completed.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.Contains("could not find an eligible FAS scheme", completed.GetProperty("text").GetString());
@@ -72,6 +72,29 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Assert.Contains("AI FAS", patch.GetProperty("schemes").GetProperty("recommendedSchemeNames")[0].GetString());
 
         Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "APPLY_FAS_PATCH");
+        JsonElement openAction = completed.GetProperty("actions").EnumerateArray().Single(x => x.GetProperty("label").GetString() == "Open FAS application");
+        Assert.True(openAction.GetProperty("payload").GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
+    }
+
+    [Fact]
+    public async Task Fas_interview_welfare_home_path_prepares_scheme_patch()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("Yes", conversationId);
+
+        JsonElement completed = await SendFasMessage("Singapore Citizen", conversationId);
+
+        Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("prepared", completed.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
+        Assert.True(patch.GetProperty("income").GetProperty("isWelfareHomeResident").GetBoolean());
+        Assert.Equal("Singapore Citizen", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
+        Assert.True(patch.GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
+        Assert.Equal("AI_CONFIRMED", patch.GetProperty("meta").GetProperty("schemeIds").GetProperty("provenance").GetString());
+        Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "APPLY_FAS_PATCH");
+        JsonElement openAction = completed.GetProperty("actions").EnumerateArray().Single(x => x.GetProperty("label").GetString() == "Open FAS application");
+        Assert.True(openAction.GetProperty("payload").GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
     }
 
     private async Task<Guid> StartFasInterview()
