@@ -24,14 +24,16 @@ using Moe.Modules.IdentityPlatform.Application.Authentication.GetCurrentIdentity
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetEServiceAuthFlow;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.DisableUserAccount;
+using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.EnableUserAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.ProvisionStudentSingpassAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.RetryIdentityProvisioning;
 using Moe.Modules.IdentityPlatform.Application.ReferenceData;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
-using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
+using Moe.Modules.IdentityPlatform.Application.Students.SetStudentAccess;
+using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 using Moe.Modules.IdentityPlatform.IGateway.Admin;
 using Moe.Modules.IdentityPlatform.IGateway.AdminDashboard;
@@ -106,6 +108,8 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IQueryHandler<GetStudentManagementReferenceDataQuery, StudentManagementReferenceDataResponse>, GetStudentManagementReferenceDataHandler>();
         services.AddScoped<ICommandHandler<CreateAdminUserCommand, CreateAdminUserResponse>, CreateAdminUserHandler>();
         services.AddScoped<ICommandHandler<CreateStudentCommand, CreateStudentResponse>, CreateStudentHandler>();
+        services.AddScoped<ICommandHandler<DisableStudentAccessCommand, StudentAccessResponse>, DisableStudentAccessHandler>();
+        services.AddScoped<ICommandHandler<EnableStudentAccessCommand, StudentAccessResponse>, EnableStudentAccessHandler>();
         services.AddScoped<ICommandHandler<BulkImportStudentsCommand, BulkImportStudentsResponse>, BulkImportStudentsHandler>();
         services.AddScoped<ICommandHandler<UpdateMyAdminContactCommand, AdminProfileResponse>, UpdateMyAdminContactHandler>();
         services.AddScoped<ICommandHandler<UpdateMyStudentContactCommand, StudentProfileResponse>, UpdateMyStudentContactHandler>();
@@ -113,6 +117,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IQueryHandler<GetIdentityProvisioningRequestQuery, IdentityProvisioningRequestResponse>, GetIdentityProvisioningRequestHandler>();
         services.AddScoped<ICommandHandler<AssignAccessScopeCommand, AssignAccessScopeResponse>, AssignAccessScopeHandler>();
         services.AddScoped<ICommandHandler<DisableUserAccountCommand, DisableUserAccountResponse>, DisableUserAccountHandler>();
+        services.AddScoped<ICommandHandler<EnableUserAccountCommand, DisableUserAccountResponse>, EnableUserAccountHandler>();
         services.AddScoped<ICommandHandler<ProvisionStudentSingpassAccountCommand, ProvisionStudentSingpassAccountResponse>, ProvisionStudentSingpassAccountHandler>();
         services.AddScoped<ICommandHandler<RetryIdentityProvisioningCommand, IdentityProvisioningRequestResponse>, RetryIdentityProvisioningHandler>();
         services.AddScoped<ICommandHandler<RevokeAccessScopeCommand, RevokeAccessScopeResponse>, RevokeAccessScopeHandler>();

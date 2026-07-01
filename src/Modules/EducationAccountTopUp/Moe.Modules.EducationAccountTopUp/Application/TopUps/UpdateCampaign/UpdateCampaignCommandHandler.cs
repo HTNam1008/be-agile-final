@@ -33,32 +33,36 @@ internal sealed class UpdateCampaignCommandHandler(
             return Result.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
-        if (campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Draft
-            && campaign.CampaignStatusCode != TopUpCampaignStatusCodes.Paused)
-        {
-            return Result.Failure(TopUpErrors.InvalidCampaignStatus);
-        }
-
         if (campaign.CampaignVersion != command.Request.CampaignVersion)
         {
             return Result.Failure(TopUpErrors.ConcurrencyException);
         }
 
         var request = command.Request;
+
+        if (!string.IsNullOrWhiteSpace(request.CampaignCode))
+        {
+            Result codeResult = campaign.UpdateCampaignCode(request.CampaignCode);
+            if (codeResult.IsFailure)
+                return codeResult;
+        }
+
         var scheduleTypeCode = Enum.Parse<ScheduleTypeCode>(request.ScheduleTypeCode, ignoreCase: true);
 
         string? frequencyCode = null;
         int? frequencyInterval = null;
         DateOnly? endDate = null;
 
-        if (scheduleTypeCode == ScheduleTypeCode.Recurring)
+        if (scheduleTypeCode == ScheduleTypeCode.Recurring ||
+            request.DeliveryTypeCode == DeliveryType.FixedContract ||
+            request.DeliveryTypeCode == DeliveryType.ConditionalRecurring)
         {
             frequencyCode = request.FrequencyCode;
             frequencyInterval = request.FrequencyInterval;
             endDate = request.EndDate;
         }
 
-        campaign.Update(
+        Result updateResult = campaign.Update(
             campaignName: request.CampaignName,
             description: request.Description,
             defaultTopUpAmount: request.DefaultTopUpAmount,
@@ -68,8 +72,13 @@ internal sealed class UpdateCampaignCommandHandler(
             endDate: endDate,
             frequencyCode: frequencyCode,
             frequencyInterval: frequencyInterval,
+            deliveryTypeCode: request.DeliveryTypeCode,
+            maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
             nowUtc: clock.UtcNow.UtcDateTime);
+
+        if (updateResult.IsFailure)
+            return updateResult;
 
         await audit.RecordSchoolActionAsync(
             new SchoolAuditContext(

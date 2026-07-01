@@ -54,14 +54,40 @@ public static class TopUpErrors
     public static readonly Error PreviewNoRules =
         new("TopUp.PreviewNoRules", "Cannot preview a dynamic campaign that has no rules configured.");
 
-    public static readonly Error ManualRunDisabled =
-        new("TopUp.ManualRunDisabled", "Manual runs are only allowed for IMMEDIATE campaigns. Scheduled or recurring campaigns must run automatically.");
+    public static readonly Error ActiveRunInProgress =
+        new("TopUp.ActiveRunInProgress", "A run for this campaign is already queued or processing.");
 
     public static readonly Error CampaignAlreadyExecuted =
         new("TopUp.CampaignAlreadyExecuted", "Immediate campaign has already been executed successfully.");
 
     public static readonly Error DateMismatch =
         new("TopUp.DateMismatch", "End date must be greater than or equal to start date.");
+
+    public static readonly Error CannotUpdateActiveCampaign =
+        new("TopUp.CannotUpdateActiveCampaign", "Campaign configuration cannot be modified after activation.");
+
+    public static readonly Error CannotChangeMaxTotalAmountAfterActive =
+        new("TopUp.CannotChangeMaxTotalAmountAfterActive", "MaxTotalAmount is immutable once campaign is active. Budget caps cannot be altered after execution begins.");
+
+    public static readonly Error CampaignCodeCannotBeEmpty =
+        new("TopUp.CampaignCodeCannotBeEmpty", "Campaign code cannot be empty.");
+
+    public static readonly Error CannotChangeCampaignCodeAfterActive =
+        new("TopUp.CannotChangeCampaignCodeAfterActive", "Campaign code is immutable once campaign is active.");
+
+    public static readonly Error MaxTotalAmountBelowPerPayment =
+        new("TopUp.MaxTotalAmountBelowPerPayment", "MaxTotalAmount must be greater than or equal to DefaultTopUpAmount.");
+
+    public static readonly Error InstantRequiresExactMax =
+        new("TopUp.InstantRequiresExactMax", "Instant delivery campaigns must have MaxTotalAmount equal to DefaultTopUpAmount.");
+
+    // Contract Errors
+    public static readonly Error ContractAlreadyCompleted =
+        new("TopUp.ContractAlreadyCompleted", "Contract has already reached a terminal state.");
+    public static readonly Error ContractNotFound =
+        new("TopUp.ContractNotFound", "Dynamic top-up contract not found.");
+    public static readonly Error ContractNotActive =
+        new("TopUp.ContractNotActive", "Contract is not in active status.");
 
     // Run Errors
     public static readonly Error RunNotFound =

@@ -3,6 +3,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
@@ -41,21 +42,25 @@ public sealed class RequestManualRunCommandHandler(
             return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignNotExecutable);
         }
 
-        if (!campaign.ScheduleTypeCode.Equals("IMMEDIATE", StringComparison.OrdinalIgnoreCase))
-        {
-            return Result<RequestManualRunResponse>.Failure(TopUpErrors.ManualRunDisabled);
-        }
-
         TopUpRun? existingRun = await runs.GetByIdempotencyKeyAsync(command.IdempotencyKey, cancellationToken);
         if (existingRun is not null)
         {
             return Result<RequestManualRunResponse>.Success(Map(existingRun));
         }
 
-        bool hasExistingRuns = await runs.HasRunsForCampaignAsync(campaign.Id, cancellationToken);
-        if (hasExistingRuns)
+        bool hasActiveRuns = await runs.HasActiveRunsForCampaignAsync(campaign.Id, cancellationToken);
+        if (hasActiveRuns)
         {
-            return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignAlreadyExecuted);
+            return Result<RequestManualRunResponse>.Failure(TopUpErrors.ActiveRunInProgress);
+        }
+
+        if (IsImmediateCampaign(campaign))
+        {
+            bool hasExistingRuns = await runs.HasRunsForCampaignAsync(campaign.Id, cancellationToken);
+            if (hasExistingRuns)
+            {
+                return Result<RequestManualRunResponse>.Failure(TopUpErrors.CampaignAlreadyExecuted);
+            }
         }
 
         if (currentUser.UserAccountId is not long requestedByUserId)
@@ -105,5 +110,13 @@ public sealed class RequestManualRunCommandHandler(
             IdempotencyKey = run.IdempotencyKey,
             RequestedAtUtc = run.ScheduledForUtc
         };
+    }
+
+    private static bool IsImmediateCampaign(TopUpCampaign campaign)
+    {
+        return string.Equals(
+            campaign.ScheduleTypeCode,
+            ScheduleTypeCode.Immediate.ToString(),
+            StringComparison.OrdinalIgnoreCase);
     }
 }

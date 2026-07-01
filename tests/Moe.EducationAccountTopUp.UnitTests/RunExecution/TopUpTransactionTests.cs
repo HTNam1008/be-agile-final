@@ -52,7 +52,7 @@ public sealed class TopUpTransactionTests
 
         result.IsSuccess.Should().BeTrue();
         transaction.TransactionStatusCode.Should().Be(TopUpTransactionStatusCodes.Failed);
-        transaction.Amount.Should().Be(0m);
+        transaction.Amount.Should().Be(250m);
         transaction.Reason.Should().Be("Account not active");
         transaction.CompletedAtUtc.Should().Be(_utcNow.AddMinutes(1));
     }
@@ -66,7 +66,7 @@ public sealed class TopUpTransactionTests
 
         result.IsSuccess.Should().BeTrue();
         transaction.TransactionStatusCode.Should().Be(TopUpTransactionStatusCodes.Skipped);
-        transaction.Amount.Should().Be(0m);
+        transaction.Amount.Should().Be(250m);
         transaction.Reason.Should().Be("Account closed");
         transaction.CompletedAtUtc.Should().Be(_utcNow.AddMinutes(1));
     }
@@ -158,13 +158,13 @@ public sealed class TopUpTransactionTests
     }
 
     [Fact]
-    public void Should_Zero_Amount_On_Failure()
+    public void Should_Preserve_Amount_On_Failure()
     {
         TopUpTransaction transaction = CreateTransaction(amount: 500m);
 
         transaction.Fail("Account not active", _utcNow).IsSuccess.Should().BeTrue();
 
-        transaction.Amount.Should().Be(0m);
+        transaction.Amount.Should().Be(500m);
     }
 
     [Fact]

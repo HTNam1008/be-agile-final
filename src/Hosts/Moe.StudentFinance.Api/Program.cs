@@ -199,12 +199,19 @@ app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous();
 
 app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 {
-    string issuer = configuration["Authentication:AdminEntra:Authority"]?.TrimEnd('/')
-        ?? throw new InvalidOperationException("Authentication:AdminEntra:Authority is required.");
-    string audience = configuration["Authentication:AdminEntra:Audience"]
-        ?? throw new InvalidOperationException("Authentication:AdminEntra:Audience is required.");
-    string signingKey = configuration["Authentication:AdminEntra:LocalTokenSigningKey"]
-        ?? throw new InvalidOperationException("Authentication:AdminEntra:LocalTokenSigningKey is required.");
+    string? issuer = configuration["Authentication:AdminEntra:Authority"]?.TrimEnd('/');
+    string? audience = configuration["Authentication:AdminEntra:Audience"];
+    string? signingKey = configuration["Authentication:AdminEntra:LocalTokenSigningKey"];
+
+    if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) || string.IsNullOrWhiteSpace(signingKey))
+    {
+        return Results.BadRequest(new
+        {
+            error = "DEV_ADMIN_TOKEN_UNAVAILABLE",
+            message = "LocalTokenSigningKey is not configured. Admin auth uses real Entra ID."
+        });
+    }
+
     int lifetimeMinutes = configuration.GetValue("Authentication:AdminEntra:LocalTokenLifetimeMinutes", 120);
     DateTime utcNow = DateTime.UtcNow;
 

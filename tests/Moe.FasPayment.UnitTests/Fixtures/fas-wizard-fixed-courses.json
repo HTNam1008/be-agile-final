@@ -8,8 +8,10 @@
   "courseIds": [101, 102],
   "subsidyType": "FIXED",
   "criteriaTemplate": [
-    { "criteriaType": "AGE", "connectorToNext": "OR", "displayOrder": 1 },
-    { "criteriaType": "NATIONALITY", "connectorToNext": null, "displayOrder": 2 }
+    { "criteriaType": "AGE", "connectorToNext": "AND", "displayOrder": 1 },
+    { "criteriaType": "GHI", "connectorToNext": "AND", "displayOrder": 2 },
+    { "criteriaType": "PCI", "connectorToNext": "AND", "displayOrder": 3 },
+    { "criteriaType": "NATIONALITY", "connectorToNext": null, "displayOrder": 4 }
   ],
   "tiers": [
     {
@@ -17,8 +19,10 @@
       "subsidyValue": 750,
       "displayOrder": 1,
       "criteriaValues": [
-        { "displayOrder": 1, "numberFrom": 7, "numberTo": 25, "nationalities": null },
-        { "displayOrder": 2, "numberFrom": null, "numberTo": null, "nationalities": ["Singapore Citizen"] }
+        { "displayOrder": 1, "numberFrom": 16, "numberTo": 25, "nationalities": null },
+        { "displayOrder": 2, "numberFrom": 0, "numberTo": 2500, "nationalities": null },
+        { "displayOrder": 3, "numberFrom": 0, "numberTo": 800, "nationalities": null },
+        { "displayOrder": 4, "numberFrom": null, "numberTo": null, "nationalities": ["Singapore Citizen"] }
       ]
     }
   ]

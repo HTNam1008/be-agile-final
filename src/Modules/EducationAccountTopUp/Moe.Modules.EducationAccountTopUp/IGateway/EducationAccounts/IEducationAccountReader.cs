@@ -11,5 +11,7 @@ public interface IEducationAccountReader
         int page,
         int pageSize,
         string? category,
+        string? sortBy,
+        string? sortDirection,
         CancellationToken cancellationToken = default);
 }

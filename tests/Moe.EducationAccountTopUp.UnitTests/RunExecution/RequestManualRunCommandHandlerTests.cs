@@ -25,7 +25,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Create_Run_When_Campaign_Active_And_Key_Unique()
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);
@@ -44,7 +44,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Return_Existing_Run_When_Idempotency_Key_Duplicate()
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);
@@ -71,7 +71,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Fail_When_Campaign_Is_Outside_Admin_Scope()
     {
-        var campaign = TopUpCampaign.Create(2, "CAMPAIGN-02", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(2, "CAMPAIGN-02", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);
@@ -101,7 +101,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [InlineData(TopUpCampaignStatusCodes.Cancelled)]
     public async Task Should_Fail_When_Campaign_Not_Active(string statusCode)
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(statusCode, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);
@@ -117,7 +117,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Enqueue_Run_For_Background_Processing()
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);
@@ -133,7 +133,7 @@ public sealed class RequestManualRunCommandHandlerTests
     [Fact]
     public async Task Should_Raise_ManualRunRequestedEvent()
     {
-        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, 99, DateTime.UtcNow);
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "FIXED", 100m, "Reason", "IMMEDIATE", new DateOnly(2026, 1, 1), null, null, null, "INSTANT", 100m, 99, DateTime.UtcNow);
         typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
         _campaigns.Add(campaign);
@@ -151,6 +151,52 @@ public sealed class RequestManualRunCommandHandlerTests
         domainEvent.TopUpRunId.Should().Be(result.Value.RunId);
         domainEvent.CampaignId.Should().Be(10);
         domainEvent.RequestedByUserId.Should().Be(_currentUser.UserAccountId);
+    }
+
+    [Fact]
+    public async Task Should_Create_Run_When_Campaign_Is_DynamicRules()
+    {
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "DynamicRules", 100m, "Reason", "Recurring", new DateOnly(2026, 1, 1), null, "Quarterly", 1, "CONDITIONAL_RECURRING", 500m, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
+
+        RequestManualRunCommandHandler handler = CreateHandler();
+        var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RunId.Should().Be(1);
+        result.Value.Status.Should().Be(TopUpRunStatusCodes.Previewed);
+        _runs.AddCalls.Should().Be(1);
+        _dispatcher.EnqueueCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Should_Fail_When_Another_Run_Is_Queued_Or_Processing()
+    {
+        var campaign = TopUpCampaign.Create(1, "CAMPAIGN-01", "Test", null, "DynamicRules", 100m, "Reason", "Recurring", new DateOnly(2026, 1, 1), null, "Quarterly", 1, "CONDITIONAL_RECURRING", 500m, 99, DateTime.UtcNow);
+        typeof(Moe.SharedKernel.Domain.Entity<long>).GetProperty("Id")!.SetValue(campaign, 10);
+        campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 99, DateTime.UtcNow);
+        _campaigns.Add(campaign);
+
+        var existingRun = TopUpRun.Rehydrate(
+            42,
+            10,
+            1,
+            _clock.UtcNow.UtcDateTime,
+            TopUpRunTriggerTypes.Manual,
+            99,
+            TopUpRunStatusCodes.Previewed,
+            "other-key");
+        _runs.Seed(existingRun);
+
+        RequestManualRunCommandHandler handler = CreateHandler();
+        var result = await handler.Handle(new RequestManualRunCommand(10, "manual-key-1", null), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(TopUpErrors.ActiveRunInProgress);
+        _runs.AddCalls.Should().Be(0);
+        _dispatcher.EnqueueCalls.Should().Be(0);
     }
 
     private RequestManualRunCommandHandler CreateHandler(IAdminAccessControl? adminAccess = null)
@@ -227,6 +273,11 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(campaign);
         }
 
+        public Task<IReadOnlyList<TopUpCampaign>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpCampaign>>(_campaigns.Values.Where(c => ids.Contains(c.Id)).ToList());
+        }
+
         public Task<bool> CampaignCodeExistsAsync(
             long organizationId,
             string campaignCode,
@@ -264,7 +315,8 @@ public sealed class RequestManualRunCommandHandlerTests
         public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
-        public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(new Dictionary<long, decimal>());
+        public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, long userId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AddRecipientAsync(TopUpCampaignRecipient recipient, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
@@ -275,6 +327,11 @@ public sealed class RequestManualRunCommandHandlerTests
         public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(0);
+        }
+
+        public Task<IReadOnlyList<TopUpCampaign>> GetDueForAssessmentAsync(DateOnly today, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
         }
 
         public Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
@@ -306,6 +363,11 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(_runs.SingleOrDefault(x => x.Id == id));
         }
 
+        public Task<IReadOnlyList<TopUpRun>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpRun>>(_runs.Where(r => ids.Contains(r.Id)).ToList());
+        }
+
         public Task<TopUpRun?> GetByIdempotencyKeyAsync(
             string idempotencyKey,
             CancellationToken cancellationToken = default)
@@ -324,6 +386,13 @@ public sealed class RequestManualRunCommandHandlerTests
         public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_runs.Any(x => x.TopUpCampaignId == campaignId && x.RunStatusCode != TopUpRunStatusCodes.Failed));
+        }
+
+        public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_runs.Any(x => x.TopUpCampaignId == campaignId
+                && (x.RunStatusCode == TopUpRunStatusCodes.Previewed
+                    || x.RunStatusCode == TopUpRunStatusCodes.Processing)));
         }
 
         public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default)

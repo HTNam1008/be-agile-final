@@ -75,7 +75,7 @@ public sealed class RecipientProcessingServiceTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(TopUpTransactionStatusCodes.Skipped);
         result.Value.Reason.Should().Be(TopUpErrors.RecipientNotEligible.Message);
-        _transactions.Items.Single().Amount.Should().Be(0m);
+        _transactions.Items.Single().Amount.Should().Be(500m);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class RecipientProcessingServiceTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(TopUpTransactionStatusCodes.Failed);
         result.Value.Reason.Should().Be("Credit rejected");
-        _transactions.Items.Single().Amount.Should().Be(0m);
+        _transactions.Items.Single().Amount.Should().Be(500m);
     }
 
     [Fact]
@@ -292,6 +292,52 @@ public sealed class RecipientProcessingServiceTests
             return Task.FromResult(_transactions.Where(x => x.TopUpRunId == topUpRunId).ToList());
         }
 
+        public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(
+            long topUpRunId,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TopUpTransaction>>(
+                _transactions.Where(x => x.TopUpRunId == topUpRunId && x.TransactionStatusCode == TopUpTransactionStatusCodes.Pending)
+                    .Skip(skip)
+                    .Take(take)
+                    .ToList());
+        }
+
+        public Task<decimal> GetTotalDisbursedForCampaignAsync(
+            long campaignId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0m);
+        }
+
+        public Task<List<TopUpTransaction>> GetByAccountIdAsync(
+            long educationAccountId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_transactions.Where(x => x.EducationAccountId == educationAccountId).ToList());
+        }
+
+        public Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(
+            long educationAccountId,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+        {
+            var all = _transactions.Where(x => x.EducationAccountId == educationAccountId)
+                .OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc)
+                .ToList();
+            return Task.FromResult<(List<TopUpTransaction>, long)>((all.Skip(skip).Take(take).ToList(), all.Count));
+        }
+
+        public Task<long> CountByAccountIdAsync(
+            long educationAccountId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult((long)_transactions.Count(x => x.EducationAccountId == educationAccountId));
+        }
+
         public void Add(TopUpTransaction transaction)
         {
             AddCalls++;
@@ -304,6 +350,9 @@ public sealed class RecipientProcessingServiceTests
             Add(transaction);
             return Task.CompletedTask;
         }
+
+        public Task<bool> TryReserveBudgetAsync(long campaignId, decimal requestedAmount, decimal budgetCap, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
     }
 
     private sealed class FakeAccountCreditGateway : IAccountCreditGateway

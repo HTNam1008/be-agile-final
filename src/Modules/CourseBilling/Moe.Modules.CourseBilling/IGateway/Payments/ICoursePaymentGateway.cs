@@ -64,7 +64,10 @@ public interface ICoursePaymentGateway
         DateTime paidAtUtc,
         CancellationToken cancellationToken);
 
-    Task ApplyPaymentFailureAsync(long billId, CancellationToken cancellationToken);
+    Task ApplyPaymentFailureAsync(
+        long billId,
+        string failureReason,
+        CancellationToken cancellationToken);
     Task ApplyFullRefundAsync(long billId, DateTime refundedAtUtc, CancellationToken cancellationToken);
     Task ApplyFullRefundForBillsAsync(
         IReadOnlyCollection<long> billIds,

@@ -15,9 +15,9 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 public sealed class RunExecutionOrchestrator(
     IRecipientProcessingService recipientProcessor,
     ITopUpCampaignRepository campaigns,
+    IDynamicTopUpContractRepository contracts,
     ITopUpRunRepository runs,
     IEducationAccountRepository educationAccounts,
-    ITopUpTransactionRepository transactions,
     ITopUpExecutionEventPublisher events,
     ITopUpExecutionMetrics metrics,
     IStudentNotificationRecipientResolver notificationRecipientResolver,
@@ -28,214 +28,278 @@ public sealed class RunExecutionOrchestrator(
 {
     private const int MaxTransientRetries = 3;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _cancellationTokens = new();
 
     public async Task<Result<RunExecutionResult>> ExecuteRunAsync(
         long topUpRunId,
         IReadOnlyList<RecipientInfo> recipients,
         CancellationToken cancellationToken = default)
     {
-        logger.LogInformation(
-            "ExecuteRunAsync started for run {TopUpRunId} with {RecipientCount} recipient(s)",
-            topUpRunId,
-            recipients.Count);
+        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _cancellationTokens.TryAdd(topUpRunId, linkedCts);
 
-        _ = transactions;
-
-        TopUpRun? run = await runs.GetByIdAsync(topUpRunId, cancellationToken);
-        if (run is null)
+        try
         {
-            return Result<RunExecutionResult>.Failure(TopUpErrors.RunNotFound);
-        }
-
-        if (TopUpRunStatusCodes.TerminalStatuses.Contains(run.RunStatusCode))
-        {
-            return Result<RunExecutionResult>.Failure(TopUpErrors.RunAlreadyTerminal);
-        }
-
-        if (run.RunStatusCode == TopUpRunStatusCodes.Processing)
-        {
-            logger.LogInformation(
-                "Top-up run {TopUpRunId} is already processing; continuing execution",
-                topUpRunId);
-        }
-        else
-        {
-            Result start = run.StartProcessing(clock.UtcNow.UtcDateTime);
-            if (start.IsFailure)
+            TopUpRun? run = await runs.GetByIdAsync(topUpRunId, cancellationToken);
+            if (run is null)
             {
-                return Result<RunExecutionResult>.Failure(start.Error);
+                return Result<RunExecutionResult>.Failure(TopUpErrors.RunNotFound);
             }
 
-            Result selected = run.SetTotalSelected(recipients.Count);
-            if (selected.IsFailure)
+            if (TopUpRunStatusCodes.TerminalStatuses.Contains(run.RunStatusCode))
             {
-                return Result<RunExecutionResult>.Failure(selected.Error);
+                return Result<RunExecutionResult>.Failure(TopUpErrors.RunAlreadyTerminal);
             }
 
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-
-            await events.PublishRunStartedAsync(
-                new TopUpRunStartedReport
+            if (run.RunStatusCode == TopUpRunStatusCodes.Processing)
+            {
+                logger.LogInformation(
+                    "Top-up run {TopUpRunId} is already processing; continuing execution",
+                    topUpRunId);
+            }
+            else
+            {
+                Result start = run.StartProcessing(clock.UtcNow.UtcDateTime);
+                if (start.IsFailure)
                 {
-                    TopUpRunId = run.Id,
-                    CampaignId = run.TopUpCampaignId,
-                    TotalSelected = recipients.Count,
-                    OccurredAtUtc = run.StartedAtUtc ?? clock.UtcNow.UtcDateTime
-                },
-                cancellationToken);
+                    return Result<RunExecutionResult>.Failure(start.Error);
+                }
 
-            metrics.RecordRunStarted(run.Id, run.TopUpCampaignId, recipients.Count);
-        }
+                Result selected = run.SetTotalSelected(recipients.Count);
+                if (selected.IsFailure)
+                {
+                    return Result<RunExecutionResult>.Failure(selected.Error);
+                }
 
-        int totalSucceeded = 0;
-        int totalFailed = 0;
-        int totalSkipped = 0;
-        decimal totalAmount = 0m;
+                await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        foreach (RecipientInfo recipient in recipients)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            logger.LogInformation(
-                "Processing recipient for run {TopUpRunId}: education account {EducationAccountId}, amount {Amount}, organization unit {OrganizationUnitId}",
-                topUpRunId,
-                recipient.EducationAccountId,
-                recipient.Amount,
-                recipient.OrganizationUnitId);
-
-            RecipientProcessingResult result = await ProcessRecipientWithRetryAsync(
-                topUpRunId,
-                recipient,
-                cancellationToken);
-
-            switch (result.Status)
-            {
-                case TopUpTransactionStatusCodes.Completed:
-                    totalSucceeded++;
-                    totalAmount += result.CreditedAmount;
-                    logger.LogInformation(
-                        "Recipient completed for run {TopUpRunId}, education account {EducationAccountId}, credited amount {CreditedAmount}, already processed {AlreadyProcessed}",
-                        topUpRunId,
-                        recipient.EducationAccountId,
-                        result.CreditedAmount,
-                        result.AlreadyProcessed);
-
-                    if (!result.AlreadyProcessed)
+                await events.PublishRunStartedAsync(
+                    new TopUpRunStartedReport
                     {
-                        await CreateTopUpReceivedNotificationAsync(topUpRunId, recipient, cancellationToken);
-                    }
-                    break;
-                case TopUpTransactionStatusCodes.Failed:
-                    logger.LogWarning(
-                        "Recipient failed for run {TopUpRunId}, education account {EducationAccountId}, reason {Reason}",
-                        topUpRunId,
-                        recipient.EducationAccountId,
-                        result.Reason ?? "N/A");
-                    totalFailed++;
-                    break;
-                case TopUpTransactionStatusCodes.Skipped:
-                    logger.LogWarning(
-                        "Recipient skipped for run {TopUpRunId}, education account {EducationAccountId}, reason {Reason}",
-                        topUpRunId,
-                        recipient.EducationAccountId,
-                        result.Reason ?? "N/A");
+                        TopUpRunId = run.Id,
+                        CampaignId = run.TopUpCampaignId,
+                        TotalSelected = recipients.Count,
+                        OccurredAtUtc = run.StartedAtUtc ?? clock.UtcNow.UtcDateTime
+                    },
+                    linkedCts.Token);
+
+                metrics.RecordRunStarted(run.Id, run.TopUpCampaignId, recipients.Count);
+            }
+
+            int totalSucceeded = 0;
+            int totalFailed = 0;
+            int totalSkipped = 0;
+            decimal totalAmount = 0m;
+            List<long> successfulAccountIds = [];
+
+            foreach (RecipientInfo recipient in recipients)
+            {
+                if (linkedCts.Token.IsCancellationRequested)
+                {
                     totalSkipped++;
-                    break;
+                    continue;
+                }
+
+                RecipientProcessingResult result = await ProcessRecipientWithRetryAsync(
+                    topUpRunId,
+                    recipient,
+                    linkedCts.Token);
+
+                switch (result.Status)
+                {
+                    case TopUpTransactionStatusCodes.Completed:
+                        totalSucceeded++;
+                        totalAmount += result.CreditedAmount;
+                        successfulAccountIds.Add(recipient.EducationAccountId);
+                        if (!result.AlreadyProcessed)
+                        {
+                            await CreateTopUpReceivedNotificationAsync(topUpRunId, recipient, linkedCts.Token);
+                        }
+                        break;
+                    case TopUpTransactionStatusCodes.Failed:
+                        totalFailed++;
+                        break;
+                    case TopUpTransactionStatusCodes.Skipped:
+                        totalSkipped++;
+                        break;
+                }
             }
-        }
 
-        int totalProcessed = totalSucceeded + totalFailed + totalSkipped;
-        Result finalize = run.Finalize(
-            totalProcessed,
-            totalSucceeded,
-            totalFailed,
-            totalSkipped,
-            totalAmount,
-            clock.UtcNow.UtcDateTime);
+            int totalProcessed = totalSucceeded + totalFailed + totalSkipped;
 
-        if (finalize.IsFailure)
-        {
-            return Result<RunExecutionResult>.Failure(finalize.Error);
-        }
-
-        DateTime completedAtUtc = run.CompletedAtUtc ?? clock.UtcNow.UtcDateTime;
-
-        TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, cancellationToken);
-        if (campaign is not null)
-        {
-            logger.LogInformation(
-                "Campaign {TopUpCampaignId} loaded after run completion. ScheduleType={ScheduleTypeCode}, NextRunAtUtc={NextRunAtUtc}",
-                campaign.Id,
-                campaign.ScheduleTypeCode,
-                campaign.NextRunAtUtc);
-
-            if (string.Equals(campaign.ScheduleTypeCode, "IMMEDIATE", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(campaign.ScheduleTypeCode, "ONETIME_SCHEDULED", StringComparison.OrdinalIgnoreCase))
+            if (linkedCts.Token.IsCancellationRequested)
             {
-                campaign.ChangeStatus(TopUpCampaignStatusCodes.Completed, 0, completedAtUtc, true);
+                Result cancelResult = run.Cancel(clock.UtcNow.UtcDateTime);
+                if (cancelResult.IsFailure)
+                {
+                    return Result<RunExecutionResult>.Failure(cancelResult.Error);
+                }
+                run.ReconcileCounters(totalProcessed, totalSucceeded, totalFailed, totalSkipped, totalAmount);
             }
-            else if (string.Equals(campaign.ScheduleTypeCode, "RECURRING", StringComparison.OrdinalIgnoreCase) && campaign.NextRunAtUtc == null)
+            else
             {
-                campaign.ChangeStatus(TopUpCampaignStatusCodes.Completed, 0, completedAtUtc, true);
+                Result finalize = run.Finalize(
+                    totalProcessed,
+                    totalSucceeded,
+                    totalFailed,
+                    totalSkipped,
+                    totalAmount,
+                    clock.UtcNow.UtcDateTime);
+
+                if (finalize.IsFailure)
+                {
+                    return Result<RunExecutionResult>.Failure(finalize.Error);
+                }
             }
-        }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        TimeSpan duration = run.StartedAtUtc is DateTime startedAtUtc
-            ? completedAtUtc - startedAtUtc
-            : TimeSpan.Zero;
+            DateTime completedAtUtc = run.CompletedAtUtc ?? clock.UtcNow.UtcDateTime;
 
-        await events.PublishRunCompletedAsync(
-            new TopUpRunCompletedReport
+            await CampaignLifecycleHelper.EvaluateCampaignAfterTerminalRunAsync(
+                run,
+                campaigns,
+                contracts,
+                completedAtUtc,
+                linkedCts.Token);
+
+            await unitOfWork.SaveChangesAsync(linkedCts.Token);
+            TimeSpan duration = run.StartedAtUtc is DateTime startedAtUtc
+                ? completedAtUtc - startedAtUtc
+                : TimeSpan.Zero;
+
+            await events.PublishRunCompletedAsync(
+                new TopUpRunCompletedReport
+                {
+                    TopUpRunId = topUpRunId,
+                    CampaignId = run.TopUpCampaignId,
+                    TerminalStatus = run.RunStatusCode,
+                    TotalProcessed = totalProcessed,
+                    TotalSucceeded = totalSucceeded,
+                    TotalFailed = totalFailed,
+                    TotalSkipped = totalSkipped,
+                    TotalAmount = totalAmount,
+                    OccurredAtUtc = completedAtUtc
+                },
+                linkedCts.Token);
+
+            metrics.RecordRunCompleted(
+                topUpRunId,
+                run.TopUpCampaignId,
+                run.RunStatusCode,
+                totalProcessed,
+                totalSucceeded,
+                totalFailed,
+                totalSkipped,
+                duration);
+
+            if (run.TriggeredByLoginAccountId is long triggeredByUserAccountId)
+            {
+                logger.LogInformation(
+                    "Run {TopUpRunId} triggered by user account {UserAccountId}; creating RUN_COMPLETED notification",
+                    run.Id,
+                    triggeredByUserAccountId);
+
+                await NotifyRunCompletedAsync(
+                    run,
+                    triggeredByUserAccountId,
+                    totalSucceeded,
+                    totalAmount,
+                    linkedCts.Token);
+            }
+
+            return Result<RunExecutionResult>.Success(new RunExecutionResult
             {
                 TopUpRunId = topUpRunId,
-                CampaignId = run.TopUpCampaignId,
                 TerminalStatus = run.RunStatusCode,
+                TotalSelected = recipients.Count,
                 TotalProcessed = totalProcessed,
                 TotalSucceeded = totalSucceeded,
                 TotalFailed = totalFailed,
                 TotalSkipped = totalSkipped,
                 TotalAmount = totalAmount,
-                OccurredAtUtc = completedAtUtc
-            },
-            cancellationToken);
-
-        metrics.RecordRunCompleted(
-            topUpRunId,
-            run.TopUpCampaignId,
-            run.RunStatusCode,
-            totalProcessed,
-            totalSucceeded,
-            totalFailed,
-            totalSkipped,
-            duration);
-
-        if (run.TriggeredByLoginAccountId is long triggeredByUserAccountId)
+                SuccessfulAccountIds = successfulAccountIds
+            });
+        }
+        finally
         {
-            logger.LogInformation(
-                "Run {TopUpRunId} triggered by user account {UserAccountId}; creating RUN_COMPLETED notification",
-                run.Id,
-                triggeredByUserAccountId);
+            _cancellationTokens.TryRemove(topUpRunId, out _);
+        }
+    }
 
-            await NotifyRunCompletedAsync(
-                run,
-                triggeredByUserAccountId,
-                totalSucceeded,
-                totalAmount,
-                cancellationToken);
+    public bool CancelRun(long topUpRunId)
+    {
+        if (_cancellationTokens.TryGetValue(topUpRunId, out CancellationTokenSource? cts))
+        {
+            cts.Cancel();
+            return true;
+        }
+        return false;
+    }
+
+    public void RegisterCancellationToken(long topUpRunId, CancellationTokenSource cts)
+    {
+        _cancellationTokens.TryAdd(topUpRunId, cts);
+    }
+
+    public void UnregisterCancellationToken(long topUpRunId)
+    {
+        _cancellationTokens.TryRemove(topUpRunId, out _);
+    }
+
+    public async Task<Result<ChunkProcessingResult>> ProcessChunkAsync(
+        long topUpRunId,
+        IReadOnlyList<RecipientInfo> chunk,
+        ChunkProcessingAccumulator accumulator,
+        CancellationToken cancellationToken)
+    {
+        int chunkSucceeded = 0;
+        int chunkFailed = 0;
+        int chunkSkipped = 0;
+        decimal chunkAmount = 0m;
+        List<long> chunkSuccessfulAccountIds = [];
+
+        CancellationTokenSource? cts = null;
+        if (_cancellationTokens.TryGetValue(topUpRunId, out var existingCts))
+        {
+            cts = existingCts;
         }
 
-        return Result<RunExecutionResult>.Success(new RunExecutionResult
+        foreach (RecipientInfo recipient in chunk)
         {
-            TopUpRunId = topUpRunId,
-            TerminalStatus = run.RunStatusCode,
-            TotalSelected = recipients.Count,
-            TotalProcessed = totalProcessed,
-            TotalSucceeded = totalSucceeded,
-            TotalFailed = totalFailed,
-            TotalSkipped = totalSkipped,
-            TotalAmount = totalAmount
-        });
+            if (cts?.Token.IsCancellationRequested == true)
+            {
+                chunkSkipped++;
+                accumulator.TotalSkipped++;
+                continue;
+            }
+
+            RecipientProcessingResult result = await ProcessRecipientWithRetryAsync(
+                topUpRunId,
+                recipient,
+                cts?.Token ?? cancellationToken);
+
+            switch (result.Status)
+            {
+                case TopUpTransactionStatusCodes.Completed:
+                    chunkSucceeded++;
+                    chunkAmount += result.CreditedAmount;
+                    chunkSuccessfulAccountIds.Add(recipient.EducationAccountId);
+                    accumulator.TotalSucceeded++;
+                    accumulator.TotalAmount += result.CreditedAmount;
+                    accumulator.SuccessfulAccountIds.Add(recipient.EducationAccountId);
+                    break;
+                case TopUpTransactionStatusCodes.Failed:
+                    chunkFailed++;
+                    accumulator.TotalFailed++;
+                    break;
+                case TopUpTransactionStatusCodes.Skipped:
+                    chunkSkipped++;
+                    accumulator.TotalSkipped++;
+                    break;
+            }
+        }
+
+        return Result<ChunkProcessingResult>.Success(new ChunkProcessingResult(
+            chunkSucceeded, chunkFailed, chunkSkipped, chunkAmount, chunkSuccessfulAccountIds));
     }
 
     private async Task<RecipientProcessingResult> ProcessRecipientWithRetryAsync(
@@ -243,11 +307,6 @@ public sealed class RunExecutionOrchestrator(
         RecipientInfo recipient,
         CancellationToken cancellationToken)
     {
-        logger.LogInformation(
-            "ProcessRecipientWithRetryAsync started for run {TopUpRunId}, education account {EducationAccountId}",
-            topUpRunId,
-            recipient.EducationAccountId);
-
         RecipientProcessingResult? lastResult = null;
 
         for (int attempt = 1; attempt <= MaxTransientRetries; attempt++)
@@ -265,11 +324,6 @@ public sealed class RunExecutionOrchestrator(
                 if (result.IsSuccess)
                 {
                     lastResult = result.Value;
-                    logger.LogInformation(
-                        "Recipient processor returned status {Status} for education account {EducationAccountId} in run {TopUpRunId}",
-                        lastResult.Status,
-                        recipient.EducationAccountId,
-                        topUpRunId);
 
                     if (lastResult.Status != TopUpTransactionStatusCodes.Failed)
                     {
@@ -427,11 +481,6 @@ public sealed class RunExecutionOrchestrator(
             totalSucceeded,
             totalAmount);
 
-        logger.LogInformation(
-            "Creating RUN_COMPLETED notification for user account {UserAccountId} in run {TopUpRunId}",
-            userAccountId,
-            run.Id);
-
         Result<long> create = await notificationWriter.CreateAsync(
             new NotificationCreateRequest(
                 userAccountId,
@@ -458,4 +507,3 @@ public sealed class RunExecutionOrchestrator(
         }
     }
 }
-

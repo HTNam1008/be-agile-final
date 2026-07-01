@@ -69,7 +69,7 @@ public class E2EDbSeeder : IHostedService
         var appType = fasAssembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasApplication");
         if (schemeType != null && appType != null)
         {
-            var scheme = schemeType.GetMethod("CreateDraft")!.Invoke(null, new object[] { "FAS-E2E", "GRANT-E2E", "E2E Seeded Scheme", "Test", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), 1001L, DateTime.UtcNow });
+            var scheme = schemeType.GetMethod("CreateDraft")!.Invoke(null, new object[] { "FAS-E2E", "GRANT-E2E", "E2E Seeded Scheme", "Test", DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), 1001L, DateTime.UtcNow });
             SetId(scheme!, 100);
             schemeType.GetMethod("Activate")!.Invoke(scheme, new object[] { 1001L, DateTime.UtcNow });
             db.Add(scheme!);

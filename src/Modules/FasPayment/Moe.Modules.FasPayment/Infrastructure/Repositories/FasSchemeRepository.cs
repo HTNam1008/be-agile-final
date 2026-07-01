@@ -65,23 +65,36 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
                 foreach (long courseId in normalizedRequest.CourseIds.Distinct()) dbContext.Add(FasSchemeCourse.Create(scheme.Id, courseId, utcNow));
                 await dbContext.SaveChangesAsync(cancellationToken);
 
+                IReadOnlyList<FasCriteriaGroupRequest> criteriaGroups = FasCriteriaGroupNormalizer.Normalize(normalizedRequest);
+                IReadOnlyList<FasCriteriaTemplateItem> flattenedTemplate = FasCriteriaGroupNormalizer.Flatten(criteriaGroups);
+
                 foreach (CreateFasTierRequest tierRequest in normalizedRequest.Tiers.OrderBy(x => x.DisplayOrder))
                 {
                     FasTier tier = FasTier.Create(scheme.Id, tierRequest.Label, normalizedRequest.SubsidyType, tierRequest.SubsidyValue, tierRequest.DisplayOrder, utcNow);
                     dbContext.Add(tier);
                     await dbContext.SaveChangesAsync(cancellationToken);
-                    foreach (FasCriteriaTemplateItem template in normalizedRequest.CriteriaTemplate.OrderBy(x => x.DisplayOrder))
+
+                    foreach (FasCriteriaGroupRequest groupRequest in criteriaGroups.OrderBy(x => x.DisplayOrder))
                     {
-                        FasTierCriteriaValue value = tierRequest.CriteriaValues.Single(x => x.DisplayOrder == template.DisplayOrder);
-                        FasTierCriteria criteria = FasTierCriteria.Create(tier.Id, template.CriteriaType, value.NumberFrom, value.NumberTo,
-                            template.ConnectorToNext, template.DisplayOrder, utcNow);
-                        dbContext.Add(criteria);
+                        FasTierCriteriaGroup group = FasTierCriteriaGroup.Create(tier.Id, groupRequest.DisplayOrder, utcNow);
+                        dbContext.Add(group);
                         await dbContext.SaveChangesAsync(cancellationToken);
-                        if (template.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE")
+
+                        foreach (FasCriteriaTemplateItem groupCriteria in groupRequest.Criteria.OrderBy(x => x.DisplayOrder))
                         {
-                            foreach (string nationality in value.Nationalities!.Distinct(StringComparer.Ordinal))
-                                dbContext.Add(FasTierCriteriaNationality.Create(criteria.Id, template.CriteriaType, nationality));
+                            FasCriteriaTemplateItem template = flattenedTemplate.Single(x => x.DisplayOrder == groupCriteria.DisplayOrder);
+                            FasTierCriteriaValue value = tierRequest.CriteriaValues.Single(x => x.DisplayOrder == template.DisplayOrder);
+                            FasTierCriteria criteria = FasTierCriteria.Create(tier.Id, group.Id, template.CriteriaType, value.NumberFrom, value.NumberTo,
+                                template.ConnectorToNext, template.DisplayOrder, utcNow);
+                            dbContext.Add(criteria);
                             await dbContext.SaveChangesAsync(cancellationToken);
+
+                            if (template.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE")
+                            {
+                                foreach (string nationality in value.Nationalities!.Distinct(StringComparer.Ordinal))
+                                    dbContext.Add(FasTierCriteriaNationality.Create(criteria.Id, template.CriteriaType, nationality));
+                                await dbContext.SaveChangesAsync(cancellationToken);
+                            }
                         }
                     }
                 }
@@ -111,6 +124,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
         dbContext.RemoveRange(await dbContext.Set<FasTierCriteriaNationality>().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToArrayAsync(cancellationToken));
         dbContext.RemoveRange(criteria);
+        dbContext.RemoveRange(await dbContext.Set<FasTierCriteriaGroup>().Where(x => tierIds.Contains(x.FasTierId)).ToArrayAsync(cancellationToken));
         dbContext.RemoveRange(tiers);
         dbContext.RemoveRange(await dbContext.Set<FasSchemeCourse>().Where(x => x.FasSchemeId == schemeId).ToArrayAsync(cancellationToken));
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -260,23 +274,37 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         return query;
     }
 
-    private static IOrderedQueryable<FasScheme> ApplySorting(IQueryable<FasScheme> query, string? sortBy, string? sortDirection, DateOnly today)
+    private IOrderedQueryable<FasScheme> ApplySorting(IQueryable<FasScheme> query, string? sortBy, string? sortDirection, DateOnly today)
     {
         bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(sortDirection);
         Expression<Func<FasScheme, int>> statusOrder = StatusSortOrder(today);
         return sortBy?.Trim() switch
         {
+            "schemeCode" => descending
+                ? query.OrderByDescending(x => x.SchemeCode).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.SchemeCode).ThenBy(x => x.Id),
             "schemeName" => descending
                 ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.Name).ThenByDescending(x => x.Id),
+                : query.OrderBy(x => x.Name).ThenBy(x => x.Id),
+            "duration" => descending
+                ? query.OrderByDescending(x => x.StartDate).ThenByDescending(x => x.EndDate).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.StartDate).ThenBy(x => x.EndDate).ThenBy(x => x.Id),
             "status" => descending
                 ? query.OrderByDescending(statusOrder).ThenByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
                 : query.OrderBy(statusOrder).ThenByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id),
+            "applicationCount" => SortByApplicationCount(query, descending),
             "createdDate" or _ => descending
                 ? query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
         };
     }
+
+    private IOrderedQueryable<FasScheme> SortByApplicationCount(IQueryable<FasScheme> query, bool descending)
+        => descending
+            ? query.OrderByDescending(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+                .ThenByDescending(scheme => scheme.Id)
+            : query.OrderBy(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+                .ThenBy(scheme => scheme.Id);
 
     private static Expression<Func<FasScheme, int>> StatusSortOrder(DateOnly today)
         => scheme => scheme.StatusCode == FasSchemeStatusCodes.Active && scheme.StartDate <= today ? 1
@@ -293,25 +321,37 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         long[] courseIds = await dbContext.Set<FasSchemeCourse>().AsNoTracking().Where(x => x.FasSchemeId == schemeId).OrderBy(x => x.CourseId).Select(x => x.CourseId).ToArrayAsync(cancellationToken);
         FasTier[] tiers = await dbContext.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == schemeId).OrderBy(x => x.DisplayOrder).ToArrayAsync(cancellationToken);
         long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        FasTierCriteriaGroup[] groups = await dbContext.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToArrayAsync(cancellationToken);
         FasTierCriteria[] criteria = await dbContext.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToArrayAsync(cancellationToken);
         long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
         FasTierCriteriaNationality[] nationalities = await dbContext.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToArrayAsync(cancellationToken);
         if (tiers.Length == 0) throw Corrupt(schemeId, "scheme has no tiers");
         string subsidyType = tiers[0].SubsidyType;
         if (tiers.Any(x => x.SubsidyType != subsidyType)) throw Corrupt(schemeId, "tier subsidy types differ");
+        FasTierCriteriaGroup[] firstGroups = groups.Where(x => x.FasTierId == tiers[0].Id).OrderBy(x => x.DisplayOrder).ToArray();
         FasTierCriteria[] firstCriteria = criteria.Where(x => x.FasTierId == tiers[0].Id).OrderBy(x => x.DisplayOrder).ToArray();
         foreach (FasTier tier in tiers.Skip(1))
         {
+            FasTierCriteriaGroup[] candidateGroups = groups.Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToArray();
             FasTierCriteria[] candidate = criteria.Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToArray();
-            if (candidate.Length != firstCriteria.Length || candidate.Where((x, i) => x.CriteriaType != firstCriteria[i].CriteriaType || x.ConnectorToNext != firstCriteria[i].ConnectorToNext || x.DisplayOrder != firstCriteria[i].DisplayOrder).Any())
+            if (candidateGroups.Length != firstGroups.Length || candidateGroups.Where((x, i) => x.DisplayOrder != firstGroups[i].DisplayOrder).Any())
+                throw Corrupt(schemeId, "tier criteria groups differ");
+            if (candidate.Length != firstCriteria.Length || candidate.Where((x, i) => x.CriteriaType != firstCriteria[i].CriteriaType || x.ConnectorToNext != firstCriteria[i].ConnectorToNext || x.DisplayOrder != firstCriteria[i].DisplayOrder || GroupDisplayOrder(groups, x) != GroupDisplayOrder(groups, firstCriteria[i])).Any())
                 throw Corrupt(schemeId, "tier criteria templates differ");
         }
         var template = firstCriteria.Select(x => new FasCriteriaTemplateItem(x.CriteriaType, x.ConnectorToNext, x.DisplayOrder)).ToArray();
+        var criteriaGroups = firstGroups.Select(group => new FasCriteriaGroupRequest(
+            group.DisplayOrder,
+            firstCriteria
+                .Where(criteria => criteria.FasTierCriteriaGroupId == group.Id)
+                .OrderBy(criteria => criteria.DisplayOrder)
+                .Select(criteria => new FasCriteriaTemplateItem(criteria.CriteriaType, null, criteria.DisplayOrder))
+                .ToArray())).ToArray();
         var tierDetails = tiers.Select(t => new FasTierDetail(t.Id, t.Label, t.SubsidyValue, t.DisplayOrder,
             criteria.Where(c => c.FasTierId == t.Id).OrderBy(c => c.DisplayOrder).Select(c => new FasTierCriteriaValue(c.DisplayOrder, c.NumberFrom, c.NumberTo,
                 c.CriteriaType is "NATIONALITY" or "PARENT_NATIONALITY" or "ACCOUNT_TYPE" ? nationalities.Where(n => n.FasTierCriteriaId == c.Id).Select(n => n.Nationality).Order().ToArray() : null)).ToArray())).ToArray();
         return new FasSchemeDetail(scheme.Id, scheme.SchemeCode, scheme.GrantCode, scheme.Name, scheme.Description,
-            scheme.StartDate, scheme.EndDate, scheme.StatusCode, courseIds, subsidyType, template, tierDetails);
+            scheme.StartDate, scheme.EndDate, scheme.StatusCode, courseIds, subsidyType, template, tierDetails, criteriaGroups);
     }
 
     private InvalidOperationException Corrupt(long schemeId, string reason)
@@ -319,4 +359,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         logger.LogError("FAS scheme {SchemeId} contains inconsistent duplicated data: {Reason}", schemeId, reason);
         return new InvalidOperationException($"FAS scheme {schemeId} contains inconsistent data.");
     }
+
+    private static int GroupDisplayOrder(IReadOnlyCollection<FasTierCriteriaGroup> groups, FasTierCriteria criteria)
+        => groups.Single(group => group.Id == criteria.FasTierCriteriaGroupId).DisplayOrder;
 }

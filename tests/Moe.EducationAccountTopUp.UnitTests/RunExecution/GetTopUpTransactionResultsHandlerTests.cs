@@ -132,7 +132,10 @@ public sealed class GetTopUpTransactionResultsHandlerTests
             new FakeRunReader(new RunSummaryProjection(
                 42,
                 7,
+                "TEST-01",
+                "Test Campaign",
                 organizationId,
+                0m,
                 DateTime.UtcNow,
                 "MANUAL",
                 "COMPLETED",
@@ -231,6 +234,11 @@ public sealed class GetTopUpTransactionResultsHandlerTests
                         [1] = new(1, "DEMO-STU-0001", "Student One")
                     }
                     : new Dictionary<long, TopUpStudentDisplaySummary>());
+
+        public Task<IReadOnlyList<AccountTaxonomyLevel>> GetAccountTaxonomyAsync(
+            IReadOnlyCollection<long> scopedOrganizationIds,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AccountTaxonomyLevel>>(Array.Empty<AccountTaxonomyLevel>());
     }
 
     private sealed class FakeCurrentUser(

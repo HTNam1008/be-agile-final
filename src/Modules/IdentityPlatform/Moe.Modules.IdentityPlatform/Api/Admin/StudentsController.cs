@@ -11,6 +11,7 @@ using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 using Moe.Modules.IdentityPlatform.Application.AdminStudentList;
 using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
+using Moe.Modules.IdentityPlatform.Application.Students.SetStudentAccess;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -39,9 +40,12 @@ public sealed class StudentsController(
                 string.IsNullOrWhiteSpace(request.LevelCode) ? [] : [request.LevelCode],
                 request.ClassCode,
                 request.AccountStatus,
+                request.PortalAccessStatus,
                 request.EnrollmentStatus,
                 request.Page,
-                request.PageSize),
+                request.PageSize,
+                request.SortBy,
+                request.SortDirection),
             cancellationToken);
 
         return result.IsFailure
@@ -110,6 +114,32 @@ public sealed class StudentsController(
         }
 
         return ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
+    [HttpPost("{personId:long}/disable-access")]
+    [Authorize(Policy = AuthorizationPolicies.ManageAccountDetails)]
+    public async Task<IActionResult> DisableAccess(
+        [FromRoute] long personId,
+        CancellationToken cancellationToken)
+    {
+        var result = await commands.Send(new DisableStudentAccessCommand(personId), cancellationToken);
+
+        return result.IsFailure
+            ? ApiResponseFactory.Failure(result.Error, GetFailureStatusCode(result.Error.Code), HttpContext.TraceIdentifier)
+            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
+    }
+
+    [HttpPost("{personId:long}/enable-access")]
+    [Authorize(Policy = AuthorizationPolicies.ManageAccountDetails)]
+    public async Task<IActionResult> EnableAccess(
+        [FromRoute] long personId,
+        CancellationToken cancellationToken)
+    {
+        var result = await commands.Send(new EnableStudentAccessCommand(personId), cancellationToken);
+
+        return result.IsFailure
+            ? ApiResponseFactory.Failure(result.Error, GetFailureStatusCode(result.Error.Code), HttpContext.TraceIdentifier)
+            : ApiResponseFactory.Ok(result.Value, HttpContext.TraceIdentifier);
     }
 
     [HttpPost]

@@ -13,9 +13,11 @@ public sealed class FasSchemeDomainTests
     {
         Action emptyGrant = () => FasScheme.CreateDraft("S", " ", "Name", null, Today().AddDays(1), Today().AddMonths(6), 1, Now);
         Action reversed = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddMonths(6), Today().AddDays(1), 1, Now);
+        Action equalDates = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(1), Today().AddDays(1), 1, Now);
         Action pastStart = () => FasScheme.CreateDraft("S", "G", "Name", null, Today().AddDays(-1), Today().AddMonths(6), 1, Now);
         emptyGrant.Should().Throw<ArgumentException>();
         reversed.Should().Throw<ArgumentException>();
+        equalDates.Should().Throw<ArgumentException>().WithMessage("*End date must be after start date.*");
         pastStart.Should().Throw<ArgumentException>();
     }
 

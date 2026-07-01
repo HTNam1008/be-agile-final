@@ -273,5 +273,10 @@ public sealed class TopUpAccountSelectionResolverTests
 
             return Task.FromResult(result);
         }
+
+        public Task<IReadOnlyList<AccountTaxonomyLevel>> GetAccountTaxonomyAsync(
+            IReadOnlyCollection<long> scopedOrganizationIds,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AccountTaxonomyLevel>>(Array.Empty<AccountTaxonomyLevel>());
     }
 }

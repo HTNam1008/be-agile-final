@@ -12,6 +12,8 @@ internal interface IUserAccountRepository
 
     Task<UserAccount?> DisableAsync(long userAccountId, DateTime utcNow, CancellationToken cancellationToken);
 
+    Task<UserAccount?> EnableAsync(long userAccountId, DateTime utcNow, CancellationToken cancellationToken);
+
     Task<UserAccount?> UpdateContactDetailsAsync(
         long userAccountId,
         string? contactEmail,

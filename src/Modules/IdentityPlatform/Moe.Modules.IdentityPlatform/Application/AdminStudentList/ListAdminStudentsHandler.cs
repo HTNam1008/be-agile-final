@@ -29,9 +29,12 @@ internal sealed class ListAdminStudentsHandler(
             query.LevelCodes,
             query.ClassCode,
             query.AccountStatus,
+            query.PortalAccessStatus,
             query.EnrollmentStatus,
             Math.Max(query.Page, 1),
-            Math.Clamp(query.PageSize, 1, 100));
+            Math.Clamp(query.PageSize, 1, 100),
+            query.SortBy,
+            query.SortDirection);
 
         AdminStudentListPage page = await students.ListAsync(
             criteria,
