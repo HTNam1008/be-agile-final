@@ -2,6 +2,11 @@ namespace Moe.Modules.FasPayment.Application.StudentApplications;
 
 public sealed record EligibilityRequest(decimal MonthlyHouseholdIncome, int HouseholdMemberCount, decimal OtherMonthlyIncome = 0,
     IReadOnlyCollection<string>? ParentNationalities = null);
+public sealed record EligibilityCriteriaPlan(
+    IReadOnlyCollection<string> ApplicableSchemeNames,
+    IReadOnlyCollection<string> RequiredCriteriaTypes,
+    IReadOnlyCollection<string> ProfileConfirmedFacts,
+    IReadOnlyCollection<string> UserRequiredFacts);
 public sealed record CreateDraftRequest(IReadOnlyCollection<long> SchemeIds);
 public sealed record ReplaceSchemesRequest(IReadOnlyCollection<long> SchemeIds);
 public sealed record UpdateParticularsRequest(string Email, IReadOnlyCollection<string> ParentNationalities);

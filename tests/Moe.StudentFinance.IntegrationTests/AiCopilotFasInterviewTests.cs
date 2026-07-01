@@ -32,12 +32,15 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("No", conversationId);
         await SendFasMessage("3000", conversationId);
         await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
 
         JsonElement completed = await SendFasMessage("Singaporean", conversationId);
 
         Assert.Equal("MANUAL_FALLBACK", completed.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.Contains("could not find an eligible FAS scheme", completed.GetProperty("text").GetString());
         Assert.DoesNotContain(completed.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
+        Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "CONTACT_ADMIN_CENTER");
+        Assert.True(completed.TryGetProperty("reviewRecordId", out JsonElement review) && review.ValueKind == JsonValueKind.String);
     }
 
     [Fact]
@@ -48,6 +51,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("No", conversationId);
         await SendFasMessage("3000", conversationId);
         await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
 
         JsonElement completed = await SendFasMessage("Singaporean", conversationId);
 
@@ -62,6 +66,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Assert.False(patch.GetProperty("income").GetProperty("isWelfareHomeResident").GetBoolean());
         Assert.Equal(3000m, patch.GetProperty("income").GetProperty("monthlyHouseholdIncome").GetDecimal());
         Assert.Equal(4, patch.GetProperty("income").GetProperty("householdMemberCount").GetInt32());
+        Assert.Equal(0m, patch.GetProperty("income").GetProperty("otherMonthlyIncome").GetDecimal());
         Assert.Equal("Singapore Citizen", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
         Assert.True(patch.GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
         Assert.Contains("AI FAS", patch.GetProperty("schemes").GetProperty("recommendedSchemeNames")[0].GetString());
@@ -73,7 +78,9 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     {
         JsonElement started = await SendFasMessage("Can you check my FAS eligibility?", null);
         Assert.Equal("FAS_INTERVIEW", started.GetProperty("mode").GetString());
-        Assert.Equal("Are you currently residing in an approved welfare home? Please answer yes or no.", started.GetProperty("text").GetString());
+        Assert.Contains("MOE record facts", started.GetProperty("text").GetString());
+        Assert.Contains("I still need", started.GetProperty("text").GetString());
+        Assert.Contains("Are you currently residing in an approved welfare home? Please answer yes or no.", started.GetProperty("text").GetString());
         Assert.Equal("isWelfareHomeResident", started.GetProperty("interviewState").GetProperty("missingFields")[0].GetString());
         return started.GetProperty("conversationId").GetGuid();
     }
