@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
+using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
@@ -16,6 +17,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignSta
 internal sealed class ChangeCampaignStatusCommandHandler(
     ITopUpCampaignRepository campaigns,
     IDynamicTopUpContractRepository contracts,
+    ITopUpRunRepository runs,
+    ITopUpRunDispatcher dispatcher,
     IUnitOfWork unitOfWork,
     ICurrentUser currentUser,
     IAdminAccessControl adminAccess,
@@ -46,6 +49,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
         var newStatusCode = command.NewStatusCode.ToUpperInvariant();
         var nowUtc = clock.UtcNow.UtcDateTime;
+        TopUpRun? immediateRunToDispatch = null;
 
         if (newStatusCode == TopUpCampaignStatusCodes.Active)
         {
@@ -93,7 +97,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
                 campaign.RecordResume(nowUtc); // returns the duration but we discard it, just clears the anchor
             }
 
-            // Cluster Fix — Orphan Termination: all ACTIVE contracts under a cancelled campaign
+            // Cluster Fix - Orphan Termination: all ACTIVE contracts under a cancelled campaign
             // are perpetual orphans. The run engine will never fire them. Terminate them now
             // so the student ledger correctly shows no further disbursements are expected.
             await contracts.CancelAllActiveContractsAsync(campaign.Id, nowUtc, cancellationToken);
@@ -108,6 +112,14 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         if (statusResult.IsFailure)
         {
             return statusResult;
+        }
+
+        if (newStatusCode == TopUpCampaignStatusCodes.Active && IsImmediateInstantCampaign(campaign))
+        {
+            immediateRunToDispatch = await CreateImmediateRunIfNeededAsync(
+                campaign,
+                nowUtc,
+                cancellationToken);
         }
 
         await audit.RecordSchoolActionAsync(
@@ -139,7 +151,37 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             }
         }
 
+        if (immediateRunToDispatch is not null)
+        {
+            await dispatcher.EnqueueAsync(immediateRunToDispatch.Id, cancellationToken);
+        }
+
         return Result.Success();
+    }
+
+    private async Task<TopUpRun?> CreateImmediateRunIfNeededAsync(
+        TopUpCampaign campaign,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        campaign.SetNextRunAt(null);
+
+        bool hasExistingRun = await runs.HasRunsForCampaignAsync(campaign.Id, cancellationToken);
+        if (hasExistingRun)
+        {
+            return null;
+        }
+
+        TopUpRun run = TopUpRun.CreateScheduled(
+            campaign.Id,
+            campaign.CampaignVersion,
+            nowUtc,
+            $"instant-{campaign.Id}-{campaign.CampaignVersion}",
+            null,
+            nowUtc);
+
+        await runs.AddAsync(run, cancellationToken);
+        return run;
     }
 
     private static void SetNextRunAt(TopUpCampaign campaign, DateTime utcNow)
@@ -205,5 +247,17 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             "RECURRING_ALERT notification requested for campaign {TopUpCampaignId} and user account {UserAccountId}",
             campaign.Id,
             userAccountId);
+    }
+
+    private static bool IsImmediateInstantCampaign(TopUpCampaign campaign)
+    {
+        return string.Equals(
+                campaign.DeliveryTypeCode,
+                DeliveryType.Instant.ToString(),
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                campaign.ScheduleTypeCode,
+                ScheduleTypeCode.Immediate.ToString(),
+                StringComparison.OrdinalIgnoreCase);
     }
 }
