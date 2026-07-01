@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Globalization;
+using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 
 namespace Moe.Modules.MailDelivery.Templates;
 
@@ -33,14 +34,23 @@ public static class EmailTemplateBranding
     }
 
     public static void AppendHeader(StringBuilder builder, string title)
+        => AppendHeader(builder, title, MailDeliveryOptions.DefaultAppName);
+
+    public static void AppendHeader(StringBuilder builder, string title, string appName)
     {
+        string brandName = string.IsNullOrWhiteSpace(appName)
+            ? MailDeliveryOptions.DefaultAppName
+            : appName.Trim();
+
         builder.Append("<tr><td bgcolor=\"")
             .Append(PrimaryColor)
             .Append("\" style=\"background-color:")
             .Append(PrimaryColor)
             .Append(";padding:26px 30px;color:#ffffff;\">");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\"><tr>");
-        builder.Append("<td style=\"font-size:13px;line-height:18px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;color:#ffe4e6;\">MOE SEEDS</td>");
+        builder.Append("<td style=\"font-size:13px;line-height:18px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;color:#ffe4e6;\">")
+            .Append(WebUtility.HtmlEncode(brandName))
+            .Append("</td>");
         builder.Append("</tr><tr><td style=\"font-size:28px;line-height:36px;font-weight:bold;color:#ffffff;padding-top:14px;\">")
             .Append(WebUtility.HtmlEncode(title))
             .Append("</td></tr></table>");

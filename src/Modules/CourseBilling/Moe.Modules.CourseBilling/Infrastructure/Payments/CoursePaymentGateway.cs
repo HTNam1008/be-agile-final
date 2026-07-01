@@ -18,11 +18,9 @@ internal sealed class CoursePaymentGateway(
     MoeDbContext dbContext,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
 {
-    private const string CourseDetailUrl = "http://localhost:5173/portal/courses";
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
-
     public Task<PayableCourseBill?> FindPayableBillAsync(
         long billId,
         long personId,
@@ -89,7 +87,7 @@ internal sealed class CoursePaymentGateway(
             await SendCourseEnrollmentSuccessEmailAsync(
                 enrollment,
                 "is confirmed and your payment has been received.",
-                "This message was sent by MOE SEEDS after your course payment was received.",
+                $"This message was sent by {branding.AppName} after your course payment was received.",
                 cancellationToken);
         }
     }
@@ -109,7 +107,7 @@ internal sealed class CoursePaymentGateway(
         await SendCourseEnrollmentSuccessEmailAsync(
             enrollment,
             "is confirmed. Your installment bills will be available in the payment dashboard.",
-            "This message was sent by MOE SEEDS after your installment course enrolment was confirmed.",
+            $"This message was sent by {branding.AppName} after your installment course enrolment was confirmed.",
             cancellationToken);
     }
 
@@ -358,10 +356,10 @@ internal sealed class CoursePaymentGateway(
         string courseName = course.CourseName.Trim();
         string startDateDisplay = course.StartDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
         string subject = $"You're Enrolled in {courseName}";
-        string courseUrl = $"{CourseDetailUrl}/{course.Id}";
+        string courseUrl = branding.CourseDetailUrl(course.Id);
 
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Course enrollment confirmation",
             string.Empty,
             $"Hello {studentName}, your enrolment in {courseName} {leadText}",
@@ -378,7 +376,8 @@ internal sealed class CoursePaymentGateway(
             startDateDisplay,
             courseUrl,
             leadText,
-            footer);
+            footer,
+            branding.AppName);
 
         try
         {
@@ -445,15 +444,15 @@ internal sealed class CoursePaymentGateway(
 
         const string subject = "Action Required: Your Payment Failed";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Payment failed",
             string.Empty,
             $"Hello {studentName}, your payment of {amountDisplay} for {itemName} could not be processed.",
             $"Reason: {reason}.",
             string.Empty,
-            $"Retry Payment -> {PaymentDashboardUrl}"
+            $"Retry Payment -> {branding.PaymentDashboardUrl}"
         ]);
-        string htmlBody = BuildPaymentFailedHtmlBody(studentName, amountDisplay, itemName, reason);
+        string htmlBody = BuildPaymentFailedHtmlBody(studentName, amountDisplay, itemName, reason, branding.AppName, branding.PaymentDashboardUrl);
 
         try
         {
@@ -486,7 +485,9 @@ internal sealed class CoursePaymentGateway(
         string studentName,
         string amountDisplay,
         string itemName,
-        string failureReason)
+        string failureReason,
+        string appName,
+        string paymentDashboardUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedAmount = WebUtility.HtmlEncode(amountDisplay);
@@ -495,7 +496,7 @@ internal sealed class CoursePaymentGateway(
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Action required: payment failed");
+        EmailTemplateBranding.AppendHeader(builder, "Action required: payment failed", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(encodedStudentName)
@@ -505,10 +506,9 @@ internal sealed class CoursePaymentGateway(
         AppendSummaryRow(builder, "Course/Bill", encodedItemName, "#f8fafc", "#334155");
         AppendSummaryRow(builder, "Reason", encodedReason, "#fff7ed", "#9a3412");
         builder.Append("</table>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Retry Payment");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Retry Payment");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after a failed payment attempt.</td></tr>");
-        builder.Append("</table></td></tr></table></body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after a failed payment attempt.");
         return builder.ToString();
     }
 
@@ -518,7 +518,8 @@ internal sealed class CoursePaymentGateway(
         string startDateDisplay,
         string courseUrl,
         string leadText,
-        string footer)
+        string footer,
+        string appName)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedCourseName = WebUtility.HtmlEncode(courseName);
@@ -526,7 +527,7 @@ internal sealed class CoursePaymentGateway(
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, $"You're enrolled in {courseName}");
+        EmailTemplateBranding.AppendHeader(builder, $"You're enrolled in {courseName}", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(encodedStudentName)

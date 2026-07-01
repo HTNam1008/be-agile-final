@@ -25,11 +25,11 @@ internal sealed class AccountCreditGateway(
     ITopUpExecutionMetrics metrics,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<AccountCreditGateway> logger) : IAccountCreditGateway
 {
     private const string CreditTransactionTypeCode = "CREDIT";
     private const string TopUpReferenceTypeCode = "TOPUP";
-    private const string AccountDashboardUrl = "http://localhost:5173/portal/accounts";
 
     public async Task<Result<CreditAccountResult>> CreditAccountForTopUpAsync(
         long educationAccountId,
@@ -187,7 +187,7 @@ internal sealed class AccountCreditGateway(
 
         const string subject = "Funds Credited to Your Education Account";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Education Account top-up",
             string.Empty,
             $"Hello {studentName},",
@@ -199,7 +199,7 @@ internal sealed class AccountCreditGateway(
             string.Empty,
             $"Updated Balance: {updatedBalanceDisplay}",
             string.Empty,
-            $"View My Account -> {AccountDashboardUrl}"
+            $"View My Account -> {branding.AccountPortalUrl}"
         ]);
 
         string htmlBody = BuildTopUpCreditedHtmlBody(
@@ -207,7 +207,9 @@ internal sealed class AccountCreditGateway(
             amountDisplay,
             campaignDisplay,
             creditedDateDisplay,
-            updatedBalanceDisplay);
+            updatedBalanceDisplay,
+            branding.AppName,
+            branding.AccountPortalUrl);
 
         try
         {
@@ -246,7 +248,9 @@ internal sealed class AccountCreditGateway(
         string amountDisplay,
         string campaignDisplay,
         string creditedDateDisplay,
-        string updatedBalanceDisplay)
+        string updatedBalanceDisplay,
+        string appName,
+        string accountPortalUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedAmount = WebUtility.HtmlEncode(amountDisplay);
@@ -256,7 +260,7 @@ internal sealed class AccountCreditGateway(
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Funds credited to your Education Account");
+        EmailTemplateBranding.AppendHeader(builder, "Funds credited to your Education Account", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 16px;color:#172033;\">Hello ")
             .Append(encodedStudentName)
@@ -270,12 +274,9 @@ internal sealed class AccountCreditGateway(
         AppendSummaryRow(builder, "Reason/Campaign", encodedCampaign, "#f8fafc", "#334155");
         AppendSummaryRow(builder, "Date Credited", encodedCreditedDate, "#fff7ed", "#9a3412");
         builder.Append("</table>");
-        EmailTemplateBranding.AppendButton(builder, AccountDashboardUrl, "View My Account");
+        EmailTemplateBranding.AppendButton(builder, accountPortalUrl, "View My Account");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after a completed Education Account top-up.</td></tr>");
-        builder.Append("</table>");
-        builder.Append("</td></tr></table>");
-        builder.Append("</body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after a completed Education Account top-up.");
         return builder.ToString();
     }
 

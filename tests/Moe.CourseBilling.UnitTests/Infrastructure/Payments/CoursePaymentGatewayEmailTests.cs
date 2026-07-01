@@ -228,6 +228,7 @@ public sealed class CoursePaymentGatewayEmailTests
             dbContext,
             mailQueue,
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<CoursePaymentGateway>.Instance);
 
     private sealed class TestModelConfiguration : IModelConfigurationContributor

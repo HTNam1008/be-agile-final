@@ -56,6 +56,7 @@ public sealed class FasEmailNotificationServiceTests
             db,
             mailQueue,
             new FixedEmailDeliverySwitch(),
+            new FixedEmailBrandingProvider(),
             NullLogger<FasEmailNotificationService>.Instance);
 
         await service.SendSubmissionAcknowledgementAsync(application.Id, CancellationToken.None);
@@ -63,7 +64,7 @@ public sealed class FasEmailNotificationServiceTests
         mailQueue.Jobs.Should().ContainSingle();
         EmailNotificationJob job = mailQueue.Jobs.Single();
         job.NotificationType.Should().Be("NOTI-05");
-        job.ProvidedEmail.Should().Be("fas-applicant@example.com");
+        job.PersonId.Should().Be(501);
         job.Subject.Should().Be("We've Received Your FAS Application");
     }
 
@@ -76,6 +77,7 @@ public sealed class FasEmailNotificationServiceTests
             db,
             mailQueue,
             new FixedEmailDeliverySwitch(isEnabled: false),
+            new FixedEmailBrandingProvider(),
             NullLogger<FasEmailNotificationService>.Instance);
 
         await service.SendSubmissionAcknowledgementAsync(999, CancellationToken.None);

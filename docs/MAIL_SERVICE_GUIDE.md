@@ -1,4 +1,4 @@
-# MOE SEEDS Mail Service Guide
+# MOE Student Finance Mail Service Guide
 
 ## Scope
 
@@ -27,6 +27,18 @@ The global switch is:
 }
 ```
 
+Display brand, sender display name, and portal links are configured from:
+
+```json
+"MailDelivery": {
+  "AppName": "Ministry of Education - Singapore",
+  "FromDisplayName": "Ministry of Education - Singapore",
+  "PortalBaseUrl": "http://localhost:5173"
+}
+```
+
+Email templates must use `MailDelivery:AppName` for body/header/footer brand text. Links such as the payment dashboard, FAS portal, account portal, and course detail pages must be built from `MailDelivery:PortalBaseUrl`.
+
 When `Enabled` is `false`:
 
 - notification services do not enqueue jobs;
@@ -40,7 +52,7 @@ Do not include SMTP passwords in this guide or logs.
 
 ## Account Holder Recipient
 
-NOTI-01, NOTI-02, NOTI-03, NOTI-04, NOTI-06, NOTI-07, NOTI-09, NOTI-10, NOTI-11, and the age-30 reminder resolve the recipient from:
+All account-holder business emails, including NOTI-01, NOTI-02, NOTI-03, NOTI-04, NOTI-05, NOTI-06, NOTI-07, NOTI-09, NOTI-10, NOTI-11, payment/defer receipts, and the age-30 reminder resolve the recipient from:
 
 ```text
 table: iam.LoginAccount
@@ -86,14 +98,9 @@ is stored in `person.Person.PreferredEmail` and `person.Person.OfficialEmail`. I
 
 ## FAS Recipient
 
-NOTI-05 is the exception. It uses the email stored on the FAS application:
+NOTI-05 follows the same account-holder recipient policy. It uses the FAS application's `AccountHolderPersonId`, then resolves the recipient from `iam.LoginAccount.ContactEmail`.
 
-```text
-table: fas.FasApplication
-field: Email
-```
-
-This preserves the applicant email captured at submission time and does not resolve it again from `iam.LoginAccount`.
+The email stored on `fas.FasApplication.Email` is treated as application form data only. It is not used as the delivery recipient.
 
 ## Trigger Matrix
 

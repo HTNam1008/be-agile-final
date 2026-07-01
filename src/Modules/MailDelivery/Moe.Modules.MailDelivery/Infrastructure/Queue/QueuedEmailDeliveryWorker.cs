@@ -56,7 +56,7 @@ internal sealed class QueuedEmailDeliveryWorker(
         IEmailRecipientResolver recipientResolver = scope.ServiceProvider.GetRequiredService<IEmailRecipientResolver>();
         IEmailDeliveryGateway deliveryGateway = scope.ServiceProvider.GetRequiredService<IEmailDeliveryGateway>();
 
-        EmailRecipient? recipient = await ResolveRecipientAsync(job, recipientResolver, cancellationToken);
+        EmailRecipient? recipient = await recipientResolver.ResolveForPersonAsync(job.PersonId, cancellationToken);
         if (recipient is null)
         {
             logger.LogWarning(
@@ -98,16 +98,4 @@ internal sealed class QueuedEmailDeliveryWorker(
             recipient.SourceCode);
     }
 
-    private async Task<EmailRecipient?> ResolveRecipientAsync(
-        EmailNotificationJob job,
-        IEmailRecipientResolver recipientResolver,
-        CancellationToken cancellationToken)
-    {
-        if (job.PersonId is long personId)
-        {
-            return await recipientResolver.ResolveForPersonAsync(personId, cancellationToken);
-        }
-
-        return recipientResolver.ResolveProvided(job.ProvidedEmail);
-    }
 }

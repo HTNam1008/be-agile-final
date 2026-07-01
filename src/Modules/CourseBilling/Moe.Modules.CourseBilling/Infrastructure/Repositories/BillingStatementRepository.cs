@@ -21,15 +21,15 @@ internal sealed class BillingStatementRepository(
     ICoursePaymentPlanGateway paymentPlans,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<BillingStatementRepository> logger) : IBillingStatementRepository
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
-
     public async Task<BillingStatementResponse> GetOrCreateAsync(
         long personId,
         int year,
         int month,
         DateTime utcNow,
+        BillingStatementNotificationMode notificationMode,
         CancellationToken cancellationToken)
     {
         DateOnly monthStart = new(year, month, 1);
@@ -119,7 +119,9 @@ internal sealed class BillingStatementRepository(
         decimal total = bills.Sum(x => x.Bill.OutstandingAmount);
         statement.Refresh(total, 0m, utcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
-        if (total > 0m && (statementCreated || addedStatementItem))
+        if (notificationMode == BillingStatementNotificationMode.SendMonthlyBill &&
+            total > 0m &&
+            (statementCreated || addedStatementItem))
         {
             await SendMonthlyBillEmailAsync(
                 personId,
@@ -255,7 +257,7 @@ internal sealed class BillingStatementRepository(
 
         string subject = $"Your {monthName} Bill Is Ready";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Monthly bill notification",
             string.Empty,
             $"Hello {studentName}, your consolidated bill for {monthYear} is now ready.",
@@ -264,7 +266,7 @@ internal sealed class BillingStatementRepository(
             $"Due Date: {dueDateDisplay}",
             string.Empty,
             "Please log in to review the breakdown and complete your payment.",
-            $"View My Bill -> {PaymentDashboardUrl}"
+            $"View My Bill -> {branding.PaymentDashboardUrl}"
         ]);
 
         string htmlBody = BuildMonthlyBillHtmlBody(
@@ -272,7 +274,9 @@ internal sealed class BillingStatementRepository(
             monthName,
             monthYear,
             totalAmountDisplay,
-            dueDateDisplay);
+            dueDateDisplay,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
         try
         {
@@ -311,7 +315,9 @@ internal sealed class BillingStatementRepository(
         string monthName,
         string monthYear,
         string totalAmountDisplay,
-        string dueDateDisplay)
+        string dueDateDisplay,
+        string appName,
+        string paymentDashboardUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedMonthYear = WebUtility.HtmlEncode(monthYear);
@@ -320,7 +326,7 @@ internal sealed class BillingStatementRepository(
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, $"Your {monthName} bill is ready");
+        EmailTemplateBranding.AppendHeader(builder, $"Your {monthName} bill is ready", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(encodedStudentName)
@@ -332,12 +338,9 @@ internal sealed class BillingStatementRepository(
         AppendSummaryRow(builder, "Due Date", encodedDueDate, "#f8fafc", "#334155");
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please log in to review the breakdown and complete your payment.</p>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "View My Bill");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "View My Bill");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS. If you have already paid, you can ignore this reminder.</td></tr>");
-        builder.Append("</table>");
-        builder.Append("</td></tr></table>");
-        builder.Append("</body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName}. If you have already paid, you can ignore this reminder.");
         return builder.ToString();
     }
 

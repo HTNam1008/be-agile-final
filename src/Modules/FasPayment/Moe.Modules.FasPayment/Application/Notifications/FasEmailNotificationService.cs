@@ -15,10 +15,9 @@ public sealed class FasEmailNotificationService(
     MoeDbContext dbContext,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<FasEmailNotificationService> logger)
 {
-    private const string FasPortalUrl = "http://localhost:5173/portal/fas";
-
     public async Task SendSubmissionAcknowledgementAsync(long applicationId, CancellationToken cancellationToken)
     {
         if (IsDisabled("FAS application received", applicationId))
@@ -36,7 +35,7 @@ public sealed class FasEmailNotificationService(
             subject: "We've Received Your FAS Application",
             title: "FAS application received",
             plainTextBody: string.Join(Environment.NewLine, [
-                "MOE SEEDS",
+                branding.AppName,
                 "FAS application acknowledgement",
                 string.Empty,
                 $"Hello {projection.StudentName},",
@@ -49,10 +48,11 @@ public sealed class FasEmailNotificationService(
                 $"Your application for <strong>{WebUtility.HtmlEncode(projection.SchemeName)}</strong> has been submitted successfully and is now pending review.",
                 [],
                 null,
-                null),
+                null,
+                branding.AppName,
+                branding.FasPortalUrl),
             applicationId,
             projection.PersonId,
-            projection.Email,
             cancellationToken);
     }
 
@@ -69,7 +69,7 @@ public sealed class FasEmailNotificationService(
             return;
         }
 
-        await SendApprovedAsync(applicationId, projection.PersonId, projection.Email, projection.StudentName, projection.SchemeName, projection.ApprovedAmount, cancellationToken);
+        await SendApprovedAsync(applicationId, projection.PersonId, projection.StudentName, projection.SchemeName, projection.ApprovedAmount, cancellationToken);
     }
 
     public async Task SendApplicationRejectedAsync(
@@ -88,7 +88,7 @@ public sealed class FasEmailNotificationService(
             return;
         }
 
-        await SendRejectedAsync(applicationId, projection.PersonId, projection.Email, projection.StudentName, projection.SchemeName, rejectionReason, cancellationToken);
+        await SendRejectedAsync(applicationId, projection.PersonId, projection.StudentName, projection.SchemeName, rejectionReason, cancellationToken);
     }
 
     public async Task SendSchemeApprovedAsync(long applicationSchemeId, CancellationToken cancellationToken)
@@ -107,7 +107,6 @@ public sealed class FasEmailNotificationService(
         await SendApprovedAsync(
             projection.ApplicationId,
             projection.PersonId,
-            projection.Email,
             projection.StudentName,
             projection.SchemeName,
             projection.ApprovedAmount,
@@ -133,7 +132,6 @@ public sealed class FasEmailNotificationService(
         await SendRejectedAsync(
             projection.ApplicationId,
             projection.PersonId,
-            projection.Email,
             projection.StudentName,
             projection.SchemeName,
             rejectionReason,
@@ -143,7 +141,6 @@ public sealed class FasEmailNotificationService(
     private async Task SendApprovedAsync(
         long applicationId,
         long personId,
-        string? recipientEmail,
         string studentName,
         string schemeName,
         decimal? approvedAmount,
@@ -158,14 +155,14 @@ public sealed class FasEmailNotificationService(
             title: "FAS application approved",
             plainTextBody: string.Join(Environment.NewLine, new string[]
             {
-                "MOE SEEDS",
+                branding.AppName,
                 "FAS application approved",
                 string.Empty,
                 $"Hello {studentName}, your application for {schemeName} has been approved.",
                 string.Empty,
                 approvedAmount.HasValue ? $"Subsidy Amount: SGD {approvedAmount.Value:N2}" : string.Empty,
                 "Your voucher is now ready to use.",
-                $"View My Voucher -> {FasPortalUrl}"
+                $"View My Voucher -> {branding.FasPortalUrl}"
             }.Where(x => x.Length > 0)),
             htmlBody: BuildHtmlBody(
                 "FAS application approved",
@@ -173,17 +170,17 @@ public sealed class FasEmailNotificationService(
                 $"Your application for <strong>{WebUtility.HtmlEncode(schemeName)}</strong> has been approved.",
                 summaryRows,
                 "Your voucher is now ready to use.",
-                "View My Voucher"),
+                "View My Voucher",
+                branding.AppName,
+                branding.FasPortalUrl),
             applicationId,
             personId,
-            recipientEmail,
             cancellationToken);
     }
 
     private async Task SendRejectedAsync(
         long applicationId,
         long personId,
-        string? recipientEmail,
         string studentName,
         string schemeName,
         string rejectionReason,
@@ -197,7 +194,7 @@ public sealed class FasEmailNotificationService(
             subject: "Update on Your FAS Application",
             title: "FAS application update",
             plainTextBody: string.Join(Environment.NewLine, [
-                "MOE SEEDS",
+                branding.AppName,
                 "FAS application update",
                 string.Empty,
                 $"Hello {studentName}, we're unable to approve your application for {schemeName} at this time.",
@@ -205,7 +202,7 @@ public sealed class FasEmailNotificationService(
                 $"Reason: {reason}",
                 string.Empty,
                 "You may review and resubmit your application with the required documents.",
-                $"View Application -> {FasPortalUrl}"
+                $"View Application -> {branding.FasPortalUrl}"
             ]),
             htmlBody: BuildHtmlBody(
                 "FAS application update",
@@ -213,10 +210,11 @@ public sealed class FasEmailNotificationService(
                 $"We're unable to approve your application for <strong>{WebUtility.HtmlEncode(schemeName)}</strong> at this time.",
                 [$"Reason|{WebUtility.HtmlEncode(reason)}"],
                 "You may review and resubmit your application with the required documents.",
-                "View Application"),
+                "View Application",
+                branding.AppName,
+                branding.FasPortalUrl),
             applicationId,
             personId,
-            recipientEmail,
             cancellationToken);
     }
 
@@ -246,7 +244,6 @@ public sealed class FasEmailNotificationService(
             select new FasEmailProjection(
                 application.Id,
                 application.AccountHolderPersonId,
-                application.Email,
                 string.IsNullOrWhiteSpace(application.StudentName) ? "Student" : application.StudentName,
                 scheme.Name,
                 (decimal?)null))
@@ -267,7 +264,6 @@ public sealed class FasEmailNotificationService(
             select new FasSchemeEmailProjection(
                 application.Id,
                 application.AccountHolderPersonId,
-                application.Email,
                 string.IsNullOrWhiteSpace(application.StudentName) ? "Student" : application.StudentName,
                 scheme.Name,
                 item.ApprovedAmount))
@@ -281,15 +277,14 @@ public sealed class FasEmailNotificationService(
         string htmlBody,
         long applicationId,
         long personId,
-        string? providedEmail,
         CancellationToken cancellationToken)
     {
         try
         {
             Result result = await mailQueue.EnqueueAsync(
-                EmailNotificationJob.ForProvidedEmail(
+                EmailNotificationJob.ForPerson(
                     "NOTI-05",
-                    providedEmail,
+                    personId,
                     subject,
                     plainTextBody,
                     htmlBody,
@@ -322,11 +317,13 @@ public sealed class FasEmailNotificationService(
         string messageHtml,
         IReadOnlyCollection<string> summaryRows,
         string? note,
-        string? buttonLabel)
+        string? buttonLabel,
+        string appName,
+        string fasPortalUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, title);
+        EmailTemplateBranding.AppendHeader(builder, title, appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
@@ -354,12 +351,11 @@ public sealed class FasEmailNotificationService(
 
         if (!string.IsNullOrWhiteSpace(buttonLabel))
         {
-            EmailTemplateBranding.AppendButton(builder, FasPortalUrl, buttonLabel);
+            EmailTemplateBranding.AppendButton(builder, fasPortalUrl, buttonLabel);
         }
 
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS.</td></tr>");
-        builder.Append("</table></td></tr></table></body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName}.");
         return builder.ToString();
     }
 
@@ -383,7 +379,6 @@ public sealed class FasEmailNotificationService(
     private sealed record FasEmailProjection(
         long ApplicationId,
         long PersonId,
-        string? Email,
         string StudentName,
         string SchemeName,
         decimal? ApprovedAmount);
@@ -391,7 +386,6 @@ public sealed class FasEmailNotificationService(
     private sealed record FasSchemeEmailProjection(
         long ApplicationId,
         long PersonId,
-        string? Email,
         string StudentName,
         string SchemeName,
         decimal? ApprovedAmount);

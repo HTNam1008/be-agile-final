@@ -104,6 +104,7 @@ public sealed class DeferBillingStatementHandlerEmailTests
             dbContext,
             mailQueue,
             new FixedEmailDeliverySwitch(),
+            new FixedEmailBrandingProvider(),
             NullLogger<PaymentNotificationEmailService>.Instance);
 
         return new TestContext(

@@ -102,18 +102,6 @@ public sealed class EmailRecipientResolverTests
         production.Should().BeNull();
     }
 
-    [Fact]
-    public void ResolveProvided_UsesApplicationEmailBeforeDevelopmentFallback()
-    {
-        using MoeDbContext db = CreateDbContext();
-        EmailRecipientResolver resolver = CreateResolver(db, Environments.Development);
-
-        resolver.ResolveProvided("fas-applicant@example.com").Should().Be(
-            new EmailRecipient("fas-applicant@example.com", EmailRecipientSourceCodes.Provided));
-        resolver.ResolveProvided("invalid-address").Should().Be(
-            new EmailRecipient("fallback@example.com", EmailRecipientSourceCodes.DevelopmentFallback));
-    }
-
     private static MoeDbContext CreateDbContext()
     {
         DbContextOptions<MoeDbContext> options = new DbContextOptionsBuilder<MoeDbContext>()

@@ -17,9 +17,9 @@ internal sealed class Age30AccountLockReminderEmailService(
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     IAccountLockReminderOutstandingReader outstandingReader,
+    IEmailBrandingProvider branding,
     ILogger<Age30AccountLockReminderEmailService> logger) : IAge30AccountLockReminderEmailService
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
     private const string ActivePersonStatusCode = "ACTIVE";
 
     private static readonly IReadOnlyCollection<ReminderWindow> ReminderWindows =
@@ -82,17 +82,21 @@ internal sealed class Age30AccountLockReminderEmailService(
             ? $"SGD {outstandingAmount.Value:N2}"
             : null;
 
-        const string subject = "Reminder: Your MOE SEEDS account will be locked soon";
+        string subject = $"Reminder: Your {branding.AppName} account will be locked soon";
         string plainTextBody = BuildPlainTextBody(
             studentName,
             lockDateDisplay,
             reminderWindowLabel,
-            outstandingAmountDisplay);
+            outstandingAmountDisplay,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
         string htmlBody = BuildHtmlBody(
             studentName,
             lockDateDisplay,
             reminderWindowLabel,
-            outstandingAmountDisplay);
+            outstandingAmountDisplay,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
         try
         {
@@ -149,16 +153,18 @@ internal sealed class Age30AccountLockReminderEmailService(
         string studentName,
         string lockDateDisplay,
         string reminderWindowLabel,
-        string? outstandingAmountDisplay)
+        string? outstandingAmountDisplay,
+        string appName,
+        string paymentDashboardUrl)
     {
         List<string> lines =
         [
-            "MOE SEEDS",
+            appName,
             "Account lock reminder",
             string.Empty,
             $"Hello {studentName},",
             string.Empty,
-            $"This is a {reminderWindowLabel} reminder that your MOE SEEDS Education Account and portal account may be locked when you turn 30 on {lockDateDisplay}.",
+            $"This is a {reminderWindowLabel} reminder that your {appName} Education Account and portal account may be locked when you turn 30 on {lockDateDisplay}.",
             string.Empty
         ];
 
@@ -169,7 +175,7 @@ internal sealed class Age30AccountLockReminderEmailService(
         }
 
         lines.Add("Please review and settle any outstanding charges before your account is locked.");
-        lines.Add($"Go to Payment Dashboard -> {PaymentDashboardUrl}");
+        lines.Add($"Go to Payment Dashboard -> {paymentDashboardUrl}");
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -177,18 +183,22 @@ internal sealed class Age30AccountLockReminderEmailService(
         string studentName,
         string lockDateDisplay,
         string reminderWindowLabel,
-        string? outstandingAmountDisplay)
+        string? outstandingAmountDisplay,
+        string appName,
+        string paymentDashboardUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Your account will be locked soon");
+        EmailTemplateBranding.AppendHeader(builder, "Your account will be locked soon", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
             .Append(",</p>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">This is a <strong>")
             .Append(WebUtility.HtmlEncode(reminderWindowLabel))
-            .Append("</strong> reminder that your MOE SEEDS Education Account and portal account may be locked when you turn 30.</p>");
+            .Append("</strong> reminder that your ")
+            .Append(WebUtility.HtmlEncode(appName))
+            .Append(" Education Account and portal account may be locked when you turn 30.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
         AppendSummaryRow(builder, "Account lock date", lockDateDisplay);
         AppendSummaryRow(builder, "Reminder window", reminderWindowLabel);
@@ -198,10 +208,9 @@ internal sealed class Age30AccountLockReminderEmailService(
         }
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please review and settle any outstanding charges before your account is locked.</p>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Go to Payment Dashboard");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Go to Payment Dashboard");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS.</td></tr>");
-        builder.Append("</table></td></tr></table></body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName}.");
         return builder.ToString();
     }
 

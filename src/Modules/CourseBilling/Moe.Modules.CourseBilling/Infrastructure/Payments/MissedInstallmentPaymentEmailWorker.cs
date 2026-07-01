@@ -22,7 +22,6 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
     IClock clock,
     ILogger<MissedInstallmentPaymentEmailWorker> logger) : BackgroundService
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
     private readonly HashSet<long> _processedBillIds = [];
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -66,6 +65,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
         ICoursePaymentPlanGateway paymentPlans = scope.ServiceProvider.GetRequiredService<ICoursePaymentPlanGateway>();
         IEmailNotificationQueue mailQueue = scope.ServiceProvider.GetRequiredService<IEmailNotificationQueue>();
+        IEmailBrandingProvider branding = scope.ServiceProvider.GetRequiredService<IEmailBrandingProvider>();
 
         DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         DateOnly missedDueDate = today.AddDays(-1);
@@ -109,7 +109,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
                 continue;
             }
 
-            if (await EnqueueEmailAsync(candidate, mailQueue, cancellationToken))
+            if (await EnqueueEmailAsync(candidate, mailQueue, branding.AppName, branding.PaymentDashboardUrl, cancellationToken))
             {
                 _processedBillIds.Add(candidate.BillId);
             }
@@ -119,6 +119,8 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
     private async Task<bool> EnqueueEmailAsync(
         MissedInstallmentCandidate candidate,
         IEmailNotificationQueue mailQueue,
+        string appName,
+        string paymentDashboardUrl,
         CancellationToken cancellationToken)
     {
         string studentName = candidate.StudentName.Trim();
@@ -131,15 +133,15 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
         const string subject = "Missed Installment Payment";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            appName,
             "Missed installment payment",
             string.Empty,
             $"Hello {studentName}, your installment of {amountDisplay} for {courseName} due {dueDateDisplay} was not received.",
             consequence,
             string.Empty,
-            $"Pay Now -> {PaymentDashboardUrl}"
+            $"Pay Now -> {paymentDashboardUrl}"
         ]);
-        string htmlBody = BuildHtmlBody(studentName, amountDisplay, courseName, dueDateDisplay, consequence);
+        string htmlBody = BuildHtmlBody(studentName, amountDisplay, courseName, dueDateDisplay, consequence, appName, paymentDashboardUrl);
 
         try
         {
@@ -177,11 +179,13 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         string amountDisplay,
         string courseName,
         string dueDateDisplay,
-        string consequence)
+        string consequence,
+        string appName,
+        string paymentDashboardUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Missed installment payment");
+        EmailTemplateBranding.AppendHeader(builder, "Missed installment payment", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
@@ -194,10 +198,9 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">")
             .Append(WebUtility.HtmlEncode(consequence))
             .Append("</p>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Pay Now");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Pay Now");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after an installment due date passed.</td></tr>");
-        builder.Append("</table></td></tr></table></body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after an installment due date passed.");
         return builder.ToString();
     }
 

@@ -21,9 +21,9 @@ internal sealed class CourseEnrollmentRepository(
     MoeDbContext dbContext,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<CourseEnrollmentRepository> logger) : ICourseEnrollmentRepository
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
     private const string PaymentPlanSelectionPlaceholder = "To be confirmed after payment plan selection";
 
     public async Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken)
@@ -459,7 +459,7 @@ internal sealed class CourseEnrollmentRepository(
 
         string subject = $"You've Been Enrolled in {courseName}";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Course enrollment notification",
             string.Empty,
             $"Hello {studentName}, you have been enrolled in {courseName} by your school administrator.",
@@ -468,14 +468,16 @@ internal sealed class CourseEnrollmentRepository(
             $"Payment Due Date: {paymentDisplays.DueDateDisplay}",
             string.Empty,
             "Please log in to complete your payment and secure your spot in this course.",
-            $"Go to Payment Dashboard -> {PaymentDashboardUrl}"
+            $"Go to Payment Dashboard -> {branding.PaymentDashboardUrl}"
         ]);
 
         string htmlBody = BuildAdminAddedEnrollmentHtmlBody(
             studentName,
             courseName,
             paymentDisplays.FeePayableDisplay,
-            paymentDisplays.DueDateDisplay);
+            paymentDisplays.DueDateDisplay,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
         try
         {
@@ -548,7 +550,9 @@ internal sealed class CourseEnrollmentRepository(
         string studentName,
         string courseName,
         string feePayableDisplay,
-        string dueDateDisplay)
+        string dueDateDisplay,
+        string appName,
+        string paymentDashboardUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedCourseName = WebUtility.HtmlEncode(courseName);
@@ -557,7 +561,7 @@ internal sealed class CourseEnrollmentRepository(
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, $"You've been enrolled in {courseName}");
+        EmailTemplateBranding.AppendHeader(builder, $"You've been enrolled in {courseName}", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(encodedStudentName)
@@ -570,12 +574,9 @@ internal sealed class CourseEnrollmentRepository(
         AppendSummaryRow(builder, "Payment Due Date", encodedDueDate, "#f8fafc", "#334155");
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please log in to complete your payment and secure your spot in this course.</p>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Go to Payment Dashboard");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Go to Payment Dashboard");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after your school administrator added you to a course.</td></tr>");
-        builder.Append("</table>");
-        builder.Append("</td></tr></table>");
-        builder.Append("</body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after your school administrator added you to a course.");
         return builder.ToString();
     }
 

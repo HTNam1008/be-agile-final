@@ -132,10 +132,6 @@ public sealed class QueuedEmailDeliveryTests
                 new EmailRecipient(emailAddress, EmailRecipientSourceCodes.Contact));
         }
 
-        public EmailRecipient? ResolveProvided(string? providedEmail)
-            => string.IsNullOrWhiteSpace(providedEmail)
-                ? null
-                : new EmailRecipient(providedEmail, EmailRecipientSourceCodes.Provided);
     }
 
     private sealed class RecordingEmailGateway : IEmailDeliveryGateway

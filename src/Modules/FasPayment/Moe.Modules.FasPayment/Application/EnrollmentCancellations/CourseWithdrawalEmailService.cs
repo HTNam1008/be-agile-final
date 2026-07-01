@@ -16,10 +16,9 @@ internal sealed class CourseWithdrawalEmailService(
     MoeDbContext dbContext,
     IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
+    IEmailBrandingProvider branding,
     ILogger<CourseWithdrawalEmailService> logger)
 {
-    private const string PaymentsUrl = "http://localhost:5173/portal/payments";
-
     public async Task SendAsync(
         EnrollmentCancellationSnapshot snapshot,
         EnrollmentRefundCalculation calculation,
@@ -48,15 +47,15 @@ internal sealed class CourseWithdrawalEmailService(
         string refundInfo = BuildRefundInfo(calculation, refundResult);
         string subject = $"Your Withdrawal from {courseName} Is Confirmed";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Course withdrawal confirmed",
             string.Empty,
             $"Hello {studentName}, your withdrawal from {courseName} has been processed.",
             refundInfo,
             string.Empty,
-            $"View Payments -> {PaymentsUrl}"
+            $"View Payments -> {branding.PaymentDashboardUrl}"
         ]);
-        string htmlBody = BuildHtmlBody(studentName, courseName, refundInfo);
+        string htmlBody = BuildHtmlBody(studentName, courseName, refundInfo, branding.AppName, branding.PaymentDashboardUrl);
 
         try
         {
@@ -111,11 +110,13 @@ internal sealed class CourseWithdrawalEmailService(
     private static string BuildHtmlBody(
         string studentName,
         string courseName,
-        string refundInfo)
+        string refundInfo,
+        string appName,
+        string paymentDashboardUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Course withdrawal confirmed");
+        EmailTemplateBranding.AppendHeader(builder, "Course withdrawal confirmed", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(WebUtility.HtmlEncode(studentName))
@@ -124,10 +125,9 @@ internal sealed class CourseWithdrawalEmailService(
         AppendSummaryRow(builder, "Course", courseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
         AppendSummaryRow(builder, "Refund", refundInfo, "#f8fafc", "#334155");
         builder.Append("</table>");
-        EmailTemplateBranding.AppendButton(builder, PaymentsUrl, "View Payments");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "View Payments");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after your course withdrawal was confirmed.</td></tr>");
-        builder.Append("</table></td></tr></table></body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after your course withdrawal was confirmed.");
         return builder.ToString();
     }
 

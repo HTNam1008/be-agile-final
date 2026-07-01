@@ -6,6 +6,7 @@ using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.Domain;
@@ -40,6 +41,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             new FixedCoursePaymentPlanGateway(),
             _mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<BillingStatementRepository>.Instance);
     }
 
@@ -67,6 +69,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             2026,
             7,
             new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(123.45m);
@@ -95,6 +98,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             2026,
             7,
             new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
             CancellationToken.None);
 
         _mailQueue.Jobs.Should().ContainSingle();
@@ -105,8 +109,30 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             2026,
             7,
             new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
             CancellationToken.None);
 
+        _mailQueue.Jobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_WhenNotificationSuppressed_CreatesStatementAndSkipsEmail()
+    {
+        await SeedStudentWithBillAsync(
+            personId: 5011,
+            studentName: "Payment Flow Student",
+            billAmount: 75m,
+            dueDate: new DateOnly(2026, 7, 10));
+
+        var statement = await _repository.GetOrCreateAsync(
+            5011,
+            2026,
+            7,
+            new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.Suppress,
+            CancellationToken.None);
+
+        statement.OutstandingAmount.Should().Be(75m);
         _mailQueue.Jobs.Should().BeEmpty();
     }
 
@@ -124,6 +150,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             2026,
             7,
             new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(0m);
@@ -145,6 +172,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             2026,
             7,
             new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(88m);
@@ -159,6 +187,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             new FixedCoursePaymentPlanGateway(),
             _mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<BillingStatementRepository>.Instance);
         await SeedStudentWithBillAsync(
             personId: 5004,
@@ -171,6 +200,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             2026,
             7,
             new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(42m);
