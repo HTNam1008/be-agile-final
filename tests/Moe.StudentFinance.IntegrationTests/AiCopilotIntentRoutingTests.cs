@@ -98,6 +98,40 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
         Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
     }
 
+    [Theory]
+    [InlineData("i want to do fas, help me")]
+    [InlineData("help me with fas")]
+    [InlineData("i want to apply for financial assistance")]
+    [InlineData("can you guide me through fas")]
+    [InlineData("tell me about fas")]
+    [InlineData("how do i do fas")]
+    [InlineData("i have a question about fas")]
+    public async Task Natural_fas_phrasing_routes_to_fas_interview(string message)
+    {
+        JsonElement response = await Chat(message, personId: 2101);
+        string? mode = response.GetProperty("mode").GetString();
+        Assert.True(mode == "FAS_INTERVIEW",
+            $"Expected FAS_INTERVIEW for \"{message}\", got {mode}");
+    }
+
+    [Fact]
+    public async Task Fas_on_payment_page_does_not_get_contaminated()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
+        request.Headers.Add("X-Test-PersonId", "2101");
+        request.Content = JsonContent.Create(new
+        {
+            message = "help me with fas",
+            pageContext = new { domain = "PAYMENT", surface = "PORTAL", path = "/portal/bills" }
+        });
+        using HttpResponseMessage response = await _client.SendAsync(request);
+        JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement root = doc.RootElement.Clone();
+        JsonElement data = root.TryGetProperty("data", out JsonElement d) ? d : root;
+        string? mode = data.GetProperty("mode").GetString();
+        Assert.Equal("FAS_INTERVIEW", mode);
+    }
+
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
