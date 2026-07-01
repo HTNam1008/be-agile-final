@@ -430,6 +430,13 @@ public sealed class EducationAccountLifecycleWorkerTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> ScheduledRunExistsAsync(
+            DateOnly runDateUtc,
+            CancellationToken cancellationToken)
+            => Task.FromResult(Runs.Any(run =>
+                run.RunDateUtc == runDateUtc
+                && run.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled));
+
         public void SaveChanges()
         {
             if (_enforceUniqueScheduledRuns)
