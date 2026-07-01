@@ -64,7 +64,7 @@ public sealed class QueuedEmailDeliveryTests
         RecordingRecipientResolver resolver = new("student.contact@example.com");
         RecordingEmailGateway gateway = new(
             expectedMessageCount: 2,
-            Result.Failure(new Error("MAIL.TEST_FAILURE", "First send failed.")),
+            Result.Failure(MailDeliveryErrors.SendFailed("First send failed.")),
             Result.Success());
         using ServiceProvider provider = CreateProvider(resolver, gateway);
         await AddNotificationAsync(provider, personId: 51);
@@ -77,10 +77,21 @@ public sealed class QueuedEmailDeliveryTests
 
         await worker.StartAsync(CancellationToken.None);
         await gateway.WaitForExpectedMessagesAsync();
+        await Task.Delay(100);
         await worker.StopAsync(CancellationToken.None);
 
         gateway.Messages.Should().HaveCount(2);
         resolver.PersonIds.Should().Equal(51, 52);
+
+        List<EmailNotification> notifications = await GetNotificationsAsync(provider);
+        notifications.Should().ContainSingle(x =>
+            x.PersonId == 51
+            && x.StatusCode == EmailNotificationStatusCodes.FailedRetryable
+            && x.AttemptCount == 1
+            && x.NextAttemptAtUtc > new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc));
+        notifications.Should().ContainSingle(x =>
+            x.PersonId == 52
+            && x.StatusCode == EmailNotificationStatusCodes.Sent);
     }
 
     [Fact]
@@ -104,6 +115,57 @@ public sealed class QueuedEmailDeliveryTests
         gateway.Messages.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Worker_WhenProcessingLockExpired_ReclaimsAndSends()
+    {
+        RecordingRecipientResolver resolver = new("student.contact@example.com");
+        RecordingEmailGateway gateway = new(expectedMessageCount: 1);
+        using ServiceProvider provider = CreateProvider(resolver, gateway);
+        await AddNotificationAsync(
+            provider,
+            personId: 71,
+            beforeSave: notification => notification.MarkProcessing(
+                new DateTime(2026, 6, 30, 23, 59, 0, DateTimeKind.Utc)));
+        QueuedEmailDeliveryWorker worker = new(
+            new FixedEmailDeliverySwitch(true),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(CreateOptions()),
+            NullLogger<QueuedEmailDeliveryWorker>.Instance);
+
+        await worker.StartAsync(CancellationToken.None);
+        await gateway.WaitForExpectedMessagesAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        gateway.Messages.Should().ContainSingle();
+        (await GetNotificationsAsync(provider)).Single().StatusCode.Should().Be(EmailNotificationStatusCodes.Sent);
+    }
+
+    [Fact]
+    public async Task Worker_WhenRateLimitReached_LeavesRemainingJobsPending()
+    {
+        RecordingRecipientResolver resolver = new("student.contact@example.com");
+        RecordingEmailGateway gateway = new(expectedMessageCount: 1);
+        using ServiceProvider provider = CreateProvider(resolver, gateway);
+        await AddNotificationAsync(provider, personId: 81);
+        await AddNotificationAsync(provider, personId: 82);
+        MailDeliveryOptions options = CreateOptions(maxEmailsPerMinute: 1);
+        QueuedEmailDeliveryWorker worker = new(
+            new FixedEmailDeliverySwitch(true),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(options),
+            NullLogger<QueuedEmailDeliveryWorker>.Instance);
+
+        await worker.StartAsync(CancellationToken.None);
+        await gateway.WaitForExpectedMessagesAsync();
+        await Task.Delay(100);
+        await worker.StopAsync(CancellationToken.None);
+
+        gateway.Messages.Should().ContainSingle();
+        List<EmailNotification> notifications = await GetNotificationsAsync(provider);
+        notifications.Count(x => x.StatusCode == EmailNotificationStatusCodes.Sent).Should().Be(1);
+        notifications.Count(x => x.StatusCode == EmailNotificationStatusCodes.Pending).Should().Be(1);
+    }
+
     private static ServiceProvider CreateProvider(
         IEmailRecipientResolver resolver,
         IEmailDeliveryGateway gateway)
@@ -119,7 +181,10 @@ public sealed class QueuedEmailDeliveryTests
         return services.BuildServiceProvider();
     }
 
-    private static async Task AddNotificationAsync(ServiceProvider provider, long personId)
+    private static async Task AddNotificationAsync(
+        ServiceProvider provider,
+        long personId,
+        Action<EmailNotification>? beforeSave = null)
     {
         using IServiceScope scope = provider.CreateScope();
         MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -133,11 +198,21 @@ public sealed class QueuedEmailDeliveryTests
             personId.ToString(),
             new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
             maxAttempts: 3);
+        beforeSave?.Invoke(notification);
         dbContext.Set<EmailNotification>().Add(notification);
         await dbContext.SaveChangesAsync();
     }
 
-    private static MailDeliveryOptions CreateOptions()
+    private static async Task<List<EmailNotification>> GetNotificationsAsync(ServiceProvider provider)
+    {
+        using IServiceScope scope = provider.CreateScope();
+        MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        return await dbContext.Set<EmailNotification>()
+            .OrderBy(x => x.PersonId)
+            .ToListAsync();
+    }
+
+    private static MailDeliveryOptions CreateOptions(int maxEmailsPerMinute = 60)
         => new()
         {
             Enabled = true,
@@ -153,7 +228,7 @@ public sealed class QueuedEmailDeliveryTests
                 BatchSize = 10,
                 PollIntervalSeconds = 1,
                 MaxAttempts = 3,
-                MaxEmailsPerMinute = 60,
+                MaxEmailsPerMinute = maxEmailsPerMinute,
                 LockSeconds = 30
             }
         };

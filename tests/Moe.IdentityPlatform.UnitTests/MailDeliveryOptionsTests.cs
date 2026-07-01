@@ -96,4 +96,30 @@ public sealed class MailDeliveryOptionsTests
         MailDeliveryOptions.IsValid(validOptions).Should().BeTrue();
         MailDeliveryOptions.IsValid(invalidOptions).Should().BeFalse();
     }
+
+    [Fact]
+    public void IsValid_WhenWorkerConfigurationIsInvalid_ReturnsFalse()
+    {
+        MailDeliveryOptions options = new()
+        {
+            Enabled = true,
+            AppName = "Ministry of Education - Singapore",
+            PortalBaseUrl = "https://femoegovsg.azurewebsites.net",
+            Host = "smtp.gmail.com",
+            Port = 587,
+            UserName = "primary@example.com",
+            FromEmail = "primary@example.com",
+            FromDisplayName = "Ministry of Education - Singapore",
+            Worker = new MailDeliveryWorkerOptions
+            {
+                BatchSize = 0,
+                PollIntervalSeconds = 10,
+                MaxAttempts = 3,
+                MaxEmailsPerMinute = 60,
+                LockSeconds = 120
+            }
+        };
+
+        MailDeliveryOptions.IsValid(options).Should().BeFalse();
+    }
 }
