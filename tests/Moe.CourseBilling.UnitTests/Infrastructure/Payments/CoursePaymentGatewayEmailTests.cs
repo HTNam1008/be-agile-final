@@ -95,6 +95,49 @@ public sealed class CoursePaymentGatewayEmailTests
     }
 
     [Fact]
+    public async Task SendInstallmentEnrollmentConfirmationAsync_Should_Send_Noti03_Without_Payment_Received_Text()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
+        (CourseEnrollment enrollment, _) = await SeedEnrollmentAsync(
+            dbContext,
+            CourseEnrollmentSourceCodes.SelfJoin,
+            billCount: 2);
+        CoursePaymentGateway gateway = CreateGateway(dbContext, mailQueue);
+
+        await gateway.SendInstallmentEnrollmentConfirmationAsync(enrollment.Id, CancellationToken.None);
+
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.NotificationType.Should().Be("NOTI-03");
+        job.Subject.Should().Be("You're Enrolled in Design Thinking 101");
+        job.PlainTextBody.Should().Contain("your enrolment in Design Thinking 101 is confirmed");
+        job.PlainTextBody.Should().Contain("installment bills will be available in the payment dashboard");
+        job.PlainTextBody.Should().NotContain("payment has been received");
+    }
+
+    [Fact]
+    public async Task ApplySuccessfulPaymentAsync_For_Installment_Bill_Should_Not_Send_Noti03()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
+        (CourseEnrollment enrollment, Bill firstBill) = await SeedEnrollmentAsync(
+            dbContext,
+            CourseEnrollmentSourceCodes.SelfJoin,
+            billCount: 2);
+        CoursePaymentGateway gateway = CreateGateway(dbContext, mailQueue);
+
+        await gateway.ApplySuccessfulPaymentAsync(
+            firstBill.Id,
+            firstBill.OutstandingAmount,
+            paidInFull: false,
+            Now,
+            CancellationToken.None);
+
+        enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.Active);
+        mailQueue.Jobs.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ApplySuccessfulPaymentAsync_WhenMailDeliveryDisabled_Should_Not_Enqueue_Email()
     {
         using MoeDbContext dbContext = CreateDbContext();
@@ -120,7 +163,8 @@ public sealed class CoursePaymentGatewayEmailTests
 
     private static async Task<(CourseEnrollment Enrollment, Bill Bill)> SeedEnrollmentAsync(
         MoeDbContext dbContext,
-        string sourceCode)
+        string sourceCode,
+        int billCount = 1)
     {
         Person person = new(
             1,
@@ -152,16 +196,19 @@ public sealed class CoursePaymentGatewayEmailTests
         dbContext.Set<CourseEnrollment>().Add(enrollment);
         await dbContext.SaveChangesAsync();
 
-        Bill bill = Bill.IssueForCourseEnrollment(
-            enrollment.Id,
-            $"BILL-{Guid.NewGuid():N}"[..30],
-            Now,
-            DateOnly.FromDateTime(Now),
-            120m).Value;
-        dbContext.Set<Bill>().Add(bill);
+        Bill[] bills = Enumerable.Range(1, billCount)
+            .Select(sequence => Bill.IssueForCourseEnrollment(
+                enrollment.Id,
+                $"BILL-{Guid.NewGuid():N}"[..30],
+                Now,
+                DateOnly.FromDateTime(Now).AddMonths(sequence - 1),
+                120m,
+                sequenceNumber: sequence).Value)
+            .ToArray();
+        dbContext.Set<Bill>().AddRange(bills);
         await dbContext.SaveChangesAsync();
 
-        return (enrollment, bill);
+        return (enrollment, bills[0]);
     }
 
     private static MoeDbContext CreateDbContext()

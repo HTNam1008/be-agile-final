@@ -64,6 +64,10 @@ public interface ICoursePaymentGateway
         DateTime paidAtUtc,
         CancellationToken cancellationToken);
 
+    Task SendInstallmentEnrollmentConfirmationAsync(
+        long courseEnrollmentId,
+        CancellationToken cancellationToken);
+
     Task ApplyPaymentFailureAsync(
         long billId,
         string failureReason,

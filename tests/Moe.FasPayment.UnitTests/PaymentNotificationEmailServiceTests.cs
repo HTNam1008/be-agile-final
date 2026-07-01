@@ -2,6 +2,9 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.CourseBilling;
+using Moe.Modules.CourseBilling.Domain.Billing;
+using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
@@ -17,25 +20,41 @@ public sealed class PaymentNotificationEmailServiceTests
     private static readonly DateTime Now = new(2026, 7, 1, 4, 30, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task SendPaymentSucceededAsync_EnqueuesPaymentReceipt()
+    public async Task SendPaymentSucceededAsync_ForFullPayment_EnqueuesFullPaymentReceipt()
     {
         using MoeDbContext dbContext = CreateDbContext();
         RecordingEmailNotificationQueue mailQueue = new();
-        Payment payment = await AddStatementPaymentAsync(dbContext);
-        payment.MarkSuccessful(Now);
+        Payment payment = await AddDirectBillPaymentAsync(dbContext, billCount: 1);
         PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
 
         await service.SendPaymentSucceededAsync(payment, Now, CancellationToken.None);
 
         mailQueue.Jobs.Should().ContainSingle();
         EmailNotificationJob job = mailQueue.Jobs.Single();
-        job.NotificationType.Should().Be("NOTI-12");
+        job.NotificationType.Should().Be("NOTI-12-FULL");
         job.PersonId.Should().Be(2001);
-        job.Subject.Should().Be("Payment Received");
+        job.Subject.Should().Be("Full Payment Received");
         job.PlainTextBody.Should().Contain("Hello Payment Student");
         job.PlainTextBody.Should().Contain("Amount: SGD 120.00");
-        job.PlainTextBody.Should().Contain("Monthly billing statement 3001");
-        job.HtmlBody.Should().Contain("Payment received");
+        job.PlainTextBody.Should().Contain("Payment Course 101");
+        job.HtmlBody.Should().Contain("Full payment received");
+    }
+
+    [Fact]
+    public async Task SendPaymentSucceededAsync_ForInstallmentPayment_EnqueuesInstallmentReceipt()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        RecordingEmailNotificationQueue mailQueue = new();
+        Payment payment = await AddDirectBillPaymentAsync(dbContext, billCount: 2);
+        PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
+
+        await service.SendPaymentSucceededAsync(payment, Now, CancellationToken.None);
+
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.NotificationType.Should().Be("NOTI-12-INSTALLMENT");
+        job.Subject.Should().Be("Installment Payment Received");
+        job.PlainTextBody.Should().Contain("installment payment");
+        job.PlainTextBody.Should().Contain("Payment Course 101 - installment 1");
     }
 
     [Fact]
@@ -134,6 +153,67 @@ public sealed class PaymentNotificationEmailServiceTests
         return payment;
     }
 
+    private static async Task<Payment> AddDirectBillPaymentAsync(MoeDbContext dbContext, int billCount)
+    {
+        dbContext.Set<Person>().Add(new Person(
+            2001,
+            "EXT-PAYMENT-1",
+            "Payment Student",
+            new DateOnly(2008, 2, 1),
+            "SG",
+            null));
+        Course course = new(
+            organizationId: 2,
+            courseCode: "PAY101",
+            courseName: "Payment Course 101",
+            description: null,
+            startDate: new DateOnly(2026, 8, 12),
+            endDate: new DateOnly(2026, 11, 12),
+            enrollmentOpenAtUtc: Now.AddDays(-5),
+            enrollmentCloseAtUtc: Now.AddDays(5),
+            actorLoginAccountId: 99,
+            utcNow: Now);
+        course.Publish(99, Now);
+        dbContext.Set<Course>().Add(course);
+        await dbContext.SaveChangesAsync();
+
+        CourseEnrollment enrollment = CourseEnrollment.JoinSelf(
+            2001,
+            course.Id,
+            coursePaymentPlanId: 10,
+            loginAccountId: 1003,
+            Now,
+            100m,
+            50m).Value;
+        dbContext.Set<CourseEnrollment>().Add(enrollment);
+        await dbContext.SaveChangesAsync();
+
+        Bill[] bills = Enumerable.Range(1, billCount)
+            .Select(sequence => Bill.IssueForCourseEnrollment(
+                enrollment.Id,
+                $"BILL-{Guid.NewGuid():N}"[..30],
+                Now,
+                DateOnly.FromDateTime(Now).AddMonths(sequence - 1),
+                120m,
+                sequenceNumber: sequence).Value)
+            .ToArray();
+        dbContext.Set<Bill>().AddRange(bills);
+        await dbContext.SaveChangesAsync();
+
+        Payment payment = Payment.RecordProviderSuccess(
+            bills[0].Id,
+            2001,
+            120m,
+            $"pi_{Guid.NewGuid():N}",
+            null,
+            null,
+            installmentNumber: billCount > 1 ? 1 : 0,
+            Now);
+        dbContext.Set<Payment>().Add(payment);
+        await dbContext.SaveChangesAsync();
+        return payment;
+    }
+
     private static PaymentNotificationEmailService CreateService(
         MoeDbContext dbContext,
         IEmailNotificationQueue mailQueue,
@@ -159,6 +239,8 @@ public sealed class PaymentNotificationEmailServiceTests
         {
             modelBuilder.Entity<Person>().HasKey(x => x.Id);
             modelBuilder.Entity<Payment>().HasKey(x => x.Id);
+            modelBuilder.Entity<PaymentAllocation>().HasKey(x => x.Id);
+            new CourseBillingModelConfiguration().Configure(modelBuilder);
         }
     }
 

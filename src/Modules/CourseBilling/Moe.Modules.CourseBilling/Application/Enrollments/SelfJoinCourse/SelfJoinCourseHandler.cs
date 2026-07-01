@@ -14,6 +14,7 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICoursePaymentPlanGateway paymentPlans,
+    ICoursePaymentGateway coursePayments,
     IFasCourseSubsidyGateway fasSubsidies,
     ICurrentUser currentUser,
     IStudentAccessControl studentAccess,
@@ -149,6 +150,12 @@ internal sealed class SelfJoinCourseHandler(
             await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
                 paidBillIds,
                 utcNow,
+                cancellationToken);
+        }
+        if (installment)
+        {
+            await coursePayments.SendInstallmentEnrollmentConfirmationAsync(
+                billingResult.Enrollment.Id,
                 cancellationToken);
         }
 
