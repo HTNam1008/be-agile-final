@@ -6,6 +6,7 @@ using Moe.Modules.CourseBilling;
 using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
+using Moe.Modules.MailDelivery;
 using Moe.Modules.Mfa;
 using Moe.StudentFinance.Persistence;
 
@@ -26,6 +27,7 @@ public sealed class DesignTimeMoeDbContextFactory : IDesignTimeDbContextFactory<
             new EducationAccountTopUpModelConfiguration(),
             new CourseBillingModelConfiguration(),
             new FasPaymentModelConfiguration(),
+            new MailDeliveryModelConfiguration(),
             new MfaModelConfiguration(),
             new AiModelConfiguration()
         ];

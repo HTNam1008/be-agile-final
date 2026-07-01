@@ -15,7 +15,7 @@ public sealed class MailDeliveryOptionsTests
 
         options.AppName.Should().Be("Ministry of Education - Singapore");
         options.FromDisplayName.Should().Be("Ministry of Education - Singapore");
-        options.PortalBaseUrl.Should().Be("http://localhost:5173");
+        options.PortalBaseUrl.Should().Be("https://femoegovsg.azurewebsites.net");
     }
 
     [Fact]

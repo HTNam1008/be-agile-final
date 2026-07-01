@@ -1,12 +1,19 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Moe.Application.Abstractions.Clock;
+using Moe.Modules.MailDelivery.Domain;
 using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 using Moe.SharedKernel.Results;
+using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.MailDelivery.Infrastructure.Queue;
 
 internal sealed class EmailNotificationScheduler(
-    IEmailNotificationQueue queue,
+    MoeDbContext dbContext,
     IEmailDeliverySwitch mailSwitch,
+    IClock clock,
+    IOptions<MailDeliveryOptions> options,
     ILogger<EmailNotificationScheduler> logger) : IEmailNotificationScheduler
 {
     public bool IsEnabled => mailSwitch.IsEnabled;
@@ -34,30 +41,30 @@ internal sealed class EmailNotificationScheduler(
 
         try
         {
-            Result result = await queue.EnqueueAsync(
-                EmailNotificationJob.ForPerson(
-                    notificationType,
-                    personId,
-                    subject,
-                    plainTextBody,
-                    htmlBody,
-                    entityType,
-                    entityId),
-                cancellationToken);
+            DateTime nowUtc = clock.UtcNow.UtcDateTime;
+            EmailNotification notification = EmailNotification.Create(
+                notificationType,
+                personId,
+                subject,
+                plainTextBody,
+                htmlBody,
+                entityType,
+                entityId,
+                nowUtc,
+                options.Value.Worker.MaxAttempts);
 
-            if (result.IsSuccess)
-            {
-                return true;
-            }
+            dbContext.Set<EmailNotification>().Add(notification);
+            await dbContext.SaveChangesAsync(cancellationToken);
 
-            logger.LogWarning(
-                "Email notification enqueue failed. NotificationType={NotificationType} PersonId={PersonId} EntityType={EntityType} EntityId={EntityId} ErrorCode={ErrorCode}",
+            logger.LogInformation(
+                "Email notification scheduled. EmailNotificationId={EmailNotificationId} NotificationType={NotificationType} PersonId={PersonId} EntityType={EntityType} EntityId={EntityId}",
+                notification.Id,
                 notificationType,
                 personId,
                 entityType,
-                entityId,
-                result.Error.Code);
-            return false;
+                entityId);
+
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

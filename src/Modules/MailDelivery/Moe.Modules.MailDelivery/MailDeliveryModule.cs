@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Modules;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Infrastructure.Queue;
@@ -19,11 +20,12 @@ public sealed class MailDeliveryModule : IModule
             .Validate(MailDeliveryOptions.IsValid, "MailDelivery configuration is invalid.")
             .ValidateOnStart();
 
+        services.AddSingleton<IModelConfigurationContributor, MailDeliveryModelConfiguration>();
         services.AddSingleton<IEmailDeliverySwitch, EmailDeliverySwitch>();
         services.AddSingleton<IEmailBrandingProvider, EmailBrandingProvider>();
         services.AddSingleton<IEmailDeliveryGateway, SmtpEmailDeliveryGateway>();
         services.AddSingleton<IEmailNotificationQueue, InMemoryEmailNotificationQueue>();
-        services.AddSingleton<IEmailNotificationScheduler, EmailNotificationScheduler>();
+        services.AddScoped<IEmailNotificationScheduler, EmailNotificationScheduler>();
         if (IsBackgroundJobEnabled(configuration, "MailDelivery:QueueWorker"))
         {
             services.AddHostedService<QueuedEmailDeliveryWorker>();

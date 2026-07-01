@@ -1,9 +1,17 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Moe.Application.Abstractions.Clock;
+using Moe.Application.Abstractions.Persistence;
+using Moe.Modules.MailDelivery;
+using Moe.Modules.MailDelivery.Domain;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Infrastructure.Queue;
+using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 using Moe.SharedKernel.Results;
+using Moe.StudentFinance.Persistence;
 using Xunit;
 
 namespace Moe.IdentityPlatform.UnitTests.Infrastructure.MailDelivery;
@@ -30,18 +38,17 @@ public sealed class QueuedEmailDeliveryTests
     [Fact]
     public async Task Worker_ResolvesPersonRecipient_AndSendsEmail()
     {
-        InMemoryEmailNotificationQueue queue = new();
         RecordingRecipientResolver resolver = new("student.contact@example.com");
         RecordingEmailGateway gateway = new(expectedMessageCount: 1);
         using ServiceProvider provider = CreateProvider(resolver, gateway);
+        await AddNotificationAsync(provider, personId: 42);
         QueuedEmailDeliveryWorker worker = new(
-            queue,
             new FixedEmailDeliverySwitch(true),
             provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(CreateOptions()),
             NullLogger<QueuedEmailDeliveryWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
-        await queue.EnqueueAsync(CreatePersonJob(42), CancellationToken.None);
         await gateway.WaitForExpectedMessagesAsync();
         await worker.StopAsync(CancellationToken.None);
 
@@ -54,22 +61,21 @@ public sealed class QueuedEmailDeliveryTests
     [Fact]
     public async Task Worker_WhenGatewayFails_ContinuesWithNextJob()
     {
-        InMemoryEmailNotificationQueue queue = new();
         RecordingRecipientResolver resolver = new("student.contact@example.com");
         RecordingEmailGateway gateway = new(
             expectedMessageCount: 2,
             Result.Failure(new Error("MAIL.TEST_FAILURE", "First send failed.")),
             Result.Success());
         using ServiceProvider provider = CreateProvider(resolver, gateway);
+        await AddNotificationAsync(provider, personId: 51);
+        await AddNotificationAsync(provider, personId: 52);
         QueuedEmailDeliveryWorker worker = new(
-            queue,
             new FixedEmailDeliverySwitch(true),
             provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(CreateOptions()),
             NullLogger<QueuedEmailDeliveryWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
-        await queue.EnqueueAsync(CreatePersonJob(51), CancellationToken.None);
-        await queue.EnqueueAsync(CreatePersonJob(52), CancellationToken.None);
         await gateway.WaitForExpectedMessagesAsync();
         await worker.StopAsync(CancellationToken.None);
 
@@ -80,17 +86,16 @@ public sealed class QueuedEmailDeliveryTests
     [Fact]
     public async Task Worker_WhenMailDeliveryIsDisabled_DoesNotResolveOrSend()
     {
-        InMemoryEmailNotificationQueue queue = new();
         RecordingRecipientResolver resolver = new("student.contact@example.com");
         RecordingEmailGateway gateway = new(expectedMessageCount: 1);
         using ServiceProvider provider = CreateProvider(resolver, gateway);
+        await AddNotificationAsync(provider, personId: 61);
         QueuedEmailDeliveryWorker worker = new(
-            queue,
             new FixedEmailDeliverySwitch(false),
             provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(CreateOptions()),
             NullLogger<QueuedEmailDeliveryWorker>.Instance);
 
-        await queue.EnqueueAsync(CreatePersonJob(61), CancellationToken.None);
         await worker.StartAsync(CancellationToken.None);
         await Task.Delay(100);
         await worker.StopAsync(CancellationToken.None);
@@ -104,10 +109,54 @@ public sealed class QueuedEmailDeliveryTests
         IEmailDeliveryGateway gateway)
     {
         ServiceCollection services = new();
+        string databaseName = Guid.NewGuid().ToString();
         services.AddScoped(_ => resolver);
         services.AddSingleton(gateway);
+        services.AddSingleton<IClock>(new TestClock(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero)));
+        services.AddSingleton<IModelConfigurationContributor, MailDeliveryModelConfiguration>();
+        services.AddDbContext<MoeDbContext>(options =>
+            options.UseInMemoryDatabase(databaseName));
         return services.BuildServiceProvider();
     }
+
+    private static async Task AddNotificationAsync(ServiceProvider provider, long personId)
+    {
+        using IServiceScope scope = provider.CreateScope();
+        MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        EmailNotification notification = EmailNotification.Create(
+            "NOTI-TEST",
+            personId,
+            "Test subject",
+            "Test body",
+            "<p>Test body</p>",
+            "TestEntity",
+            personId.ToString(),
+            new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
+            maxAttempts: 3);
+        dbContext.Set<EmailNotification>().Add(notification);
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static MailDeliveryOptions CreateOptions()
+        => new()
+        {
+            Enabled = true,
+            AppName = MailDeliveryOptions.DefaultAppName,
+            PortalBaseUrl = MailDeliveryOptions.DefaultPortalBaseUrl,
+            Host = "smtp.test.local",
+            UserName = "sender@example.com",
+            Password = "password",
+            FromEmail = "sender@example.com",
+            FromDisplayName = MailDeliveryOptions.DefaultAppName,
+            Worker = new MailDeliveryWorkerOptions
+            {
+                BatchSize = 10,
+                PollIntervalSeconds = 1,
+                MaxAttempts = 3,
+                MaxEmailsPerMinute = 60,
+                LockSeconds = 30
+            }
+        };
 
     private static EmailNotificationJob CreatePersonJob(long personId)
         => EmailNotificationJob.ForPerson(
@@ -170,5 +219,12 @@ public sealed class QueuedEmailDeliveryTests
     private sealed class FixedEmailDeliverySwitch(bool isEnabled) : IEmailDeliverySwitch
     {
         public bool IsEnabled { get; } = isEnabled;
+    }
+
+    private sealed class TestClock(DateTimeOffset utcNow) : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = utcNow;
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
 }
