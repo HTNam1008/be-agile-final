@@ -15,4 +15,16 @@ public static class EducationAccountErrors
     public static readonly Error InvalidTransactionCategory = new(
         "ACCOUNT.INVALID_TRANSACTION_CATEGORY",
         "Transaction category must be TOP_UP, PAYMENT, REFUND, or REVERSAL.");
+
+    public static readonly Error InvalidSettlementPreference = new(
+        "ACCOUNT.INVALID_SETTLEMENT_PREFERENCE",
+        "Settlement preference destination details are invalid.");
+
+    public static readonly Error SettlementPreferenceConflict = new(
+        "ACCOUNT.SETTLEMENT_PREFERENCE_CONFLICT",
+        "The settlement preference was updated by another request.");
+
+    public static readonly Error PendingPaymentInProgress = new(
+        "ACCOUNT.PENDING_PAYMENT_IN_PROGRESS",
+        "A payment is currently in progress for this Education Account. Please retry shortly.");
 }

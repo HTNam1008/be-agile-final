@@ -64,7 +64,6 @@ internal sealed class AdminStudentListReader(
 
         IReadOnlyDictionary<long, EducationAccountLookupSummary> accountByPersonId =
             await accounts.FindByPersonIdsAsync(people.Select(x => x.Id).ToArray(), cancellationToken);
-
         IEnumerable<Row> rows = people.Select(person =>
         {
             enrollmentByPersonId.TryGetValue(person.Id, out SchoolEnrollment? enrollment);
@@ -159,6 +158,13 @@ internal sealed class AdminStudentListReader(
             _ => rows
         };
 
+        rows = criteria.PortalAccessStatus switch
+        {
+            AdminStudentPortalAccessStatusFilter.Active => rows.Where(x => x.Person.PersonStatusCode == PersonStatusCodes.Active),
+            AdminStudentPortalAccessStatusFilter.Disabled => rows.Where(x => x.Person.PersonStatusCode == PersonStatusCodes.Disabled),
+            _ => rows
+        };
+
         return rows;
     }
 
@@ -171,6 +177,9 @@ internal sealed class AdminStudentListReader(
             row.Person.NationalityCode,
             row.Enrollment?.LevelCode,
             row.Enrollment?.ClassCode,
+            row.Person.PersonStatusCode,
+            null,
+            null,
             row.Account?.AccountStatusCode ?? NoAccount,
             row.Account?.CurrentBalance,
             row.IsEnrolled ? row.Enrollment!.SchoolingStatusCode : NotEnrolled,

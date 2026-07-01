@@ -15,6 +15,7 @@ public static class AuditActionCodes
     public const string StudentBulkImportCompleted = "STUDENT_BULK_IMPORT_COMPLETED";
     public const string StudentContactUpdated = "STUDENT_CONTACT_UPDATED";
     public const string UserAccountDisabled = "USER_ACCOUNT_DISABLED";
+    public const string UserAccountEnabled = "USER_ACCOUNT_ENABLED";
     public const string CourseCreated = "COURSE_CREATED";
     public const string CourseUpdated = "COURSE_UPDATED";
     public const string CoursePublished = "COURSE_PUBLISHED";

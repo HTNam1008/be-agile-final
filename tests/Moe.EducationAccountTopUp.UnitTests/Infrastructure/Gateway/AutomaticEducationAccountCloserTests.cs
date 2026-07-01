@@ -30,6 +30,7 @@ public sealed class AutomaticEducationAccountCloserTests
     private readonly FakeEligiblePersonLookupGateway _people = new();
     private readonly FakeAuditService _audit = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
+    private readonly FakeAccountHoldRepository _accountHolds = new();
     private readonly FakePersonDirectory _personDirectory = new();
     private readonly TestDoubles.RecordingEmailNotificationQueue _mailQueue = new();
 
@@ -85,6 +86,46 @@ public sealed class AutomaticEducationAccountCloserTests
     }
 
     [Fact]
+    public async Task EnsureClosedAsync_WhenPendingHoldExists_SkipsWithoutAuditSaveOrEmail()
+    {
+        EducationAccount account = AddAutomaticAccount(2101, personId: 3101);
+        _accountHolds.PendingHoldAccountIds.Add(account.Id);
+        AutomaticEducationAccountCloser closer = CreateCloser();
+
+        AutomaticEducationAccountClosureResult result =
+            await closer.EnsureClosedAsync(account, Now, CancellationToken.None);
+
+        result.Closed.Should().BeFalse();
+        result.SkipReasonCode.Should().Be(AutomaticEducationAccountClosureSkipReasonCodes.PendingPaymentHold);
+        account.StatusCode.Should().Be(AccountStatuses.Active);
+        _audit.Calls.Should().BeEmpty();
+        _unitOfWork.SaveCalls.Should().Be(0);
+        _mailGateway.Messages.Should().BeEmpty();
+        _accountHolds.CheckedAccountIds.Should().ContainSingle().Which.Should().Be(account.Id);
+        _accountHolds.CheckedUtcNow.Should().ContainSingle().Which.Should().Be(Now.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task EnsureClosedAsync_WhenPreviouslyPendingHoldHasExpired_ClosesNormallyOnLaterRun()
+    {
+        EducationAccount account = AddAutomaticAccount(2102, personId: 3102);
+        _accountHolds.PendingHoldAccountIds.Add(account.Id);
+        AutomaticEducationAccountCloser closer = CreateCloser();
+        await closer.EnsureClosedAsync(account, Now, CancellationToken.None);
+        _accountHolds.PendingHoldAccountIds.Clear();
+
+        AutomaticEducationAccountClosureResult result =
+            await closer.EnsureClosedAsync(account, Now.AddDays(1), CancellationToken.None);
+
+        result.Closed.Should().BeTrue();
+        result.SkipReasonCode.Should().BeNull();
+        account.StatusCode.Should().Be(AccountStatuses.Closed);
+        _audit.Calls.Should().ContainSingle();
+        _unitOfWork.SaveCalls.Should().Be(1);
+        _mailGateway.Messages.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task EnsureClosedAsync_WritesAutoAgeLimitAuditDetails()
     {
         EducationAccount account = AddManualAccount(3001, personId: 4001);
@@ -116,6 +157,7 @@ public sealed class AutomaticEducationAccountCloserTests
         await dbContext.SaveChangesAsync();
         AutomaticEducationAccountCloser closer = new(
             new EducationAccountRepository(dbContext),
+            new AccountHoldRepository(dbContext),
             _people,
             _audit,
             new DbUnitOfWork(dbContext),
@@ -128,7 +170,7 @@ public sealed class AutomaticEducationAccountCloserTests
     }
 
     private AutomaticEducationAccountCloser CreateCloser()
-        => new(_educationAccounts, _people, _audit, _unitOfWork, CreateClosureEmails());
+        => new(_educationAccounts, _accountHolds, _people, _audit, _unitOfWork, CreateClosureEmails());
 
     private EducationAccountClosureEmailService CreateClosureEmails()
         => new(
@@ -225,6 +267,23 @@ public sealed class AutomaticEducationAccountCloserTests
             RequestedMinAge = minAge;
             RequestedToday = today;
             return Task.FromResult(AgedAtLeastPersonIds);
+        }
+    }
+
+    private sealed class FakeAccountHoldRepository : IAccountHoldRepository
+    {
+        public HashSet<long> PendingHoldAccountIds { get; } = [];
+        public List<long> CheckedAccountIds { get; } = [];
+        public List<DateTime> CheckedUtcNow { get; } = [];
+
+        public Task<bool> HasPendingHoldAsync(
+            long educationAccountId,
+            DateTime utcNow,
+            CancellationToken cancellationToken)
+        {
+            CheckedAccountIds.Add(educationAccountId);
+            CheckedUtcNow.Add(utcNow);
+            return Task.FromResult(PendingHoldAccountIds.Contains(educationAccountId));
         }
     }
 

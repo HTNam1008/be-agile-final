@@ -27,3 +27,33 @@ public sealed class RunHistoryRequest
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 10;
 }
+
+public sealed class CampaignTransactionHistoryRequest
+{
+    public DateTime? DateFromUtc { get; init; }
+    public DateTime? DateToUtc { get; init; }
+    public long? OrganizationId { get; init; }
+    public string? Status { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 25;
+}
+
+public sealed class AccountTransactionHistoryRequest
+{
+    public DateTime? DateFromUtc { get; init; }
+    public DateTime? DateToUtc { get; init; }
+    public string? Status { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 25;
+}
+
+public sealed class AllTransactionsRequest
+{
+    public DateTime? DateFromUtc { get; init; }
+    public DateTime? DateToUtc { get; init; }
+    public string? CampaignSearch { get; init; }
+    public long? OrganizationId { get; init; }
+    public string? Status { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 25;
+}

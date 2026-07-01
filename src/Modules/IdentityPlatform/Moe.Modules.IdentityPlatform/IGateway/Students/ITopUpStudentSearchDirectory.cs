@@ -18,4 +18,10 @@ public interface ITopUpStudentSearchDirectory
         IReadOnlyCollection<long> personIds,
         long organizationId,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<AccountTaxonomyLevel>> GetAccountTaxonomyAsync(
+        IReadOnlyCollection<long> scopedOrganizationIds,
+        CancellationToken cancellationToken);
 }
+
+public sealed record AccountTaxonomyLevel(string LevelCode, IReadOnlyList<string> Classes);

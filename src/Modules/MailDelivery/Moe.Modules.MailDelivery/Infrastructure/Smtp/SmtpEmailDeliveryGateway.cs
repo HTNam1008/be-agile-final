@@ -28,82 +28,79 @@ internal sealed class SmtpEmailDeliveryGateway(
             return Result.Success();
         }
 
-        if (string.IsNullOrWhiteSpace(value.Password))
+        SmtpAccount primaryAccount = SmtpAccount.Primary(value);
+        if (string.IsNullOrWhiteSpace(primaryAccount.Password))
         {
             return Result.Failure(MailDeliveryErrors.MissingSmtpPassword);
         }
 
         try
         {
-            await SendWithSenderAsync(
-                message,
-                new SmtpSender(
-                    value.UserName,
-                    value.Password,
-                    value.FromEmail,
-                    value.FromDisplayName),
-                value,
-                cancellationToken);
+            await SendWithAccountAsync(value, primaryAccount, message, cancellationToken);
             return Result.Success();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException
+            && IsQuotaFailure(ex)
+            && SmtpAccount.TryFallback(value) is SmtpAccount fallbackAccount)
+        {
+            logger.LogWarning(
+                ex,
+                "Primary email account quota was exceeded. Retrying with fallback account. ToEmail={ToEmail} Subject={Subject}",
+                message.ToEmail,
+                message.Subject);
+
+            try
+            {
+                await SendWithAccountAsync(value, fallbackAccount, message, cancellationToken);
+
+                logger.LogInformation(
+                    "Email delivery succeeded with fallback SMTP account. ToEmail={ToEmail} Subject={Subject}",
+                    message.ToEmail,
+                    message.Subject);
+
+                return Result.Success();
+            }
+            catch (Exception fallbackException) when (fallbackException is not OperationCanceledException)
+            {
+                logger.LogWarning(
+                    fallbackException,
+                    "Fallback email delivery failed. ToEmail={ToEmail} Subject={Subject}",
+                    message.ToEmail,
+                    message.Subject);
+
+                return Result.Failure(MailDeliveryErrors.SendFailed(fallbackException.Message));
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            if (value.HasFallbackSender && ShouldRetryWithFallback(ex))
-            {
-                try
-                {
-                    await SendWithSenderAsync(
-                        message,
-                        new SmtpSender(
-                            value.FallbackUserName!,
-                            value.FallbackPassword!,
-                            value.FallbackFromEmail!,
-                            value.FallbackFromDisplayName!),
-                        value,
-                        cancellationToken);
-
-                    logger.LogInformation(
-                        "Email delivery succeeded with fallback SMTP sender. Subject={Subject}",
-                        message.Subject);
-                    return Result.Success();
-                }
-                catch (Exception fallbackEx) when (fallbackEx is not OperationCanceledException)
-                {
-                    logger.LogWarning(
-                        fallbackEx,
-                        "Email delivery fallback failed. Subject={Subject}",
-                        message.Subject);
-                    return Result.Failure(MailDeliveryErrors.SendFailed(fallbackEx.Message));
-                }
-            }
-
             logger.LogWarning(
                 ex,
-                "Email delivery failed. Subject={Subject}",
+                "Email delivery failed. ToEmail={ToEmail} Subject={Subject}",
+                message.ToEmail,
                 message.Subject);
 
             return Result.Failure(MailDeliveryErrors.SendFailed(ex.Message));
         }
     }
 
-    private static async Task SendWithSenderAsync(
-        EmailDeliveryMessage message,
-        SmtpSender sender,
+    private static async Task SendWithAccountAsync(
         MailDeliveryOptions options,
+        SmtpAccount account,
+        EmailDeliveryMessage message,
         CancellationToken cancellationToken)
     {
-        using MailMessage mail = CreateMailMessage(sender, message);
-        using SmtpClient client = CreateSmtpClient(options, sender);
+        using MailMessage mail = CreateMailMessage(account, message);
+        using SmtpClient client = CreateSmtpClient(options, account);
         await client.SendMailAsync(mail, cancellationToken);
     }
 
     private static MailMessage CreateMailMessage(
-        SmtpSender sender,
+        SmtpAccount account,
         EmailDeliveryMessage message)
     {
         MailMessage mail = new()
         {
-            From = new MailAddress(sender.FromEmail, sender.FromDisplayName),
+            From = new MailAddress(account.FromEmail, account.FromDisplayName),
             Subject = message.Subject,
             Body = message.HtmlBody ?? message.PlainTextBody,
             IsBodyHtml = !string.IsNullOrWhiteSpace(message.HtmlBody)
@@ -126,27 +123,62 @@ internal sealed class SmtpEmailDeliveryGateway(
         return mail;
     }
 
-    private static SmtpClient CreateSmtpClient(MailDeliveryOptions options, SmtpSender sender)
+    private static SmtpClient CreateSmtpClient(MailDeliveryOptions options, SmtpAccount account)
         => new(options.Host, options.Port)
         {
             EnableSsl = options.EnableSsl,
             DeliveryMethod = SmtpDeliveryMethod.Network,
             UseDefaultCredentials = false,
-            Credentials = new NetworkCredential(sender.UserName, sender.Password)
+            Credentials = new NetworkCredential(account.UserName, account.Password)
         };
 
-    private static bool ShouldRetryWithFallback(Exception exception)
+    private static bool IsQuotaFailure(Exception exception)
     {
-        string message = exception.ToString();
-        return message.Contains("5.4.5", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("Daily user sending limit exceeded", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("quota", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("limit exceeded", StringComparison.OrdinalIgnoreCase);
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            string message = current.Message;
+            if (message.Contains("5.4.5", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Daily user sending limit exceeded", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("quota", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("limit exceeded", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private sealed record SmtpSender(
+    private sealed record SmtpAccount(
         string UserName,
         string Password,
         string FromEmail,
-        string FromDisplayName);
+        string FromDisplayName)
+    {
+        public static SmtpAccount Primary(MailDeliveryOptions options)
+            => new(
+                options.UserName,
+                NormalizePassword(options.Password),
+                options.FromEmail,
+                options.FromDisplayName);
+
+        public static SmtpAccount? TryFallback(MailDeliveryOptions options)
+        {
+            if (!options.HasFallbackSender)
+            {
+                return null;
+            }
+
+            return new SmtpAccount(
+                options.FallbackUserName!,
+                NormalizePassword(options.FallbackPassword!),
+                options.FallbackFromEmail!,
+                string.IsNullOrWhiteSpace(options.FallbackFromDisplayName)
+                    ? options.FromDisplayName
+                    : options.FallbackFromDisplayName);
+        }
+
+        private static string NormalizePassword(string password)
+            => string.Concat(password.Where(character => !char.IsWhiteSpace(character)));
+    }
 }

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
@@ -87,6 +89,8 @@ internal sealed class DownloadStudentCourseMaterialHandler(
     ILogger<DownloadStudentCourseMaterialHandler> logger,
     IClock clock) : IQueryHandler<DownloadStudentCourseMaterialQuery, StudentCourseMaterialDownload>
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> PreviewLocks = new();
+
     public async Task<Result<StudentCourseMaterialDownload>> Handle(
         DownloadStudentCourseMaterialQuery query,
         CancellationToken cancellationToken)
@@ -106,35 +110,87 @@ internal sealed class DownloadStudentCourseMaterialHandler(
         if (material is null)
             return Result<StudentCourseMaterialDownload>.Failure(CourseErrors.MaterialNotFound);
 
-        Stream content = await storage.OpenReadAsync(material.StoragePath, cancellationToken);
         if (query.PreviewAsPdf)
         {
             if (IsPdfMaterial(material))
             {
+                Stream pdfContent = await storage.OpenReadAsync(material.StoragePath, cancellationToken);
                 return Result<StudentCourseMaterialDownload>.Success(new(
-                    content,
+                    pdfContent,
                     "application/pdf",
                     Path.ChangeExtension(material.OriginalFileName, ".pdf")));
             }
 
+            Stopwatch previewStopwatch = Stopwatch.StartNew();
             Stream? cachedPreview = await previewCache.GetPdfAsync(material, cancellationToken);
             if (cachedPreview is not null)
             {
-                await content.DisposeAsync();
+                logger.LogInformation(
+                    "Course material PDF preview served from cache. CourseMaterialId={CourseMaterialId}, ElapsedMs={ElapsedMs}.",
+                    material.Id,
+                    previewStopwatch.ElapsedMilliseconds);
                 return Result<StudentCourseMaterialDownload>.Success(new(
                     cachedPreview,
                     "application/pdf",
                     Path.ChangeExtension(material.OriginalFileName, ".pdf")));
             }
 
-            Stream? preview;
+            string lockKey = $"{material.Id}:{material.StoragePath}";
+            SemaphoreSlim previewLock = PreviewLocks.GetOrAdd(lockKey, _ => new SemaphoreSlim(1, 1));
+            await previewLock.WaitAsync(cancellationToken);
             try
             {
-                preview = await previewConverter.TryConvertToPdfAsync(
+                cachedPreview = await previewCache.GetPdfAsync(material, cancellationToken);
+                if (cachedPreview is not null)
+                {
+                    logger.LogInformation(
+                        "Course material PDF preview served from cache after wait. CourseMaterialId={CourseMaterialId}, ElapsedMs={ElapsedMs}.",
+                        material.Id,
+                        previewStopwatch.ElapsedMilliseconds);
+                    return Result<StudentCourseMaterialDownload>.Success(new(
+                        cachedPreview,
+                        "application/pdf",
+                        Path.ChangeExtension(material.OriginalFileName, ".pdf")));
+                }
+
+                logger.LogInformation(
+                    "Course material PDF preview converting. CourseMaterialId={CourseMaterialId}, FileName={FileName}, ContentType={ContentType}.",
+                    material.Id,
+                    material.OriginalFileName,
+                    material.ContentType);
+
+                await using Stream sourceContent = await storage.OpenReadAsync(material.StoragePath, cancellationToken);
+                Stream? preview = await previewConverter.TryConvertToPdfAsync(
                     material.OriginalFileName,
                     material.ContentType,
-                    content,
+                    sourceContent,
                     cancellationToken);
+
+                if (preview is null)
+                {
+                    logger.LogWarning(
+                        "PDF preview converter returned no preview for course material {CourseMaterialId}. FileName={FileName}, ContentType={ContentType}.",
+                        material.Id,
+                        material.OriginalFileName,
+                        material.ContentType);
+                    return Result<StudentCourseMaterialDownload>.Failure(CourseErrors.MaterialPreviewUnavailable);
+                }
+
+                await using (preview)
+                {
+                    byte[] previewBytes = await ReadAllBytesAsync(preview, cancellationToken);
+                    await previewCache.SetPdfAsync(material, previewBytes, cancellationToken);
+                    logger.LogInformation(
+                        "Course material PDF preview converted. CourseMaterialId={CourseMaterialId}, SizeBytes={SizeBytes}, ElapsedMs={ElapsedMs}.",
+                        material.Id,
+                        previewBytes.Length,
+                        previewStopwatch.ElapsedMilliseconds);
+
+                    return Result<StudentCourseMaterialDownload>.Success(new(
+                        new MemoryStream(previewBytes, writable: false),
+                        "application/pdf",
+                        Path.ChangeExtension(material.OriginalFileName, ".pdf")));
+                }
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -148,33 +204,13 @@ internal sealed class DownloadStudentCourseMaterialHandler(
             }
             finally
             {
-                await content.DisposeAsync();
-            }
-
-            if (preview is null)
-            {
-                logger.LogWarning(
-                    "PDF preview converter returned no preview for course material {CourseMaterialId}. FileName={FileName}, ContentType={ContentType}.",
-                    material.Id,
-                    material.OriginalFileName,
-                    material.ContentType);
-                return Result<StudentCourseMaterialDownload>.Failure(CourseErrors.MaterialPreviewUnavailable);
-            }
-
-            await using (preview)
-            {
-                byte[] previewBytes = await ReadAllBytesAsync(preview, cancellationToken);
-                await previewCache.SetPdfAsync(material, previewBytes, cancellationToken);
-
-                return Result<StudentCourseMaterialDownload>.Success(new(
-                    new MemoryStream(previewBytes, writable: false),
-                    "application/pdf",
-                    Path.ChangeExtension(material.OriginalFileName, ".pdf")));
+                previewLock.Release();
             }
         }
 
+        Stream originalContent = await storage.OpenReadAsync(material.StoragePath, cancellationToken);
         return Result<StudentCourseMaterialDownload>.Success(new(
-            content,
+            originalContent,
             material.ContentType,
             material.OriginalFileName));
     }

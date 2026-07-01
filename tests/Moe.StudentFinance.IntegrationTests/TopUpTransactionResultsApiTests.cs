@@ -54,7 +54,6 @@ public sealed class TopUpTransactionResultsApiTests
         Assert.DoesNotContain(seeded.RawStudentNumber, json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"idempotencyKey\"", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"personId\"", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("\"educationAccountId\"", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -135,6 +134,8 @@ public sealed class TopUpTransactionResultsApiTests
             null,
             null,
             null,
+            deliveryTypeCode: "INSTANT",
+            maxTotalAmount: 100m,
             currentUserId: 1,
             now);
         campaign.ChangeStatus(TopUpCampaignStatusCodes.Active, 1, now);

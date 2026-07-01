@@ -187,6 +187,16 @@ public sealed class AiCopilotPaymentTests(CustomWebApplicationFactory factory) :
         Assert.NotEmpty(response.GetProperty("grounding").GetProperty("citations").EnumerateArray());
     }
 
+    [Fact]
+    public async Task New_payment_faq_returns_expected_citation()
+    {
+        JsonElement response = await Chat("Can I request a top-up myself?", personId: 2101);
+
+        Assert.True(response.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        JsonElement[] citations = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().ToArray();
+        Assert.Contains(citations, x => x.GetProperty("sourceId").GetString() == "PAY-CHUNK-09-PAYMENT-FAQS");
+    }
+
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");

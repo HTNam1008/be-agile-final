@@ -38,6 +38,8 @@ internal sealed class GetRunSummaryQueryHandler(
         {
             RunId = run.RunId,
             CampaignId = run.CampaignId,
+            CampaignCode = run.CampaignCode,
+            CampaignName = run.CampaignName,
             RunDateUtc = run.RunDateUtc,
             TriggerType = run.TriggerType,
             Status = run.Status,
@@ -47,6 +49,12 @@ internal sealed class GetRunSummaryQueryHandler(
             FailedCount = run.FailedCount,
             SkippedCount = run.SkippedCount,
             TotalCredited = run.TotalCredited,
+            BudgetConsumedPercent = run.CampaignMaxTotalAmount > 0
+                ? Math.Round((run.TotalCredited / run.CampaignMaxTotalAmount) * 100, 1)
+                : null,
+            DurationSeconds = run.StartedAtUtc is DateTime started && run.CompletedAtUtc is DateTime completed
+                ? (int)(completed - started).TotalSeconds
+                : null,
             StartedAtUtc = run.StartedAtUtc,
             CompletedAtUtc = run.CompletedAtUtc
         });

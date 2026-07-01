@@ -2,6 +2,9 @@ namespace Moe.Modules.IdentityPlatform.IGateway.Repositories;
 
 internal sealed record AdminAccountDetailsProfile(
     long PersonId,
+    string PersonStatusCode,
+    long? UserAccountId,
+    string? UserAccountStatusCode,
     string? IdentityNumberMasked,
     string OfficialFullName,
     DateOnly DateOfBirth,

@@ -181,6 +181,12 @@ internal sealed class UserAccount : AggregateRoot<long>
         UpdatedAtUtc = utcNow;
     }
 
+    public void Enable(DateTime utcNow)
+    {
+        AccountStatusCode = UserAccountStatusCodes.Active;
+        UpdatedAtUtc = utcNow;
+    }
+
     public void UpdateContactDetails(string? contactEmail, string? contactMobile, DateTime utcNow)
     {
         ContactEmail = NormalizeEmailForContact(contactEmail);

@@ -24,7 +24,10 @@ internal sealed class TopUpRunSummaryReader(MoeDbContext dbContext)
             select new RunSummaryProjection(
                 run.Id,
                 run.TopUpCampaignId,
+                campaign.CampaignCode,
+                campaign.CampaignName,
                 campaign.OrganizationId,
+                campaign.MaxTotalAmount,
                 run.ScheduledForUtc,
                 run.TriggerTypeCode,
                 run.RunStatusCode,

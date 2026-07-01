@@ -5,11 +5,13 @@ namespace Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 public interface ITopUpRunRepository
 {
     Task<TopUpRun?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TopUpRun>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default);
     Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default);
     Task<bool> ExistsForScheduledOccurrenceAsync(
         long campaignId,
         DateTime scheduledFor,
         CancellationToken cancellationToken = default);
     Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
+    Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
     Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default);
 }

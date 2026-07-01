@@ -13,9 +13,9 @@ public class FasCriteriaEvaluatorTests
 {
     private readonly FasCriteriaEvaluator _evaluator = new FasCriteriaEvaluator();
 
-    private static FasTierCriteria CreateCriteria(long id, string type, decimal? from, decimal? to, string? connector, int displayOrder)
+    private static FasTierCriteria CreateCriteria(long id, string type, decimal? from, decimal? to, string? connector, int displayOrder, long groupId = 0)
     {
-        var criteria = FasTierCriteria.Create(1, type, from, to, connector, displayOrder, DateTime.UtcNow);
+        var criteria = FasTierCriteria.Create(1, groupId, type, from, to, connector, displayOrder, DateTime.UtcNow);
         var property = typeof(FasTierCriteria).BaseType?.GetProperty("Id");
         property?.SetValue(criteria, id);
         return criteria;
@@ -89,7 +89,7 @@ public class FasCriteriaEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_MixedAndOr_LeftToRight_ShouldEvaluateCorrectly()
+    public void Evaluate_MixedAndOr_ShouldTreatAndInsideGroupsAndOrBetweenGroups()
     {
         // [AGE AND NATIONALITY]
         var criteriaAnd = new List<FasTierCriteria>
@@ -113,7 +113,7 @@ public class FasCriteriaEvaluatorTests
         bool resultOr = _evaluator.Evaluate(criteriaOr, lookupOr, age: 12, gdpValue: null, pciValue: null, nationality: "Singapore Citizen");
         resultOr.Should().BeTrue(); // Age fails, Nat passes -> true
 
-        // [A OR B AND C] left to right = ((A OR B) AND C)
+        // [A] OR [B AND C]
         var criteriaComplex = new List<FasTierCriteria>
         {
             FasTierCriteria.Create(1, "AGE", 13, 18, "OR", 1, DateTime.UtcNow, 1),
@@ -122,12 +122,58 @@ public class FasCriteriaEvaluatorTests
         };
         var lookupComplex = new[] { new { Id = 3L, Nat = "Singapore Citizen" } }.ToLookup(x => x.Id, x => x.Nat);
 
-        // A fails, B passes -> (F or T) = T. C passes -> T and T = True
+        // A fails, B passes, C passes -> [F] OR [T AND T] = True
         bool res1 = _evaluator.Evaluate(criteriaComplex, lookupComplex, age: 12, gdpValue: 1500, pciValue: null, nationality: "Singapore Citizen");
         res1.Should().BeTrue();
 
-        // A passes, B fails -> (T or F) = T. C fails -> T and F = False
+        // A passes, so the first group is enough even when the second group fails.
         bool res2 = _evaluator.Evaluate(criteriaComplex, lookupComplex, age: 15, gdpValue: 5000, pciValue: null, nationality: "Foreigner");
-        res2.Should().BeFalse();
+        res2.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Evaluate_GroupedNationalityOrParentNationalityWithSharedPci_ShouldMatchExpectedAlternative()
+    {
+        var criteria = new List<FasTierCriteria>
+        {
+            CreateCriteria(1, "NATIONALITY", null, null, "AND", 1, groupId: 10),
+            CreateCriteria(2, "PCI", 0, 1000, "OR", 2, groupId: 10),
+            CreateCriteria(3, "PARENT_NATIONALITY", null, null, "AND", 3, groupId: 20),
+            CreateCriteria(4, "PCI", 0, 1000, null, 4, groupId: 20)
+        };
+        var lookup = new[]
+        {
+            new { Id = 1L, Value = "Singapore Citizen" },
+            new { Id = 3L, Value = "Permanent Resident" }
+        }.ToLookup(x => x.Id, x => x.Value);
+
+        bool studentNationalityPath = _evaluator.Evaluate(
+            criteria,
+            lookup,
+            age: null,
+            gdpValue: null,
+            pciValue: 900,
+            nationality: "Singapore Citizen",
+            parentNationalities: ["Foreigner"]);
+        bool parentNationalityPath = _evaluator.Evaluate(
+            criteria,
+            lookup,
+            age: null,
+            gdpValue: null,
+            pciValue: 900,
+            nationality: "Foreigner",
+            parentNationalities: ["Permanent Resident"]);
+        bool noPath = _evaluator.Evaluate(
+            criteria,
+            lookup,
+            age: null,
+            gdpValue: null,
+            pciValue: 1200,
+            nationality: "Singapore Citizen",
+            parentNationalities: ["Permanent Resident"]);
+
+        studentNationalityPath.Should().BeTrue();
+        parentNationalityPath.Should().BeTrue();
+        noPath.Should().BeFalse();
     }
 }

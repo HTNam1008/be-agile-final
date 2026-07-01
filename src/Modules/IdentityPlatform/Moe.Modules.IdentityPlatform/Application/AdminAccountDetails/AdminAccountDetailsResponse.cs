@@ -2,6 +2,9 @@ namespace Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 
 public sealed record AdminAccountDetailsResponse(
     long PersonId,
+    string PersonStatusCode,
+    long? UserAccountId,
+    string? UserAccountStatusCode,
     long EducationAccountId,
     string AccountNumber,
     string? IdentityNumberMasked,
