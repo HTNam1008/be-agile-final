@@ -72,7 +72,7 @@ public sealed class EmailRecipientResolverTests
     }
 
     [Fact]
-    public async Task ResolveForPersonAsync_DoesNotUsePersonEmails()
+    public async Task ResolveForPersonAsync_UsesOfficialEmailWhenContactEmailIsMissing()
     {
         await using MoeDbContext db = CreateDbContext();
         Person person = CreatePerson("official@example.com");
@@ -83,7 +83,61 @@ public sealed class EmailRecipientResolverTests
         EmailRecipient? result = await CreateResolver(db, Environments.Production)
             .ResolveForPersonAsync(person.Id, CancellationToken.None);
 
-        result.Should().BeNull();
+        result.Should().Be(new EmailRecipient("official@example.com", EmailRecipientSourceCodes.Official));
+    }
+
+    [Fact]
+    public async Task ResolveForPersonAsync_UsesOfficialEmailWhenContactEmailIsInvalid()
+    {
+        await using MoeDbContext db = CreateDbContext();
+        Person person = CreatePerson("official@example.com");
+        UserAccount account = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        account.UpdateContactDetails("not-an-email", null, DateTime.UtcNow);
+        db.AddRange(person, account);
+        await db.SaveChangesAsync();
+
+        EmailRecipient? result = await CreateResolver(db, Environments.Production)
+            .ResolveForPersonAsync(person.Id, CancellationToken.None);
+
+        result.Should().Be(new EmailRecipient("official@example.com", EmailRecipientSourceCodes.Official));
+    }
+
+    [Fact]
+    public async Task ResolveForPersonAsync_UsesOlderValidContactBeforeOfficialEmail()
+    {
+        await using MoeDbContext db = CreateDbContext();
+        Person person = CreatePerson("official@example.com");
+        UserAccount olderAccount = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject-old",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        olderAccount.UpdateContactDetails("old-contact@example.com", null, DateTime.UtcNow);
+        typeof(UserAccount).GetProperty(nameof(UserAccount.Id))!.SetValue(olderAccount, 10);
+        UserAccount newerAccount = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject-new",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        newerAccount.UpdateContactDetails(null, null, DateTime.UtcNow);
+        typeof(UserAccount).GetProperty(nameof(UserAccount.Id))!.SetValue(newerAccount, 11);
+        db.AddRange(person, olderAccount, newerAccount);
+        await db.SaveChangesAsync();
+
+        EmailRecipient? result = await CreateResolver(db, Environments.Production)
+            .ResolveForPersonAsync(person.Id, CancellationToken.None);
+
+        result.Should().Be(new EmailRecipient("old-contact@example.com", EmailRecipientSourceCodes.Contact));
     }
 
     [Fact]

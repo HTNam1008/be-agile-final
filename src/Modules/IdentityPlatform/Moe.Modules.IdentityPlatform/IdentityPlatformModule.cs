@@ -31,6 +31,7 @@ using Moe.Modules.IdentityPlatform.Application.ReferenceData;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
+using Moe.Modules.IdentityPlatform.Application.Students;
 using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Application.Students.SetStudentAccess;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
@@ -95,6 +96,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IStudentProfileRepository, StudentProfileRepository>();
         services.AddScoped<IAdminAccountDetailsRepository, AdminAccountDetailsRepository>();
         services.AddScoped<ILocalIdentityRepository, LocalIdentityRepository>();
+        services.AddScoped<StudentAccountNotificationEmailService>();
         services.AddScoped<IQueryHandler<GetAdminAuthFlowQuery, AdminAuthFlowResponse>, GetAdminAuthFlowHandler>();
         services.AddScoped<IQueryHandler<GetCurrentIdentityQuery, LocalIdentitySummary>, GetCurrentIdentityHandler>();
         services.AddScoped<IQueryHandler<GetEServiceAuthFlowQuery, EServiceAuthFlowResponse>, GetEServiceAuthFlowHandler>();
