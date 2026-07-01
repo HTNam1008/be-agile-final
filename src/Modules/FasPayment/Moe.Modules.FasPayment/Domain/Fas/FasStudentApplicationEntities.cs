@@ -25,7 +25,12 @@ internal sealed class FasApplicationScheme : Entity<long>
     public static FasApplicationScheme CreateDraft(long applicationId, long schemeId, long actorId, DateTime now) =>
         new() { FasApplicationId = applicationId, FasSchemeId = schemeId, CreatedByLoginAccountId = actorId, CreatedAtUtc = now };
     public void Submit() { if (StatusCode != "DRAFT") throw new DomainException("Only draft scheme selections can be submitted."); StatusCode = "PENDING"; }
-    public void Withdraw() { if (StatusCode != "PENDING") throw new DomainException("Only pending scheme selections can be withdrawn."); StatusCode = "CANCELLED"; IsActive = false; }
+    public void Withdraw()
+    {
+        if (StatusCode is not ("DRAFT" or "PENDING")) throw new DomainException("Only draft or pending scheme selections can be withdrawn.");
+        StatusCode = "CANCELLED";
+        IsActive = false;
+    }
     public void CancelAsUnavailable() { if (StatusCode is not ("DRAFT" or "PENDING")) throw new DomainException("Only draft or pending scheme selections can be marked unavailable."); StatusCode = "CANCELLED"; IsActive = false; }
     public void Approve(long actorId, decimal amount, string? components, DateOnly from, DateOnly to, DateTime now) { if (StatusCode != "PENDING" || to < from) throw new DomainException("Invalid approval transition."); StatusCode = "APPROVED"; ApprovedAmount = amount; ApprovedComponentsJson = components; ValidFrom = from; ValidTo = to; ApprovedByLoginAccountId = actorId; ApprovedAtUtc = now; }
     public void Reject(long actorId, string notes, DateTime now) { if (StatusCode != "PENDING" || string.IsNullOrWhiteSpace(notes)) throw new DomainException("Rejection notes are required."); StatusCode = "REJECTED"; RejectionNotes = notes.Trim(); RejectedByLoginAccountId = actorId; RejectedAtUtc = now; }

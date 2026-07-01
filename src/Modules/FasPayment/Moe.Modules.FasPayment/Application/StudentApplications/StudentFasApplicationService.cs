@@ -275,7 +275,7 @@ public sealed class StudentFasApplicationService(
     public async Task<object> UpdateParticulars(long id, UpdateParticularsRequest r, CancellationToken ct)
     {
         var (person, actor) = Identity();
-        var app = await OwnedDraft(id, person, ct);
+        var app = await OwnedEditable(id, person, ct);
         DateTime now = DateTime.UtcNow;
 
         app.UpdateEmail(r.Email, actor, now);
@@ -288,7 +288,7 @@ public sealed class StudentFasApplicationService(
     public async Task<object> UpdateIncome(long id, UpdateIncomeRequest r, CancellationToken ct)
     {
         var (person, actor) = Identity();
-        var app = await OwnedDraft(id, person, ct);
+        var app = await OwnedEditable(id, person, ct);
 
         app.UpdateIncome(r.IsWelfareHomeResident, r.EmploymentStatusCode, r.MonthlyHouseholdIncome, r.HouseholdMemberCount, r.OtherMonthlyIncome, actor, DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
@@ -321,7 +321,7 @@ public sealed class StudentFasApplicationService(
 
     public async Task<object> SaveDeclarations(long id, SaveDeclarationsRequest r, string? ip, string? agent, CancellationToken ct)
     {
-        var (person, actor) = Identity(); await OwnedDraft(id, person, ct); if (!r.TrueAndAccurate || !r.AcceptTerms) throw new ArgumentException("FAS.DECLARATIONS_REQUIRED");
+        var (person, actor) = Identity(); await OwnedEditable(id, person, ct); if (!r.TrueAndAccurate || !r.AcceptTerms) throw new ArgumentException("FAS.DECLARATIONS_REQUIRED");
         var old = await db.Set<FasDeclaration>().Where(x => x.FasApplicationId == id).ToListAsync(ct); db.RemoveRange(old);
         db.Add(FasDeclaration.Accept(id, "TRUE_AND_ACCURATE", r.TrueAndAccurateText, actor, DateTime.UtcNow, ip, agent));
         db.Add(FasDeclaration.Accept(id, "ACCEPT_TERMS", r.AcceptTermsText, actor, DateTime.UtcNow, ip, agent)); await db.SaveChangesAsync(ct);
@@ -330,17 +330,17 @@ public sealed class StudentFasApplicationService(
 
     public async Task<object> UploadDocument(long id, string checklistCode, string fileName, string mime, long size, Stream stream, CancellationToken ct)
     {
-        var (person, actor) = Identity(); await OwnedDraft(id, person, ct); ValidateFile(fileName, mime, size);
-        var app = await OwnedDraft(id, person, ct); var required = await BuildChecklist(app, ct); if (!required.Any(x => x.ChecklistItemCode == checklistCode)) throw new ArgumentException("FAS.INVALID_CHECKLIST_ITEM");
+        var (person, actor) = Identity(); await OwnedEditable(id, person, ct); ValidateFile(fileName, mime, size);
+        var app = await OwnedEditable(id, person, ct); var required = await BuildChecklist(app, ct); if (!required.Any(x => x.ChecklistItemCode == checklistCode)) throw new ArgumentException("FAS.INVALID_CHECKLIST_ITEM");
         var key = await storage.UploadAsync(id, fileName, stream, ct); var doc = FasDocument.Create(id, checklistCode, checklistCode, true, fileName, key, mime, size, actor, DateTime.UtcNow, scanner.RequiresScan);
         db.Add(doc); await db.SaveChangesAsync(ct); return new { id = doc.Id, doc.FileName, doc.MimeType, doc.FileSizeBytes, scanStatus = doc.UploadStatusCode };
     }
 
     public async Task RemoveDocument(long id, long documentId, CancellationToken ct)
-    { var (person, actor) = Identity(); await OwnedDraft(id, person, ct); var d = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); d.Remove(actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); await storage.DeleteAsync(d.BlobKey, ct); }
+    { var (person, actor) = Identity(); await OwnedEditable(id, person, ct); var d = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); d.Remove(actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); await storage.DeleteAsync(d.BlobKey, ct); }
 
     public async Task<object> ReplaceDocument(long id, long documentId, string fileName, string mime, long size, Stream stream, CancellationToken ct)
-    { var (person, actor) = Identity(); await OwnedDraft(id, person, ct); var old = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); ValidateFile(fileName, mime, size); var key = await storage.UploadAsync(id, fileName, stream, ct); var replacement = FasDocument.Create(id, old.DocumentTypeCode, old.ChecklistItemCode, old.IsMandatory, fileName, key, mime, size, actor, DateTime.UtcNow, scanner.RequiresScan); db.Add(replacement); await db.SaveChangesAsync(ct); old.Replace(replacement.Id, actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); await storage.DeleteAsync(old.BlobKey, ct); return new { id = replacement.Id, replacement.FileName, replacement.MimeType, replacement.FileSizeBytes, scanStatus = replacement.UploadStatusCode }; }
+    { var (person, actor) = Identity(); await OwnedEditable(id, person, ct); var old = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); ValidateFile(fileName, mime, size); var key = await storage.UploadAsync(id, fileName, stream, ct); var replacement = FasDocument.Create(id, old.DocumentTypeCode, old.ChecklistItemCode, old.IsMandatory, fileName, key, mime, size, actor, DateTime.UtcNow, scanner.RequiresScan); db.Add(replacement); await db.SaveChangesAsync(ct); old.Replace(replacement.Id, actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); await storage.DeleteAsync(old.BlobKey, ct); return new { id = replacement.Id, replacement.FileName, replacement.MimeType, replacement.FileSizeBytes, scanStatus = replacement.UploadStatusCode }; }
 
     public async Task<(Stream Stream, string Mime, string Name)> DownloadDocument(long documentId, CancellationToken ct)
     { var (person, _) = Identity(); var doc = await db.Set<FasDocument>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == documentId && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); await Owned(doc.FasApplicationId, person, ct); return (await storage.OpenReadAsync(doc.BlobKey, ct), doc.MimeType, doc.FileName); }
@@ -374,7 +374,6 @@ public sealed class StudentFasApplicationService(
             from account in accounts.DefaultIfEmpty()
             select new { application, selection, scheme, account };
 
-        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.selection.StatusCode == status.Trim().ToUpperInvariant());
         if (schemeId.HasValue) query = query.Where(x => x.scheme.Id == schemeId);
         if (!string.IsNullOrWhiteSpace(keyword))
         {
@@ -395,31 +394,15 @@ public sealed class StudentFasApplicationService(
             query = query.Where(x => x.application.SubmittedAtUtc < toUtc);
         }
 
-        int total = await query.CountAsync(ct);
-        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(sortDirection);
-        var sortedQuery = sortBy?.Trim() switch
-        {
-            "applicationId" => descending
-                ? query.OrderByDescending(x => x.application.ApplicationNo).ThenByDescending(x => x.application.Id)
-                : query.OrderBy(x => x.application.ApplicationNo).ThenByDescending(x => x.application.Id),
-            "studentName" => descending
-                ? query.OrderByDescending(x => x.application.StudentName).ThenByDescending(x => x.application.Id)
-                : query.OrderBy(x => x.application.StudentName).ThenByDescending(x => x.application.Id),
-            "schemeName" => descending
-                ? query.OrderByDescending(x => x.scheme.Name).ThenByDescending(x => x.application.Id)
-                : query.OrderBy(x => x.scheme.Name).ThenByDescending(x => x.application.Id),
-            "status" => descending
-                ? query.OrderByDescending(x => x.selection.StatusCode).ThenByDescending(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id)
-                : query.OrderBy(x => x.selection.StatusCode).ThenByDescending(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id),
-            "submittedDate" or _ => descending
-                ? query.OrderByDescending(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id)
-                : query.OrderBy(x => x.application.SubmittedAtUtc).ThenByDescending(x => x.application.Id)
-        };
+        var filteredRows = (await query.ToListAsync(ct))
+            .Where(x => MatchesAdminApplicationStatus(ToAdminVisibleStatus(x.application.StatusCode, x.selection.StatusCode), status))
+            .ToArray();
 
-        var pageRows = await sortedQuery
+        int total = filteredRows.Length;
+        var pageRows = ApplyAdminApplicationSort(filteredRows, sortBy, sortDirection)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync(ct);
+            .ToList();
 
         long[] schemeIds = pageRows.Select(x => x.selection.FasSchemeId).Distinct().ToArray();
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
@@ -451,7 +434,7 @@ public sealed class StudentFasApplicationService(
                 schemeName = row.scheme.Name,
                 schemeTier = approvedTier ?? recommendedTier,
                 submittedAt = row.application.SubmittedAtUtc,
-                status = row.selection.StatusCode
+                status = ToAdminVisibleStatus(row.application.StatusCode, row.selection.StatusCode)
             };
         }).ToArray();
 
@@ -747,17 +730,19 @@ public sealed class StudentFasApplicationService(
                 .SingleOrDefaultAsync(ct)
                 ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
 
-            if ((target.Application.StatusCode != FasApplicationStatuses.Submitted && target.Application.StatusCode != FasApplicationStatuses.PendingReview) || target.Scheme.StatusCode != "PENDING")
+            if (target.Application.StatusCode is not (FasApplicationStatuses.Draft or FasApplicationStatuses.Submitted or FasApplicationStatuses.PendingReview) ||
+                target.Scheme.StatusCode is not ("DRAFT" or "PENDING"))
             {
                 throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
             }
 
             DateTime now = DateTime.UtcNow;
+            string previousSchemeStatus = target.Scheme.StatusCode;
             target.Scheme.Withdraw();
             db.Add(FasStatusHistory.Create(
                 target.Application.Id,
                 target.Scheme.Id,
-                "PENDING",
+                previousSchemeStatus,
                 "CANCELLED",
                 "Scheme withdrawn by student",
                 actor,
@@ -790,7 +775,7 @@ public sealed class StudentFasApplicationService(
                 target.Application,
                 target.Scheme,
                 "FAS scheme selection withdrawn by student",
-                "PENDING",
+                previousSchemeStatus,
                 "CANCELLED",
                 ct);
 
@@ -1110,7 +1095,56 @@ public sealed class StudentFasApplicationService(
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";
     private static string SchemeAvailabilityStatus(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? "AVAILABLE" : "NOT_AVAILABLE";
     private static string? SchemeAvailabilityMessage(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? null : "This FAS scheme is no longer available.";
-    private static string StudentVisibleStatus(string itemStatus, string schemeStatus) => !SchemeIsAvailable(schemeStatus) && itemStatus is "DRAFT" or "PENDING" or "CANCELLED" ? "NOT_AVAILABLE" : itemStatus;
+    private static string StudentVisibleStatus(string itemStatus, string schemeStatus)
+    {
+        if (string.Equals(itemStatus, "CANCELLED", StringComparison.OrdinalIgnoreCase)) return "WITHDRAWN";
+        return !SchemeIsAvailable(schemeStatus) && itemStatus is "DRAFT" or "PENDING" ? "NOT_AVAILABLE" : itemStatus;
+    }
+
+    private static string ToAdminVisibleStatus(string applicationStatus, string selectionStatus)
+    {
+        if (string.Equals(applicationStatus, FasApplicationStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase)) return "WITHDRAWN";
+        return string.Equals(selectionStatus, "CANCELLED", StringComparison.OrdinalIgnoreCase) ? "WITHDRAWN" : selectionStatus;
+    }
+
+    private static bool MatchesAdminApplicationStatus(string visibleStatus, string? status)
+    {
+        string normalized = status?.Trim().ToUpperInvariant() ?? "ALL";
+        return string.IsNullOrWhiteSpace(normalized) || normalized == "ALL" || string.Equals(visibleStatus, normalized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<T> ApplyAdminApplicationSort<T>(IReadOnlyCollection<T> rows, string? sortBy, string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(sortDirection);
+        string key = sortBy?.Trim() ?? string.Empty;
+
+        IOrderedEnumerable<T> ordered = key switch
+        {
+            "applicationId" => AdminOrderByObject(rows, "application.ApplicationNo", descending),
+            "studentName" => AdminOrderByObject(rows, "application.StudentName", descending),
+            "schemeName" => AdminOrderByObject(rows, "scheme.Name", descending),
+            "status" => AdminOrderByObject(rows, "selection.StatusCode", descending),
+            "submittedDate" or _ => AdminOrderByObject(rows, "application.SubmittedAtUtc", descending)
+        };
+
+        return ordered.ThenByDescending(x => AdminReadObjectProperty(x, "application.Id"));
+    }
+
+    private static IOrderedEnumerable<T> AdminOrderByObject<T>(IEnumerable<T> rows, string propertyPath, bool descending)
+        => descending
+            ? rows.OrderByDescending(x => AdminReadObjectProperty(x, propertyPath))
+            : rows.OrderBy(x => AdminReadObjectProperty(x, propertyPath));
+
+    private static object? AdminReadObjectProperty<T>(T row, string propertyPath)
+    {
+        object? current = row;
+        foreach (string segment in propertyPath.Split('.', StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = current?.GetType().GetProperty(segment)?.GetValue(current);
+        }
+
+        return current;
+    }
 
     private async Task RecordFasApplicationAuditAsync(
         string actionCode,
@@ -1203,6 +1237,16 @@ public sealed class StudentFasApplicationService(
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
     private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Draft) throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
     private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted && a.StatusCode != FasApplicationStatuses.PendingReview) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
+    private async Task<FasApplication> OwnedEditable(long id, long person, CancellationToken ct)
+    {
+        var application = await Owned(id, person, ct);
+        if (application.StatusCode is not (FasApplicationStatuses.Draft or FasApplicationStatuses.Submitted or FasApplicationStatuses.PendingReview))
+        {
+            throw new InvalidOperationException("FAS.APPLICATION_LOCKED");
+        }
+
+        return application;
+    }
     private sealed record ProfileRow(long PersonId, string Name, string? NricFinMasked, DateOnly DateOfBirth, string NationalityCode, string? Mobile, string? Address, string? Email, long SchoolOrganizationId, string SchoolName, string StudentNumber);
 
     private async Task<string> ResolveAccountType(long personId, CancellationToken ct)
