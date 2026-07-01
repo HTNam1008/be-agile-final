@@ -166,8 +166,9 @@ public sealed class AiOrchestratorService(
             return new(c.Id, 0, completedText, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
         }
 
-        string? answeredField = isNewInterview ? null : ResolveTargetField(state, fieldKey);
-        FasExtractionResult extraction = isNewInterview ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
+        bool isGuidanceTurn = fieldKey is null && LooksLikeFasSchemeGuidanceRequest(request.Message);
+        string? answeredField = isNewInterview || isGuidanceTurn ? null : ResolveTargetField(state, fieldKey);
+        FasExtractionResult extraction = isNewInterview || isGuidanceTurn ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
         if (extraction.Status == "MANUAL_FALLBACK")
         {
             state.Status = "MANUAL_FALLBACK";
@@ -226,7 +227,7 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "COLLECTING";
             string? acknowledgement = extraction.Status == "ACCEPTED" ? AcceptedFieldAcknowledgement(answeredField, state) : null;
-            text = isNewInterview
+            text = isNewInterview || isGuidanceTurn
                 ? $"{ProfileFactsIntro(state)}\n\n{next}"
                 : acknowledgement is null ? next : $"{acknowledgement}\n\n{next}";
         }
@@ -626,6 +627,11 @@ public sealed class AiOrchestratorService(
     private static bool LooksLikeFieldHelpRequest(string message)
     {
         return Regex.IsMatch(message, @"\b(what are|what is|options|option|choose|choices|example|examples|not sure|don't know|do not know|idk|help)\b", RegexOptions.IgnoreCase);
+    }
+
+    private static bool LooksLikeFasSchemeGuidanceRequest(string message)
+    {
+        return Regex.IsMatch(message, @"\b(scheme|schemes|recommend|recommendation|eligible|eligibility|qualify|apply for)\b", RegexOptions.IgnoreCase);
     }
 
     private static string HelpForField(string field) => field switch
