@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Globalization;
 
 namespace Moe.Modules.MailDelivery.Templates;
 
@@ -60,4 +61,36 @@ public static class EmailTemplateBranding
             .Append("</a>");
         builder.Append("</td></tr></table>");
     }
+
+    public static void AppendSummaryRow(
+        StringBuilder builder,
+        string label,
+        string value,
+        string backgroundColor = "#f8fafc",
+        string valueColor = "#334155")
+    {
+        builder.Append("<tr><td bgcolor=\"")
+            .Append(backgroundColor)
+            .Append("\" style=\"background-color:")
+            .Append(backgroundColor)
+            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
+        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
+            .Append(WebUtility.HtmlEncode(label))
+            .Append("</div>");
+        builder.Append("<div style=\"font-size:20px;line-height:28px;color:")
+            .Append(valueColor)
+            .Append(";font-weight:bold;padding-top:4px;\">")
+            .Append(WebUtility.HtmlEncode(value))
+            .Append("</div></td></tr>");
+    }
+
+    public static void AppendFooter(StringBuilder builder, string message)
+    {
+        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">")
+            .Append(WebUtility.HtmlEncode(message))
+            .Append("</td></tr>");
+        builder.Append("</table></td></tr></table></body></html>");
+    }
+
+    public static string FormatMoney(decimal amount) => string.Create(CultureInfo.InvariantCulture, $"SGD {amount:N2}");
 }

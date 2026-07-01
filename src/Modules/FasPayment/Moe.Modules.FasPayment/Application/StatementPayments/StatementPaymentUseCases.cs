@@ -212,7 +212,7 @@ internal sealed class PayBillingStatementHandler(
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
     IClock clock,
-    PaymentFailedEmailService paymentFailedEmails) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
+    PaymentNotificationEmailService paymentNotifications) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
 {
     public async Task<Result<PayBillingStatementResponse>> Handle(PayBillingStatementCommand command, CancellationToken ct)
     {
@@ -277,6 +277,7 @@ internal sealed class PayBillingStatementHandler(
                 now,
                 ct);
             payment.MarkSuccessful(now);
+            await paymentNotifications.SendPaymentSucceededAsync(payment, now, ct);
             await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
             return Result<PayBillingStatementResponse>.Success(new(
                 payment.Id, payment.PaymentStatusCode, educationAmount, 0m, null, null, null, false));
@@ -324,7 +325,7 @@ internal sealed class PayBillingStatementHandler(
         {
             if (educationPart?.AccountHoldId is long holdId) await accounts.ReleaseAsync(holdId, ct);
             payment.MarkFailed(now);
-            await paymentFailedEmails.SendStatementPaymentFailedAsync(
+            await paymentNotifications.SendStatementPaymentFailedAsync(
                 payment,
                 "The payment gateway was unavailable. Please try again.",
                 ct);
@@ -394,10 +395,7 @@ internal sealed class PayBillingStatementHandler(
         onlinePart?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
         checkout?.ExpireBeforePayment(now);
         activePayment.MarkExpired(now);
-        await paymentFailedEmails.SendStatementPaymentFailedAsync(
-            activePayment,
-            "The payment session expired before completion. Please try again.",
-            cancellationToken);
+        await paymentNotifications.SendPaymentExpiredAsync(activePayment, cancellationToken);
         await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, cancellationToken);
         return Result<PayBillingStatementResponse?>.Success(null);
     }
@@ -446,7 +444,8 @@ internal sealed class CancelBillingStatementPaymentHandler(
     IEducationAccountPaymentGateway accounts,
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
-    IClock clock) : ICommandHandler<CancelBillingStatementPaymentCommand>
+    IClock clock,
+    PaymentNotificationEmailService paymentNotifications) : ICommandHandler<CancelBillingStatementPaymentCommand>
 {
     public async Task<Result> Handle(CancelBillingStatementPaymentCommand command, CancellationToken ct)
     {
@@ -487,6 +486,7 @@ internal sealed class CancelBillingStatementPaymentHandler(
             await accounts.ReleaseAsync(holdId, ct);
             educationPart.MarkCompleted(PaymentPartStatusCodes.Released, now);
         }
+        bool releasedEducationAccountHold = educationPart?.AccountHoldId is long;
         parts.SingleOrDefault(part => part.PaymentMethodCode == PaymentMethodCodes.OnlinePayment)
             ?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
         checkout?.CancelBeforePayment(now);
@@ -499,6 +499,7 @@ internal sealed class CancelBillingStatementPaymentHandler(
         {
             return Result.Success();
         }
+        await paymentNotifications.SendPaymentCancelledAsync(payment, now, releasedEducationAccountHold, ct);
         return Result.Success();
     }
 }
