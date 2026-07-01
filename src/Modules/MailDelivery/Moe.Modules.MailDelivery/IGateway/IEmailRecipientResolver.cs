@@ -1,12 +1,10 @@
-namespace Moe.Modules.IdentityPlatform.IGateway.People;
+namespace Moe.Modules.MailDelivery.IGateway;
 
 public sealed record EmailRecipient(string EmailAddress, string SourceCode);
 
 public static class EmailRecipientSourceCodes
 {
-    public const string Preferred = "PREFERRED";
     public const string Contact = "CONTACT";
-    public const string Official = "OFFICIAL";
     public const string Provided = "PROVIDED";
     public const string DevelopmentFallback = "DEVELOPMENT_FALLBACK";
 }

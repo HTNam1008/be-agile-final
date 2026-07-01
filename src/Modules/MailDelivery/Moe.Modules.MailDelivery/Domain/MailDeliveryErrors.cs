@@ -14,4 +14,8 @@ public static class MailDeliveryErrors
             string.IsNullOrWhiteSpace(reason)
                 ? "The email could not be sent."
                 : $"The email could not be sent. {reason}");
+
+    public static readonly Error QueueFull = new(
+        "MAIL_DELIVERY.QUEUE_FULL",
+        "The email notification queue is full.");
 }

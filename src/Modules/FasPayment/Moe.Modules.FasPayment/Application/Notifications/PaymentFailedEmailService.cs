@@ -1,10 +1,10 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -14,8 +14,7 @@ namespace Moe.Modules.FasPayment.Application.Notifications;
 
 internal sealed class PaymentFailedEmailService(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<PaymentFailedEmailService> logger)
 {
@@ -32,23 +31,6 @@ internal sealed class PaymentFailedEmailService(
                 "Statement payment failure email skipped because MailDelivery is disabled. PersonId={PersonId} PaymentId={PaymentId}",
                 payment.PayerPersonId,
                 payment.Id);
-            return;
-        }
-
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(payment.PayerPersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Statement payment failure email recipient resolution failed. PersonId={PersonId} PaymentId={PaymentId}", payment.PayerPersonId, payment.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Statement payment failure email skipped because no valid recipient was found. PersonId={PersonId} PaymentId={PaymentId}", payment.PayerPersonId, payment.Id);
             return;
         }
 
@@ -81,14 +63,21 @@ internal sealed class PaymentFailedEmailService(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-09",
+                    payment.PayerPersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "Payment",
+                    payment.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Statement payment failure email failed. PaymentId={PaymentId} ErrorCode={ErrorCode}",
+                    "Statement payment failure email enqueue failed. PaymentId={PaymentId} ErrorCode={ErrorCode}",
                     payment.Id,
                     result.Error.Code);
             }

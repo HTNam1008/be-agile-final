@@ -19,7 +19,7 @@ namespace Moe.CourseBilling.UnitTests.Infrastructure.Repositories;
 public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
 {
     private readonly MoeDbContext _dbContext;
-    private readonly RecordingEmailDeliveryGateway _mailGateway = new();
+    private readonly TestDoubles.RecordingEmailNotificationQueue _mailQueue = new();
     private readonly BillingStatementRepository _repository;
 
     public BillingStatementRepositoryEmailTests()
@@ -38,8 +38,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
         _repository = new BillingStatementRepository(
             _dbContext,
             new FixedCoursePaymentPlanGateway(),
-            new TestDoubles.FixedEmailRecipientResolver(),
-            _mailGateway,
+            _mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<BillingStatementRepository>.Instance);
     }
@@ -71,14 +70,44 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(123.45m);
-        _mailGateway.Messages.Should().ContainSingle();
-        EmailDeliveryMessage message = _mailGateway.Messages.Single();
-        message.ToEmail.Should().Be("student.real@example.com");
-        message.Subject.Should().Be("Your July Bill Is Ready");
-        message.PlainTextBody.Should().Contain("Hello Ada Student, your consolidated bill for July 2026 is now ready.");
-        message.PlainTextBody.Should().Contain("Total Amount Due: SGD 123.45");
-        message.PlainTextBody.Should().Contain("Due Date: 01 Jul 2026");
-        message.PlainTextBody.Should().Contain("http://localhost:5173/portal/payments");
+        _mailQueue.Jobs.Should().ContainSingle();
+        EmailNotificationJob job = _mailQueue.Jobs.Single();
+        job.NotificationType.Should().Be("NOTI-01");
+        job.PersonId.Should().Be(5001);
+        job.Subject.Should().Be("Your July Bill Is Ready");
+        job.PlainTextBody.Should().Contain("Hello Ada Student, your consolidated bill for July 2026 is now ready.");
+        job.PlainTextBody.Should().Contain("Total Amount Due: SGD 123.45");
+        job.PlainTextBody.Should().Contain("Due Date: 01 Jul 2026");
+        job.PlainTextBody.Should().Contain("http://localhost:5173/portal/payments");
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_WhenStatementAlreadyGenerated_DoesNotSendDuplicateMonthlyBillEmail()
+    {
+        await SeedStudentWithBillAsync(
+            personId: 5010,
+            studentName: "Generated Student",
+            billAmount: 54.20m,
+            dueDate: new DateOnly(2026, 7, 1));
+
+        await _repository.GetOrCreateAsync(
+            5010,
+            2026,
+            7,
+            new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        _mailQueue.Jobs.Should().ContainSingle();
+        _mailQueue.Jobs.Clear();
+
+        await _repository.GetOrCreateAsync(
+            5010,
+            2026,
+            7,
+            new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        _mailQueue.Jobs.Should().BeEmpty();
     }
 
     [Fact]
@@ -98,13 +127,13 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(0m);
-        _mailGateway.Messages.Should().BeEmpty();
+        _mailQueue.Jobs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GetOrCreateAsync_WhenEmailFails_StillReturnsStatement()
+    public async Task GetOrCreateAsync_WhenEmailQueueFails_StillReturnsStatement()
     {
-        _mailGateway.Result = Result.Failure(MailDeliveryErrors.MissingSmtpPassword);
+        _mailQueue.Result = Result.Failure(MailDeliveryErrors.QueueFull);
         await SeedStudentWithBillAsync(
             personId: 5003,
             studentName: "Mail Failure Student",
@@ -119,7 +148,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(88m);
-        _mailGateway.Messages.Should().ContainSingle();
+        _mailQueue.Jobs.Should().ContainSingle();
     }
 
     [Fact]
@@ -128,8 +157,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
         BillingStatementRepository repository = new(
             _dbContext,
             new FixedCoursePaymentPlanGateway(),
-            new TestDoubles.FixedEmailRecipientResolver(),
-            _mailGateway,
+            _mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false),
             NullLogger<BillingStatementRepository>.Instance);
         await SeedStudentWithBillAsync(
@@ -146,7 +174,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             CancellationToken.None);
 
         statement.OutstandingAmount.Should().Be(42m);
-        _mailGateway.Messages.Should().BeEmpty();
+        _mailQueue.Jobs.Should().BeEmpty();
     }
 
     private async Task SeedStudentWithBillAsync(
@@ -162,6 +190,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             new DateOnly(2010, 1, 1),
             "SG",
             "CITIZEN");
+        person.UpdatePreferredContact("student.real@example.com", null, null, new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc));
         Course course = new(
             organizationId: 10,
             courseCode: $"COURSE-{personId}",
@@ -212,18 +241,6 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
                 InstallmentCount: 3,
                 IntervalMonths: 1,
                 IsActive: true));
-    }
-
-    private sealed class RecordingEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-        public Result Result { get; set; } = Result.Success();
-
-        public Task<Result> SendAsync(EmailDeliveryMessage message, CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(Result);
-        }
     }
 
     private sealed class PersonOnlyModelConfiguration : IModelConfigurationContributor

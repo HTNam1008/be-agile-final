@@ -7,7 +7,6 @@ using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -17,8 +16,7 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Payments;
 
 internal sealed class CoursePaymentGateway(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
 {
@@ -329,23 +327,6 @@ internal sealed class CoursePaymentGateway(
             return;
         }
 
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(enrollment.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Course enrollment email recipient resolution failed. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Course enrollment email skipped because no valid recipient was found. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
-            return;
-        }
-
         Course course = await dbContext.Set<Course>()
             .AsNoTracking()
             .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
@@ -381,14 +362,21 @@ internal sealed class CoursePaymentGateway(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-03",
+                    enrollment.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "CourseEnrollment",
+                    enrollment.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Course enrollment success email failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
+                    "Course enrollment success email enqueue failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
                     enrollment.Id,
                     result.Error.Code);
             }
@@ -414,23 +402,6 @@ internal sealed class CoursePaymentGateway(
                 "Payment failure email skipped because MailDelivery is disabled. PersonId={PersonId} BillId={BillId}",
                 enrollment.PersonId,
                 bill.Id);
-            return;
-        }
-
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(enrollment.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Payment failure email recipient resolution failed. PersonId={PersonId} BillId={BillId}", enrollment.PersonId, bill.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Payment failure email skipped because no valid recipient was found. PersonId={PersonId} BillId={BillId}", enrollment.PersonId, bill.Id);
             return;
         }
 
@@ -466,14 +437,21 @@ internal sealed class CoursePaymentGateway(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-09",
+                    enrollment.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "Bill",
+                    bill.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Payment failure email failed. BillId={BillId} ErrorCode={ErrorCode}",
+                    "Payment failure email enqueue failed. BillId={BillId} ErrorCode={ErrorCode}",
                     bill.Id,
                     result.Error.Code);
             }

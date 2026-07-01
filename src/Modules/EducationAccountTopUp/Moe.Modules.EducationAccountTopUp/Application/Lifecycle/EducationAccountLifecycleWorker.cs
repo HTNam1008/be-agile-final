@@ -19,6 +19,8 @@ public sealed class EducationAccountLifecycleWorker(
     ILogger<EducationAccountLifecycleWorker> logger,
     IClock clock) : BackgroundService
 {
+    private DateOnly? _lastScheduledRunDate;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Education Account lifecycle worker started");
@@ -61,11 +63,17 @@ public sealed class EducationAccountLifecycleWorker(
             return;
         }
 
+        if (_lastScheduledRunDate == today)
+        {
+            return;
+        }
+
         await ProcessAsync(
             today,
             now,
             EducationAccountLifecycleRunTriggerTypes.Scheduled,
             cancellationToken);
+        _lastScheduledRunDate = today;
     }
 
     internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
@@ -88,6 +96,16 @@ public sealed class EducationAccountLifecycleWorker(
         IEducationAccountLifecycleRunRepository runs =
             runScope.ServiceProvider.GetRequiredService<IEducationAccountLifecycleRunRepository>();
         IUnitOfWork unitOfWork = runScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        if (triggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled
+            && await runs.HasScheduledRunAsync(today, cancellationToken))
+        {
+            logger.LogInformation(
+                "Scheduled lifecycle run already exists for {RunDateUtc}, skipping.",
+                today);
+            return new EducationAccountLifecycleRunResult(0, 0, Skipped: true);
+        }
+
         EducationAccountLifecycleRun run;
         try
         {

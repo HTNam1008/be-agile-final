@@ -10,7 +10,6 @@ using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -24,6 +23,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
     ILogger<MissedInstallmentPaymentEmailWorker> logger) : BackgroundService
 {
     private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
+    private readonly HashSet<long> _processedBillIds = [];
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -53,7 +53,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
         }
     }
 
-    private async Task SendDueNotificationsAsync(CancellationToken cancellationToken)
+    internal async Task SendDueNotificationsAsync(CancellationToken cancellationToken)
     {
         using IServiceScope scope = scopeFactory.CreateScope();
         IEmailDeliverySwitch mailSwitch = scope.ServiceProvider.GetRequiredService<IEmailDeliverySwitch>();
@@ -65,8 +65,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
         MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
         ICoursePaymentPlanGateway paymentPlans = scope.ServiceProvider.GetRequiredService<ICoursePaymentPlanGateway>();
-        IEmailRecipientResolver recipientResolver = scope.ServiceProvider.GetRequiredService<IEmailRecipientResolver>();
-        IEmailDeliveryGateway mailGateway = scope.ServiceProvider.GetRequiredService<IEmailDeliveryGateway>();
+        IEmailNotificationQueue mailQueue = scope.ServiceProvider.GetRequiredService<IEmailNotificationQueue>();
 
         DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         DateOnly missedDueDate = today.AddDays(-1);
@@ -97,6 +96,11 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
         foreach (MissedInstallmentCandidate candidate in candidates)
         {
+            if (_processedBillIds.Contains(candidate.BillId))
+            {
+                continue;
+            }
+
             CourseBillingPlan? plan = await paymentPlans.FindPlanAsync(
                 candidate.CoursePaymentPlanId,
                 cancellationToken);
@@ -105,33 +109,18 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
                 continue;
             }
 
-            await SendEmailAsync(candidate, recipientResolver, mailGateway, cancellationToken);
+            if (await EnqueueEmailAsync(candidate, mailQueue, cancellationToken))
+            {
+                _processedBillIds.Add(candidate.BillId);
+            }
         }
     }
 
-    private async Task SendEmailAsync(
+    private async Task<bool> EnqueueEmailAsync(
         MissedInstallmentCandidate candidate,
-        IEmailRecipientResolver recipientResolver,
-        IEmailDeliveryGateway mailGateway,
+        IEmailNotificationQueue mailQueue,
         CancellationToken cancellationToken)
     {
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(candidate.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Missed installment email recipient resolution failed. PersonId={PersonId} BillId={BillId}", candidate.PersonId, candidate.BillId);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Missed installment email skipped because no valid recipient was found. PersonId={PersonId} BillId={BillId}", candidate.PersonId, candidate.BillId);
-            return;
-        }
-
         string studentName = candidate.StudentName.Trim();
         string courseName = string.IsNullOrWhiteSpace(candidate.CourseName)
             ? "your course"
@@ -154,21 +143,32 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-11",
+                    candidate.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "Bill",
+                    candidate.BillId.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Missed installment email failed. BillId={BillId} ErrorCode={ErrorCode}",
+                    "Missed installment email enqueue failed. BillId={BillId} ErrorCode={ErrorCode}",
                     candidate.BillId,
                     result.Error.Code);
+                return false;
             }
+
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Missed installment email threw an exception. BillId={BillId}", candidate.BillId);
+            return false;
         }
     }
 

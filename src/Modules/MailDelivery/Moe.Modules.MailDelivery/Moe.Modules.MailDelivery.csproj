@@ -8,5 +8,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.MailDelivery.UnitTests" />
+    <InternalsVisibleTo Include="Moe.IdentityPlatform.UnitTests" />
   </ItemGroup>
 </Project>

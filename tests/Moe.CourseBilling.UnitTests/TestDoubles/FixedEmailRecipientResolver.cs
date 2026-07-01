@@ -1,4 +1,4 @@
-using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
 
 namespace Moe.CourseBilling.UnitTests.TestDoubles;
 
@@ -10,7 +10,7 @@ internal sealed class FixedEmailRecipientResolver(
         CancellationToken cancellationToken)
         => Task.FromResult(emailAddress is null
             ? null
-            : new EmailRecipient(emailAddress, EmailRecipientSourceCodes.Preferred));
+            : new EmailRecipient(emailAddress, EmailRecipientSourceCodes.Contact));
 
     public EmailRecipient? ResolveProvided(string? providedEmail)
         => string.IsNullOrWhiteSpace(providedEmail)

@@ -8,7 +8,6 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -24,8 +23,7 @@ internal sealed class AccountCreditGateway(
     MoeDbContext dbContext,
     IClock clock,
     ITopUpExecutionMetrics metrics,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<AccountCreditGateway> logger) : IAccountCreditGateway
 {
@@ -173,23 +171,6 @@ internal sealed class AccountCreditGateway(
             return;
         }
 
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(account.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Top-up email recipient resolution failed. PersonId={PersonId} EducationAccountId={EducationAccountId}", account.PersonId, account.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Top-up email skipped because no valid recipient was found. PersonId={PersonId} EducationAccountId={EducationAccountId}", account.PersonId, account.Id);
-            return;
-        }
-
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == account.PersonId, cancellationToken);
@@ -230,14 +211,21 @@ internal sealed class AccountCreditGateway(
 
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    "NOTI-02",
+                    account.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "EducationAccount",
+                    account.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Top-up credited email notification failed. EducationAccountId={EducationAccountId} AccountTransactionDate={CreditedAtUtc} ErrorCode={ErrorCode}",
+                    "Top-up credited email enqueue failed. EducationAccountId={EducationAccountId} AccountTransactionDate={CreditedAtUtc} ErrorCode={ErrorCode}",
                     account.Id,
                     creditedAtUtc,
                     result.Error.Code);

@@ -12,8 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 
 internal sealed class EducationAccountClosureEmailService(
     IPersonDirectory people,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
+    IEmailNotificationQueue mailQueue,
     IEmailDeliverySwitch mailSwitch,
     ILogger<EducationAccountClosureEmailService> logger)
 {
@@ -30,12 +29,6 @@ internal sealed class EducationAccountClosureEmailService(
                 "Education Account closed email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
                 account.PersonId,
                 account.Id);
-            return;
-        }
-
-        EmailRecipient? recipient = await ResolveRecipientAsync(account, "closed", cancellationToken);
-        if (recipient is null)
-        {
             return;
         }
 
@@ -74,7 +67,7 @@ internal sealed class EducationAccountClosureEmailService(
             remainingBalance,
             refundDestination);
 
-        await SendAsync(recipient.EmailAddress, subject, plainTextBody, htmlBody, account.Id, "closed", cancellationToken);
+        await EnqueueAsync(account, subject, plainTextBody, htmlBody, "NOTI-06-CLOSED", "closed", cancellationToken);
     }
 
     public async Task SendPendingClosureAsync(
@@ -89,12 +82,6 @@ internal sealed class EducationAccountClosureEmailService(
                 "Education Account pending closure email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
                 account.PersonId,
                 account.Id);
-            return;
-        }
-
-        EmailRecipient? recipient = await ResolveRecipientAsync(account, "pending closure", cancellationToken);
-        if (recipient is null)
-        {
             return;
         }
 
@@ -125,30 +112,37 @@ internal sealed class EducationAccountClosureEmailService(
             outstandingDisplay,
             deadlineDisplay);
 
-        await SendAsync(recipient.EmailAddress, subject, plainTextBody, htmlBody, account.Id, "pending closure", cancellationToken);
+        await EnqueueAsync(account, subject, plainTextBody, htmlBody, "NOTI-06-PENDING", "pending closure", cancellationToken);
     }
 
-    private async Task SendAsync(
-        string recipientEmail,
+    private async Task EnqueueAsync(
+        EducationAccount account,
         string subject,
         string plainTextBody,
         string htmlBody,
-        long accountId,
+        string notificationCode,
         string notificationType,
         CancellationToken cancellationToken)
     {
         try
         {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipientEmail, subject, plainTextBody, htmlBody),
+            Result result = await mailQueue.EnqueueAsync(
+                EmailNotificationJob.ForPerson(
+                    notificationCode,
+                    account.PersonId,
+                    subject,
+                    plainTextBody,
+                    htmlBody,
+                    "EducationAccount",
+                    account.Id.ToString(CultureInfo.InvariantCulture)),
                 cancellationToken);
 
             if (result.IsFailure)
             {
                 logger.LogWarning(
-                    "Education Account {NotificationType} email notification failed. EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
+                    "Education Account {NotificationType} email enqueue failed. EducationAccountId={EducationAccountId} ErrorCode={ErrorCode}",
                     notificationType,
-                    accountId,
+                    account.Id,
                     result.Error.Code);
             }
         }
@@ -156,40 +150,9 @@ internal sealed class EducationAccountClosureEmailService(
         {
             logger.LogWarning(
                 ex,
-                "Education Account {NotificationType} email notification threw an exception. EducationAccountId={EducationAccountId}",
+                "Education Account {NotificationType} email enqueue threw an exception. EducationAccountId={EducationAccountId}",
                 notificationType,
-                accountId);
-        }
-    }
-
-    private async Task<EmailRecipient?> ResolveRecipientAsync(
-        EducationAccount account,
-        string notificationType,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            EmailRecipient? recipient = await recipientResolver.ResolveForPersonAsync(account.PersonId, cancellationToken);
-            if (recipient is null)
-            {
-                logger.LogWarning(
-                    "Education Account {NotificationType} email skipped because no valid recipient was found. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                    notificationType,
-                    account.PersonId,
-                    account.Id);
-            }
-
-            return recipient;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Education Account {NotificationType} email recipient resolution failed. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                notificationType,
-                account.PersonId,
                 account.Id);
-            return null;
         }
     }
 

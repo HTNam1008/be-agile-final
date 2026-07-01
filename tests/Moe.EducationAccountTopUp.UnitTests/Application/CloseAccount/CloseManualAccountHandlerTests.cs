@@ -25,7 +25,7 @@ public sealed class CloseManualAccountHandlerTests
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 6, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeAuditService _audit = new();
-    private readonly FakeEmailDeliveryGateway _mailGateway = new();
+    private readonly TestDoubles.RecordingEmailNotificationQueue _mailQueue = new();
 
     [Fact]
     public async Task Handle_OnSuccess_CallsAuditServiceWithReasonAndActor()
@@ -52,9 +52,11 @@ public sealed class CloseManualAccountHandlerTests
         root.GetProperty("closedByLoginAccountId").GetInt64().Should().Be(42);
         root.TryGetProperty("remarks", out _).Should().BeFalse();
         _unitOfWork.SaveCalls.Should().Be(1);
-        _mailGateway.Messages.Should().ContainSingle();
-        _mailGateway.Messages.Single().ToEmail.Should().Be("student.real@example.com");
-        _mailGateway.Messages.Single().Subject.Should().Be("Your Education Account Has Been Closed");
+        _mailQueue.Jobs.Should().ContainSingle();
+        EmailNotificationJob job = _mailQueue.Jobs.Single();
+        job.NotificationType.Should().Be("NOTI-06-CLOSED");
+        job.PersonId.Should().Be(5001);
+        job.Subject.Should().Be("Your Education Account Has Been Closed");
     }
 
     [Fact]
@@ -78,7 +80,6 @@ public sealed class CloseManualAccountHandlerTests
         EducationAccount account = AddAccount(1008, personId: 5008);
         _people.OrganizationByPersonId[5008] = 10;
         CloseManualAccountHandler handler = CreateHandler(
-            new ThrowingEmailRecipientResolver(),
             new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
 
         var result = await handler.Handle(CreateCommand(account.Id), CancellationToken.None);
@@ -87,7 +88,7 @@ public sealed class CloseManualAccountHandlerTests
         account.StatusCode.Should().Be(AccountStatuses.Closed);
         _audit.Calls.Should().ContainSingle();
         _unitOfWork.SaveCalls.Should().Be(1);
-        _mailGateway.Messages.Should().BeEmpty();
+        _mailQueue.Jobs.Should().BeEmpty();
     }
 
     [Fact]
@@ -200,7 +201,6 @@ public sealed class CloseManualAccountHandlerTests
     }
 
     private CloseManualAccountHandler CreateHandler(
-        IEmailRecipientResolver? recipientResolver = null,
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             _educationAccounts,
@@ -212,8 +212,7 @@ public sealed class CloseManualAccountHandlerTests
             _audit,
             new EducationAccountClosureEmailService(
                 _people,
-                recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
-                _mailGateway,
+                _mailQueue,
                 mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
                 NullLogger<EducationAccountClosureEmailService>.Instance));
 
@@ -352,30 +351,6 @@ public sealed class CloseManualAccountHandlerTests
             SchoolCalls.Add(context);
             return Task.CompletedTask;
         }
-    }
-
-    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Task<Result> SendAsync(
-            EmailDeliveryMessage message,
-            CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(Result.Success());
-        }
-    }
-
-    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
-    {
-        public Task<EmailRecipient?> ResolveForPersonAsync(
-            long personId,
-            CancellationToken cancellationToken)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-
-        public EmailRecipient? ResolveProvided(string? providedEmail)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
     }
 
     private sealed record AuditCall(string ActionCode, string EntityTypeCode, string EntityId, string? DetailsJson);

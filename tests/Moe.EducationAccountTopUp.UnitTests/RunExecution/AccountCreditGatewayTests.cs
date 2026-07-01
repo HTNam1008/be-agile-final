@@ -9,7 +9,6 @@ using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -25,9 +24,9 @@ public sealed class AccountCreditGatewayTests
     public async Task Should_Credit_Account_And_Return_TransactionId()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         EducationAccount account = await AddAccountAsync(dbContext, personId: 5001, balance: 100m);
-        AccountCreditGateway gateway = CreateGateway(dbContext, mailGateway);
+        AccountCreditGateway gateway = CreateGateway(dbContext, mailQueue);
 
         var result = await gateway.CreditAccountForTopUpAsync(
             account.Id,
@@ -45,14 +44,15 @@ public sealed class AccountCreditGatewayTests
         transaction.Amount.Should().Be(50m);
         transaction.BalanceAfter.Should().Be(150m);
 
-        mailGateway.Messages.Should().ContainSingle();
-        EmailDeliveryMessage message = mailGateway.Messages.Single();
-        message.ToEmail.Should().Be("student.real@example.com");
-        message.Subject.Should().Be("Funds Credited to Your Education Account");
-        message.PlainTextBody.Should().Contain("SGD 50.00 has been credited to your Education Account.");
-        message.PlainTextBody.Should().Contain("Reason/Campaign: Test top-up");
-        message.PlainTextBody.Should().Contain("Updated Balance: SGD 150.00");
-        message.HtmlBody.Should().Contain("View My Account");
+        mailQueue.Jobs.Should().ContainSingle();
+        EmailNotificationJob job = mailQueue.Jobs.Single();
+        job.NotificationType.Should().Be("NOTI-02");
+        job.PersonId.Should().Be(5001);
+        job.Subject.Should().Be("Funds Credited to Your Education Account");
+        job.PlainTextBody.Should().Contain("SGD 50.00 has been credited to your Education Account.");
+        job.PlainTextBody.Should().Contain("Reason/Campaign: Test top-up");
+        job.PlainTextBody.Should().Contain("Updated Balance: SGD 150.00");
+        job.HtmlBody.Should().Contain("View My Account");
     }
 
     [Fact]
@@ -190,15 +190,15 @@ public sealed class AccountCreditGatewayTests
     }
 
     [Fact]
-    public async Task Should_Not_Fail_Credit_When_Email_Fails()
+    public async Task Should_Not_Fail_Credit_When_Email_Queue_Fails()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new()
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new()
         {
-            ResultToReturn = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
+            Result = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
         };
         EducationAccount account = await AddAccountAsync(dbContext, personId: 5008, balance: 100m);
-        AccountCreditGateway gateway = CreateGateway(dbContext, mailGateway);
+        AccountCreditGateway gateway = CreateGateway(dbContext, mailQueue);
 
         var result = await gateway.CreditAccountForTopUpAsync(
             account.Id,
@@ -208,19 +208,18 @@ public sealed class AccountCreditGatewayTests
 
         result.IsSuccess.Should().BeTrue();
         account.CachedBalance.Should().Be(125m);
-        mailGateway.Messages.Should().ContainSingle();
+        mailQueue.Jobs.Should().ContainSingle();
     }
 
     [Fact]
     public async Task Should_Credit_Account_Without_Email_When_MailDelivery_Disabled()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         EducationAccount account = await AddAccountAsync(dbContext, personId: 5009, balance: 100m);
         AccountCreditGateway gateway = CreateGateway(
             dbContext,
-            mailGateway,
-            new ThrowingEmailRecipientResolver(),
+            mailQueue,
             new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
 
         var result = await gateway.CreditAccountForTopUpAsync(
@@ -231,7 +230,7 @@ public sealed class AccountCreditGatewayTests
 
         result.IsSuccess.Should().BeTrue();
         account.CachedBalance.Should().Be(125m);
-        mailGateway.Messages.Should().BeEmpty();
+        mailQueue.Jobs.Should().BeEmpty();
     }
 
     private static MoeDbContext CreateDbContext()
@@ -258,13 +257,15 @@ public sealed class AccountCreditGatewayTests
 
         account.UpdateBalance(balance);
         dbContext.Set<EducationAccount>().Add(account);
-        dbContext.Set<Person>().Add(new Person(
+        Person person = new(
             personId,
             $"EXT-{personId}",
             $"Student {personId}",
             new DateOnly(2000, 1, 1),
             "SG",
-            null));
+            null);
+        person.UpdatePreferredContact("student.real@example.com", null, null, _clock.UtcNow.UtcDateTime);
+        dbContext.Set<Person>().Add(person);
         await dbContext.SaveChangesAsync();
 
         return account;
@@ -272,15 +273,13 @@ public sealed class AccountCreditGatewayTests
 
     private AccountCreditGateway CreateGateway(
         MoeDbContext dbContext,
-        FakeEmailDeliveryGateway? mailGateway = null,
-        IEmailRecipientResolver? recipientResolver = null,
+        IEmailNotificationQueue? mailQueue = null,
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
             _clock,
             new FakeTopUpExecutionMetrics(),
-            recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
-            mailGateway ?? new FakeEmailDeliveryGateway(),
+            mailQueue ?? new TestDoubles.RecordingEmailNotificationQueue(),
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<AccountCreditGateway>.Instance);
 
@@ -330,27 +329,4 @@ public sealed class AccountCreditGatewayTests
         public void RecordAccountCreditDbConflict() { }
     }
 
-    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Result ResultToReturn { get; init; } = Result.Success();
-
-        public Task<Result> SendAsync(EmailDeliveryMessage message, CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(ResultToReturn);
-        }
-    }
-
-    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
-    {
-        public Task<EmailRecipient?> ResolveForPersonAsync(
-            long personId,
-            CancellationToken cancellationToken)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-
-        public EmailRecipient? ResolveProvided(string? providedEmail)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-    }
 }
