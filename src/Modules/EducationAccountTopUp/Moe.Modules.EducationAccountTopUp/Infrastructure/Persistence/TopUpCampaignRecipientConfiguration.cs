@@ -14,5 +14,8 @@ internal sealed class TopUpCampaignRecipientConfiguration : IEntityTypeConfigura
         builder.HasIndex(x => new { x.TopUpCampaignId, x.EducationAccountId }).IsUnique();
         builder.Property(x => x.AmountOverride).HasPrecision(19, 2);
         builder.Property(x => x.AddedAtUtc).HasColumnName("AddedAt");
+        builder.Property(x => x.DeletedAtUtc).HasColumnName("DeletedAt");
+        builder.Property(x => x.DeletedByLoginAccountId).HasColumnName("DeletedByLoginAccountId");
+        builder.HasQueryFilter(x => x.DeletedAtUtc == null);
     }
 }

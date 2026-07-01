@@ -104,7 +104,8 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
                 var (frontmatter, body) = SplitFrontmatter(raw);
                 var meta = ParseFrontmatter(frontmatter);
 
-                string chunkId = MapChunkId(meta.GetValueOrDefault("chunk_id", ""));
+                string domain = meta.GetValueOrDefault("domain", "FAS").ToUpperInvariant();
+                string chunkId = MapChunkId(meta.GetValueOrDefault("chunk_id", ""), domain);
                 string title = meta.GetValueOrDefault("title", resourceName);
                 string confidence = meta.GetValueOrDefault("confidence", "medium");
                 string status = confidence switch
@@ -124,9 +125,10 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
                 }
 
                 string content = body.Trim();
+                string url = meta.GetValueOrDefault("url", domain == "PAYMENT" ? "/portal/bills" : "/portal/fas");
 
-                chunks.Add(new KnowledgeDocument(chunkId, title, title, "FAS", status, "1.0", effectiveDate,
-                    content, "/portal/fas", synonyms, alwaysInclude));
+                chunks.Add(new KnowledgeDocument(chunkId, title, title, domain, status, "1.0", effectiveDate,
+                    content, url, synonyms, alwaysInclude));
             }
             catch (Exception ex)
             {
@@ -180,18 +182,25 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             .ToArray();
     }
 
-    private static string MapChunkId(string chunkId) => chunkId switch
+    private static string MapChunkId(string chunkId, string domain)
     {
-        "chunk-01-glossary" => "FAS-GLOSSARY-001",
-        "chunk-02-scope-and-fallback" => "FAS-SCOPE-001",
-        "chunk-03-jc-ci-fas" => "FAS-JC-CI-001",
-        "chunk-04-tiered-fee-subsidy" => "FAS-TIERED-SUBSIDY-001",
-        "chunk-05-bursary-fulltime" => "FAS-BURSARY-FULLTIME-001",
-        "chunk-06-bursary-parttime" => "FAS-BURSARY-PARTTIME-001",
-        "chunk-07-application-process" => "FAS-APPLICATION-001",
-        "chunk-08-faqs" => "FAS-FAQS-001",
-        _ => $"FAS-{chunkId.ToUpperInvariant()}"
-    };
+        if (domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"PAY-{chunkId.ToUpperInvariant()}";
+        }
+        return chunkId switch
+        {
+            "chunk-01-glossary" => "FAS-GLOSSARY-001",
+            "chunk-02-scope-and-fallback" => "FAS-SCOPE-001",
+            "chunk-03-jc-ci-fas" => "FAS-JC-CI-001",
+            "chunk-04-tiered-fee-subsidy" => "FAS-TIERED-SUBSIDY-001",
+            "chunk-05-bursary-fulltime" => "FAS-BURSARY-FULLTIME-001",
+            "chunk-06-bursary-parttime" => "FAS-BURSARY-PARTTIME-001",
+            "chunk-07-application-process" => "FAS-APPLICATION-001",
+            "chunk-08-faqs" => "FAS-FAQS-001",
+            _ => $"FAS-{chunkId.ToUpperInvariant()}"
+        };
+    }
 
     public sealed record KnowledgeDocument(
         string Id, string Title, string Section, string Domain, string Status,

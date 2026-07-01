@@ -32,7 +32,8 @@ internal sealed class CancelEnrollmentHandler(
     IStudentDirectory students,
     ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
     INotificationWriter notificationWriter,
-    IClock clock)
+    IClock clock,
+    CourseWithdrawalEmailService withdrawalEmails)
     : ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>
 {
     public async Task<Result<EnrollmentCancellationResponse>> Handle(
@@ -99,6 +100,7 @@ internal sealed class CancelEnrollmentHandler(
             snapshot.Enrollment.PersonId,
             snapshot.Course.CourseName,
             cancellationToken);
+        await withdrawalEmails.SendAsync(snapshot, calculation, refundResult, cancellationToken);
 
         return Result<EnrollmentCancellationResponse>.Success(new(
             snapshot.Enrollment.Id,

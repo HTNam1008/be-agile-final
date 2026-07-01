@@ -84,10 +84,11 @@ public sealed class CreateFasSchemeValidationTests
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         CreateFasTierRequest tier = source.Tiers[0];
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, null, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 19, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, -1, 18, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 13, 121, null), tier.CriteriaValues[1]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, null, 18, null), tier.CriteriaValues[1], tier.CriteriaValues[2], tier.CriteriaValues[3]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 19, 18, null), tier.CriteriaValues[1], tier.CriteriaValues[2], tier.CriteriaValues[3]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, -1, 18, null), tier.CriteriaValues[1], tier.CriteriaValues[2], tier.CriteriaValues[3]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 15, 18, null), tier.CriteriaValues[1], tier.CriteriaValues[2], tier.CriteriaValues[3]] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [new(1, 16, 31, null), tier.CriteriaValues[1], tier.CriteriaValues[2], tier.CriteriaValues[3]] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -95,9 +96,9 @@ public sealed class CreateFasSchemeValidationTests
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
         CreateFasTierRequest tier = source.Tiers[0];
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], new(2, 1, null, ["Singapore Citizen"])] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], new(2, null, null, [])] }] }).IsValid.Should().BeFalse();
-        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], new(2, null, null, ["Unknown"])] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], tier.CriteriaValues[1], tier.CriteriaValues[2], new(4, 1, null, ["Singapore Citizen"])] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], tier.CriteriaValues[1], tier.CriteriaValues[2], new(4, null, null, [])] }] }).IsValid.Should().BeFalse();
+        _validator.Validate(source with { Tiers = [tier with { CriteriaValues = [tier.CriteriaValues[0], tier.CriteriaValues[1], tier.CriteriaValues[2], new(4, null, null, ["Unknown"])] }] }).IsValid.Should().BeFalse();
     }
 
     [Fact]
@@ -133,6 +134,63 @@ public sealed class CreateFasSchemeValidationTests
         _validator.Validate(source with { Tiers = [source.Tiers[0], source.Tiers[0] with { DisplayOrder = 2 }] }).IsValid.Should().BeFalse();
     }
 
+    [Fact]
+    public void Grouped_criteria_allow_repeated_types_across_or_groups()
+    {
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+        CreateFasSchemeRequest grouped = source with
+        {
+            CriteriaTemplate = [],
+            CriteriaGroups =
+            [
+                new(1, [new("GHI", null, 1), new("PCI", null, 2), new("NATIONALITY", null, 3)]),
+                new(2, [new("GHI", null, 4), new("PCI", null, 5), new("PARENT_NATIONALITY", null, 6)])
+            ],
+            Tiers =
+            [
+                source.Tiers[0] with
+                {
+                    CriteriaValues =
+                    [
+                        new(1, 0, 3000, null),
+                        new(2, 0, 1000, null),
+                        new(3, null, null, ["Singapore Citizen"]),
+                        new(4, 0, 3000, null),
+                        new(5, 0, 1000, null),
+                        new(6, null, null, ["Permanent Resident"])
+                    ]
+                }
+            ]
+        };
+
+        _validator.Validate(grouped).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Grouped_criteria_reject_or_inside_a_group()
+    {
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+        CreateFasSchemeRequest grouped = source with
+        {
+            CriteriaTemplate = [],
+            CriteriaGroups = [new(1, [new("NATIONALITY", "OR", 1), new("PCI", null, 2)])]
+        };
+
+        _validator.Validate(grouped).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Ghi_and_pci_are_required()
+    {
+        CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
+
+        _validator.Validate(source with
+        {
+            CriteriaTemplate = [new("AGE", "AND", 1), new("NATIONALITY", null, 2)],
+            Tiers = [new("Full", 100, 1, [new(1, 16, 18, null), new(2, null, null, ["Singapore Citizen"])])]
+        }).IsValid.Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(null, true)]
     [InlineData("DRAFT", true)]
@@ -148,6 +206,9 @@ public sealed class CreateFasSchemeValidationTests
     [InlineData("schemeName", "asc", true)]
     [InlineData("createdDate", "desc", true)]
     [InlineData("status", "asc", true)]
+    [InlineData("schemeCode", "asc", true)]
+    [InlineData("duration", "desc", true)]
+    [InlineData("applicationCount", "asc", true)]
     [InlineData("grantCode", "asc", false)]
     [InlineData("schemeName", "descending", false)]
     public void List_sort_validation_is_explicit(string? sortBy, string? sortDirection, bool valid)

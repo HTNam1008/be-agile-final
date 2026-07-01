@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
@@ -52,6 +53,7 @@ public sealed class CourseBillingModule : IModule
 
         services.AddScoped<ICourseEnrollmentRepository, CourseEnrollmentRepository>();
         services.AddScoped<ICoursePaymentGateway, CoursePaymentGateway>();
+        services.AddHostedService<MissedInstallmentPaymentEmailWorker>();
         services.AddScoped<IAdminCourseRepository, AdminCourseRepository>();
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
         services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
@@ -64,7 +66,9 @@ public sealed class CourseBillingModule : IModule
         services.AddScoped<ICurrentAdminContext, CurrentAdminContext>();
         services.AddScoped<ICourseMaterialStorageService, AzureBlobCourseMaterialStorageService>();
         services.AddScoped<ICourseMaterialPreviewConverter, PowerPointCourseMaterialPreviewConverter>();
-        services.AddSingleton<ICourseMaterialPreviewCache, AzureBlobCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewRedisCache, RedisCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewBlobCache, AzureBlobCourseMaterialPreviewCache>();
+        services.AddSingleton<ICourseMaterialPreviewCache, CompositeCourseMaterialPreviewCache>();
 
         services.AddScoped<IQueryHandler<ListCoursesQuery, PageResponse<CourseSummaryDto>>, ListCoursesQueryHandler>();
         services.AddScoped<IQueryHandler<GetCourseQuery, CourseDetailDto>, GetCourseQueryHandler>();

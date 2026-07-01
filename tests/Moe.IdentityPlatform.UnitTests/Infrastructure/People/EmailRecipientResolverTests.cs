@@ -17,7 +17,7 @@ namespace Moe.IdentityPlatform.UnitTests.Infrastructure.People;
 public sealed class EmailRecipientResolverTests
 {
     [Fact]
-    public async Task ResolveForPersonAsync_PrefersPreferredThenContactThenOfficial()
+    public async Task ResolveForPersonAsync_UsesStudentLoginAccountContactEmail()
     {
         await using MoeDbContext db = CreateDbContext();
         Person person = CreatePerson("official@example.com");
@@ -36,45 +36,54 @@ public sealed class EmailRecipientResolverTests
         EmailRecipient? result = await CreateResolver(db, Environments.Production)
             .ResolveForPersonAsync(person.Id, CancellationToken.None);
 
-        result.Should().Be(new EmailRecipient("preferred@example.com", EmailRecipientSourceCodes.Preferred));
+        result.Should().Be(new EmailRecipient("contact@example.com", EmailRecipientSourceCodes.Contact));
     }
 
     [Fact]
-    public async Task ResolveForPersonAsync_UsesContactWhenPreferredIsInvalid()
+    public async Task ResolveForPersonAsync_UsesNewestStudentContactEmail()
     {
         await using MoeDbContext db = CreateDbContext();
         Person person = CreatePerson("official@example.com");
-        person.UpdatePreferredContact("invalid-address", null, null, DateTime.UtcNow);
-        UserAccount account = UserAccount.CreateStudentSingpass(
+        UserAccount olderAccount = UserAccount.CreateStudentSingpass(
             person.Id,
             "issuer",
-            "subject",
+            "subject-old",
             "Student",
             null,
             DateTime.UtcNow);
-        account.UpdateContactDetails("contact@example.com", null, DateTime.UtcNow);
-        db.AddRange(person, account);
+        olderAccount.UpdateContactDetails("old-contact@example.com", null, DateTime.UtcNow);
+        typeof(UserAccount).GetProperty(nameof(UserAccount.Id))!.SetValue(olderAccount, 10);
+        UserAccount newerAccount = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject-new",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        newerAccount.UpdateContactDetails("new-contact@example.com", null, DateTime.UtcNow);
+        typeof(UserAccount).GetProperty(nameof(UserAccount.Id))!.SetValue(newerAccount, 11);
+        db.AddRange(person, olderAccount, newerAccount);
         await db.SaveChangesAsync();
 
         EmailRecipient? result = await CreateResolver(db, Environments.Production)
             .ResolveForPersonAsync(person.Id, CancellationToken.None);
 
-        result.Should().Be(new EmailRecipient("contact@example.com", EmailRecipientSourceCodes.Contact));
+        result.Should().Be(new EmailRecipient("new-contact@example.com", EmailRecipientSourceCodes.Contact));
     }
 
     [Fact]
-    public async Task ResolveForPersonAsync_UsesOfficialWhenOtherCandidatesAreMissing()
+    public async Task ResolveForPersonAsync_DoesNotUsePersonEmails()
     {
         await using MoeDbContext db = CreateDbContext();
         Person person = CreatePerson("official@example.com");
-        person.UpdatePreferredContact(null, null, null, DateTime.UtcNow);
+        person.UpdatePreferredContact("preferred@example.com", null, null, DateTime.UtcNow);
         db.Add(person);
         await db.SaveChangesAsync();
 
         EmailRecipient? result = await CreateResolver(db, Environments.Production)
             .ResolveForPersonAsync(person.Id, CancellationToken.None);
 
-        result.Should().Be(new EmailRecipient("official@example.com", EmailRecipientSourceCodes.Official));
+        result.Should().BeNull();
     }
 
     [Fact]

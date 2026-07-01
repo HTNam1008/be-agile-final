@@ -40,6 +40,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             new FixedCoursePaymentPlanGateway(),
             new TestDoubles.FixedEmailRecipientResolver(),
             _mailGateway,
+            new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<BillingStatementRepository>.Instance);
     }
 
@@ -119,6 +120,33 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
 
         statement.OutstandingAmount.Should().Be(88m);
         _mailGateway.Messages.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_WhenMailDeliveryDisabled_StillReturnsStatementAndSkipsEmail()
+    {
+        BillingStatementRepository repository = new(
+            _dbContext,
+            new FixedCoursePaymentPlanGateway(),
+            new TestDoubles.FixedEmailRecipientResolver(),
+            _mailGateway,
+            new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false),
+            NullLogger<BillingStatementRepository>.Instance);
+        await SeedStudentWithBillAsync(
+            personId: 5004,
+            studentName: "Disabled Mail Student",
+            billAmount: 42m,
+            dueDate: new DateOnly(2026, 7, 15));
+
+        var statement = await repository.GetOrCreateAsync(
+            5004,
+            2026,
+            7,
+            new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        statement.OutstandingAmount.Should().Be(42m);
+        _mailGateway.Messages.Should().BeEmpty();
     }
 
     private async Task SeedStudentWithBillAsync(

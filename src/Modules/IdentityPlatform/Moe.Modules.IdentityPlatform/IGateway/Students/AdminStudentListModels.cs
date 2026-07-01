@@ -6,9 +6,12 @@ public sealed record AdminStudentListCriteria(
     IReadOnlyCollection<string> LevelCodes,
     string? ClassCode,
     AdminStudentAccountStatusFilter AccountStatus,
+    AdminStudentPortalAccessStatusFilter PortalAccessStatus,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
     int Page,
-    int PageSize)
+    int PageSize,
+    string? SortBy,
+    string? SortDirection)
 {
     public static AdminStudentListCriteria Default(
         long? organizationId = null,
@@ -17,18 +20,24 @@ public sealed record AdminStudentListCriteria(
         IReadOnlyCollection<string>? levelCodes = null,
         string? classCode = null,
         AdminStudentAccountStatusFilter accountStatus = AdminStudentAccountStatusFilter.All,
+        AdminStudentPortalAccessStatusFilter portalAccessStatus = AdminStudentPortalAccessStatusFilter.All,
         AdminStudentEnrollmentStatusFilter enrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
         int page = 1,
-        int pageSize = 10)
+        int pageSize = 10,
+        string? sortBy = null,
+        string? sortDirection = null)
         => new(
             organizationId,
             search,
             levelCodes ?? (string.IsNullOrWhiteSpace(levelCode) ? [] : [levelCode]),
             classCode,
             accountStatus,
+            portalAccessStatus,
             enrollmentStatus,
             page,
-            pageSize);
+            pageSize,
+            sortBy,
+            sortDirection);
 }
 
 public enum AdminStudentAccountStatusFilter
@@ -38,6 +47,13 @@ public enum AdminStudentAccountStatusFilter
     PendingClosure,
     Closed,
     NoAccount
+}
+
+public enum AdminStudentPortalAccessStatusFilter
+{
+    All,
+    Active,
+    Disabled
 }
 
 public enum AdminStudentEnrollmentStatusFilter
@@ -61,6 +77,9 @@ public sealed record AdminStudentListItem(
     string NationalityCode,
     string? LevelCode,
     string? ClassCode,
+    string PersonStatusCode,
+    long? UserAccountId,
+    string? UserAccountStatusCode,
     string? AccountStatusCode,
     decimal? Balance,
     string EnrollmentStatusCode,

@@ -25,9 +25,12 @@ public sealed class ListAdminStudentsHandlerTests
                 LevelCodes: [],
                 ClassCode: null,
                 AccountStatus: AdminStudentAccountStatusFilter.All,
+                PortalAccessStatus: AdminStudentPortalAccessStatusFilter.All,
                 EnrollmentStatus: AdminStudentEnrollmentStatusFilter.All,
                 Page: 1,
-                PageSize: 20),
+                PageSize: 20,
+                SortBy: null,
+                SortDirection: null),
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -49,9 +52,12 @@ public sealed class ListAdminStudentsHandlerTests
                 LevelCodes: [],
                 ClassCode: null,
                 AccountStatus: AdminStudentAccountStatusFilter.All,
+                PortalAccessStatus: AdminStudentPortalAccessStatusFilter.All,
                 EnrollmentStatus: AdminStudentEnrollmentStatusFilter.All,
                 Page: 1,
-                PageSize: 20),
+                PageSize: 20,
+                SortBy: null,
+                SortDirection: null),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

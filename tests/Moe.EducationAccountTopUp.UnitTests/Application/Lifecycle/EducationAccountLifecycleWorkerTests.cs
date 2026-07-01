@@ -85,22 +85,52 @@ public sealed class EducationAccountLifecycleWorkerTests
     }
 
     [Fact]
-    public async Task RunIfDueAsync_ClosesAccountsBeforeOpeningEligibleAccounts()
+    public async Task RunIfDueAsync_SendsRemindersThenClosesAccountsBeforeOpeningEligibleAccounts()
     {
         List<string> events = [];
         FakeEligiblePersonLookupGateway people = new([1]);
         FakeAutomaticEducationAccountCreator creator = new(events);
         FakeAutomaticEducationAccountCloser closer = new(events);
+        FakeAge30AccountLockReminderEmailService reminders = new(events);
         EducationAccountLifecycleWorker worker = CreateWorker(
             new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
             new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
             people,
             creator,
-            closer);
+            closer,
+            reminders: reminders);
 
         await worker.RunIfDueAsync(CancellationToken.None);
 
-        events.Should().Equal("close", "open:1");
+        events.Should().Equal("remind:2026-06-24", "close", "open:1");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenReminderFails_ContinuesLifecycle()
+    {
+        FakeEligiblePersonLookupGateway people = new([1]);
+        FakeAutomaticEducationAccountCreator creator = new();
+        FakeAutomaticEducationAccountCloser closer = new();
+        FakeAge30AccountLockReminderEmailService reminders = new()
+        {
+            ExceptionToThrow = new InvalidOperationException("mail failed")
+        };
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer,
+            reminders: reminders);
+
+        EducationAccountLifecycleRunResult result = await worker.ProcessAsync(
+            new DateOnly(2026, 6, 24),
+            new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero),
+            CancellationToken.None);
+
+        result.OpenedCount.Should().Be(1);
+        closer.Calls.Should().Be(1);
+        reminders.Calls.Should().Be(1);
     }
 
     [Fact]
@@ -255,13 +285,16 @@ public sealed class EducationAccountLifecycleWorkerTests
         FakeEligiblePersonLookupGateway people,
         FakeAutomaticEducationAccountCreator creator,
         FakeAutomaticEducationAccountCloser closer,
-        FakeEducationAccountLifecycleRunRepository? runs = null)
+        FakeEducationAccountLifecycleRunRepository? runs = null,
+        FakeAge30AccountLockReminderEmailService? reminders = null)
     {
         runs ??= new FakeEducationAccountLifecycleRunRepository();
+        reminders ??= new FakeAge30AccountLockReminderEmailService();
         ServiceProvider provider = new ServiceCollection()
             .AddSingleton<IEligiblePersonLookupGateway>(people)
             .AddSingleton<IAutomaticEducationAccountCreator>(creator)
             .AddSingleton<IAutomaticEducationAccountCloser>(closer)
+            .AddSingleton<IAge30AccountLockReminderEmailService>(reminders)
             .AddSingleton<IEducationAccountLifecycleRunRepository>(runs)
             .AddSingleton<IUnitOfWork>(new FakeUnitOfWork(runs))
             .BuildServiceProvider();
@@ -298,6 +331,25 @@ public sealed class EducationAccountLifecycleWorkerTests
             CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
+        }
+    }
+
+    private sealed class FakeAge30AccountLockReminderEmailService(List<string>? events = null)
+        : IAge30AccountLockReminderEmailService
+    {
+        public int Calls { get; private set; }
+        public Exception? ExceptionToThrow { get; init; }
+
+        public Task SendDueRemindersAsync(DateOnly today, CancellationToken cancellationToken)
+        {
+            Calls++;
+            events?.Add($"remind:{today:yyyy-MM-dd}");
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
+            return Task.CompletedTask;
         }
     }
 

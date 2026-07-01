@@ -14,7 +14,10 @@ public sealed record CreateFasSchemeRequest(
     string SchemeCode, string GrantCode, string Name, string? Description,
     DateOnly StartDate, DateOnly EndDate, IReadOnlyList<long> CourseIds,
     string SubsidyType, IReadOnlyList<FasCriteriaTemplateItem> CriteriaTemplate,
-    IReadOnlyList<CreateFasTierRequest> Tiers);
+    IReadOnlyList<CreateFasTierRequest> Tiers,
+    IReadOnlyList<FasCriteriaGroupRequest>? CriteriaGroups = null);
+
+public sealed record FasCriteriaGroupRequest(int DisplayOrder, IReadOnlyList<FasCriteriaTemplateItem> Criteria);
 
 public sealed record FasCriteriaTemplateItem(string CriteriaType, string? ConnectorToNext, int DisplayOrder);
 
@@ -33,6 +36,7 @@ public sealed record FasSchemeListItem(long SchemeId, string SchemeCode, string 
     int ApplicationCount);
 public sealed record FasSchemeDetail(long SchemeId, string SchemeCode, string GrantCode, string Name,
     string? Description, DateOnly StartDate, DateOnly EndDate, string Status, IReadOnlyList<long> CourseIds,
-    string SubsidyType, IReadOnlyList<FasCriteriaTemplateItem> CriteriaTemplate, IReadOnlyList<FasTierDetail> Tiers);
+    string SubsidyType, IReadOnlyList<FasCriteriaTemplateItem> CriteriaTemplate, IReadOnlyList<FasTierDetail> Tiers,
+    IReadOnlyList<FasCriteriaGroupRequest>? CriteriaGroups = null);
 public sealed record FasTierDetail(long TierId, string Label, decimal SubsidyValue, int DisplayOrder,
     IReadOnlyList<FasTierCriteriaValue> CriteriaValues);

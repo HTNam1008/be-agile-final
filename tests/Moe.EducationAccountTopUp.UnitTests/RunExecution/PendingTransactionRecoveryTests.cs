@@ -14,6 +14,7 @@ namespace Moe.EducationAccountTopUp.UnitTests.RunExecution;
 public sealed class PendingTransactionRecoveryTests
 {
     private readonly FakeTopUpTransactionRepository _transactions = new();
+    private readonly FakeTopUpRunRepository _runs = new();
     private readonly FakeAccountCreditGateway _accountGateway = new();
     private readonly FakeTopUpExecutionEventPublisher _events = new();
     private readonly FakeTopUpExecutionMetrics _metrics = new();
@@ -115,6 +116,7 @@ public sealed class PendingTransactionRecoveryTests
     {
         return new PendingTransactionRecoveryService(
             _transactions,
+            _runs,
             _accountGateway,
             _events,
             _metrics,
@@ -135,8 +137,19 @@ public sealed class PendingTransactionRecoveryTests
         public Task<TopUpTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey));
         public Task<TopUpTransaction?> GetByRunAndAccountAsync(long topUpRunId, long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.SingleOrDefault(x => x.TopUpRunId == topUpRunId && x.EducationAccountId == educationAccountId));
         public Task<List<TopUpTransaction>> GetByRunIdAsync(long topUpRunId, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.Where(x => x.TopUpRunId == topUpRunId).ToList());
+        public Task<IReadOnlyList<TopUpTransaction>> GetPendingByRunIdPagedAsync(long topUpRunId, int skip, int take, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<TopUpTransaction>>(_transactions.Where(x => x.TopUpRunId == topUpRunId && x.TransactionStatusCode == TopUpTransactionStatusCodes.Pending).Skip(skip).Take(take).ToList());
+        public Task<decimal> GetTotalDisbursedForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0m);
+        public Task<List<TopUpTransaction>> GetByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult(_transactions.Where(x => x.EducationAccountId == educationAccountId).ToList());
+        public Task<(List<TopUpTransaction> Transactions, long TotalCount)> GetByAccountIdPagedAsync(long educationAccountId, int skip, int take, CancellationToken cancellationToken = default)
+        {
+            var all = _transactions.Where(x => x.EducationAccountId == educationAccountId).OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc).ToList();
+            return Task.FromResult<(List<TopUpTransaction>, long)>((all.Skip(skip).Take(take).ToList(), all.Count));
+        }
+        public Task<long> CountByAccountIdAsync(long educationAccountId, CancellationToken cancellationToken = default) => Task.FromResult((long)_transactions.Count(x => x.EducationAccountId == educationAccountId));
         public void Add(TopUpTransaction transaction) => _transactions.Add(transaction);
         public Task AddAsync(TopUpTransaction transaction, CancellationToken cancellationToken = default) { Add(transaction); return Task.CompletedTask; }
+        public Task<bool> TryReserveBudgetAsync(long campaignId, decimal requestedAmount, decimal budgetCap, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class FakeAccountCreditGateway : IAccountCreditGateway
@@ -191,6 +204,20 @@ public sealed class PendingTransactionRecoveryTests
             TopUpReceivedReports.Add(report);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeTopUpRunRepository : ITopUpRunRepository
+    {
+        private TopUpRun? _run;
+
+        public void Seed(TopUpRun run) => _run = run;
+        public Task<TopUpRun?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult(_run);
+        public Task<IReadOnlyList<TopUpRun>> GetByIdsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpRun>>(_run != null && ids.Contains(_run.Id) ? [_run] : []);
+        public Task<TopUpRun?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default) => Task.FromResult<TopUpRun?>(null);
+        public Task<bool> ExistsForScheduledOccurrenceAsync(long campaignId, DateTime scheduledFor, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> HasRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> HasActiveRunsForCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task AddAsync(TopUpRun run, CancellationToken cancellationToken = default) { _run = run; return Task.CompletedTask; }
     }
 
     private sealed class FakeTopUpExecutionMetrics : ITopUpExecutionMetrics

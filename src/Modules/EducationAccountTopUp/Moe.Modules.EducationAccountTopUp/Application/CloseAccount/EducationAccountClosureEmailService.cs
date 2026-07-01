@@ -14,6 +14,7 @@ internal sealed class EducationAccountClosureEmailService(
     IPersonDirectory people,
     IEmailRecipientResolver recipientResolver,
     IEmailDeliveryGateway mailGateway,
+    IEmailDeliverySwitch mailSwitch,
     ILogger<EducationAccountClosureEmailService> logger)
 {
     private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
@@ -23,6 +24,15 @@ internal sealed class EducationAccountClosureEmailService(
         string reason,
         CancellationToken cancellationToken)
     {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Education Account closed email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
+                account.PersonId,
+                account.Id);
+            return;
+        }
+
         EmailRecipient? recipient = await ResolveRecipientAsync(account, "closed", cancellationToken);
         if (recipient is null)
         {
@@ -73,6 +83,15 @@ internal sealed class EducationAccountClosureEmailService(
         DateOnly deadlineDate,
         CancellationToken cancellationToken)
     {
+        if (!mailSwitch.IsEnabled)
+        {
+            logger.LogInformation(
+                "Education Account pending closure email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
+                account.PersonId,
+                account.Id);
+            return;
+        }
+
         EmailRecipient? recipient = await ResolveRecipientAsync(account, "pending closure", cancellationToken);
         if (recipient is null)
         {
@@ -222,11 +241,7 @@ internal sealed class EducationAccountClosureEmailService(
     private static StringBuilder StartBody(string title)
     {
         StringBuilder builder = new();
-        builder.Append("<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head>");
-        builder.Append("<body bgcolor=\"#eef4fb\" style=\"margin:0;padding:0;background-color:#eef4fb;font-family:Arial,Helvetica,sans-serif;color:#172033;\">");
-        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#eef4fb\" style=\"background-color:#eef4fb;\">");
-        builder.Append("<tr><td align=\"center\" style=\"padding:28px 12px;\">");
-        builder.Append("<table role=\"presentation\" width=\"640\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#ffffff\" style=\"width:640px;max-width:100%;background-color:#ffffff;border:1px solid #dce3ee;\">");
+        EmailTemplateBranding.AppendShellStart(builder);
         EmailTemplateBranding.AppendHeader(builder, title);
         builder.Append("<tr><td style=\"padding:30px;\">");
         return builder;

@@ -8,6 +8,28 @@ public static class EmailTemplateBranding
     public const string PrimaryColor = "#DC343B";
     public const string PrimarySoftColor = "#fff1f2";
     public const string PrimaryTextColor = "#9f1239";
+    public const string PortalHeroBackgroundColor = "#ffffff";
+    public const string PortalHeroBackgroundStyle = "background-color:#ffffff;background-image:radial-gradient(circle at 92% 8%, rgba(239, 51, 64, .08), transparent 24%),linear-gradient(100deg,#fff 0%,#fff 100%);";
+    public const string CardBorderColor = "#dce3ee";
+
+    public static void AppendShellStart(StringBuilder builder)
+    {
+        builder.Append("<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head>");
+        builder.Append("<body bgcolor=\"")
+            .Append(PortalHeroBackgroundColor)
+            .Append("\" style=\"margin:0;padding:0;")
+            .Append(PortalHeroBackgroundStyle)
+            .Append("font-family:Arial,Helvetica,sans-serif;color:#172033;\">");
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"")
+            .Append(PortalHeroBackgroundColor)
+            .Append("\" style=\"")
+            .Append(PortalHeroBackgroundStyle)
+            .Append("\">");
+        builder.Append("<tr><td align=\"center\" style=\"padding:28px 12px;\">");
+        builder.Append("<table role=\"presentation\" width=\"640\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" bgcolor=\"#ffffff\" style=\"width:640px;max-width:100%;background-color:#ffffff;border:1px solid ")
+            .Append(CardBorderColor)
+            .Append(";border-radius:16px;overflow:hidden;box-shadow:0 12px 28px rgba(15, 23, 42, .08);\">");
+    }
 
     public static void AppendHeader(StringBuilder builder, string title)
     {
