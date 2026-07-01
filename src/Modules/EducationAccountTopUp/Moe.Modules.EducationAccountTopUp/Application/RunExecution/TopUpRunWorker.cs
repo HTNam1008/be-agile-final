@@ -96,7 +96,7 @@ public sealed class TopUpRunWorker(
         }
 
         TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, cancellationToken);
-        bool isInstant = string.Equals(campaign?.DeliveryTypeCode, "INSTANT", StringComparison.OrdinalIgnoreCase);
+        bool isInstant = string.Equals(campaign?.DeliveryTypeCode, DeliveryType.Instant, StringComparison.OrdinalIgnoreCase);
         decimal? maxTotalAmount = (!isInstant && campaign?.MaxTotalAmount > 0) ? campaign.MaxTotalAmount : null;
 
         await recovery.RecoverPendingTransactionsAsync(
