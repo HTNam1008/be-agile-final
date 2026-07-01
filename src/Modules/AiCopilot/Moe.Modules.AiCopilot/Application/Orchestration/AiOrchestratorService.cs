@@ -299,16 +299,19 @@ public sealed class AiOrchestratorService(
     private static string DetermineMode(string message, string current, string? domain)
     {
         string value = $"{domain} {message}".ToUpperInvariant();
+        string msgOnly = message.ToUpperInvariant();
         if (current == "FAS_INTERVIEW") return "FAS_INTERVIEW";
         if (IsFasInterviewRequest(value)) return "FAS_INTERVIEW";
-        if (value.Contains("PAY") || value.Contains("BILL") || value.Contains("BALANCE") || value.Contains("OUTSTANDING") || value.Contains("REFUND") || value.Contains("WITHDRAW")) return "PAYMENT";
+        bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
+        bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
+        if (isPaymentDomain || msgHasPaymentKeyword) return "PAYMENT";
         return "GENERAL";
     }
 
     private static bool IsFasInterviewRequest(string value)
     {
         bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE");
-        bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP ME APPLY)\b", RegexOptions.IgnoreCase);
+        bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW)\b", RegexOptions.IgnoreCase);
         bool eligibilityWithoutFas = value.Contains("ELIGIB") || value.Contains("QUALIF");
         return eligibilityWithoutFas || (mentionsFas && asksForInterview);
     }
