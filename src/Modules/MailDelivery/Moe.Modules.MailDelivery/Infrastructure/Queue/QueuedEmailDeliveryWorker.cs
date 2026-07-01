@@ -18,6 +18,10 @@ internal sealed class QueuedEmailDeliveryWorker(
     IOptions<MailDeliveryOptions> options,
     ILogger<QueuedEmailDeliveryWorker> logger) : BackgroundService
 {
+    private readonly object _rateLimitLock = new();
+    private DateTime _rateWindowStartedAtUtc = DateTime.MinValue;
+    private int _sentInWindow;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -61,14 +65,24 @@ internal sealed class QueuedEmailDeliveryWorker(
         IClock clock = scope.ServiceProvider.GetRequiredService<IClock>();
 
         DateTime nowUtc = clock.UtcNow.UtcDateTime;
+        int remainingRateLimit = GetRemainingRateLimit(nowUtc, workerOptions);
+        if (remainingRateLimit <= 0)
+        {
+            return 0;
+        }
+
         int batchSize = Math.Clamp(workerOptions.BatchSize, 1, 100);
+        int effectiveBatchSize = Math.Min(batchSize, remainingRateLimit);
 
         List<EmailNotification> jobs = await dbContext.Set<EmailNotification>()
-            .Where(job => EmailNotificationStatusCodes.Queueable.Contains(job.StatusCode)
-                && job.NextAttemptAtUtc <= nowUtc)
+            .Where(job =>
+                (EmailNotificationStatusCodes.Queueable.Contains(job.StatusCode)
+                    && job.NextAttemptAtUtc <= nowUtc)
+                || (job.StatusCode == EmailNotificationStatusCodes.Processing
+                    && job.LockedUntilUtc <= nowUtc))
             .OrderByDescending(job => job.Priority)
             .ThenBy(job => job.CreatedAtUtc)
-            .Take(batchSize)
+            .Take(effectiveBatchSize)
             .ToListAsync(cancellationToken);
 
         foreach (EmailNotification job in jobs)
@@ -80,16 +94,22 @@ internal sealed class QueuedEmailDeliveryWorker(
 
         foreach (EmailNotification job in jobs)
         {
-            await ProcessAsync(scope.ServiceProvider, job, cancellationToken);
+            bool smtpAttempted = await ProcessAsync(scope.ServiceProvider, job, workerOptions, cancellationToken);
+            if (smtpAttempted)
+            {
+                RegisterSendAttempt(clock.UtcNow.UtcDateTime, workerOptions);
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         return jobs.Count;
     }
 
-    private async Task ProcessAsync(
+    private async Task<bool> ProcessAsync(
         IServiceProvider services,
         EmailNotification job,
+        MailDeliveryWorkerOptions workerOptions,
         CancellationToken cancellationToken)
     {
         IEmailRecipientResolver recipientResolver = services.GetRequiredService<IEmailRecipientResolver>();
@@ -109,7 +129,7 @@ internal sealed class QueuedEmailDeliveryWorker(
                 "MAIL_DELIVERY.RECIPIENT_NOT_FOUND",
                 "No valid recipient was found.",
                 clock.UtcNow.UtcDateTime);
-            return;
+            return false;
         }
 
         Result result = await deliveryGateway.SendAsync(
@@ -122,6 +142,7 @@ internal sealed class QueuedEmailDeliveryWorker(
 
         if (result.IsFailure)
         {
+            DateTime failedAtUtc = clock.UtcNow.UtcDateTime;
             logger.LogWarning(
                 "Queued email delivery failed. NotificationType={NotificationType} EntityType={EntityType} EntityId={EntityId} PersonId={PersonId} RecipientSource={RecipientSource} ErrorCode={ErrorCode}",
                 job.NotificationType,
@@ -130,8 +151,20 @@ internal sealed class QueuedEmailDeliveryWorker(
                 job.PersonId,
                 recipient.SourceCode,
                 result.Error.Code);
-            job.MarkFinalFailure(result.Error.Code, result.Error.Message, clock.UtcNow.UtcDateTime);
-            return;
+
+            if (IsRetryable(result.Error) && job.AttemptCount + 1 < Math.Max(1, job.MaxAttempts))
+            {
+                job.MarkRetryableFailure(
+                    result.Error.Code,
+                    result.Error.Message,
+                    CalculateNextAttemptAtUtc(failedAtUtc, job.AttemptCount + 1));
+            }
+            else
+            {
+                job.MarkFinalFailure(result.Error.Code, result.Error.Message, failedAtUtc);
+            }
+
+            return true;
         }
 
         job.MarkSent(MaskEmail(recipient.EmailAddress), recipient.SourceCode, clock.UtcNow.UtcDateTime);
@@ -143,10 +176,74 @@ internal sealed class QueuedEmailDeliveryWorker(
             job.EntityId,
             job.PersonId,
             recipient.SourceCode);
+
+        return true;
     }
 
     private static Task DelayAsync(MailDeliveryWorkerOptions workerOptions, CancellationToken cancellationToken)
         => Task.Delay(TimeSpan.FromSeconds(Math.Clamp(workerOptions.PollIntervalSeconds, 1, 300)), cancellationToken);
+
+    private int GetRemainingRateLimit(DateTime nowUtc, MailDeliveryWorkerOptions workerOptions)
+    {
+        int maxEmailsPerMinute = workerOptions.MaxEmailsPerMinute;
+        if (maxEmailsPerMinute <= 0)
+        {
+            return int.MaxValue;
+        }
+
+        lock (_rateLimitLock)
+        {
+            ResetRateWindowIfNeeded(nowUtc);
+            return Math.Max(0, maxEmailsPerMinute - _sentInWindow);
+        }
+    }
+
+    private void RegisterSendAttempt(DateTime nowUtc, MailDeliveryWorkerOptions workerOptions)
+    {
+        if (workerOptions.MaxEmailsPerMinute <= 0)
+        {
+            return;
+        }
+
+        lock (_rateLimitLock)
+        {
+            ResetRateWindowIfNeeded(nowUtc);
+            _sentInWindow++;
+        }
+    }
+
+    private void ResetRateWindowIfNeeded(DateTime nowUtc)
+    {
+        if (_rateWindowStartedAtUtc == DateTime.MinValue
+            || nowUtc - _rateWindowStartedAtUtc >= TimeSpan.FromMinutes(1))
+        {
+            _rateWindowStartedAtUtc = nowUtc;
+            _sentInWindow = 0;
+        }
+    }
+
+    private static DateTime CalculateNextAttemptAtUtc(DateTime failedAtUtc, int failedAttemptCount)
+    {
+        int delayMinutes = failedAttemptCount switch
+        {
+            <= 1 => 1,
+            2 => 5,
+            3 => 15,
+            _ => 30
+        };
+
+        return failedAtUtc.AddMinutes(delayMinutes);
+    }
+
+    private static bool IsRetryable(Error error)
+    {
+        if (string.Equals(error.Code, MailDeliveryErrors.MissingSmtpPassword.Code, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return string.Equals(error.Code, "MAIL_DELIVERY.SEND_FAILED", StringComparison.Ordinal);
+    }
 
     private static string MaskEmail(string email)
     {

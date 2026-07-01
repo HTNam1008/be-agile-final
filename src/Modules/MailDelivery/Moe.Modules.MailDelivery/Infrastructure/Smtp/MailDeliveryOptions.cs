@@ -60,6 +60,7 @@ public sealed class MailDeliveryOptions
             && IsValidEmail(options.FromEmail)
             && !string.IsNullOrWhiteSpace(options.FromDisplayName)
             && IsValidFallback(options)
+            && IsValidWorker(options.Worker)
             && (string.IsNullOrWhiteSpace(options.DevelopmentFallbackRecipient)
                 || IsValidEmail(options.DevelopmentFallbackRecipient));
     }
@@ -77,6 +78,13 @@ public sealed class MailDeliveryOptions
     private static bool IsValidEmail(string? emailAddress)
         => !string.IsNullOrWhiteSpace(emailAddress)
             && MailAddress.TryCreate(emailAddress.Trim(), out _);
+
+    private static bool IsValidWorker(MailDeliveryWorkerOptions worker)
+        => worker.BatchSize is >= 1 and <= 500
+            && worker.PollIntervalSeconds is >= 1 and <= 300
+            && worker.MaxAttempts is >= 1 and <= 20
+            && worker.MaxEmailsPerMinute >= 0
+            && worker.LockSeconds is >= 10 and <= 3600;
 }
 
 public sealed class MailDeliveryWorkerOptions
