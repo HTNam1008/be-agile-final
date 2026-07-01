@@ -5,5 +5,5 @@ public sealed class EducationAccountLifecycleOptions
     public const string SectionName = "EducationAccountLifecycle";
 
     public bool Enabled { get; set; } = true;
-    public string RunAtUtc { get; set; } = "02:00";
+    public string RunAtUtc { get; set; } = "18:00";
 }
