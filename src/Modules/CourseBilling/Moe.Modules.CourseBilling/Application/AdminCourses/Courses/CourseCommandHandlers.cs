@@ -4,6 +4,9 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.Application.AdminCourses.Courses;
@@ -219,7 +222,13 @@ internal sealed class RemoveCourseCommandHandler(AdminCourseAccess access, IAudi
     }
 }
 
-internal sealed class PublishCourseCommandHandler(AdminCourseAccess access, IAuditService audit, IUnitOfWork unitOfWork)
+internal sealed class PublishCourseCommandHandler(
+    AdminCourseAccess access,
+    IAuditService audit,
+    IUnitOfWork unitOfWork,
+    IStudentDirectory students,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter)
     : ICommandHandler<PublishCourseCommand, CourseDetailDto>
 {
     public async Task<Result<CourseDetailDto>> Handle(PublishCourseCommand command, CancellationToken cancellationToken)
@@ -287,11 +296,51 @@ internal sealed class PublishCourseCommandHandler(AdminCourseAccess access, IAud
             cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await NotifyEnrollOpenAsync(course, cancellationToken);
+
         return await access.LoadCourseDetailAsync(command.CourseId, cancellationToken);
+    }
+
+    private async Task NotifyEnrollOpenAsync(Course course, CancellationToken cancellationToken)
+    {
+        IReadOnlyCollection<long> personIds = await students.FindActivePersonIdsByOrganizationAsync(
+            course.OrganizationId,
+            cancellationToken);
+
+        if (personIds.Count == 0)
+        {
+            return;
+        }
+
+        System.Collections.Generic.List<long> userAccountIds = new();
+        foreach (long personId in personIds)
+        {
+            long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(personId, cancellationToken);
+            if (userAccountId.HasValue)
+            {
+                userAccountIds.Add(userAccountId.Value);
+            }
+        }
+
+        foreach (long userAccountId in userAccountIds.Distinct())
+        {
+            await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId,
+                    NotificationTypeCode.EnrollOpen,
+                    $"Enrollment Open: {course.CourseCode}",
+                    $"Registration for {course.CourseName} is open until {course.EnrollmentCloseAtUtc:yyyy-MM-dd HH:mm}."),
+                cancellationToken);
+        }
     }
 }
 
-internal sealed class DisableCourseCommandHandler(AdminCourseAccess access, IAuditService audit, IUnitOfWork unitOfWork)
+internal sealed class DisableCourseCommandHandler(
+    AdminCourseAccess access,
+    IAuditService audit,
+    IUnitOfWork unitOfWork,
+    INotificationWriter notificationWriter,
+    IStudentNotificationRecipientResolver notificationRecipients)
     : ICommandHandler<DisableCourseCommand, CourseDetailDto>
 {
     public async Task<Result<CourseDetailDto>> Handle(DisableCourseCommand command, CancellationToken cancellationToken)
@@ -308,12 +357,39 @@ internal sealed class DisableCourseCommandHandler(AdminCourseAccess access, IAud
                     new SchoolAuditDetails("Course disabled", EntityDisplayName: result.Value.CourseName)),
                 cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            await NotifyCourseDisabledAsync(result.Value.CourseId, result.Value.CourseName, cancellationToken);
         }
 
         return result;
     }
-}
 
+    private async Task NotifyCourseDisabledAsync(long courseId, string courseName, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<AdminCourseEnrollmentDto> enrollments = await access.Courses.ListEnrollmentsAsync(courseId, cancellationToken);
+        if (enrollments.Count == 0)
+        {
+            return;
+        }
+
+        foreach (AdminCourseEnrollmentDto enrollment in enrollments.Where(x => x.EnrollmentStatusCode is not CourseEnrollmentStatusCodes.Cancelled and not CourseEnrollmentStatusCodes.Exited))
+        {
+            long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(enrollment.PersonId, cancellationToken);
+            if (userAccountId is null)
+            {
+                continue;
+            }
+
+            await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId.Value,
+                    NotificationTypeCode.CourseDisabled,
+                    "Course Suspended",
+                    $"Reason: MOE administrative action. The course {courseName} is currently unavailable."),
+                cancellationToken);
+        }
+    }
+}
 internal sealed class EnableCourseCommandHandler(AdminCourseAccess access, IAuditService audit, IUnitOfWork unitOfWork)
     : ICommandHandler<EnableCourseCommand, CourseDetailDto>
 {
@@ -336,3 +412,8 @@ internal sealed class EnableCourseCommandHandler(AdminCourseAccess access, IAudi
         return result;
     }
 }
+
+
+
+
+

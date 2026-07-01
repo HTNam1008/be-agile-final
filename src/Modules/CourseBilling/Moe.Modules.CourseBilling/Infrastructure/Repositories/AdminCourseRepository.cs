@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Modules.CourseBilling.Contracts.AdminCourses;
 using Moe.Modules.CourseBilling.Domain.Billing;
@@ -6,12 +7,19 @@ using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
-internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCourseRepository
+internal sealed class AdminCourseRepository(
+    MoeDbContext dbContext,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter,
+    ILogger<AdminCourseRepository> logger) : IAdminCourseRepository
 {
     public async Task<PageResponse<CourseSummaryDto>> ListCoursesAsync(
         CourseQueryRequest request,
@@ -368,12 +376,15 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
             return 0;
         }
 
+        Course course = await dbContext.Set<Course>().AsNoTracking()
+            .SingleAsync(x => x.Id == courseId, cancellationToken);
         var strategy = dbContext.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
+            List<(long PersonId, long BillId, string BillNumber, DateOnly DueDate, decimal NetPayableAmount)> issuedNotifications = [];
             int issuedCount = 0;
             IReadOnlyList<CourseFeeBillingAmount> feeAmounts = CourseFeeAmountCalculator.Calculate(fees);
             decimal grossAmount = feeAmounts.Sum(x => x.Amount);
@@ -412,11 +423,28 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
                     await dbContext.Set<BillLine>().AddAsync(billLineResult.Value, cancellationToken);
                 }
 
+                issuedNotifications.Add((
+                    enrollment.PersonId,
+                    billResult.Value.Id,
+                    billResult.Value.BillNumber,
+                    billResult.Value.CurrentDueDate,
+                    billResult.Value.NetPayableAmount));
                 issuedCount++;
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            foreach (var notification in issuedNotifications)
+            {
+                await NotifyBillIssuedAsync(
+                    notification.PersonId,
+                    course,
+                    notification.BillNumber,
+                    notification.DueDate,
+                    notification.NetPayableAmount,
+                    cancellationToken);
+            }
 
             return issuedCount;
         });
@@ -455,6 +483,39 @@ internal sealed class AdminCourseRepository(MoeDbContext dbContext) : IAdminCour
            where fee.CourseId == courseId && (!activeOnly || fee.IsActive)
            orderby fee.SequenceNumber, component.ComponentName
            select new CourseFeeDetail(fee, component);
+
+    private async Task NotifyBillIssuedAsync(
+        long personId,
+        Course course,
+        string billNumber,
+        DateOnly dueDate,
+        decimal netPayableAmount,
+        CancellationToken cancellationToken)
+    {
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(personId, cancellationToken);
+        if (userAccountId is null)
+        {
+            logger.LogWarning("Bill issued notification skipped because no user account was found for person {PersonId}.", personId);
+            return;
+        }
+
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.BillIssued,
+                $"Bill Issued: {billNumber}",
+                $"New bill for {course.CourseName}. Net Payable: {netPayableAmount:N2}. Due: {dueDate:yyyy-MM-dd}."),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "Bill issued notification failed. PersonId={PersonId} BillNumber={BillNumber} Error={ErrorCode}",
+                personId,
+                billNumber,
+                result.Error.Code);
+        }
+    }
 }
 
 internal sealed record CourseFeeProjection(

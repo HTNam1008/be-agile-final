@@ -82,6 +82,8 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IEligiblePersonReader, EligiblePersonReader>();
         services.AddScoped<ILifecyclePersonDisplayReader, LifecyclePersonDisplayReader>();
         services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();
+        services.AddScoped<IStudentNotificationRecipientResolver, StudentNotificationRecipientResolver>();
+        services.AddScoped<ISchoolAdminNotificationRecipientResolver, SchoolAdminNotificationRecipientResolver>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IExternalIdentityProvisioningRepository, UserAccountRepository>();
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();
@@ -131,3 +133,7 @@ public sealed class IdentityPlatformModule : IModule
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }
+
+
+
+

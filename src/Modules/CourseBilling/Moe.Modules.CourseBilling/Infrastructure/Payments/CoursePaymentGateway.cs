@@ -8,8 +8,11 @@ using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
@@ -19,6 +22,8 @@ internal sealed class CoursePaymentGateway(
     MoeDbContext dbContext,
     IEmailRecipientResolver recipientResolver,
     IEmailDeliveryGateway mailGateway,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter,
     ILogger<CoursePaymentGateway> logger) : ICoursePaymentGateway
 {
     private const string CourseDetailUrl = "http://localhost:5173/portal/courses";
@@ -96,6 +101,7 @@ internal sealed class CoursePaymentGateway(
         CourseEnrollment enrollment = await dbContext.Set<CourseEnrollment>()
             .SingleAsync(candidate => candidate.Id == enrollmentId, cancellationToken);
         enrollment.LockForPaymentFailure();
+        await NotifyBillOverdueAsync(billId, cancellationToken);
     }
 
     public async Task ApplyFullRefundAsync(long billId, DateTime refundedAtUtc, CancellationToken cancellationToken)
@@ -446,5 +452,53 @@ internal sealed class CoursePaymentGateway(
             .Append(value)
             .Append("</div>");
         builder.Append("</td></tr>");
+    }
+
+    private async Task NotifyBillOverdueAsync(long billId, CancellationToken cancellationToken)
+    {
+        var row = await (
+            from bill in dbContext.Set<Bill>().AsNoTracking()
+            join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+                on bill.CourseEnrollmentId equals enrollment.Id
+            join course in dbContext.Set<Course>().AsNoTracking()
+                on enrollment.CourseId equals course.Id
+            where bill.Id == billId
+            select new
+            {
+                enrollment.PersonId,
+                bill.BillNumber,
+                bill.OutstandingAmount,
+                course.CourseName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return;
+        }
+
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(row.PersonId, cancellationToken);
+        if (userAccountId is null)
+        {
+            logger.LogWarning("Bill overdue notification skipped because no user account was found for person {PersonId}.", row.PersonId);
+            return;
+        }
+
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.BillOverdue,
+                "Urgent: Bill Overdue",
+                $"Bill {row.BillNumber} for {row.CourseName} is now OUTSTANDING. Please pay {row.OutstandingAmount:N2} immediately."),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "Bill overdue notification failed. PersonId={PersonId} BillId={BillId} Error={ErrorCode}",
+                row.PersonId,
+                billId,
+                result.Error.Code);
+        }
     }
 }

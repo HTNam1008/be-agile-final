@@ -4,9 +4,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
+using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Xunit;
 
@@ -19,6 +22,9 @@ public sealed class RunExecutionOrchestratorTests
     private readonly FakeTopUpTransactionRepository _transactions = new();
     private readonly FakeTopUpExecutionEventPublisher _events = new();
     private readonly FakeTopUpExecutionMetrics _metrics = new();
+    private readonly FakeEducationAccountRepository _educationAccounts = new();
+    private readonly FakeStudentNotificationRecipientResolver _notificationRecipientResolver = new();
+    private readonly FakeNotificationWriter _notificationWriter = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateTimeOffset(2026, 6, 18, 4, 0, 0, TimeSpan.Zero));
 
@@ -232,12 +238,33 @@ public sealed class RunExecutionOrchestratorTests
             _recipientProcessor,
             new FakeTopUpCampaignRepository(),
             _runs,
+            _educationAccounts,
             _transactions,
             _events,
             _metrics,
+            _notificationRecipientResolver,
+            _notificationWriter,
             _unitOfWork,
             _clock,
             NullLogger<RunExecutionOrchestrator>.Instance);
+    }
+
+    private sealed class FakeEducationAccountRepository : IEducationAccountRepository
+    {
+        public Task<EducationAccount?> FindByIdAsync(long educationAccountId, CancellationToken cancellationToken)
+            => Task.FromResult<EducationAccount?>(null);
+
+        public Task<EducationAccount?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<EducationAccount?>(null);
+
+        public Task<IReadOnlyCollection<EducationAccount>> ListActiveAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<EducationAccount>>([]);
+
+        public Task<bool> ExistsForPersonAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult(false);
+
+        public Task AddAsync(EducationAccount account, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 
     private TopUpRun AddRun()
@@ -496,6 +523,23 @@ public sealed class RunExecutionOrchestratorTests
         { }
 
         public void RecordAccountCreditDbConflict() { }
+    }
+
+    private sealed class FakeStudentNotificationRecipientResolver : IStudentNotificationRecipientResolver
+    {
+        public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<long?>(null);
+    }
+
+    private sealed class FakeNotificationWriter : INotificationWriter
+    {
+        public List<NotificationCreateRequest> Requests { get; } = [];
+
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return Task.FromResult(Result<long>.Success(Requests.Count));
+        }
     }
 
     private sealed class FakeTopUpCampaignRepository : ITopUpCampaignRepository
