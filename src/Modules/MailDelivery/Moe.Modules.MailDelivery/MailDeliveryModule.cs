@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Modules;
+using Moe.Modules.MailDelivery.Application.Admin;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Infrastructure.Queue;
 using Moe.Modules.MailDelivery.Infrastructure.Smtp;
@@ -26,6 +27,7 @@ public sealed class MailDeliveryModule : IModule
         services.AddSingleton<IEmailDeliveryGateway, SmtpEmailDeliveryGateway>();
         services.AddSingleton<IEmailNotificationQueue, InMemoryEmailNotificationQueue>();
         services.AddScoped<IEmailNotificationScheduler, EmailNotificationScheduler>();
+        services.AddScoped<IMailNotificationAdminService, MailNotificationAdminService>();
         if (IsBackgroundJobEnabled(configuration, "MailDelivery:QueueWorker"))
         {
             services.AddHostedService<QueuedEmailDeliveryWorker>();
