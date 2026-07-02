@@ -144,7 +144,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                 principalSchema: "topup",
                 principalTable: "TopUpRuleGroup",
                 principalColumn: "TopUpRuleGroupId",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Restrict);
         }
 
         /// <inheritdoc />

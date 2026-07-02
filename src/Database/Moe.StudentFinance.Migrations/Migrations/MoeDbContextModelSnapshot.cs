@@ -10694,7 +10694,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRuleGroup", null)
                         .WithMany("Rules")
                         .HasForeignKey("TopUpRuleGroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
