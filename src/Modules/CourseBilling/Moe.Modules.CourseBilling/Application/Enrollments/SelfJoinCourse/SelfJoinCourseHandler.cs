@@ -107,7 +107,7 @@ internal sealed class SelfJoinCourseHandler(
 
         DateOnly enrolledDate = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         DateOnly firstDueDate = installment
-            ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(utcNow)
             : enrolledDate;
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(

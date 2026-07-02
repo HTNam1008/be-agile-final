@@ -37,8 +37,9 @@ public sealed class SelfJoinCourseHandlerEmailTests
         SetId(course, 100);
 
         RecordingCoursePaymentGateway coursePayments = new();
+        EnrollmentRepositoryDouble enrollments = new(course);
         SelfJoinCourseHandler handler = new(
-            new EnrollmentRepositoryDouble(course),
+            enrollments,
             new PaymentPlanGatewayDouble(new CourseBillingPlan(
                 CoursePaymentPlanId: 300,
                 CourseId: course.Id,
@@ -58,6 +59,7 @@ public sealed class SelfJoinCourseHandlerEmailTests
 
         result.IsSuccess.Should().BeTrue();
         coursePayments.InstallmentEnrollmentIds.Should().ContainSingle();
+        enrollments.LastFirstDueDate.Should().Be(new DateOnly(2026, 8, 8));
     }
 
     private static void SetId<T>(Entity<T> entity, T id) where T : notnull
@@ -67,6 +69,8 @@ public sealed class SelfJoinCourseHandlerEmailTests
 
     private sealed class EnrollmentRepositoryDouble(Course course) : ICourseEnrollmentRepository
     {
+        public DateOnly? LastFirstDueDate { get; private set; }
+
         public Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken)
             => Task.FromResult<long?>(course.OrganizationId);
 
@@ -121,6 +125,7 @@ public sealed class SelfJoinCourseHandlerEmailTests
             IReadOnlyCollection<CourseFasSubsidy> fasSubsidies,
             CancellationToken cancellationToken)
         {
+            LastFirstDueDate = firstDueDate;
             SetId(enrollment, 500);
             Bill bill = Bill.IssueForCourseEnrollment(
                 enrollment.Id,

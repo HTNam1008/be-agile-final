@@ -13,6 +13,8 @@ using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.MailDelivery;
+using Moe.Modules.MailDelivery.Domain;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.StudentFinance.Persistence;
 using Xunit;
@@ -108,11 +110,59 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         context.Queue.Jobs.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task SendDueNotificationsAsync_OnDueDate_DoesNotEnqueue()
+    {
+        TestContext context = await CreateContextAsync(
+            dueDate: new DateOnly(2026, 8, 8),
+            outstandingAmount: 25m,
+            planTypeCode: "INSTALLMENT",
+            utcNow: new DateTimeOffset(2026, 8, 8, 8, 0, 0, TimeSpan.Zero));
+
+        await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
+
+        context.Queue.Jobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SendDueNotificationsAsync_DayAfterDueDate_EnqueuesNotification()
+    {
+        TestContext context = await CreateContextAsync(
+            dueDate: new DateOnly(2026, 8, 8),
+            outstandingAmount: 25m,
+            planTypeCode: "INSTALLMENT",
+            utcNow: new DateTimeOffset(2026, 8, 9, 8, 0, 0, TimeSpan.Zero));
+
+        await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
+
+        EmailNotificationJob job = context.Queue.Jobs.Should().ContainSingle().Subject;
+        job.NotificationType.Should().Be("NOTI-11");
+        job.PlainTextBody.Should().Contain("08 Aug 2026");
+    }
+
+    [Fact]
+    public async Task SendDueNotificationsAsync_WhenNotificationAlreadyExists_DoesNotEnqueueDuplicate()
+    {
+        TestContext context = await CreateContextAsync(
+            dueDate: new DateOnly(2026, 8, 8),
+            outstandingAmount: 25m,
+            planTypeCode: "INSTALLMENT",
+            utcNow: new DateTimeOffset(2026, 8, 9, 8, 0, 0, TimeSpan.Zero),
+            seedMissedNotification: true);
+
+        await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
+
+        context.Queue.Jobs.Should().BeEmpty();
+        context.PaymentPlans.Calls.Should().Be(0);
+    }
+
     private static async Task<TestContext> CreateContextAsync(
         DateOnly dueDate,
         decimal outstandingAmount,
         string planTypeCode,
-        bool mailEnabled = true)
+        bool mailEnabled = true,
+        DateTimeOffset? utcNow = null,
+        bool seedMissedNotification = false)
     {
         DbContextOptions<MoeDbContext> options = new DbContextOptionsBuilder<MoeDbContext>()
             .UseInMemoryDatabase($"missed-installment-worker-{Guid.NewGuid():N}")
@@ -120,7 +170,8 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         IModelConfigurationContributor[] contributors =
         [
             new CourseBillingModelConfiguration(),
-            new PersonOnlyModelConfiguration()
+            new PersonOnlyModelConfiguration(),
+            new MailDeliveryModelConfiguration()
         ];
 
         await using (MoeDbContext dbContext = new(options, contributors))
@@ -160,6 +211,21 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
                 outstandingAmount).Value;
             dbContext.Add(bill);
             await dbContext.SaveChangesAsync();
+
+            if (seedMissedNotification)
+            {
+                dbContext.Set<EmailNotification>().Add(EmailNotification.Create(
+                    "NOTI-11",
+                    person.Id,
+                    "Missed Installment Payment",
+                    "Already scheduled.",
+                    null,
+                    "Bill",
+                    bill.Id.ToString(),
+                    utcNow?.UtcDateTime ?? TodayUtc.UtcDateTime,
+                    3));
+                await dbContext.SaveChangesAsync();
+            }
         }
 
         RecordingEmailNotificationQueue queue = new();
@@ -176,7 +242,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         ServiceProvider provider = services.BuildServiceProvider();
         MissedInstallmentPaymentEmailWorker worker = new(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            new FixedClock(TodayUtc),
+            new FixedClock(utcNow ?? TodayUtc),
             NullLogger<MissedInstallmentPaymentEmailWorker>.Instance,
             Options.Create(new CourseBillingWorkerOptions()));
 
