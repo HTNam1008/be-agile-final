@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Audit;
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
@@ -15,7 +16,8 @@ internal sealed class UpsertCampaignRulesCommandHandler(
     IUnitOfWork unitOfWork,
     ITransactionalExecutor transactions,
     IAdminAccessControl adminAccess,
-    IAuditService audit) : ICommandHandler<UpsertCampaignRulesCommand>
+    IAuditService audit,
+    IClock clock) : ICommandHandler<UpsertCampaignRulesCommand>
 {
     public async Task<Result> Handle(UpsertCampaignRulesCommand command, CancellationToken cancellationToken)
     {
@@ -50,7 +52,7 @@ internal sealed class UpsertCampaignRulesCommandHandler(
         await ruleGroups.DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
 
         int totalCriteria = 0;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = clock.UtcNow.UtcDateTime;
 
         for (int groupIndex = 0; groupIndex < command.Groups.Count; groupIndex++)
         {
