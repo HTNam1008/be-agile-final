@@ -645,22 +645,15 @@ internal sealed class CoursePaymentGateway(
             return;
         }
 
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.BillOverdue,
                 "Urgent: Bill Overdue",
                 $"Bill {row.BillNumber} for {row.CourseName} is now OUTSTANDING. Please pay {row.OutstandingAmount:N2} immediately."),
+            logger,
+            "Course bill overdue",
             cancellationToken);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "Bill overdue notification failed. PersonId={PersonId} BillId={BillId} Error={ErrorCode}",
-                row.PersonId,
-                billId,
-                result.Error.Code);
-        }
     }
 
     private async Task NotifyPaymentCompletedAsync(
@@ -707,42 +700,28 @@ internal sealed class CoursePaymentGateway(
 
         if (studentUserAccountId is not null)
         {
-            Result<long> result = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     studentUserAccountId.Value,
                     NotificationTypeCode.PaymentSuccess,
                     title,
                     studentBody),
+                logger,
+                "Course payment completed student notification",
                 cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Payment success notification failed for student. EnrollmentId={EnrollmentId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                    enrollmentId,
-                    studentUserAccountId.Value,
-                    result.Error.Code);
-            }
         }
 
         foreach (long schoolAdminUserAccountId in schoolAdminUserAccountIds.Distinct())
         {
-            Result<long> result = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     schoolAdminUserAccountId,
                     NotificationTypeCode.PaymentSuccess,
                     title,
                     $"Student {studentName} completed payment of {paidAmount:N2} for {row.CourseName} at {paidAtUtc:yyyy-MM-dd HH:mm}."),
+                logger,
+                "Course payment completed school admin notification",
                 cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Payment success notification failed for school admin. EnrollmentId={EnrollmentId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                    enrollmentId,
-                    schoolAdminUserAccountId,
-                    result.Error.Code);
-            }
         }
     }
 }

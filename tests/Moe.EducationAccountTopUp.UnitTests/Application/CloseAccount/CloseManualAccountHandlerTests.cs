@@ -241,7 +241,8 @@ public sealed class CloseManualAccountHandlerTests
                 new TestDoubles.RecordingEmailNotificationScheduler(_mailQueue, mailSwitch),
                 new TestDoubles.FixedEmailBrandingProvider()),
             _notificationRecipients,
-            _notificationWriter);
+            _notificationWriter,
+            NullLogger<CloseManualAccountHandler>.Instance);
 
     private static CloseManualAccountCommand CreateCommand(long educationAccountId)
         => new(

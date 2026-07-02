@@ -1,5 +1,6 @@
 using System.Reflection;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
@@ -56,7 +57,55 @@ public sealed class SelfJoinCourseHandlerEmailTests
             new StudentDirectoryDouble(),
             new StudentNotificationRecipientResolverDouble(),
             new NotificationWriterDouble(),
-            new FixedClock(Now));
+            new FixedClock(Now),
+            NullLogger<SelfJoinCourseHandler>.Instance);
+
+        Result<CourseEnrollmentResponse> result = await handler.Handle(
+            new SelfJoinCourseCommand(course.Id, 300),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        coursePayments.InstallmentEnrollmentIds.Should().ContainSingle();
+        enrollments.LastFirstDueDate.Should().Be(new DateOnly(2026, 8, 8));
+    }
+
+    [Fact]
+    public async Task Handle_WhenNotificationWriterThrows_StillCompletesEnrollment()
+    {
+        Course course = new(
+            organizationId: 20,
+            courseCode: "DT101",
+            courseName: "Design Thinking 101",
+            description: null,
+            startDate: new DateOnly(2026, 8, 12),
+            endDate: new DateOnly(2026, 11, 12),
+            enrollmentOpenAtUtc: Now.AddDays(-1),
+            enrollmentCloseAtUtc: Now.AddDays(1),
+            actorLoginAccountId: 9001,
+            utcNow: Now);
+        course.Publish(9001, Now);
+        SetId(course, 100);
+
+        RecordingCoursePaymentGateway coursePayments = new();
+        EnrollmentRepositoryDouble enrollments = new(course);
+        SelfJoinCourseHandler handler = new(
+            enrollments,
+            new PaymentPlanGatewayDouble(new CourseBillingPlan(
+                CoursePaymentPlanId: 300,
+                CourseId: course.Id,
+                PlanTypeCode: "INSTALLMENT",
+                InstallmentCount: 3,
+                IntervalMonths: 1,
+                IsActive: true)),
+            coursePayments,
+            new FasGatewayDouble(),
+            new CurrentUserDouble(),
+            new StudentAccessDouble(),
+            new StudentDirectoryDouble(),
+            new StudentNotificationRecipientResolverDouble(),
+            new NotificationWriterDouble(throwOnCreate: true),
+            new FixedClock(Now),
+            NullLogger<SelfJoinCourseHandler>.Instance);
 
         Result<CourseEnrollmentResponse> result = await handler.Handle(
             new SelfJoinCourseCommand(course.Id, 300),
@@ -323,10 +372,17 @@ public sealed class SelfJoinCourseHandlerEmailTests
             => Task.FromResult<long?>(1003);
     }
 
-    private sealed class NotificationWriterDouble : INotificationWriter
+    private sealed class NotificationWriterDouble(bool throwOnCreate = false) : INotificationWriter
     {
         public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
-            => Task.FromResult(Result<long>.Success(1));
+        {
+            if (throwOnCreate)
+            {
+                throw new InvalidOperationException("Notification infrastructure unavailable.");
+            }
+
+            return Task.FromResult(Result<long>.Success(1));
+        }
     }
 
     private sealed class FixedClock(DateTime utcNow) : IClock

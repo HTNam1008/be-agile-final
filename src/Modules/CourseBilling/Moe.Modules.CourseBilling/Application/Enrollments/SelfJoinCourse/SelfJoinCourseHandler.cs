@@ -11,6 +11,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 
@@ -24,7 +25,8 @@ internal sealed class SelfJoinCourseHandler(
     IStudentDirectory students,
     IStudentNotificationRecipientResolver notificationRecipients,
     INotificationWriter notificationWriter,
-    IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
+    IClock clock,
+    ILogger<SelfJoinCourseHandler> logger) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         SelfJoinCourseCommand command,
@@ -188,12 +190,14 @@ internal sealed class SelfJoinCourseHandler(
         }
 
         string schoolName = student.SchoolName ?? "your school";
-        await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.EnrollSuccess,
                 $"Course Enrollment Completed: {course.CourseCode}",
                 $"Welcome {student.DisplayName}! You are now enrolled in {course.CourseName} at {schoolName}."),
+            logger,
+            "Course self enrollment success",
             cancellationToken);
     }
 

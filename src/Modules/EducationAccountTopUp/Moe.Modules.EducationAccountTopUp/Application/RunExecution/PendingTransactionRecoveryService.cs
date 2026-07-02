@@ -240,27 +240,20 @@ public sealed class PendingTransactionRecoveryService(
             topUpRunId,
             userAccountId.Value);
 
-        Result<long> create = await notificationWriter.CreateAsync(
+        bool created = await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.TopUpReceived,
                 $"Top-up Credited: {account.AccountNumber}",
                 $"Amount {amountText} has been credited to account {account.AccountNumber}."),
+            logger,
+            "Recovered top-up recipient credited",
             cancellationToken);
 
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create top-up notification for recovered run {TopUpRunId} and user account {UserAccountId}: {ErrorCode}",
-                topUpRunId,
-                userAccountId.Value,
-                create.Error.Code);
-        }
-        else
+        if (created)
         {
             logger.LogInformation(
-                "TOP_UP_RECEIVED notification created successfully with NotificationId {NotificationId} for user account {UserAccountId} in recovered run {TopUpRunId}",
-                create.Value,
+                "TOP_UP_RECEIVED notification created successfully for user account {UserAccountId} in recovered run {TopUpRunId}",
                 userAccountId.Value,
                 topUpRunId);
         }

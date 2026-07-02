@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
@@ -197,7 +198,14 @@ public sealed class SettlementPreferenceHandlerTests
         => new(_educationAccounts, _settlementPreferences);
 
     private SetSettlementPreferenceHandler CreateSetHandler()
-        => new(_educationAccounts, _settlementPreferences, _notificationRecipients, _notificationWriter, _clock, _unitOfWork);
+        => new(
+            _educationAccounts,
+            _settlementPreferences,
+            _notificationRecipients,
+            _notificationWriter,
+            _clock,
+            _unitOfWork,
+            NullLogger<SetSettlementPreferenceHandler>.Instance);
 
     private EducationAccount AddAccount(long personId, long accountId)
     {
