@@ -1,4 +1,5 @@
 using FluentValidation;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.DTOs;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -7,7 +8,7 @@ namespace Moe.Modules.EducationAccountTopUp.Api.Admin;
 
 public sealed class CreateCampaignRequestValidator : AbstractValidator<CreateCampaignRequest>
 {
-    public CreateCampaignRequestValidator()
+    public CreateCampaignRequestValidator(IClock clock)
     {
         RuleFor(x => x.OrganizationId).GreaterThan(0);
         RuleFor(x => x.CampaignCode).NotEmpty().MaximumLength(50);
@@ -35,7 +36,7 @@ public sealed class CreateCampaignRequestValidator : AbstractValidator<CreateCam
         When(x => !string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.Immediate.ToString(), StringComparison.OrdinalIgnoreCase) || IsRecurringOrContract(x), () =>
         {
             RuleFor(x => x.StartDate)
-                .Must(startDate => startDate >= DateOnly.FromDateTime(DateTime.UtcNow))
+                .Must(startDate => startDate >= DateOnly.FromDateTime(clock.UtcNow.UtcDateTime))
                 .WithMessage("StartDate must be today or in the future for scheduled or contract campaigns.");
 
             When(x => string.Equals(x.ScheduleTypeCode, ScheduleTypeCode.OneTimeScheduled.ToString(), StringComparison.OrdinalIgnoreCase) && !IsRecurringOrContract(x), () =>

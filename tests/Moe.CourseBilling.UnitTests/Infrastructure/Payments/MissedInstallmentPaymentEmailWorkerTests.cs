@@ -2,12 +2,14 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.CourseBilling.UnitTests.TestDoubles;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
@@ -175,7 +177,8 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         MissedInstallmentPaymentEmailWorker worker = new(
             provider.GetRequiredService<IServiceScopeFactory>(),
             new FixedClock(TodayUtc),
-            NullLogger<MissedInstallmentPaymentEmailWorker>.Instance);
+            NullLogger<MissedInstallmentPaymentEmailWorker>.Instance,
+            Options.Create(new CourseBillingWorkerOptions()));
 
         return new TestContext(worker, queue, paymentPlans, provider);
     }

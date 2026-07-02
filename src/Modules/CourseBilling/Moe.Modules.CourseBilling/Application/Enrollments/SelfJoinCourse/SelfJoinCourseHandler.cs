@@ -105,7 +105,7 @@ internal sealed class SelfJoinCourseHandler(
         if (installment)
             enrollmentResult.Value.ActivateInstallmentEnrollment();
 
-        DateOnly enrolledDate = clock.TodayInSingapore();
+        DateOnly enrolledDate = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         DateOnly firstDueDate = installment
             ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
             : enrolledDate;

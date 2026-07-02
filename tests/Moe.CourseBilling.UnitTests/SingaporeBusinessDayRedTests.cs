@@ -3,12 +3,14 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
@@ -64,7 +66,8 @@ public sealed class SingaporeBusinessDayRedTests
         MissedInstallmentPaymentEmailWorker worker = new(
             services.GetRequiredService<IServiceScopeFactory>(),
             new TestClock(SgtEarlyMorning),
-            NullLogger<MissedInstallmentPaymentEmailWorker>.Instance);
+            NullLogger<MissedInstallmentPaymentEmailWorker>.Instance,
+            Options.Create(new CourseBillingWorkerOptions()));
         MethodInfo send = typeof(MissedInstallmentPaymentEmailWorker).GetMethod(
             "SendDueNotificationsAsync",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
