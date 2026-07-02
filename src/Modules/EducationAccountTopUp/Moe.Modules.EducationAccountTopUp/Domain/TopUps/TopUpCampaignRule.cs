@@ -43,4 +43,30 @@ public sealed class TopUpCampaignRule : Entity<long>
             TextValue = textValue
         };
     }
+
+    internal static TopUpCampaignRule CreateForNewGroup(
+        long topUpCampaignId,
+        int displayOrder,
+        string criterionCode,
+        string operatorCode,
+        decimal? numericValueFrom,
+        decimal? numericValueTo,
+        string? textValue)
+    {
+        if (topUpCampaignId <= 0) throw new ArgumentOutOfRangeException(nameof(topUpCampaignId));
+        if (displayOrder <= 0) throw new ArgumentOutOfRangeException(nameof(displayOrder));
+        if (string.IsNullOrWhiteSpace(criterionCode)) throw new ArgumentException("Criterion code is required.", nameof(criterionCode));
+        if (string.IsNullOrWhiteSpace(operatorCode)) throw new ArgumentException("Operator code is required.", nameof(operatorCode));
+
+        return new TopUpCampaignRule
+        {
+            TopUpCampaignId = topUpCampaignId,
+            DisplayOrder = displayOrder,
+            CriterionCode = criterionCode,
+            OperatorCode = operatorCode,
+            NumericValueFrom = numericValueFrom,
+            NumericValueTo = numericValueTo,
+            TextValue = textValue
+        };
+    }
 }

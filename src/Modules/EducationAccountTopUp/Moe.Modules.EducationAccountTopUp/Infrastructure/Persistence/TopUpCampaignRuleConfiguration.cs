@@ -23,6 +23,6 @@ internal sealed class TopUpCampaignRuleConfiguration : IEntityTypeConfiguration<
         builder.HasOne<TopUpRuleGroup>()
             .WithMany(x => x.Rules)
             .HasForeignKey(x => x.TopUpRuleGroupId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

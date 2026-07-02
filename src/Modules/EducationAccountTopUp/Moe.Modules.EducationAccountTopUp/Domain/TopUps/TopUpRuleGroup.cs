@@ -13,6 +13,24 @@ public sealed class TopUpRuleGroup : Entity<long>
 
     public List<TopUpCampaignRule> Rules { get; private set; } = [];
 
+    public void AddRule(
+        int displayOrder,
+        string criterionCode,
+        string operatorCode,
+        decimal? numericValueFrom,
+        decimal? numericValueTo,
+        string? textValue)
+    {
+        Rules.Add(TopUpCampaignRule.CreateForNewGroup(
+            TopUpCampaignId,
+            displayOrder,
+            criterionCode,
+            operatorCode,
+            numericValueFrom,
+            numericValueTo,
+            textValue));
+    }
+
     public static TopUpRuleGroup Create(long campaignId, int displayOrder, DateTime utcNow)
     {
         if (campaignId <= 0) throw new ArgumentOutOfRangeException(nameof(campaignId));

@@ -72,11 +72,26 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
 
     public async Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default)
     {
+        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true)
+        {
+            await dbContext.Set<TopUpCampaignRule>()
+                .Where(x => x.TopUpCampaignId == campaignId)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await dbContext.Set<TopUpRuleGroup>()
+                .Where(x => x.TopUpCampaignId == campaignId)
+                .ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        var rules = await dbContext.Set<TopUpCampaignRule>()
+            .Where(x => x.TopUpCampaignId == campaignId)
+            .ToListAsync(cancellationToken);
         var groups = await dbContext.Set<TopUpRuleGroup>()
             .Where(x => x.TopUpCampaignId == campaignId)
-            .Include(x => x.Rules)
             .ToListAsync(cancellationToken);
 
+        dbContext.Set<TopUpCampaignRule>().RemoveRange(rules);
         dbContext.Set<TopUpRuleGroup>().RemoveRange(groups);
     }
 
