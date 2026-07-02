@@ -34,6 +34,23 @@ internal sealed class OrganizationUnitRepository(MoeDbContext dbContext) : IOrga
             .ToArrayAsync(cancellationToken);
     }
 
+    public Task<OrganizationUnitSummary?> FindActiveByIdAsync(
+        long organizationId,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Set<OrganizationUnit>()
+            .AsNoTracking()
+            .Where(x => x.Id == organizationId && x.StatusCode == IamStatusCodes.Active)
+            .Select(x => new OrganizationUnitSummary(
+                x.Id,
+                x.ParentOrganizationUnitId,
+                x.UnitCode,
+                x.UnitName,
+                x.UnitTypeCode,
+                x.StatusCode))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public Task<OrganizationUnitSummary?> FindActiveSchoolByNameAsync(
         string schoolName,
         CancellationToken cancellationToken)
