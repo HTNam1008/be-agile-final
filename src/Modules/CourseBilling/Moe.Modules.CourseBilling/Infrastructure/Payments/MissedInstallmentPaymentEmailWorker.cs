@@ -12,6 +12,7 @@ using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.MailDelivery.Domain;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.StudentFinance.Persistence;
@@ -105,6 +106,12 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
                 continue;
             }
 
+            if (await HasMissedInstallmentNotificationAsync(dbContext, candidate, cancellationToken))
+            {
+                _processedBillIds.Add(candidate.BillId);
+                continue;
+            }
+
             CourseBillingPlan? plan = await paymentPlans.FindPlanAsync(
                 candidate.CoursePaymentPlanId,
                 cancellationToken);
@@ -119,6 +126,20 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
             }
         }
     }
+
+    private static Task<bool> HasMissedInstallmentNotificationAsync(
+        MoeDbContext dbContext,
+        MissedInstallmentCandidate candidate,
+        CancellationToken cancellationToken)
+        => dbContext.Set<EmailNotification>()
+            .AsNoTracking()
+            .AnyAsync(
+                notification =>
+                    notification.NotificationType == "NOTI-11" &&
+                    notification.PersonId == candidate.PersonId &&
+                    notification.EntityType == "Bill" &&
+                    notification.EntityId == candidate.BillId.ToString(CultureInfo.InvariantCulture),
+                cancellationToken);
 
     private async Task<bool> EnqueueEmailAsync(
         MissedInstallmentCandidate candidate,
