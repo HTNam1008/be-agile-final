@@ -21,10 +21,10 @@ public sealed class MailNotificationAdminServiceTests
         using MoeDbContext dbContext = CreateDbContext();
         await AddNotificationAsync(dbContext, personId: 1001, status: EmailNotificationStatusCodes.Pending);
         await AddNotificationAsync(dbContext, personId: 1002, status: EmailNotificationStatusCodes.FailedFinal);
-        MailNotificationAdminService service = new(dbContext, _clock);
+        MailNotificationAdminService service = CreateService(dbContext);
 
         var page = await service.ListAsync(
-            new MailNotificationFilter(EmailNotificationStatusCodes.FailedFinal, null, null, null, null, null, null),
+            new MailNotificationFilter(null, EmailNotificationStatusCodes.FailedFinal, null, null, null, null, null, null, null, null),
             page: 1,
             pageSize: 25,
             CancellationToken.None);
@@ -40,7 +40,7 @@ public sealed class MailNotificationAdminServiceTests
         await AddNotificationAsync(dbContext, personId: 1001, status: EmailNotificationStatusCodes.Pending);
         await AddNotificationAsync(dbContext, personId: 1002, status: EmailNotificationStatusCodes.FailedRetryable);
         await AddNotificationAsync(dbContext, personId: 1003, status: EmailNotificationStatusCodes.Sent);
-        MailNotificationAdminService service = new(dbContext, _clock);
+        MailNotificationAdminService service = CreateService(dbContext);
 
         MailNotificationSummary summary = await service.GetSummaryAsync(CancellationToken.None);
 
@@ -57,7 +57,7 @@ public sealed class MailNotificationAdminServiceTests
             dbContext,
             personId: 1001,
             status: EmailNotificationStatusCodes.FailedFinal);
-        MailNotificationAdminService service = new(dbContext, _clock);
+        MailNotificationAdminService service = CreateService(dbContext);
 
         Result<MailNotificationDetail> result = await service.RetryAsync(notification.Id, CancellationToken.None);
 
@@ -74,7 +74,7 @@ public sealed class MailNotificationAdminServiceTests
             dbContext,
             personId: 1001,
             status: EmailNotificationStatusCodes.Pending);
-        MailNotificationAdminService service = new(dbContext, _clock);
+        MailNotificationAdminService service = CreateService(dbContext);
 
         Result<MailNotificationDetail> result = await service.CancelAsync(notification.Id, CancellationToken.None);
 
@@ -91,7 +91,7 @@ public sealed class MailNotificationAdminServiceTests
             dbContext,
             personId: 1001,
             status: EmailNotificationStatusCodes.FailedFinal);
-        MailNotificationAdminService service = new(dbContext, _clock);
+        MailNotificationAdminService service = CreateService(dbContext);
 
         Result<MailNotificationDetail> result = await service.SuppressAsync(
             notification.Id,
@@ -103,6 +103,79 @@ public sealed class MailNotificationAdminServiceTests
         result.Value.LastErrorMessage.Should().Be("Handled manually.");
     }
 
+    [Fact]
+    public async Task ListAsync_Applies_AccessScope()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        await AddNotificationAsync(dbContext, personId: 1001, status: EmailNotificationStatusCodes.Pending);
+        await AddNotificationAsync(dbContext, personId: 2001, status: EmailNotificationStatusCodes.Pending);
+        MailNotificationAdminService service = CreateService(
+            dbContext,
+            new PersonIdMailNotificationAccessScope(1001));
+
+        var page = await service.ListAsync(
+            new MailNotificationFilter(null, null, null, null, null, null, null, null, null, null),
+            page: 1,
+            pageSize: 25,
+            CancellationToken.None);
+
+        page.TotalCount.Should().Be(1);
+        page.Items.Should().ContainSingle(x => x.PersonId == 1001);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_Applies_AccessScope()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        await AddNotificationAsync(dbContext, personId: 1001, status: EmailNotificationStatusCodes.Pending);
+        await AddNotificationAsync(dbContext, personId: 2001, status: EmailNotificationStatusCodes.FailedFinal);
+        MailNotificationAdminService service = CreateService(
+            dbContext,
+            new PersonIdMailNotificationAccessScope(1001));
+
+        MailNotificationSummary summary = await service.GetSummaryAsync(CancellationToken.None);
+
+        summary.Pending.Should().Be(1);
+        summary.FailedFinal.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RetryAsync_WhenOutsideAccessScope_ReturnsNotFound()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        EmailNotification notification = await AddNotificationAsync(
+            dbContext,
+            personId: 2001,
+            status: EmailNotificationStatusCodes.FailedFinal);
+        MailNotificationAdminService service = CreateService(
+            dbContext,
+            new PersonIdMailNotificationAccessScope(1001));
+
+        Result<MailNotificationDetail> result = await service.RetryAsync(notification.Id, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(MailDeliveryErrors.NotificationNotFound);
+    }
+
+    [Fact]
+    public async Task ListAsync_Applies_ServerSearch_And_ServerSort()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        await AddNotificationAsync(dbContext, personId: 1001, status: EmailNotificationStatusCodes.Pending, subject: "Alpha notice");
+        await AddNotificationAsync(dbContext, personId: 1003, status: EmailNotificationStatusCodes.Pending, subject: "Alpha reminder");
+        await AddNotificationAsync(dbContext, personId: 1002, status: EmailNotificationStatusCodes.Pending, subject: "Beta notice");
+        MailNotificationAdminService service = CreateService(dbContext);
+
+        var page = await service.ListAsync(
+            new MailNotificationFilter("Alpha", null, null, null, null, null, null, null, "personId", "desc"),
+            page: 1,
+            pageSize: 25,
+            CancellationToken.None);
+
+        page.TotalCount.Should().Be(2);
+        page.Items.Select(x => x.PersonId).Should().Equal(1003, 1001);
+    }
+
     private static MoeDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<MoeDbContext>()
@@ -112,16 +185,25 @@ public sealed class MailNotificationAdminServiceTests
         return new MoeDbContext(options, [new MailDeliveryModelConfiguration()]);
     }
 
+    private MailNotificationAdminService CreateService(MoeDbContext dbContext)
+        => new(dbContext, _clock, new AllowAllMailNotificationAccessScope());
+
+    private MailNotificationAdminService CreateService(
+        MoeDbContext dbContext,
+        IMailNotificationAccessScope accessScope)
+        => new(dbContext, _clock, accessScope);
+
     private static async Task<EmailNotification> AddNotificationAsync(
         MoeDbContext dbContext,
         long personId,
-        string status)
+        string status,
+        string subject = "Test subject")
     {
         DateTime createdAtUtc = new(2026, 7, 1, 4, 0, 0, DateTimeKind.Utc);
         EmailNotification notification = EmailNotification.Create(
             "NOTI-TEST",
             personId,
-            "Test subject",
+            subject,
             "Test body",
             "<p>Test body</p>",
             "TestEntity",
@@ -154,5 +236,11 @@ public sealed class MailNotificationAdminServiceTests
         public DateTimeOffset UtcNow { get; } = utcNow;
 
         public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
+    }
+
+    private sealed class PersonIdMailNotificationAccessScope(params long[] personIds) : IMailNotificationAccessScope
+    {
+        public IQueryable<EmailNotification> Apply(IQueryable<EmailNotification> query)
+            => query.Where(notification => personIds.Contains(notification.PersonId));
     }
 }

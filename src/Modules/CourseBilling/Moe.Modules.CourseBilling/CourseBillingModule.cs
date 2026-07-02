@@ -34,6 +34,7 @@ using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.AdminStudentCourses;
 using Moe.Modules.CourseBilling.Infrastructure.BillingStatements;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.Infrastructure.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
@@ -51,6 +52,8 @@ public sealed class CourseBillingModule : IModule
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IModelConfigurationContributor, CourseBillingModelConfiguration>();
+        services.AddOptions<CourseBillingWorkerOptions>()
+            .BindConfiguration(CourseBillingWorkerOptions.SectionName);
 
         services.AddScoped<ICourseEnrollmentRepository, CourseEnrollmentRepository>();
         services.AddScoped<ICoursePaymentGateway, CoursePaymentGateway>();

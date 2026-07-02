@@ -5,9 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
@@ -19,7 +21,8 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Payments;
 internal sealed class MissedInstallmentPaymentEmailWorker(
     IServiceScopeFactory scopeFactory,
     IClock clock,
-    ILogger<MissedInstallmentPaymentEmailWorker> logger) : BackgroundService
+    ILogger<MissedInstallmentPaymentEmailWorker> logger,
+    IOptions<CourseBillingWorkerOptions> options) : BackgroundService
 {
     private readonly HashSet<long> _processedBillIds = [];
 
@@ -42,7 +45,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+                await Task.Delay(GetPollInterval(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -50,6 +53,9 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
             }
         }
     }
+
+    private TimeSpan GetPollInterval()
+        => TimeSpan.FromSeconds(Math.Clamp(options.Value.MissedInstallmentPaymentEmailPollIntervalSeconds, 1, 86400));
 
     internal async Task SendDueNotificationsAsync(CancellationToken cancellationToken)
     {
@@ -65,7 +71,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
         IEmailBrandingProvider branding = scope.ServiceProvider.GetRequiredService<IEmailBrandingProvider>();
 
-        DateOnly today = clock.TodayInSingapore();
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         DateOnly missedDueDate = today.AddDays(-1);
 
         MissedInstallmentCandidate[] candidates = await (

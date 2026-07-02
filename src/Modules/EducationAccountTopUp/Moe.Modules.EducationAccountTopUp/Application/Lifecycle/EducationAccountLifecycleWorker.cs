@@ -42,7 +42,7 @@ public sealed class EducationAccountLifecycleWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                await Task.Delay(GetPollInterval(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -50,6 +50,9 @@ public sealed class EducationAccountLifecycleWorker(
             }
         }
     }
+
+    private TimeSpan GetPollInterval()
+        => TimeSpan.FromSeconds(Math.Clamp(options.Value.PollIntervalSeconds, 1, 86400));
 
     internal async Task RunIfDueAsync(CancellationToken cancellationToken)
     {
