@@ -8,7 +8,7 @@ public sealed class UpsertCampaignRulesCommandValidator : AbstractValidator<Upse
     public UpsertCampaignRulesCommandValidator()
     {
         RuleFor(x => x.TopUpCampaignId).GreaterThan(0);
-        RuleFor(x => x.Groups).NotNull().NotEmpty();
+        RuleFor(x => x.Groups).NotNull();
         RuleFor(x => x.Groups).Must(groups => groups.Count <= 10).WithMessage("Max 10 rule groups.");
 
         RuleForEach(x => x.Groups).ChildRules(group =>
@@ -51,6 +51,7 @@ internal sealed class UpsertCampaignRuleDtoValidator : AbstractValidator<UpsertC
             .WithMessage("Numeric criteria must use valid numeric operators.");
 
             RuleFor(x => x.NumericValueFrom).NotNull();
+            RuleFor(x => x.TextValue).Empty();
 
             When(x => string.Equals(x.OperatorCode, OperatorCode.Between.ToString(), StringComparison.OrdinalIgnoreCase), () =>
             {
@@ -72,6 +73,8 @@ internal sealed class UpsertCampaignRuleDtoValidator : AbstractValidator<UpsertC
             .WithMessage("Text criteria must use valid text operators (Equals, NotEquals, In).");
 
             RuleFor(x => x.TextValue).NotEmpty();
+            RuleFor(x => x.NumericValueFrom).Null();
+            RuleFor(x => x.NumericValueTo).Null();
 
             When(x => string.Equals(x.OperatorCode, OperatorCode.In.ToString(), StringComparison.OrdinalIgnoreCase), () =>
             {
@@ -99,6 +102,9 @@ internal sealed class UpsertCampaignRuleDtoValidator : AbstractValidator<UpsertC
                     string.Equals(value, "YES", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(value, "NO", StringComparison.OrdinalIgnoreCase))
                 .WithMessage("Edu Account must be YES or NO.");
+
+            RuleFor(x => x.NumericValueFrom).Null();
+            RuleFor(x => x.NumericValueTo).Null();
         });
     }
 }

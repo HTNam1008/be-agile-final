@@ -37,10 +37,19 @@ public sealed class TopUpRuleValidationTests
     [Fact]
     public void Validator_ShouldReject_TextValueForAge()
     {
-        var command = Command(new UpsertCampaignRuleDto("AGE", "EQUALS", null, null, "15"));
+        var command = Command(new UpsertCampaignRuleDto("AGE", "EQUALS", 15, null, "15"));
 
         var result = _validator.Validate(command);
         result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validator_ShouldAccept_EmptyGroupsAsRuleClear()
+    {
+        var command = new UpsertCampaignRulesCommand(1, []);
+
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeTrue();
     }
 
     [Fact]

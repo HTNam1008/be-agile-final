@@ -83,7 +83,8 @@ namespace Moe.StudentFinance.Migrations.Migrations
             migrationBuilder.Sql("""
                 INSERT INTO [topup].[TopUpRuleGroup] ([TopUpCampaignId], [DisplayOrder], [CreatedAt], [UpdatedAt])
                 SELECT DISTINCT [TopUpCampaignId], 1, SYSUTCDATETIME(), NULL
-                FROM [topup].[TopUpCampaignRule];
+                FROM [topup].[TopUpCampaignRule]
+                WHERE [IsActive] = 1;
                 """);
 
             migrationBuilder.Sql("""
@@ -98,7 +99,13 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     SELECT [TopUpCampaignRuleId],
                            ROW_NUMBER() OVER (PARTITION BY [TopUpCampaignId] ORDER BY [TopUpCampaignRuleId]) AS [RowNum]
                     FROM [topup].[TopUpCampaignRule]
+                    WHERE [IsActive] = 1
                 ) seq ON seq.[TopUpCampaignRuleId] = r.[TopUpCampaignRuleId];
+                """);
+
+            migrationBuilder.Sql("""
+                DELETE FROM [topup].[TopUpCampaignRule]
+                WHERE [IsActive] = 0;
                 """);
 
             migrationBuilder.AlterColumn<long>(
