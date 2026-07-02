@@ -5693,6 +5693,10 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasIndex("PersonId");
 
+                    b.HasIndex("PersonId", "PortalAccessCode")
+                        .IsUnique()
+                        .HasFilter("[PersonId] IS NOT NULL");
+
                     b.HasIndex("IdentityProviderCode", "ExternalIssuer", "ExternalSubjectId")
                         .IsUnique();
 
