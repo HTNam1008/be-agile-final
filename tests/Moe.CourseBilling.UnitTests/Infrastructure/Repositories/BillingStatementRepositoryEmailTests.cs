@@ -9,6 +9,7 @@ using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.Infrastructure.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.MailDelivery;
 using Moe.Modules.MailDelivery.Domain;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
@@ -33,7 +34,8 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             options,
             [
                 new PersonOnlyModelConfiguration(),
-                new CourseBillingModelConfiguration()
+                new CourseBillingModelConfiguration(),
+                new MailDeliveryModelConfiguration()
             ]);
 
         _repository = new BillingStatementRepository(
@@ -101,6 +103,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
 
         _mailQueue.Jobs.Should().ContainSingle();
         _mailQueue.Jobs.Clear();
+        await SeedMonthlyBillNotificationAsync(5010, new DateOnly(2026, 7, 1));
 
         await _repository.GetOrCreateAsync(
             5010,
@@ -111,6 +114,40 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             CancellationToken.None);
 
         _mailQueue.Jobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_WhenStatementAlreadyGeneratedWithoutNotification_SendsMonthlyBillEmail()
+    {
+        await SeedStudentWithBillAsync(
+            personId: 5012,
+            studentName: "Existing Statement Student",
+            billAmount: 64.80m,
+            dueDate: new DateOnly(2026, 8, 1));
+
+        await _repository.GetOrCreateAsync(
+            5012,
+            2026,
+            8,
+            new DateTime(2026, 7, 31, 23, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.Suppress,
+            CancellationToken.None);
+
+        _mailQueue.Jobs.Should().BeEmpty();
+
+        await _repository.GetOrCreateAsync(
+            5012,
+            2026,
+            8,
+            new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc),
+            BillingStatementNotificationMode.SendMonthlyBill,
+            CancellationToken.None);
+
+        EmailNotificationJob job = _mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.NotificationType.Should().Be("NOTI-01");
+        job.PersonId.Should().Be(5012);
+        job.EntityType.Should().Be("BillingStatement");
+        job.EntityId.Should().Be("2026-08");
     }
 
     [Fact]
@@ -254,6 +291,21 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             billAmount).Value;
 
         _dbContext.Add(bill);
+        await _dbContext.SaveChangesAsync();
+    }
+
+    private async Task SeedMonthlyBillNotificationAsync(long personId, DateOnly billingMonth)
+    {
+        _dbContext.Set<EmailNotification>().Add(EmailNotification.Create(
+            "NOTI-01",
+            personId,
+            $"Your {billingMonth:MMMM} Bill Is Ready",
+            "Already scheduled.",
+            null,
+            "BillingStatement",
+            $"{billingMonth.Year:D4}-{billingMonth.Month:D2}",
+            new DateTime(billingMonth.Year, billingMonth.Month, 1, 8, 0, 0, DateTimeKind.Utc),
+            3));
         await _dbContext.SaveChangesAsync();
     }
 
