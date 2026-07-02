@@ -35,6 +35,8 @@ using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.IGateway.Storage;
 using Moe.Modules.CourseBilling.Infrastructure.AdminStudentCourses;
+using Moe.Modules.CourseBilling.Infrastructure.BillingStatements;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.Infrastructure.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Dashboard;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
@@ -53,10 +55,19 @@ public sealed class CourseBillingModule : IModule
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IModelConfigurationContributor, CourseBillingModelConfiguration>();
+        services.AddOptions<CourseBillingWorkerOptions>()
+            .BindConfiguration(CourseBillingWorkerOptions.SectionName);
 
         services.AddScoped<ICourseEnrollmentRepository, CourseEnrollmentRepository>();
         services.AddScoped<ICoursePaymentGateway, CoursePaymentGateway>();
-        services.AddHostedService<MissedInstallmentPaymentEmailWorker>();
+        if (IsBackgroundJobEnabled(configuration, "CourseBilling:MonthlyBillNotifications"))
+        {
+            services.AddHostedService<MonthlyBillNotificationWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "CourseBilling:MissedInstallmentPaymentEmails"))
+        {
+            services.AddHostedService<MissedInstallmentPaymentEmailWorker>();
+        }
         services.AddScoped<IAdminCourseRepository, AdminCourseRepository>();
         services.AddScoped<IAdminFeeComponentRepository, AdminFeeComponentRepository>();
         services.AddScoped<IAdminDashboardCourseRepository, AdminDashboardCourseRepository>();
@@ -138,4 +149,8 @@ public sealed class CourseBillingModule : IModule
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }

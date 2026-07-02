@@ -19,6 +19,8 @@ public sealed class EducationAccountLifecycleWorker(
     ILogger<EducationAccountLifecycleWorker> logger,
     IClock clock) : BackgroundService
 {
+    private DateOnly? _lastScheduledRunDate;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Education Account lifecycle worker started");
@@ -40,7 +42,7 @@ public sealed class EducationAccountLifecycleWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                await Task.Delay(GetPollInterval(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -48,6 +50,9 @@ public sealed class EducationAccountLifecycleWorker(
             }
         }
     }
+
+    private TimeSpan GetPollInterval()
+        => TimeSpan.FromSeconds(Math.Clamp(options.Value.PollIntervalSeconds, 1, 86400));
 
     internal async Task RunIfDueAsync(CancellationToken cancellationToken)
     {
@@ -72,11 +77,17 @@ public sealed class EducationAccountLifecycleWorker(
             return;
         }
 
+        if (_lastScheduledRunDate == today)
+        {
+            return;
+        }
+
         await ProcessAsync(
             today,
             now,
             EducationAccountLifecycleRunTriggerTypes.Scheduled,
             cancellationToken);
+        _lastScheduledRunDate = today;
     }
 
     internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
