@@ -42,10 +42,12 @@ public sealed class TopUpCampaignsController(
         [FromQuery] string? status = null,
         [FromQuery] string? dateFrom = null,
         [FromQuery] string? dateTo = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         CancellationToken cancellationToken = default)
     {
         var result = await queryDispatcher.Send(
-            new GetCampaignsQuery(pageNumber, pageSize, search, status, dateFrom, dateTo),
+            new GetCampaignsQuery(pageNumber, pageSize, search, status, dateFrom, dateTo, sortBy, sortDirection),
             cancellationToken);
         if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return Ok(result.Value);
