@@ -58,15 +58,11 @@ internal sealed class TopUpRecipientResolver(
                 .CountAsync(cancellationToken);
         }
 
-        List<TopUpCampaignRule> rules = await GetActiveRulesAsync(campaign.Id, cancellationToken);
-        if (rules.Count == 0)
+        IReadOnlyList<CampaignRuleGroupProjection> groups = await GetActiveRuleGroupsAsync(campaign.Id, cancellationToken);
+        if (groups.Count == 0)
             return 0;
 
-        var projections = rules
-            .Select(r => new CampaignRuleProjection(r.Id, r.CriterionCode, r.OperatorCode, r.NumericValueFrom, r.NumericValueTo, r.TextValue))
-            .ToList();
-
-        return await dynamicRuleFilter.CountMatchingAccountsAsync(projections, DateTime.UtcNow, cancellationToken);
+        return await dynamicRuleFilter.CountMatchingAccountsAsync(groups, DateTime.UtcNow, cancellationToken);
     }
 
     public async Task<decimal> GetTotalResolvedAmountAsync(
@@ -154,17 +150,12 @@ internal sealed class TopUpRecipientResolver(
         int offset,
         CancellationToken cancellationToken)
     {
-        List<TopUpCampaignRule> rules = await GetActiveRulesAsync(campaign.Id, cancellationToken);
-        if (rules.Count == 0)
+        IReadOnlyList<CampaignRuleGroupProjection> groups = await GetActiveRuleGroupsAsync(campaign.Id, cancellationToken);
+        if (groups.Count == 0)
             return [];
 
-        // Map domain rules to CampaignRuleProjection for IDynamicRuleFilter
-        var projections = rules
-            .Select(r => new CampaignRuleProjection(r.Id, r.CriterionCode, r.OperatorCode, r.NumericValueFrom, r.NumericValueTo, r.TextValue))
-            .ToList();
-
         IReadOnlyList<long> accountIds = await dynamicRuleFilter.FilterAccountIdsAsync(
-            projections, offset, chunkSize, DateTime.UtcNow, cancellationToken);
+            groups, offset, chunkSize, DateTime.UtcNow, cancellationToken);
 
         return accountIds
             .Select(id => new RecipientInfo
@@ -177,14 +168,40 @@ internal sealed class TopUpRecipientResolver(
             .ToList();
     }
 
-    private Task<List<TopUpCampaignRule>> GetActiveRulesAsync(
+    private async Task<IReadOnlyList<CampaignRuleGroupProjection>> GetActiveRuleGroupsAsync(
         long campaignId,
         CancellationToken cancellationToken)
     {
-        return dbContext.Set<TopUpCampaignRule>()
-            .AsNoTracking()
-            .Where(x => x.TopUpCampaignId == campaignId && x.IsActive)
+        var rows = await (
+            from ruleGroup in dbContext.Set<TopUpRuleGroup>().AsNoTracking()
+            join rule in dbContext.Set<TopUpCampaignRule>().AsNoTracking()
+                on ruleGroup.Id equals rule.TopUpRuleGroupId
+            where ruleGroup.TopUpCampaignId == campaignId
+            orderby ruleGroup.DisplayOrder, rule.DisplayOrder, rule.Id
+            select new
+            {
+                GroupId = ruleGroup.Id,
+                GroupDisplayOrder = ruleGroup.DisplayOrder,
+                Rule = new CampaignRuleProjection(
+                    rule.Id,
+                    ruleGroup.Id,
+                    rule.DisplayOrder,
+                    rule.CriterionCode,
+                    rule.OperatorCode,
+                    rule.NumericValueFrom,
+                    rule.NumericValueTo,
+                    rule.TextValue)
+            })
             .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => new { x.GroupId, x.GroupDisplayOrder })
+            .OrderBy(x => x.Key.GroupDisplayOrder)
+            .Select(x => new CampaignRuleGroupProjection(
+                x.Key.GroupId,
+                x.Key.GroupDisplayOrder,
+                x.Select(row => row.Rule).OrderBy(rule => rule.DisplayOrder).ToList()))
+            .ToList();
     }
 
     private static bool IsFixedSelection(TopUpCampaign campaign)

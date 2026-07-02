@@ -12,6 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 internal sealed class UpsertCampaignRulesCommandHandler(
     ITopUpCampaignRepository campaigns,
     IUnitOfWork unitOfWork,
+    ITransactionalExecutor transactionalExecutor,
     IAdminAccessControl adminAccess,
     IAuditService audit) : ICommandHandler<UpsertCampaignRulesCommand>
 {
@@ -35,38 +36,54 @@ internal sealed class UpsertCampaignRulesCommandHandler(
             return Result.Failure(TopUpErrors.InvalidCampaignStatus);
         }
 
-        var existingRules = await campaigns.GetRulesAsync(campaign.Id, cancellationToken);
-
-        await campaigns.RemoveRulesAsync(existingRules, cancellationToken);
-
-        foreach (var ruleDto in command.Rules)
+        await transactionalExecutor.ExecuteAsync(async ct =>
         {
-            var rule = TopUpCampaignRule.Create(
-                topUpCampaignId: campaign.Id,
-                criterionCode: ruleDto.CriterionCode.ToUpperInvariant(),
-                operatorCode: ruleDto.OperatorCode.ToUpperInvariant(),
-                numericValueFrom: ruleDto.NumericValueFrom,
-                numericValueTo: ruleDto.NumericValueTo,
-                textValue: ruleDto.TextValue
-            );
+            await campaigns.DeleteRuleGroupsByCampaignIdAsync(campaign.Id, ct);
 
-            await campaigns.AddRuleAsync(rule, cancellationToken);
-        }
+            int totalCriteria = 0;
+            DateTime utcNow = DateTime.UtcNow;
 
-        await audit.RecordSchoolActionAsync(
-            new SchoolAuditContext(
-                AuditActionCodes.TopUpRulesUpdated,
-                "TopUpCampaign",
-                campaign.Id,
-                campaign.OrganizationId,
-                new SchoolAuditDetails(
-                    "Top-up rule edits",
-                    EntityDisplayName: campaign.CampaignName,
-                    RelatedIds: new Dictionary<string, long> { ["campaignId"] = campaign.Id },
-                    Count: command.Rules.Count)),
-            cancellationToken);
+            for (int groupIndex = 0; groupIndex < command.Groups.Count; groupIndex++)
+            {
+                UpsertRuleGroupDto groupDto = command.Groups[groupIndex];
+                var group = TopUpRuleGroup.Create(campaign.Id, groupIndex + 1, utcNow);
+                await campaigns.AddRuleGroupAsync(group, ct);
+                await unitOfWork.SaveChangesAsync(ct);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+                for (int ruleIndex = 0; ruleIndex < groupDto.Criteria.Count; ruleIndex++)
+                {
+                    UpsertCampaignRuleDto ruleDto = groupDto.Criteria[ruleIndex];
+                    var rule = TopUpCampaignRule.Create(
+                        topUpCampaignId: campaign.Id,
+                        topUpRuleGroupId: group.Id,
+                        displayOrder: ruleIndex + 1,
+                        criterionCode: ruleDto.CriterionCode.ToUpperInvariant(),
+                        operatorCode: ruleDto.OperatorCode.ToUpperInvariant(),
+                        numericValueFrom: ruleDto.NumericValueFrom,
+                        numericValueTo: ruleDto.NumericValueTo,
+                        textValue: ruleDto.TextValue);
+
+                    await campaigns.AddRuleAsync(rule, ct);
+                    totalCriteria++;
+                }
+            }
+
+            await audit.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.TopUpRulesUpdated,
+                    "TopUpCampaign",
+                    campaign.Id,
+                    campaign.OrganizationId,
+                    new SchoolAuditDetails(
+                        "Top-up rule edits",
+                        EntityDisplayName: campaign.CampaignName,
+                        RelatedIds: new Dictionary<string, long> { ["campaignId"] = campaign.Id },
+                        Count: totalCriteria)),
+                ct);
+
+            await unitOfWork.SaveChangesAsync(ct);
+            return true;
+        }, cancellationToken);
 
         return Result.Success();
     }

@@ -245,7 +245,9 @@ public sealed class TopUpRunWorkerTests
             => Task.FromResult(0);
         public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<TopUpCampaignRule>>([]);
-        public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default)
+        public Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
         public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
