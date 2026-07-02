@@ -12,7 +12,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static readonly string[] KnownCardTypes = ["FINANCE_SUMMARY", "OUTSTANDING_BILLS", "PAYMENT_HISTORY", "FAS_RECOMMENDATION"];
+    private static readonly string[] KnownCardTypes = ["FINANCE_SUMMARY", "OUTSTANDING_BILLS", "PAYMENT_HISTORY", "FAS_RECOMMENDATION", "KNOWLEDGE_ANSWER"];
 
     private static readonly string[] KnownActionTypes = ["NAVIGATE", "CONTACT_ADMIN_CENTER", "APPLY_FAS_PATCH"];
 
@@ -70,6 +70,29 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         Assert.True(response.TryGetProperty("grounding", out _));
         Assert.True(response.TryGetProperty("cards", out _));
         Assert.True(response.TryGetProperty("actions", out _));
+        Assert.True(response.TryGetProperty("followUpQuestions", out _));
+    }
+
+    [Fact]
+    public async Task Knowledge_answer_card_is_preserved_in_contract()
+    {
+        JsonElement response = await ChatWithContext("Explain the MOE FAS Bursary", 2101, new
+        {
+            domain = "FAS",
+            surface = "PORTAL",
+            path = "/portal/fas"
+        });
+
+        JsonElement card = Assert.Single(response.GetProperty("cards").EnumerateArray());
+        Assert.Equal("KNOWLEDGE_ANSWER", card.GetProperty("type").GetString());
+        JsonElement data = card.GetProperty("data");
+        Assert.False(string.IsNullOrWhiteSpace(data.GetProperty("summary").GetString()));
+        Assert.NotEmpty(data.GetProperty("keyFacts").EnumerateArray());
+        Assert.NotEmpty(data.GetProperty("nextSteps").EnumerateArray());
+        Assert.NotEmpty(response.GetProperty("followUpQuestions").EnumerateArray());
+        Assert.Contains(response.GetProperty("actions").EnumerateArray(), action =>
+            action.GetProperty("type").GetString() == "NAVIGATE" &&
+            action.GetProperty("route").GetString() == "/portal/fas");
     }
 
     [Fact]
