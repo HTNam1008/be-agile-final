@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -27,6 +28,16 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Authentication:AdminEntra:RequireHttpsMetadata"] = "false",
+                ["Authentication:AdminEntra:LocalTokenSigningKey"] = "MOE-dev-admin-local-token-signing-key-change-before-production-2026",
+                ["Authentication:AdminEntra:LocalTokenLifetimeMinutes"] = "120"
+            });
+        });
+
         builder.ConfigureTestServices(services =>
         {
             // Remove the app's DbContext registration.
@@ -56,6 +67,29 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 options.DefaultChallengeScheme = "Test";
             })
             .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", options => { });
+
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                ReplaceSchemeHandler(options, AuthenticationSchemes.AdminEntra);
+                ReplaceSchemeHandler(options, AuthenticationSchemes.EServiceSingpass);
+
+                static void ReplaceSchemeHandler(AuthenticationOptions options, string schemeName)
+                {
+                    var scheme = options.Schemes.FirstOrDefault(candidate => candidate.Name == schemeName);
+                    if (scheme is null)
+                    {
+                        options.AddScheme(schemeName, addedScheme =>
+                        {
+                            addedScheme.DisplayName = schemeName;
+                            addedScheme.HandlerType = typeof(TestAuthHandler);
+                        });
+                        return;
+                    }
+
+                    scheme.DisplayName = schemeName;
+                    scheme.HandlerType = typeof(TestAuthHandler);
+                }
+            });
 
             services.Configure<Microsoft.AspNetCore.Authorization.AuthorizationOptions>(options =>
             {
