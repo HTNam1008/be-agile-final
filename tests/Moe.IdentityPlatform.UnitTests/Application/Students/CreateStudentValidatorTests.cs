@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Moe.Modules.IdentityPlatform.Api.Admin;
+using Moe.Modules.IdentityPlatform.Application.AdminAccountDetails;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Xunit;
@@ -53,6 +54,15 @@ public sealed class CreateStudentValidatorTests
             utcNow: new DateTime(2026, 6, 26, 0, 0, 0, DateTimeKind.Utc));
 
         person.CitizenshipStatusCode.Should().BeNull();
+    }
+
+    [Fact]
+    public void StudentManagementContactFields_UseContactNumberContractName()
+    {
+        typeof(CreateStudentRequest).GetProperty(nameof(CreateStudentRequest.ContactNumber)).Should().NotBeNull();
+        typeof(CreateStudentCommand).GetProperty(nameof(CreateStudentCommand.ContactNumber)).Should().NotBeNull();
+        typeof(UpdateAdminAccountDetailsRequest).GetProperty(nameof(UpdateAdminAccountDetailsRequest.ContactNumber)).Should().NotBeNull();
+        typeof(UpdateAdminAccountDetailsCommand).GetProperty(nameof(UpdateAdminAccountDetailsCommand.ContactNumber)).Should().NotBeNull();
     }
 
     [Theory]
@@ -238,7 +248,7 @@ public sealed class CreateStudentValidatorTests
             ClassCode: "4A",
             StartDate: new DateOnly(2026, 1, 1),
             Email: "student@example.sg",
-            Mobile: "+6591234567",
+            ContactNumber: "+6591234567",
             Address: "Valid address",
             IsAccountHolder: true);
 
@@ -257,7 +267,7 @@ public sealed class CreateStudentValidatorTests
             ClassCode: "4A",
             StartDate: new DateOnly(2026, 1, 1),
             Email: "student@example.sg",
-            Mobile: "+6591234567",
+            ContactNumber: "+6591234567",
             Address: "Valid address",
             IsAccountHolder: true);
 }

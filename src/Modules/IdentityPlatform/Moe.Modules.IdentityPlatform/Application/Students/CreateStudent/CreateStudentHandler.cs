@@ -81,7 +81,7 @@ internal sealed class CreateStudentHandler(
             command.NationalityCode,
             command.CitizenshipStatusCode,
             command.Email,
-            command.Mobile,
+            command.ContactNumber,
             command.Address,
             utcNow);
 

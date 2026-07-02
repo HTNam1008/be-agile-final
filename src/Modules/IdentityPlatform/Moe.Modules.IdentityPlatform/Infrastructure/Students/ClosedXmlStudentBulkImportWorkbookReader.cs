@@ -42,7 +42,7 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
                 Text(row, columns, BulkImportStudentWorkbookColumns.ClassCode) ?? string.Empty,
                 Date(row, columns, BulkImportStudentWorkbookColumns.StartDate),
                 Text(row, columns, BulkImportStudentWorkbookColumns.Email),
-                Text(row, columns, BulkImportStudentWorkbookColumns.Mobile),
+                Text(row, columns, BulkImportStudentWorkbookColumns.ContactNumber),
                 Text(row, columns, BulkImportStudentWorkbookColumns.Address)));
         }
 

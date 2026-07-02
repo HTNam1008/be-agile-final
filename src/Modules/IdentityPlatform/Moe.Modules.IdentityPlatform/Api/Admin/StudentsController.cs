@@ -162,7 +162,7 @@ public sealed class StudentsController(
             request.ClassCode,
             request.StartDate,
             request.Email,
-            request.Mobile,
+            request.ContactNumber,
             request.Address,
             request.IsAccountHolder);
 
