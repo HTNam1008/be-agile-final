@@ -16,29 +16,45 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.TopUps;
 internal sealed class DynamicRuleFilter(MoeDbContext dbContext) : IDynamicRuleFilter
 {
     public async Task<IReadOnlyList<long>> FilterAccountIdsAsync(
-        IReadOnlyList<CampaignRuleProjection> rules,
+        IReadOnlyList<CampaignRuleGroupProjection> groups,
         int skip,
         int take,
         DateTime nowUtc,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<EducationAccount> query = BuildBaseQuery(rules, nowUtc);
+        HashSet<long> matchedIds = await GetMatchingAccountIdsAsync(groups, nowUtc, cancellationToken);
 
-        return await query
-            .OrderBy(x => x.Id)
+        return matchedIds
+            .OrderBy(x => x)
             .Skip(skip)
             .Take(take)
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken);
+            .ToList();
     }
 
     public async Task<int> CountMatchingAccountsAsync(
-        IReadOnlyList<CampaignRuleProjection> rules,
+        IReadOnlyList<CampaignRuleGroupProjection> groups,
         DateTime nowUtc,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<EducationAccount> query = BuildBaseQuery(rules, nowUtc);
-        return await query.CountAsync(cancellationToken);
+        HashSet<long> matchedIds = await GetMatchingAccountIdsAsync(groups, nowUtc, cancellationToken);
+        return matchedIds.Count;
+    }
+
+    private async Task<HashSet<long>> GetMatchingAccountIdsAsync(
+        IReadOnlyList<CampaignRuleGroupProjection> groups,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var matchedIds = new HashSet<long>();
+
+        foreach (CampaignRuleGroupProjection group in groups.Where(g => g.Criteria.Count > 0))
+        {
+            IQueryable<EducationAccount> query = BuildBaseQuery(group.Criteria, nowUtc);
+            List<long> groupIds = await query.Select(x => x.Id).ToListAsync(cancellationToken);
+            matchedIds.UnionWith(groupIds);
+        }
+
+        return matchedIds;
     }
 
     private IQueryable<EducationAccount> BuildBaseQuery(
@@ -63,6 +79,7 @@ internal sealed class DynamicRuleFilter(MoeDbContext dbContext) : IDynamicRuleFi
         if (requiresEnrollment)
             query = ApplyEnrollmentRules(query, rules, nowUtc);
 
+        query = ApplyEducationAccountRules(query, rules);
         query = ApplyBalanceRules(query, rules);
 
         return query;
@@ -207,6 +224,23 @@ internal sealed class DynamicRuleFilter(MoeDbContext dbContext) : IDynamicRuleFi
                 query = query.Where(x => x.CachedBalance != rule.NumericValueFrom.Value);
             else if (op.Equals(OperatorCode.Between.ToString(), StringComparison.OrdinalIgnoreCase) && rule.NumericValueFrom.HasValue && rule.NumericValueTo.HasValue)
                 query = query.Where(x => x.CachedBalance >= rule.NumericValueFrom.Value && x.CachedBalance <= rule.NumericValueTo.Value);
+        }
+
+        return query;
+    }
+
+    private IQueryable<EducationAccount> ApplyEducationAccountRules(
+        IQueryable<EducationAccount> query,
+        IReadOnlyList<CampaignRuleProjection> rules)
+    {
+        foreach (CampaignRuleProjection rule in rules.Where(r =>
+            r.CriterionCode.Equals(TopUpCriterionCode.HasEducationAccount.ToString(), StringComparison.OrdinalIgnoreCase)))
+        {
+            bool wantsAccount = string.Equals(rule.TextValue, "YES", StringComparison.OrdinalIgnoreCase);
+
+            // The base query already contains active education accounts; "NO" cannot yield top-up recipients.
+            if (!wantsAccount)
+                query = query.Where(_ => false);
         }
 
         return query;

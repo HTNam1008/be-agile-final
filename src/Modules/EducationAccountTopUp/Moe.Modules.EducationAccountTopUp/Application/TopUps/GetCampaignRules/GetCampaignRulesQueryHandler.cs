@@ -11,9 +11,9 @@ internal sealed class GetCampaignRulesQueryHandler(
     ITopUpCampaignRepository campaigns,
     ITopUpCampaignReader reader,
     ICurrentUser currentUser)
-    : IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>
+    : IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleGroupDto>>
 {
-    public async Task<Result<IReadOnlyList<CampaignRuleDto>>> Handle(
+    public async Task<Result<IReadOnlyList<CampaignRuleGroupDto>>> Handle(
         GetCampaignRulesQuery query,
         CancellationToken cancellationToken)
     {
@@ -21,26 +21,32 @@ internal sealed class GetCampaignRulesQueryHandler(
 
         if (campaign is null)
         {
-            return Result<IReadOnlyList<CampaignRuleDto>>.Failure(TopUpErrors.CampaignNotFound);
+            return Result<IReadOnlyList<CampaignRuleGroupDto>>.Failure(TopUpErrors.CampaignNotFound);
         }
 
         if (!currentUser.OrganizationUnitIds.Contains(campaign.OrganizationId)
             && currentUser.OrganizationUnitId != campaign.OrganizationId)
         {
-            return Result<IReadOnlyList<CampaignRuleDto>>.Failure(TopUpErrors.OrganizationOutsideScope);
+            return Result<IReadOnlyList<CampaignRuleGroupDto>>.Failure(TopUpErrors.OrganizationOutsideScope);
         }
 
         var rules = await reader.GetRulesAsync(query.TopUpCampaignId, cancellationToken);
         var ruleDtos = rules
-            .Select(x => new CampaignRuleDto(
-                x.Id.ToString(),
-                x.CriterionCode,
-                x.OperatorCode,
-                x.NumericValueFrom,
-                x.NumericValueTo,
-                x.TextValue))
+            .Select(group => new CampaignRuleGroupDto(
+                group.GroupId.ToString(),
+                group.DisplayOrder,
+                group.Criteria
+                    .Select(x => new CampaignRuleDto(
+                        x.Id.ToString(),
+                        x.DisplayOrder,
+                        x.CriterionCode,
+                        x.OperatorCode,
+                        x.NumericValueFrom,
+                        x.NumericValueTo,
+                        x.TextValue))
+                    .ToList()))
             .ToList();
 
-        return Result<IReadOnlyList<CampaignRuleDto>>.Success(ruleDtos);
+        return Result<IReadOnlyList<CampaignRuleGroupDto>>.Success(ruleDtos);
     }
 }

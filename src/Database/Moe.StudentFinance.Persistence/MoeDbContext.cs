@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Moe.Application.Abstractions.Persistence;
 
 namespace Moe.StudentFinance.Persistence;
@@ -66,6 +67,27 @@ public sealed class MoeDbContext(
             await transaction.CommitAsync(cancellationToken);
             return result;
         });
+    }
+
+    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+    {
+        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return Task.FromResult<IDbContextTransaction>(new NoopDbContextTransaction());
+        }
+
+        return Database.BeginTransactionAsync(cancellationToken);
+    }
+
+    private sealed class NoopDbContextTransaction : IDbContextTransaction
+    {
+        public Guid TransactionId { get; } = Guid.NewGuid();
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void Commit() { }
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public void Rollback() { }
+        public Task RollbackAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
 
