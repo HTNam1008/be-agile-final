@@ -9,7 +9,8 @@ namespace Moe.Modules.MailDelivery.Application.Admin;
 
 internal sealed class MailNotificationAdminService(
     MoeDbContext dbContext,
-    IClock clock) : IMailNotificationAdminService
+    IClock clock,
+    IMailNotificationAccessScope accessScope) : IMailNotificationAdminService
 {
     public async Task<PageResponse<MailNotificationListItem>> ListAsync(
         MailNotificationFilter filter,
@@ -21,13 +22,11 @@ internal sealed class MailNotificationAdminService(
         int safePageSize = Math.Clamp(pageSize, 1, 100);
 
         IQueryable<EmailNotification> query = ApplyFilter(
-            dbContext.Set<EmailNotification>().AsNoTracking(),
+            accessScope.Apply(dbContext.Set<EmailNotification>().AsNoTracking()),
             filter);
 
         long total = await query.LongCountAsync(cancellationToken);
-        List<MailNotificationListItem> items = await query
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .ThenByDescending(x => x.Id)
+        List<MailNotificationListItem> items = await ApplySort(query, filter)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
             .Select(x => ToListItem(x))
@@ -38,7 +37,7 @@ internal sealed class MailNotificationAdminService(
 
     public async Task<MailNotificationDetail?> GetAsync(long id, CancellationToken cancellationToken)
     {
-        EmailNotification? notification = await dbContext.Set<EmailNotification>()
+        EmailNotification? notification = await accessScope.Apply(dbContext.Set<EmailNotification>())
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
@@ -48,7 +47,8 @@ internal sealed class MailNotificationAdminService(
     public async Task<MailNotificationSummary> GetSummaryAsync(CancellationToken cancellationToken)
     {
         DateTime todayUtc = clock.UtcNow.UtcDateTime.Date;
-        IQueryable<EmailNotification> notifications = dbContext.Set<EmailNotification>().AsNoTracking();
+        IQueryable<EmailNotification> notifications = accessScope.Apply(
+            dbContext.Set<EmailNotification>().AsNoTracking());
 
         return new MailNotificationSummary(
             Pending: await notifications.LongCountAsync(x => x.StatusCode == EmailNotificationStatusCodes.Pending, cancellationToken),
@@ -98,7 +98,7 @@ internal sealed class MailNotificationAdminService(
         Error invalidStateError,
         CancellationToken cancellationToken)
     {
-        EmailNotification? notification = await dbContext.Set<EmailNotification>()
+        EmailNotification? notification = await accessScope.Apply(dbContext.Set<EmailNotification>())
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (notification is null)
@@ -120,6 +120,21 @@ internal sealed class MailNotificationAdminService(
         IQueryable<EmailNotification> query,
         MailNotificationFilter filter)
     {
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            string search = filter.Search.Trim();
+            query = query.Where(x =>
+                x.NotificationType.Contains(search)
+                || x.Subject.Contains(search)
+                || x.PersonId.ToString().Contains(search)
+                || (x.EntityType != null && x.EntityType.Contains(search))
+                || (x.EntityId != null && x.EntityId.Contains(search))
+                || x.StatusCode.Contains(search)
+                || (x.LastErrorCode != null && x.LastErrorCode.Contains(search))
+                || (x.RecipientSourceCode != null && x.RecipientSourceCode.Contains(search))
+                || (x.ResolvedToEmailMasked != null && x.ResolvedToEmailMasked.Contains(search)));
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             string status = filter.Status.Trim();
@@ -161,6 +176,38 @@ internal sealed class MailNotificationAdminService(
 
         return query;
     }
+
+    private static IOrderedQueryable<EmailNotification> ApplySort(
+        IQueryable<EmailNotification> query,
+        MailNotificationFilter filter)
+    {
+        bool descending = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string sortBy = filter.SortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        return sortBy switch
+        {
+            "id" => Order(query, x => x.Id, descending),
+            "notificationtype" => Order(query, x => x.NotificationType, descending),
+            "subject" => Order(query, x => x.Subject, descending),
+            "personid" => Order(query, x => x.PersonId, descending),
+            "entity" => Order(query, x => x.EntityType ?? string.Empty, descending),
+            "statuscode" => Order(query, x => x.StatusCode, descending),
+            "attempts" => Order(query, x => x.AttemptCount, descending),
+            "nextattemptatutc" => Order(query, x => x.NextAttemptAtUtc, descending),
+            "sentatutc" => Order(query, x => x.SentAtUtc, descending),
+            "recipientsourcecode" => Order(query, x => x.RecipientSourceCode ?? string.Empty, descending),
+            "resolvedtoemailmasked" => Order(query, x => x.ResolvedToEmailMasked ?? string.Empty, descending),
+            _ => query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+        };
+    }
+
+    private static IOrderedQueryable<EmailNotification> Order<TKey>(
+        IQueryable<EmailNotification> query,
+        System.Linq.Expressions.Expression<Func<EmailNotification, TKey>> keySelector,
+        bool descending)
+        => descending
+            ? query.OrderByDescending(keySelector).ThenByDescending(x => x.Id)
+            : query.OrderBy(keySelector).ThenBy(x => x.Id);
 
     private static MailNotificationListItem ToListItem(EmailNotification notification)
         => new(

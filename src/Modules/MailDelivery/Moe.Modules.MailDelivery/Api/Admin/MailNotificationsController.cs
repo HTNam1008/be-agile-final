@@ -36,13 +36,16 @@ public sealed class MailNotificationsController(
         CancellationToken cancellationToken)
     {
         MailNotificationFilter filter = new(
+            request.Search,
             request.Status,
             request.NotificationType,
             request.PersonId,
             request.EntityType,
             request.EntityId,
             request.CreatedFromUtc,
-            request.CreatedToUtc);
+            request.CreatedToUtc,
+            request.SortBy,
+            request.SortDirection);
 
         PageResponse<MailNotificationListItem> page = await mailNotifications.ListAsync(
             filter,
@@ -120,6 +123,8 @@ public sealed class MailNotificationsController(
 
 public sealed class MailNotificationListRequest
 {
+    public string? Search { get; init; }
+
     public string? Status { get; init; }
 
     public string? NotificationType { get; init; }
@@ -133,6 +138,10 @@ public sealed class MailNotificationListRequest
     public DateTime? CreatedFromUtc { get; init; }
 
     public DateTime? CreatedToUtc { get; init; }
+
+    public string? SortBy { get; init; }
+
+    public string? SortDirection { get; init; }
 
     public int Page { get; init; } = 1;
 
