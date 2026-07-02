@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Moe.Modules.Notifications.Application;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
@@ -8,7 +9,8 @@ namespace Moe.Modules.Notifications.Infrastructure.Notifications;
 
 public sealed class NotificationWriter(
     MoeDbContext dbContext,
-    INotificationRealtimeNotifier realtimeNotifier) : INotificationWriter
+    INotificationRealtimeNotifier realtimeNotifier,
+    ILogger<NotificationWriter> logger) : INotificationWriter
 {
     public async Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
     {
@@ -28,14 +30,25 @@ public sealed class NotificationWriter(
         dbContext.Set<Notification>().Add(notification);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await realtimeNotifier.NotifyUserAccountAsync(
-            request.RecipientUserAccountId,
-            new NotificationRealtimeMessage(
+        try
+        {
+            await realtimeNotifier.NotifyUserAccountAsync(
+                request.RecipientUserAccountId,
+                new NotificationRealtimeMessage(
+                    notification.Id,
+                    notification.NotificationTypeCode,
+                    notification.Title,
+                    notification.Body),
+                cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                exception,
+                "Realtime notification delivery failed. NotificationId={NotificationId}, RecipientUserAccountId={RecipientUserAccountId}",
                 notification.Id,
-                notification.NotificationTypeCode,
-                notification.Title,
-                notification.Body),
-            cancellationToken);
+                request.RecipientUserAccountId);
+        }
 
         return Result<long>.Success(notification.Id);
     }
