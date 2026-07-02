@@ -48,7 +48,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : I
         long organizationId,
         CancellationToken cancellationToken)
     {
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
 
         return await dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()
