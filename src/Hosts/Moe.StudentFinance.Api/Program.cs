@@ -42,7 +42,10 @@ if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
     builder.Services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
 }
 builder.Services.AddMoePersistence(builder.Configuration);
-builder.Services.AddSignalR();
+builder.Services
+    .AddSignalR()
+    .AddAzureSignalR();
+
 
 IModule[] modules =
 [
@@ -400,9 +403,8 @@ internal sealed record DevelopmentClockResponse(DateTimeOffset UtcNow, DateOnly 
 
 public partial class Program
 {
-    internal static bool IsDevelopmentClockEnabled(IHostEnvironment environment, IConfiguration configuration)
-        => !environment.IsProduction()
-           && configuration.GetValue("DevTools:Clock:Enabled", false);
+    internal static bool IsDevelopmentClockEnabled(IHostEnvironment _, IConfiguration configuration)
+        => configuration.GetValue("DevTools:Clock:Enabled", false);
 
     internal static DevelopmentClockResponse CreateDevelopmentClockResponse(DevelopmentManualClock clock)
         => new(clock.UtcNow, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime), clock.IsOverridden);
