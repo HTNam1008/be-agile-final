@@ -2,6 +2,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.IdentityPlatform.Application;
+using Moe.Modules.IdentityPlatform.Application.Organizations;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
 using Moe.SharedKernel.Results;
@@ -11,6 +12,7 @@ namespace Moe.Modules.IdentityPlatform.Application.AdminProfile.UpdateMyAdminCon
 internal sealed class UpdateMyAdminContactHandler(
     ICurrentUser currentUser,
     IUserAccountRepository userAccounts,
+    IOrganizationUnitRepository organizations,
     IClock clock)
     : ICommandHandler<UpdateMyAdminContactCommand, AdminProfileResponse>
 {
@@ -33,6 +35,11 @@ internal sealed class UpdateMyAdminContactHandler(
             return Result<AdminProfileResponse>.Failure(IdentityErrors.UserAccountNotFound);
         }
 
-        return Result<AdminProfileResponse>.Success(AdminProfileMapper.ToResponse(account, currentUser));
+        OrganizationUnitSummary? organization = account.AdminOrganizationId is long organizationId
+            ? await organizations.FindActiveByIdAsync(organizationId, cancellationToken)
+            : null;
+
+        return Result<AdminProfileResponse>.Success(
+            AdminProfileMapper.ToResponse(account, currentUser, organization));
     }
 }

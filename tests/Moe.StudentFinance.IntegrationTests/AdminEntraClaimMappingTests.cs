@@ -304,6 +304,7 @@ public sealed class AdminEntraClaimMappingTests
                     "Test Admin",
                     "ENTRA_WORKFORCE",
                     PortalCodes.Admin,
+                    "HQ_ADMIN",
                     "ACTIVE",
                     null,
                     false,

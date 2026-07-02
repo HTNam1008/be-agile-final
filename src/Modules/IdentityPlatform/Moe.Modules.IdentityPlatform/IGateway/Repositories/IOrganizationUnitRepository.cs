@@ -8,6 +8,10 @@ public interface IOrganizationUnitRepository
         IReadOnlyCollection<long>? organizationIds,
         CancellationToken cancellationToken);
 
+    Task<OrganizationUnitSummary?> FindActiveByIdAsync(
+        long organizationId,
+        CancellationToken cancellationToken);
+
     Task<OrganizationUnitSummary?> FindActiveSchoolByNameAsync(
         string schoolName,
         CancellationToken cancellationToken);

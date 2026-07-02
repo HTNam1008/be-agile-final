@@ -23,4 +23,11 @@ public sealed record AdminProfileResponse(
     DateTime UpdatedAtUtc,
     IReadOnlyCollection<long> OrganizationUnitIds,
     IReadOnlyCollection<string> Roles,
-    IReadOnlyCollection<string> Permissions);
+    IReadOnlyCollection<string> Permissions,
+    AdminProfileOrganizationResponse? Organization);
+
+public sealed record AdminProfileOrganizationResponse(
+    long Id,
+    string Code,
+    string Name,
+    string TypeCode);
