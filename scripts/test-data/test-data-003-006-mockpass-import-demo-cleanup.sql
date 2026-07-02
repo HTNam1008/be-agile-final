@@ -188,3 +188,4 @@ UNION ALL
 SELECT 'iam.LoginMfaCredential', COUNT(*)
 FROM iam.LoginMfaCredential
 WHERE LoginAccountId IN (SELECT LoginAccountId FROM @FixtureLoginAccountIds);
+
