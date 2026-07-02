@@ -12,6 +12,7 @@ internal static class PaymentApplicationErrors
     public static readonly Error CourseNotFound = new("PAYMENT.COURSE_NOT_FOUND", "The course was not found.");
     public static readonly Error CourseForbidden = new("PAYMENT.COURSE_FORBIDDEN", "The administrator cannot manage this course.");
     public static readonly Error BillNotFound = new("PAYMENT.BILL_NOT_FOUND", "The payable bill was not found.");
+    public static readonly Error ReceiptNotFound = new("PAYMENT.RECEIPT_NOT_FOUND", "The payment receipt was not found.");
     public static readonly Error CancellationNotAllowed = new(
         "PAYMENT.CANCELLATION_NOT_ALLOWED",
         "This enrollment cannot be cancelled under the configured course refund policy.");

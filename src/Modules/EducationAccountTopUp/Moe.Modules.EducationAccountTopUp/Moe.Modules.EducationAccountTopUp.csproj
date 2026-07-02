@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
     <ProjectReference Include="..\..\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
+    <ProjectReference Include="..\..\Notifications\Moe.Modules.Notifications\Moe.Modules.Notifications.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.EducationAccountTopUp.UnitTests" />

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -27,6 +28,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DevTools:Clock:Enabled"] = "true"
+            });
+        });
+
         builder.ConfigureTestServices(services =>
         {
             // Remove the app's DbContext registration.
@@ -246,6 +255,17 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
             amountMinor,
             "sgd");
     }
+
+    public Task<StripePaymentEvidenceGatewayResult> GetPaymentEvidenceAsync(
+        string? providerCheckoutSessionId,
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        string? providerChargeId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new StripePaymentEvidenceGatewayResult(
+            providerInvoiceId is null ? null : $"https://stripe.test/invoices/{providerInvoiceId}",
+            providerInvoiceId is null ? null : $"https://stripe.test/invoices/{providerInvoiceId}.pdf",
+            providerChargeId is null ? null : $"https://stripe.test/receipts/{providerChargeId}"));
 
     public Task<StripeRefundGatewayResult> CreateRefundAsync(
         string idempotencyKey,

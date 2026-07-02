@@ -30,7 +30,9 @@ public sealed class PersonDirectory(MoeDbContext db, IClock clock) : IPersonDire
                     .OrderByDescending(e => e.StartDate)
                     .ThenByDescending(e => e.Id)
                     .Select(e => (long?)e.OrganizationId)
-                    .FirstOrDefault()))
+                    .FirstOrDefault(),
+                x.PreferredEmail,
+                x.OfficialEmail))
             .SingleOrDefaultAsync(cancellationToken);
     }
 }

@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
     <ProjectReference Include="..\..\Modules\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
     <ProjectReference Include="..\..\Modules\Mfa\Moe.Modules.Mfa\Moe.Modules.Mfa.csproj" />
+    <ProjectReference Include="..\..\Modules\Notifications\Moe.Modules.Notifications\Moe.Modules.Notifications.csproj" />
     <ProjectReference Include="..\..\Modules\AiCopilot\Moe.Modules.AiCopilot\Moe.Modules.AiCopilot.csproj" />
     <ProjectReference Include="..\..\Modules\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
   </ItemGroup>
@@ -27,5 +28,9 @@
     <None Update="Certs\MockPass\fapi-rp-private.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Remove="artifacts\**" />
+    <None Remove="artifacts\**" />
   </ItemGroup>
 </Project>

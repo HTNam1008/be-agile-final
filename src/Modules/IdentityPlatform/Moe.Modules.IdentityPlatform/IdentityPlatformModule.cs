@@ -31,6 +31,7 @@ using Moe.Modules.IdentityPlatform.Application.ReferenceData;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.GetMyStudentProfile;
 using Moe.Modules.IdentityPlatform.Application.StudentProfile.UpdateMyStudentContact;
+using Moe.Modules.IdentityPlatform.Application.Students;
 using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Application.Students.SetStudentAccess;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
@@ -83,10 +84,13 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IAdminStudentListReader, AdminStudentListReader>();
         services.AddScoped<IStudentBulkImportWorkbookReader, ClosedXmlStudentBulkImportWorkbookReader>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
-        services.AddScoped<IEmailRecipientResolver, EmailRecipientResolver>();
+        services.AddScoped<Moe.Modules.MailDelivery.IGateway.IEmailRecipientResolver, EmailRecipientResolver>();
+        services.AddScoped<Moe.Modules.MailDelivery.Application.Admin.IMailNotificationAccessScope, MailNotificationAccessScope>();
         services.AddScoped<IEligiblePersonReader, EligiblePersonReader>();
         services.AddScoped<ILifecyclePersonDisplayReader, LifecyclePersonDisplayReader>();
         services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();
+        services.AddScoped<IStudentNotificationRecipientResolver, StudentNotificationRecipientResolver>();
+        services.AddScoped<ISchoolAdminNotificationRecipientResolver, SchoolAdminNotificationRecipientResolver>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IExternalIdentityProvisioningRepository, UserAccountRepository>();
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();
@@ -98,6 +102,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IStudentProfileRepository, StudentProfileRepository>();
         services.AddScoped<IAdminAccountDetailsRepository, AdminAccountDetailsRepository>();
         services.AddScoped<ILocalIdentityRepository, LocalIdentityRepository>();
+        services.AddScoped<StudentAccountNotificationEmailService>();
         services.AddScoped<IQueryHandler<GetAdminAuthFlowQuery, AdminAuthFlowResponse>, GetAdminAuthFlowHandler>();
         services.AddScoped<IQueryHandler<GetCurrentIdentityQuery, LocalIdentitySummary>, GetCurrentIdentityHandler>();
         services.AddScoped<IQueryHandler<GetEServiceAuthFlowQuery, EServiceAuthFlowResponse>, GetEServiceAuthFlowHandler>();
@@ -139,3 +144,7 @@ public sealed class IdentityPlatformModule : IModule
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }
+
+
+
+

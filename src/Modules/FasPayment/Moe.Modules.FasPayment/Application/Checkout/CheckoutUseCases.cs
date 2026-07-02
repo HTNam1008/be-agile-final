@@ -4,6 +4,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Application;
+using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -103,6 +104,8 @@ internal sealed class CreateStripeCheckoutHandler(
         }
 
         long amountMinor = decimal.ToInt64(checkout.Amount * 100m);
+        IReadOnlyCollection<PaymentCheckoutLineItem> billingLineItems =
+            await courses.BuildPaymentCheckoutLineItemsAsync([bill.BillId], cancellationToken);
         StripeCheckoutGatewayResult provider;
         try
         {
@@ -117,7 +120,8 @@ internal sealed class CreateStripeCheckoutHandler(
                 amountMinor / checkout.RequiredInstallmentCount,
                 checkout.RequiredInstallmentCount,
                     checkout.ProviderPriceId,
-                    clock.UtcNow.UtcDateTime.Add(PaymentCheckoutPolicy.Lifetime)),
+                    clock.UtcNow.UtcDateTime.Add(PaymentCheckoutPolicy.Lifetime),
+                    LineItems: ToStripeLineItems(billingLineItems)),
                 cancellationToken);
         }
         catch (PaymentProviderUnavailableException)
@@ -137,12 +141,29 @@ internal sealed class CreateStripeCheckoutHandler(
             provider.CheckoutUrl,
             checkout.CheckoutStatusCode));
     }
+
+    private static IReadOnlyCollection<StripeCheckoutLineItem>? ToStripeLineItems(
+        IReadOnlyCollection<PaymentCheckoutLineItem> lineItems)
+        => lineItems.Count == 0
+            ? null
+            : lineItems
+                .Where(item => item.Amount > 0m)
+                .Select(item => new StripeCheckoutLineItem(
+                    item.Name,
+                    item.Description,
+                    ToMinorUnit(item.Amount),
+                    Math.Max(1, item.Quantity)))
+                .ToArray();
+
+    private static long ToMinorUnit(decimal amount)
+        => checked((long)Math.Round(amount * 100m, MidpointRounding.AwayFromZero));
 }
 
 internal sealed class GetPaymentCheckoutStatusHandler(
     IPaymentCheckoutRepository payments,
     ICurrentUser currentUser,
-    IClock clock)
+    IClock clock,
+    PaymentReceiptService receipts)
     : IQueryHandler<GetPaymentCheckoutStatusQuery, PaymentCheckoutStatusResponse>
 {
     public async Task<Result<PaymentCheckoutStatusResponse>> Handle(
@@ -158,7 +179,10 @@ internal sealed class GetPaymentCheckoutStatusHandler(
 
         Payment? payment = checkout.PaymentId is long paymentId
             ? await payments.FindPaymentAsync(paymentId, cancellationToken)
-            : null;
+            : await payments.FindPaymentByProviderReferenceAsync(
+                checkout.ProviderPaymentIntentId,
+                null,
+                cancellationToken);
         IReadOnlyCollection<PaymentAllocation> allocations = payment is not null
             ? await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken)
             : [];
@@ -167,6 +191,9 @@ internal sealed class GetPaymentCheckoutStatusHandler(
             : checkout.BillId > 0
                 ? [checkout.BillId]
                 : [];
+        PaymentReceiptResponse? receipt = payment is null
+            ? null
+            : await receipts.BuildForPaymentAsync(payment, cancellationToken);
 
         return Result<PaymentCheckoutStatusResponse>.Success(new(
             checkout.Id,
@@ -185,6 +212,7 @@ internal sealed class GetPaymentCheckoutStatusHandler(
             billIds,
             checkout.CheckoutUrl,
             checkout.ExpiresAtUtc,
-            checkout.CanResume(clock.UtcNow.UtcDateTime)));
+            checkout.CanResume(clock.UtcNow.UtcDateTime),
+            receipt));
     }
 }

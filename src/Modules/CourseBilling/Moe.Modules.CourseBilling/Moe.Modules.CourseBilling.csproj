@@ -17,10 +17,12 @@
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\IdentityPlatform\Moe.Modules.IdentityPlatform\Moe.Modules.IdentityPlatform.csproj" />
     <ProjectReference Include="..\..\EducationAccountTopUp\Moe.Modules.EducationAccountTopUp\Moe.Modules.EducationAccountTopUp.csproj" />
+    <ProjectReference Include="..\..\Notifications\Moe.Modules.Notifications\Moe.Modules.Notifications.csproj" />
     <ProjectReference Include="..\..\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
     <InternalsVisibleTo Include="Moe.Modules.FasPayment" />
+    <InternalsVisibleTo Include="Moe.FasPayment.UnitTests" />
   </ItemGroup>
 </Project>

@@ -15,9 +15,13 @@ public interface IAdminDashboardIdentityMetricsReader
 }
 
 public sealed record AdminDashboardIdentityMetrics(
-    long TotalActiveSchools,
-    long TotalActiveStudents,
-    long NewStudentsThisMonth,
-    IReadOnlyCollection<AdminDashboardCountPoint> MonthlyNewStudents);
+    long TotalSchools,
+    long PreviousPeriodTotalSchools,
+    long TotalStudents,
+    long PreviousPeriodTotalStudents,
+    IReadOnlyCollection<AdminDashboardCountPoint> MonthlyNewStudents,
+    IReadOnlyCollection<AdminDashboardNullableCountPoint> MonthlyActiveStudents);
 
 public sealed record AdminDashboardCountPoint(int Month, long Value);
+
+public sealed record AdminDashboardNullableCountPoint(int Month, long? Value);

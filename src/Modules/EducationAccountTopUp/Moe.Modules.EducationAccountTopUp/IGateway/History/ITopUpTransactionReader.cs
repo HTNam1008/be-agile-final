@@ -22,6 +22,8 @@ internal interface ITopUpTransactionReader
         TopUpHistoryFilter filter,
         int page,
         int pageSize,
+        string? sortBy,
+        string? sortDirection,
         CancellationToken cancellationToken);
 }
 

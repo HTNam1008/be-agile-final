@@ -12,9 +12,7 @@ internal sealed class GetHqDashboardHandler(
     IAdminAccessControl adminAccess,
     IClock clock,
     IAdminDashboardIdentityMetricsReader identities,
-    IAdminDashboardFinanceMetricsReader finance,
-    IAdminDashboardCourseMetricsReader courses,
-    IAdminDashboardFasMetricsReader fas)
+    IAdminDashboardFinanceMetricsReader finance)
     : IQueryHandler<GetHqDashboardQuery, HqDashboardResponse>
 {
     public async Task<Result<HqDashboardResponse>> Handle(
@@ -34,9 +32,7 @@ internal sealed class GetHqDashboardHandler(
         }
 
         AdminDashboardIdentityMetrics identity = await identities.GetHqMetricsAsync(year, now, cancellationToken);
-        AdminDashboardFinanceMetrics financeMetrics = await finance.GetHqMetricsAsync(year, now, cancellationToken);
-        long activeCourses = await courses.CountActiveCoursesAsync(null, clock.TodayInSingapore(), cancellationToken);
-        long pendingFasApplications = await fas.CountPendingApplicationsAsync(null, cancellationToken);
+        AdminDashboardHqFinanceMetrics financeMetrics = await finance.GetHqMetricsAsync(year, now, cancellationToken);
         Dictionary<int, long> studentsByMonth = identity.MonthlyNewStudents.ToDictionary(point => point.Month, point => point.Value);
         Dictionary<int, long> accountsByMonth = financeMetrics.MonthlyNewEducationAccounts.ToDictionary(point => point.Month, point => point.Value);
 
@@ -49,16 +45,17 @@ internal sealed class GetHqDashboardHandler(
 
         return Result<HqDashboardResponse>.Success(new HqDashboardResponse(
             new HqDashboardCardsResponse(
-                identity.TotalActiveSchools,
-                identity.TotalActiveStudents,
-                financeMetrics.TotalActiveEducationAccounts,
-                activeCourses),
-            new HqDashboardYearlyGrowthResponse(year, points),
-            new HqDashboardOverviewResponse(
-                identity.NewStudentsThisMonth,
-                financeMetrics.NewEducationAccountsThisMonth,
-                pendingFasApplications,
-                financeMetrics.TopUpAmountThisMonth,
-                financeMetrics.CurrencyCode)));
+                new DashboardCountMetricResponse(
+                    identity.TotalSchools,
+                    DashboardTrend.Calculate(identity.TotalSchools, identity.PreviousPeriodTotalSchools)),
+                new DashboardCountMetricResponse(
+                    identity.TotalStudents,
+                    DashboardTrend.Calculate(identity.TotalStudents, identity.PreviousPeriodTotalStudents)),
+                new DashboardCountMetricResponse(
+                    financeMetrics.TotalEducationAccounts,
+                    DashboardTrend.Calculate(
+                        financeMetrics.TotalEducationAccounts,
+                        financeMetrics.PreviousPeriodTotalEducationAccounts))),
+            new HqDashboardYearlyGrowthResponse(year, points)));
     }
 }

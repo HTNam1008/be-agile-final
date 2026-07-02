@@ -4,6 +4,9 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.IGateway.Notifications;
+using Moe.SharedKernel.Results;
 using Xunit;
 
 namespace Moe.EducationAccountTopUp.UnitTests.Application.SettlementPreferences;
@@ -14,6 +17,8 @@ public sealed class SettlementPreferenceHandlerTests
 
     private readonly FakeEducationAccountRepository _educationAccounts = new();
     private readonly FakeSettlementPreferenceRepository _settlementPreferences = new();
+    private readonly FakeStudentNotificationRecipientResolver _notificationRecipients = new();
+    private readonly FakeNotificationWriter _notificationWriter = new();
     private readonly TestClock _clock = new(Now);
     private readonly FakeUnitOfWork _unitOfWork = new();
 
@@ -192,7 +197,7 @@ public sealed class SettlementPreferenceHandlerTests
         => new(_educationAccounts, _settlementPreferences);
 
     private SetSettlementPreferenceHandler CreateSetHandler()
-        => new(_educationAccounts, _settlementPreferences, _clock, _unitOfWork);
+        => new(_educationAccounts, _settlementPreferences, _notificationRecipients, _notificationWriter, _clock, _unitOfWork);
 
     private EducationAccount AddAccount(long personId, long accountId)
     {
@@ -247,6 +252,18 @@ public sealed class SettlementPreferenceHandlerTests
             ActiveByAccount[preference.EducationAccountId] = preference;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeStudentNotificationRecipientResolver : IStudentNotificationRecipientResolver
+    {
+        public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<long?>(personId + 1000);
+    }
+
+    private sealed class FakeNotificationWriter : INotificationWriter
+    {
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<long>.Success(1));
     }
 
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
