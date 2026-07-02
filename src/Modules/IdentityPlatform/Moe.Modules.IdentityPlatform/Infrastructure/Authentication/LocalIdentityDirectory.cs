@@ -39,6 +39,7 @@ internal sealed class LocalIdentityDirectory(
             account.DisplayNameSnapshot ?? string.Empty,
             account.IdentityProviderCode,
             currentUser.Portal,
+            account.RoleCode,
             account.AccountStatusCode,
             age,
             isAccountHolder,

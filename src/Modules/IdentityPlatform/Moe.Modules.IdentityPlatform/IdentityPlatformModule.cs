@@ -22,6 +22,7 @@ using Moe.Modules.IdentityPlatform.Application.AdminUsers.CreateAdminUser;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetAdminAuthFlow;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetCurrentIdentity;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetEServiceAuthFlow;
+using Moe.Modules.IdentityPlatform.Application.Authentication.RecordAdminLogin;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.DisableUserAccount;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.EnableUserAccount;
@@ -70,6 +71,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<ISchoolAuditLogReader, SchoolAuditLogReader>();
         services.AddScoped<IEServiceLoginResolver, EServiceLoginResolver>();
+        services.AddScoped<IAdminLoginRecorder, AdminLoginRecorder>();
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         if (services.All(x => x.ServiceType != typeof(ISingpassLoginGateway)))
         {
@@ -113,6 +115,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IQueryHandler<ListAdminStudentClassesQuery, IReadOnlyList<string>>, ListAdminStudentClassesHandler>();
         services.AddScoped<IQueryHandler<GetStudentManagementReferenceDataQuery, StudentManagementReferenceDataResponse>, GetStudentManagementReferenceDataHandler>();
         services.AddScoped<ICommandHandler<CreateAdminUserCommand, CreateAdminUserResponse>, CreateAdminUserHandler>();
+        services.AddScoped<ICommandHandler<RecordAdminLoginCommand>, RecordAdminLoginHandler>();
         services.AddScoped<ICommandHandler<CreateStudentCommand, CreateStudentResponse>, CreateStudentHandler>();
         services.AddScoped<ICommandHandler<DisableStudentAccessCommand, StudentAccessResponse>, DisableStudentAccessHandler>();
         services.AddScoped<ICommandHandler<EnableStudentAccessCommand, StudentAccessResponse>, EnableStudentAccessHandler>();
