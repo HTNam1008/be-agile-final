@@ -1,0 +1,381 @@
+Using launch settings from src\Hosts\Moe.StudentFinance.Api\Properties\launchSettings.json...
+info: Moe.StudentFinance.Api[0]
+      Data Protection keys are persisted to C:\Users\ADMIN\AppData\Local\ASP.NET\DataProtection-Keys
+2026-07-02 12:02:31,360 INFO  [(null)] Moe.StudentFinance.Api - Data Protection keys are persisted to C:\Users\ADMIN\AppData\Local\ASP.NET\DataProtection-Keys
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (57ms) [Parameters=[@bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT CASE
+          WHEN EXISTS (
+              SELECT 1
+              FROM [org].[Organization] AS [o]
+              WHERE [o].[OrganizationId] = @bootstrap_OrganizationUnitId AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+          ELSE CAST(0 AS bit)
+      END
+2026-07-02 12:02:34,496 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (57ms) [Parameters=[@bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [org].[Organization] AS [o]
+        WHERE [o].[OrganizationId] = @bootstrap_OrganizationUnitId AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (7ms) [Parameters=[@utcNow='?' (DbType = DateTime2), @utcNow1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT CASE
+          WHEN EXISTS (
+              SELECT 1
+              FROM [iam].[RolePermission] AS [r]
+              WHERE [r].[RoleCode] = 'HQ_ADMIN' AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow1)) THEN CAST(1 AS bit)
+          ELSE CAST(0 AS bit)
+      END
+2026-07-02 12:02:34,572 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (7ms) [Parameters=[@utcNow='?' (DbType = DateTime2), @utcNow1='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[RolePermission] AS [r]
+        WHERE [r].[RoleCode] = 'HQ_ADMIN' AND [r].[StatusCode] = 'ACTIVE' AND [r].[EffectiveFromUtc] <= @utcNow AND ([r].[EffectiveToUtc] IS NULL OR [r].[EffectiveToUtc] > @utcNow1)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+      FROM [iam].[LoginAccount] AS [l]
+      WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @entraObjectId
+2026-07-02 12:02:34,653 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @entraObjectId
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[@account_Id='?' (DbType = Int64), @bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT CASE
+          WHEN EXISTS (
+              SELECT 1
+              FROM [iam].[UserAccessScope] AS [u]
+              WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @bootstrap_OrganizationUnitId AND [u].[RoleCode] = 'HQ_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+          ELSE CAST(0 AS bit)
+      END
+2026-07-02 12:02:34,774 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@account_Id='?' (DbType = Int64), @bootstrap_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @bootstrap_OrganizationUnitId AND [u].[RoleCode] = 'HQ_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@_8__locals1_schoolAdmin_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT CASE
+          WHEN EXISTS (
+              SELECT 1
+              FROM [org].[Organization] AS [o]
+              WHERE [o].[OrganizationId] = @_8__locals1_schoolAdmin_OrganizationUnitId AND [o].[OrganizationTypeCode] = 'SCHOOL' AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+          ELSE CAST(0 AS bit)
+      END
+2026-07-02 12:02:34,806 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@_8__locals1_schoolAdmin_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow2='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [org].[Organization] AS [o]
+        WHERE [o].[OrganizationId] = @_8__locals1_schoolAdmin_OrganizationUnitId AND [o].[OrganizationTypeCode] = 'SCHOOL' AND [o].[OrganizationStatusCode] = 'ACTIVE' AND [o].[EffectiveFromUtc] <= @utcNow AND ([o].[EffectiveToUtc] IS NULL OR [o].[EffectiveToUtc] > @utcNow2)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[@objectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+      FROM [iam].[LoginAccount] AS [l]
+      WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @objectId
+2026-07-02 12:02:34,843 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@objectId='?' (Size = 100)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(2) [l].[LoginAccountId], [l].[LoginStatusCode], [l].[AdminOrganizationId], [l].[ContactEmail], [l].[ContactMobile], [l].[CreatedAt], [l].[CreatedByLoginAccountId], [l].[DisplayNameSnapshot], [l].[ExternalIssuer], [l].[ExternalObjectId], [l].[ExternalSubjectId], [l].[ExternalTenantId], [l].[FirstLoginAtUtc], [l].[IdentityProviderCode], [l].[LastLoginAt], [l].[LastSyncedAt], [l].[LoginEmailNormalized], [l].[PersonId], [l].[PortalAccessCode], [l].[ProviderDisplayName], [l].[ProviderEmail], [l].[ProviderLoginName], [l].[ProviderMobile], [l].[RoleCode], [l].[RowVersion], [l].[UpdatedAt], [l].[UserTypeCode]
+FROM [iam].[LoginAccount] AS [l]
+WHERE [l].[IdentityProviderCode] = 'ENTRA_WORKFORCE' AND [l].[ExternalObjectId] = @objectId
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@account_Id='?' (DbType = Int64), @_8__locals1_schoolAdmin_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT CASE
+          WHEN EXISTS (
+              SELECT 1
+              FROM [iam].[UserAccessScope] AS [u]
+              WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @_8__locals1_schoolAdmin_OrganizationUnitId AND [u].[RoleCode] = 'SCHOOL_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+          ELSE CAST(0 AS bit)
+      END
+2026-07-02 12:02:34,866 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@account_Id='?' (DbType = Int64), @_8__locals1_schoolAdmin_OrganizationUnitId='?' (DbType = Int64), @utcNow='?' (DbType = DateTime2), @utcNow3='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [iam].[UserAccessScope] AS [u]
+        WHERE [u].[UserAccountId] = @account_Id AND [u].[OrganizationUnitId] = @_8__locals1_schoolAdmin_OrganizationUnitId AND [u].[RoleCode] = 'SCHOOL_ADMIN' AND [u].[StatusCode] = 'ACTIVE' AND [u].[EffectiveFromUtc] <= @utcNow AND ([u].[EffectiveToUtc] IS NULL OR [u].[EffectiveToUtc] > @utcNow3)) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+info: Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpRunWorker[0]
+      Top-up run worker started
+2026-07-02 12:02:34,878 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpRunWorker - Top-up run worker started
+info: Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpSchedulerWorker[0]
+      Top-up scheduler worker started
+info: Moe.Modules.EducationAccountTopUp.Application.Lifecycle.EducationAccountLifecycleWorker[0]
+      Education Account lifecycle worker started
+2026-07-02 12:02:34,879 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.Lifecycle.EducationAccountLifecycleWorker - Education Account lifecycle worker started
+info: Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpAssessmentWorker[0]
+      Top-up assessment worker started
+2026-07-02 12:02:34,878 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpSchedulerWorker - Top-up scheduler worker started
+2026-07-02 12:02:34,879 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpAssessmentWorker - Top-up assessment worker started
+info: Moe.Modules.CourseBilling.Infrastructure.Payments.MissedInstallmentPaymentEmailWorker[0]
+      Missed installment emails skipped because MailDelivery is disabled.
+2026-07-02 12:02:34,886 INFO  [(null)] Moe.Modules.CourseBilling.Infrastructure.Payments.MissedInstallmentPaymentEmailWorker - Missed installment emails skipped because MailDelivery is disabled.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@p='?' (DbType = Int32), @cutoffUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(@p) [c].[Id], [c].[CreatedAtUtc], [c].[ExpiresAtUtc], [c].[FasInterviewJson], [c].[ModeCode], [c].[PageContextJson], [c].[PersonId], [c].[PortalCode], [c].[StatusCode], [c].[UpdatedAtUtc]
+      FROM [ai].[Conversation] AS [c]
+      WHERE [c].[ExpiresAtUtc] < @cutoffUtc
+      ORDER BY [c].[ExpiresAtUtc], [c].[Id]
+2026-07-02 12:02:35,016 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@p='?' (DbType = Int32), @cutoffUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT TOP(@p) [c].[Id], [c].[CreatedAtUtc], [c].[ExpiresAtUtc], [c].[FasInterviewJson], [c].[ModeCode], [c].[PageContextJson], [c].[PersonId], [c].[PortalCode], [c].[StatusCode], [c].[UpdatedAtUtc]
+FROM [ai].[Conversation] AS [c]
+WHERE [c].[ExpiresAtUtc] < @cutoffUtc
+ORDER BY [c].[ExpiresAtUtc], [c].[Id]
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[@today='?' (DbType = Date), @today1='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+      SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+      FROM [topup].[TopUpCampaign] AS [t]
+      WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[RecipientModeCode] = 'DynamicRules' AND [t].[DeliveryTypeCode] <> 'INSTANT' AND [t].[StartDate] <= @today AND ([t].[EndDate] IS NULL OR [t].[EndDate] >= @today1)
+2026-07-02 12:02:35,032 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@today='?' (DbType = Date), @today1='?' (DbType = Date)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[RecipientModeCode] = 'DynamicRules' AND [t].[DeliveryTypeCode] <> 'INSTANT' AND [t].[StartDate] <= @today AND ([t].[EndDate] IS NULL OR [t].[EndDate] >= @today1)
+info: Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpAssessmentWorker[0]
+      Assessment cycle completed. Next run at 07/03/2026 00:00:00 (in 19.0 hours).
+2026-07-02 12:02:35,036 INFO  [(null)] Moe.Modules.EducationAccountTopUp.Application.RunExecution.TopUpAssessmentWorker - Assessment cycle completed. Next run at 07/03/2026 00:00:00 (in 19.0 hours).
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+      FROM [topup].[TopUpCampaign] AS [t]
+      WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+2026-07-02 12:02:35,037 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@nowUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT [d].[DynamicTopUpContractId], [d].[AmountPerPayment], [d].[ContractStatus], [d].[CreatedAt], [d].[CyclesCompleted], [d].[DeliveryTypeCode], [d].[EducationAccountId], [d].[FirstPaymentDate], [d].[FrequencyCode], [d].[FrequencyInterval], [d].[MaxTotalAmount], [d].[NextPaymentDate], [d].[QualifiedAtUtc], [d].[TopUpCampaignId], [d].[TotalReceived], [d].[UpdatedAt]
+      FROM [topup].[DynamicTopUpContract] AS [d]
+      WHERE [d].[ContractStatus] = 'ACTIVE' AND [d].[NextPaymentDate] IS NOT NULL AND [d].[NextPaymentDate] <= @nowUtc AND [d].[TotalReceived] < [d].[MaxTotalAmount]
+2026-07-02 12:02:35,068 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@nowUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [d].[DynamicTopUpContractId], [d].[AmountPerPayment], [d].[ContractStatus], [d].[CreatedAt], [d].[CyclesCompleted], [d].[DeliveryTypeCode], [d].[EducationAccountId], [d].[FirstPaymentDate], [d].[FrequencyCode], [d].[FrequencyInterval], [d].[MaxTotalAmount], [d].[NextPaymentDate], [d].[QualifiedAtUtc], [d].[TopUpCampaignId], [d].[TotalReceived], [d].[UpdatedAt]
+FROM [topup].[DynamicTopUpContract] AS [d]
+WHERE [d].[ContractStatus] = 'ACTIVE' AND [d].[NextPaymentDate] IS NOT NULL AND [d].[NextPaymentDate] <= @nowUtc AND [d].[TotalReceived] < [d].[MaxTotalAmount]
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: https://localhost:7000
+2026-07-02 12:02:35,092 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: https://localhost:7000
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:7001
+2026-07-02 12:02:35,093 INFO  [(null)] Microsoft.Hosting.Lifetime - Now listening on: http://localhost:7001
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+2026-07-02 12:02:35,094 INFO  [(null)] Microsoft.Hosting.Lifetime - Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+2026-07-02 12:02:35,095 INFO  [(null)] Microsoft.Hosting.Lifetime - Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: D:\Avepoint\Agile\be-agile-final\src\Hosts\Moe.StudentFinance.Api
+2026-07-02 12:02:35,096 INFO  [(null)] Microsoft.Hosting.Lifetime - Content root path: D:\Avepoint\Agile\be-agile-final\src\Hosts\Moe.StudentFinance.Api
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:02:36,599 INFO  [7e662bedd6244335b8562829261ac9b9] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (8ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:02:36,690 INFO  [7e662bedd6244335b8562829261ac9b9] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (8ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 128 ms with 200
+2026-07-02 12:02:36,733 INFO  [7e662bedd6244335b8562829261ac9b9] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 128 ms with 200
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 134 ms. TraceId=7e662bedd6244335b8562829261ac9b9
+2026-07-02 12:02:36,738 INFO  [7e662bedd6244335b8562829261ac9b9] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 134 ms. TraceId=7e662bedd6244335b8562829261ac9b9
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:02:36,744 INFO  [6e9c11fe877241019680a07fdbf8a3f9] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:02:36,753 INFO  [6e9c11fe877241019680a07fdbf8a3f9] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 10 ms with 200
+2026-07-02 12:02:36,755 INFO  [6e9c11fe877241019680a07fdbf8a3f9] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 10 ms with 200
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 11 ms. TraceId=6e9c11fe877241019680a07fdbf8a3f9
+2026-07-02 12:02:36,756 INFO  [6e9c11fe877241019680a07fdbf8a3f9] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 11 ms. TraceId=6e9c11fe877241019680a07fdbf8a3f9
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:02:42,526 INFO  [14685483142441079a8d939c231dd41b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:02:42,540 INFO  [14685483142441079a8d939c231dd41b] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 15 ms with 200
+2026-07-02 12:02:42,543 INFO  [14685483142441079a8d939c231dd41b] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 15 ms with 200
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 16 ms. TraceId=14685483142441079a8d939c231dd41b
+2026-07-02 12:02:42,544 INFO  [14685483142441079a8d939c231dd41b] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 16 ms. TraceId=14685483142441079a8d939c231dd41b
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:02:42,546 INFO  [9d3164e4578b434994bb0c8f86a4bd31] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:02:42,550 INFO  [9d3164e4578b434994bb0c8f86a4bd31] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 5 ms with 200
+2026-07-02 12:02:42,552 INFO  [9d3164e4578b434994bb0c8f86a4bd31] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 5 ms with 200
+2026-07-02 12:02:42,553 INFO  [9d3164e4578b434994bb0c8f86a4bd31] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 5 ms. TraceId=9d3164e4578b434994bb0c8f86a4bd31
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 5 ms. TraceId=9d3164e4578b434994bb0c8f86a4bd31
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /favicon.ico
+2026-07-02 12:02:45,461 INFO  [0cd1e9dc72494454aaf2ec9ab647f8c3] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /favicon.ico
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /favicon.ico => 404 in 0 ms. TraceId=0cd1e9dc72494454aaf2ec9ab647f8c3
+2026-07-02 12:02:45,463 INFO  [0cd1e9dc72494454aaf2ec9ab647f8c3] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /favicon.ico => 404 in 0 ms. TraceId=0cd1e9dc72494454aaf2ec9ab647f8c3
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /favicon.ico completed in 0 ms with 404
+2026-07-02 12:02:45,463 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /favicon.ico completed in 0 ms with 404
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /favicon.ico
+2026-07-02 12:02:45,645 INFO  [b48bb46a2fc44cf89eab8199d3f27232] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /favicon.ico
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /favicon.ico => 404 in 0 ms. TraceId=b48bb46a2fc44cf89eab8199d3f27232
+2026-07-02 12:02:45,646 INFO  [b48bb46a2fc44cf89eab8199d3f27232] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /favicon.ico => 404 in 0 ms. TraceId=b48bb46a2fc44cf89eab8199d3f27232
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /favicon.ico completed in 0 ms with 404
+2026-07-02 12:02:45,647 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /favicon.ico completed in 0 ms with 404
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:03:32,221 INFO  [39a2f06519e84404871b9973aa1d6897] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:03:32,229 INFO  [39a2f06519e84404871b9973aa1d6897] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 9 ms with 200
+2026-07-02 12:03:32,232 INFO  [39a2f06519e84404871b9973aa1d6897] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 9 ms with 200
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 11 ms. TraceId=39a2f06519e84404871b9973aa1d6897
+2026-07-02 12:03:32,234 INFO  [39a2f06519e84404871b9973aa1d6897] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 11 ms. TraceId=39a2f06519e84404871b9973aa1d6897
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+      FROM [topup].[TopUpCampaign] AS [t]
+      WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+2026-07-02 12:03:35,089 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (6ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@nowUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT [d].[DynamicTopUpContractId], [d].[AmountPerPayment], [d].[ContractStatus], [d].[CreatedAt], [d].[CyclesCompleted], [d].[DeliveryTypeCode], [d].[EducationAccountId], [d].[FirstPaymentDate], [d].[FrequencyCode], [d].[FrequencyInterval], [d].[MaxTotalAmount], [d].[NextPaymentDate], [d].[QualifiedAtUtc], [d].[TopUpCampaignId], [d].[TotalReceived], [d].[UpdatedAt]
+      FROM [topup].[DynamicTopUpContract] AS [d]
+      WHERE [d].[ContractStatus] = 'ACTIVE' AND [d].[NextPaymentDate] IS NOT NULL AND [d].[NextPaymentDate] <= @nowUtc AND [d].[TotalReceived] < [d].[MaxTotalAmount]
+2026-07-02 12:03:35,101 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@nowUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [d].[DynamicTopUpContractId], [d].[AmountPerPayment], [d].[ContractStatus], [d].[CreatedAt], [d].[CyclesCompleted], [d].[DeliveryTypeCode], [d].[EducationAccountId], [d].[FirstPaymentDate], [d].[FrequencyCode], [d].[FrequencyInterval], [d].[MaxTotalAmount], [d].[NextPaymentDate], [d].[QualifiedAtUtc], [d].[TopUpCampaignId], [d].[TotalReceived], [d].[UpdatedAt]
+FROM [topup].[DynamicTopUpContract] AS [d]
+WHERE [d].[ContractStatus] = 'ACTIVE' AND [d].[NextPaymentDate] IS NOT NULL AND [d].[NextPaymentDate] <= @nowUtc AND [d].[TotalReceived] < [d].[MaxTotalAmount]
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /favicon.ico
+2026-07-02 12:04:01,463 INFO  [3adcc039f12b4771a76ced0744edc48c] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /favicon.ico
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /favicon.ico => 404 in 0 ms. TraceId=3adcc039f12b4771a76ced0744edc48c
+2026-07-02 12:04:01,464 INFO  [3adcc039f12b4771a76ced0744edc48c] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /favicon.ico => 404 in 0 ms. TraceId=3adcc039f12b4771a76ced0744edc48c
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /favicon.ico completed in 0 ms with 404
+2026-07-02 12:04:01,464 INFO  [(null)] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /favicon.ico completed in 0 ms with 404
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+      FROM [topup].[TopUpCampaign] AS [t]
+      WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+2026-07-02 12:04:35,111 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (4ms) [Parameters=[@utcNow='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [t].[TopUpCampaignId], [t].[BudgetReserved], [t].[CampaignCode], [t].[CampaignName], [t].[CampaignStatusCode], [t].[CampaignVersion], [t].[CreatedAt], [t].[CreatedByLoginAccountId], [t].[DefaultTopUpAmount], [t].[DeliveryTypeCode], [t].[Description], [t].[EndDate], [t].[FrequencyCode], [t].[FrequencyInterval], [t].[MaxTotalAmount], [t].[NextRunAt], [t].[OrganizationId], [t].[PausedAt], [t].[Reason], [t].[RecipientModeCode], [t].[ScheduleTypeCode], [t].[StartDate], [t].[UpdatedAt], [t].[UpdatedByLoginAccountId]
+FROM [topup].[TopUpCampaign] AS [t]
+WHERE [t].[CampaignStatusCode] = 'ACTIVE' AND [t].[NextRunAt] IS NOT NULL AND [t].[NextRunAt] <= @utcNow
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[@nowUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+      SELECT [d].[DynamicTopUpContractId], [d].[AmountPerPayment], [d].[ContractStatus], [d].[CreatedAt], [d].[CyclesCompleted], [d].[DeliveryTypeCode], [d].[EducationAccountId], [d].[FirstPaymentDate], [d].[FrequencyCode], [d].[FrequencyInterval], [d].[MaxTotalAmount], [d].[NextPaymentDate], [d].[QualifiedAtUtc], [d].[TopUpCampaignId], [d].[TotalReceived], [d].[UpdatedAt]
+      FROM [topup].[DynamicTopUpContract] AS [d]
+      WHERE [d].[ContractStatus] = 'ACTIVE' AND [d].[NextPaymentDate] IS NOT NULL AND [d].[NextPaymentDate] <= @nowUtc AND [d].[TotalReceived] < [d].[MaxTotalAmount]
+2026-07-02 12:04:35,118 INFO  [(null)] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (3ms) [Parameters=[@nowUtc='?' (DbType = DateTime2)], CommandType='Text', CommandTimeout='30']
+SELECT [d].[DynamicTopUpContractId], [d].[AmountPerPayment], [d].[ContractStatus], [d].[CreatedAt], [d].[CyclesCompleted], [d].[DeliveryTypeCode], [d].[EducationAccountId], [d].[FirstPaymentDate], [d].[FrequencyCode], [d].[FrequencyInterval], [d].[MaxTotalAmount], [d].[NextPaymentDate], [d].[QualifiedAtUtc], [d].[TopUpCampaignId], [d].[TotalReceived], [d].[UpdatedAt]
+FROM [topup].[DynamicTopUpContract] AS [d]
+WHERE [d].[ContractStatus] = 'ACTIVE' AND [d].[NextPaymentDate] IS NOT NULL AND [d].[NextPaymentDate] <= @nowUtc AND [d].[TotalReceived] < [d].[MaxTotalAmount]
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:04:42,560 INFO  [b5c21f0d648d4674ac10422e53e73ef0] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:04:42,571 INFO  [b5c21f0d648d4674ac10422e53e73ef0] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 13 ms with 200
+2026-07-02 12:04:42,574 INFO  [b5c21f0d648d4674ac10422e53e73ef0] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 13 ms with 200
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 14 ms. TraceId=b5c21f0d648d4674ac10422e53e73ef0
+2026-07-02 12:04:42,575 INFO  [b5c21f0d648d4674ac10422e53e73ef0] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 14 ms. TraceId=b5c21f0d648d4674ac10422e53e73ef0
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      Request started GET /api/public/v1/fas/schools
+2026-07-02 12:04:42,578 INFO  [818ca56e21af4012b96fa44968c3af16] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - Request started GET /api/public/v1/fas/schools
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+      FROM [org].[Organization] AS [o]
+      WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+      ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+2026-07-02 12:04:42,583 INFO  [818ca56e21af4012b96fa44968c3af16] Microsoft.EntityFrameworkCore.Database.Command - Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT [o].[OrganizationId], [o].[ParentOrganizationId], [o].[OrganizationCode], [o].[OrganizationName], [o].[OrganizationTypeCode], [o].[OrganizationStatusCode]
+FROM [org].[Organization] AS [o]
+WHERE [o].[OrganizationStatusCode] = 'ACTIVE'
+ORDER BY [o].[OrganizationTypeCode], [o].[OrganizationName]
+info: Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware[0]
+      GET /api/public/v1/fas/schools completed in 5 ms with 200
+2026-07-02 12:04:42,585 INFO  [818ca56e21af4012b96fa44968c3af16] Moe.Infrastructure.Shared.Middleware.PerformanceTrackingMiddleware - GET /api/public/v1/fas/schools completed in 5 ms with 200
+info: Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware[0]
+      HTTP GET /api/public/v1/fas/schools => 200 in 6 ms. TraceId=818ca56e21af4012b96fa44968c3af16
+2026-07-02 12:04:42,586 INFO  [818ca56e21af4012b96fa44968c3af16] Moe.Infrastructure.Shared.Middleware.RequestLoggingMiddleware - HTTP GET /api/public/v1/fas/schools => 200 in 6 ms. TraceId=818ca56e21af4012b96fa44968c3af16
