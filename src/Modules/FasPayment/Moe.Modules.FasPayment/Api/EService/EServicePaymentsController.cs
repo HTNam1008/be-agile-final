@@ -32,4 +32,10 @@ public sealed class EServicePaymentsController(
             new ListUserPaymentHistoryQuery(page, pageSize, status, sortBy, sortDirection),
             cancellationToken));
 
+    [HttpGet("{paymentId:long}/receipt")]
+    [ProducesResponseType(typeof(ApiResponse<PaymentReceiptResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetReceipt(long paymentId, CancellationToken cancellationToken)
+        => this.ToPaymentResponse(await queries.Send(
+            new GetPaymentReceiptQuery(paymentId),
+            cancellationToken));
 }

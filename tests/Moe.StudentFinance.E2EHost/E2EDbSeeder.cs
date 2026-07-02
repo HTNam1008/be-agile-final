@@ -213,16 +213,16 @@ public class E2EDbSeeder : IHostedService
     {
         DemoStudentSeed[] demoStudents =
         [
-            new(2001, "ef39a074-b64d-4990-a937-6f80772e2bb8", "Tan Mei Ling", new DateOnly(2008, 5, 12), "DEMO-STU-0001", "SEC_4", "4A", "ACTIVE", 2, "EA-DEMO-0001", 250.00m, false),
-            new(2002, "MOCKPASS-STUDENT-2002", "Nur Aisyah", new DateOnly(2009, 3, 1), "DEMO-STU-0002", "SEC_3", "3B", "ACTIVE", 2, "EA-DEMO-0002", 80.00m, false),
-            new(2003, "MOCKPASS-STUDENT-2003", "Loh Jun Jie", new DateOnly(2010, 9, 20), "DEMO-STU-0003", "SEC_2", "2C", "ACTIVE", 2, "EA-DEMO-0003", 600.00m, false),
-            new(2004, "MOCKPASS-STUDENT-2004", "Alicia Tan", new DateOnly(2011, 11, 3), "DEMO-STU-0004", "SEC_1", "1A", "ACTIVE", 2, "EA-DEMO-0004", 15.50m, false),
-            new(2005, "MOCKPASS-STUDENT-2005", "Mohamad Danish", new DateOnly(2012, 2, 14), "DEMO-STU-0005", "PRI_6", "6B", "ON_LEAVE", 2, "EA-DEMO-0005", 45.00m, false),
-            new(2006, "MOCKPASS-STUDENT-2006", "Grace Ng", new DateOnly(2013, 7, 8), "DEMO-STU-0006", "PRI_5", "5C", "GRADUATED", 2, "EA-DEMO-0006", 0.00m, false),
-            new(2007, "MOCKPASS-STUDENT-2007", "Ryan Lee", new DateOnly(2014, 1, 26), "DEMO-STU-0007", "PRI_4", "4D", "WITHDRAWN", 2, "EA-DEMO-0007", 130.25m, false),
-            new(2008, "MOCKPASS-STUDENT-2008", "Farah Syazwani", new DateOnly(2015, 4, 18), "DEMO-STU-0008", "PRI_3", "3A", "ACTIVE", 3, "EA-DEMO-0008", 22.00m, false),
+            new(2001, "ef39a074-b64d-4990-a937-6f80772e2bb8", "Tan Mei Ling", new DateOnly(2008, 5, 12), "DEMO-STU-0001", "POST_SEC", "4A", "ACTIVE", 2, "EA-DEMO-0001", 250.00m, false),
+            new(2002, "MOCKPASS-STUDENT-2002", "Nur Aisyah", new DateOnly(2009, 3, 1), "DEMO-STU-0002", "POST_SEC", "3B", "ACTIVE", 2, "EA-DEMO-0002", 80.00m, false),
+            new(2003, "MOCKPASS-STUDENT-2003", "Loh Jun Jie", new DateOnly(2010, 9, 20), "DEMO-STU-0003", "POST_SEC", "2C", "ACTIVE", 2, "EA-DEMO-0003", 600.00m, false),
+            new(2004, "MOCKPASS-STUDENT-2004", "Alicia Tan", new DateOnly(2011, 11, 3), "DEMO-STU-0004", "POST_SEC", "1A", "ACTIVE", 2, "EA-DEMO-0004", 15.50m, false),
+            new(2005, "MOCKPASS-STUDENT-2005", "Mohamad Danish", new DateOnly(2012, 2, 14), "DEMO-STU-0005", "POST_SEC", "6B", "ON_LEAVE", 2, "EA-DEMO-0005", 45.00m, false),
+            new(2006, "MOCKPASS-STUDENT-2006", "Grace Ng", new DateOnly(2013, 7, 8), "DEMO-STU-0006", "POST_SEC", "5C", "GRADUATED", 2, "EA-DEMO-0006", 0.00m, false),
+            new(2007, "MOCKPASS-STUDENT-2007", "Ryan Lee", new DateOnly(2014, 1, 26), "DEMO-STU-0007", "POST_SEC", "4D", "WITHDRAWN", 2, "EA-DEMO-0007", 130.25m, false),
+            new(2008, "MOCKPASS-STUDENT-2008", "Farah Syazwani", new DateOnly(2015, 4, 18), "DEMO-STU-0008", "POST_SEC", "3A", "ACTIVE", 3, "EA-DEMO-0008", 22.00m, false),
             new(2009, "MOCKPASS-STUDENT-2009", "Marcus Lim", new DateOnly(2000, 6, 30), "DEMO-STU-0009", "POST_SEC", "P1", "ACTIVE", 3, "EA-DEMO-0009", 500.00m, true),
-            new(2010, "MOCKPASS-STUDENT-2010", "Sarah Chen", new DateOnly(2016, 10, 9), "DEMO-STU-0010", "PRI_2", "2B", "ON_LEAVE", 2, "EA-DEMO-0010", 9.75m, true),
+            new(2010, "MOCKPASS-STUDENT-2010", "Sarah Chen", new DateOnly(2016, 10, 9), "DEMO-STU-0010", "POST_SEC", "2B", "ON_LEAVE", 2, "EA-DEMO-0010", 9.75m, true),
         ];
 
         foreach (DemoStudentSeed student in demoStudents)

@@ -6,4 +6,6 @@ public sealed record PersonSummary(
     DateOnly DateOfBirth,
     string NationalityCode,
     string? CitizenshipStatusCode,
-    long? OrganizationId);
+    long? OrganizationId,
+    string? PreferredEmail = null,
+    string? OfficialEmail = null);

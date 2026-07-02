@@ -33,10 +33,17 @@ public sealed class AiCopilotModule : IModule
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
-        services.AddHostedService<AiRetentionService>();
+        if (IsBackgroundJobEnabled(configuration, "AiCopilot:Retention"))
+        {
+            services.AddHostedService<AiRetentionService>();
+        }
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
     }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }

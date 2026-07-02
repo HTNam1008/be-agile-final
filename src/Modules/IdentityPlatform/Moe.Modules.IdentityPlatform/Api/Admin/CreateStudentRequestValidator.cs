@@ -1,4 +1,5 @@
 using FluentValidation;
+using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -14,15 +15,18 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
         RuleFor(x => x.IdentityNumber)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .MaximumLength(30)
-            .Matches("^[A-Za-z0-9]+$")
-            .WithMessage("Identity number can contain only letters and numbers.");
+            .Must(SingaporeIdentityNumberValidator.IsValid)
+            .WithMessage("Identity number must be a valid Singapore NRIC/FIN.");
 
         RuleFor(x => x.FullName)
             .NotEmpty()
             .MaximumLength(200);
 
         RuleFor(x => x.DateOfBirth).NotEmpty();
+
+        RuleFor(x => x)
+            .Must(HaveStartDateOnOrAfterDateOfBirth)
+            .WithMessage("Start date cannot be earlier than date of birth.");
 
         RuleFor(x => x.NationalityCode)
             .NotEmpty()
@@ -53,7 +57,10 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
             .MaximumLength(320)
             .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
-        RuleFor(x => x.Mobile).MaximumLength(50);
+        RuleFor(x => x.ContactNumber).MaximumLength(50);
         RuleFor(x => x.Address).MaximumLength(1000);
     }
+
+    private static bool HaveStartDateOnOrAfterDateOfBirth(CreateStudentRequest request)
+        => !request.StartDate.HasValue || request.StartDate.Value >= request.DateOfBirth;
 }

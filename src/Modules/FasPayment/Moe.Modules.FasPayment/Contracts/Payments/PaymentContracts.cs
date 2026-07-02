@@ -10,12 +10,53 @@ public sealed record UserPaymentHistoryResponse(
     decimal OnlinePaymentAmount,
     string PaymentStatusCode,
     string? ReceiptNumber,
+    string? ProviderHostedInvoiceUrl,
+    string? ProviderInvoicePdfUrl,
+    string? ProviderReceiptUrl,
     DateTime InitiatedAtUtc,
     DateTime? CompletedAtUtc,
     DateTime? FailedAtUtc,
     IReadOnlyCollection<UserPaymentHistoryPartResponse> Parts,
     IReadOnlyCollection<UserPaymentHistoryRefundResponse> Refunds,
     IReadOnlyCollection<UserPaymentHistoryFasSettlementResponse> FasSettlements);
+
+public sealed record PaymentReceiptResponse(
+    long PaymentId,
+    string PaymentNumber,
+    string ReceiptNumber,
+    DateTime IssuedAtUtc,
+    string StatusCode,
+    string StudentName,
+    long? BillingStatementId,
+    string CurrencyCode,
+    decimal TotalPaidAmount,
+    decimal EducationAccountAmount,
+    decimal OnlinePaymentAmount,
+    IReadOnlyCollection<PaymentReceiptItemResponse> Items,
+    IReadOnlyCollection<PaymentReceiptPartResponse> PaymentParts,
+    string? ProviderHostedInvoiceUrl,
+    string? ProviderInvoicePdfUrl,
+    string? ProviderReceiptUrl);
+
+public sealed record PaymentReceiptItemResponse(
+    long BillId,
+    string? BillNumber,
+    string? CourseCode,
+    string? CourseName,
+    int SequenceNumber,
+    DateOnly DueDate,
+    decimal PaidAmount,
+    decimal OutstandingAmount);
+
+public sealed record PaymentReceiptPartResponse(
+    long PaymentPartId,
+    string PaymentMethodCode,
+    decimal Amount,
+    string StatusCode,
+    long? EducationAccountId,
+    long? AccountTransactionId,
+    string? ProviderCode,
+    string? ProviderReference);
 
 public sealed record UserPaymentHistoryPartResponse(
     long PaymentPartId,

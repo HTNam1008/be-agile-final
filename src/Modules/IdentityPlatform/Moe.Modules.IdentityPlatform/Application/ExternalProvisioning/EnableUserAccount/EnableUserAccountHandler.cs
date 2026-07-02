@@ -3,6 +3,7 @@ using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.IdentityPlatform.Application.ExternalProvisioning.DisableUserAccount;
+using Moe.Modules.IdentityPlatform.Application.Students;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
 using Moe.SharedKernel.Results;
@@ -14,7 +15,8 @@ internal sealed class EnableUserAccountHandler(
     IStudentProfileRepository studentProfiles,
     IClock clock,
     IAuditService audit,
-    IUnitOfWork unitOfWork) : ICommandHandler<EnableUserAccountCommand, DisableUserAccountResponse>
+    IUnitOfWork unitOfWork,
+    StudentAccountNotificationEmailService accountNotifications) : ICommandHandler<EnableUserAccountCommand, DisableUserAccountResponse>
 {
     public async Task<Result<DisableUserAccountResponse>> Handle(EnableUserAccountCommand command, CancellationToken cancellationToken)
     {
@@ -51,6 +53,12 @@ internal sealed class EnableUserAccountHandler(
                     cancellationToken);
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
+
+            await accountNotifications.SendStudentAccountEnabledAsync(
+                personId,
+                profile?.OfficialFullName ?? account.DisplayNameSnapshot,
+                clock.UtcNow.UtcDateTime,
+                cancellationToken);
         }
 
         return Result<DisableUserAccountResponse>.Success(new DisableUserAccountResponse(account.Id, account.AccountStatusCode));

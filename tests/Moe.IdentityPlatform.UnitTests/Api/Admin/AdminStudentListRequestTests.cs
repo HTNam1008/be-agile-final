@@ -15,4 +15,14 @@ public sealed class AdminStudentListRequestTests
             .Should()
             .Be(typeof(string));
     }
+
+    [Fact]
+    public void CitizenshipStatusCode_IsTextQueryParameter()
+    {
+        typeof(AdminStudentListRequest)
+            .GetProperty(nameof(AdminStudentListRequest.CitizenshipStatusCode))!
+            .PropertyType
+            .Should()
+            .Be(typeof(string));
+    }
 }

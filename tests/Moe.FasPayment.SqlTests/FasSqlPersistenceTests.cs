@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.Domain.Fas;
 using Moe.Modules.FasPayment.IGateway.Repositories;
@@ -115,7 +116,7 @@ public sealed class FasSqlPersistenceTests
         await using SqlFasTestDatabase database = await SqlFasTestDatabase.CreateAsync();
         await using MoeDbContext context = database.CreateContext();
         var logger = new RecordingLogger<FasSchemeRepository>();
-        var repository = new FasSchemeRepository(context, logger);
+        var repository = new FasSchemeRepository(context, logger, new FixedClock(DateTimeOffset.UtcNow));
         CreateFasSchemeRequest request = Request("CORRUPT", []) with
         {
             Tiers =
@@ -134,7 +135,7 @@ public sealed class FasSqlPersistenceTests
     }
 
     private static FasSchemeRepository Repository(MoeDbContext context)
-        => new(context, NullLogger<FasSchemeRepository>.Instance);
+        => new(context, NullLogger<FasSchemeRepository>.Instance, new FixedClock(DateTimeOffset.UtcNow));
 
     private static CreateFasSchemeRequest Request(string suffix, IReadOnlyList<long> courseIds) => new(
         $"SCHEME-{suffix}", $"GRANT-{suffix}", $"Scheme {suffix}", null,
@@ -150,6 +151,13 @@ public sealed class FasSqlPersistenceTests
 
     private static Task<int> Scalar(MoeDbContext context, string sql)
         => context.Database.SqlQueryRaw<int>(sql).SingleAsync();
+}
+
+file sealed class FixedClock(DateTimeOffset utcNow) : IClock
+{
+    public DateTimeOffset UtcNow { get; } = utcNow;
+
+    public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
 }
 
 internal sealed class RecordingLogger<T> : ILogger<T>

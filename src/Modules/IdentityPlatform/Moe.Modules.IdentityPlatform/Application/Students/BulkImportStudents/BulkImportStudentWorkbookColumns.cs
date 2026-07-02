@@ -15,7 +15,7 @@ public static class BulkImportStudentWorkbookColumns
     public const string ClassCode = nameof(ClassCode);
     public const string StartDate = nameof(StartDate);
     public const string Email = nameof(Email);
-    public const string Mobile = nameof(Mobile);
+    public const string ContactNumber = "Mobile";
     public const string Address = nameof(Address);
 
     public static IReadOnlyList<string> Headers { get; } =
@@ -33,7 +33,7 @@ public static class BulkImportStudentWorkbookColumns
         ClassCode,
         StartDate,
         Email,
-        Mobile,
+        ContactNumber,
         Address
     ];
 
@@ -45,7 +45,7 @@ public static class BulkImportStudentWorkbookColumns
         ClassCode,
         StartDate,
         Email,
-        Mobile,
+        ContactNumber,
         Address
     };
 }

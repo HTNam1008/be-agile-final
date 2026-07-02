@@ -7,6 +7,7 @@ public sealed record AdminStudentListRequest(
     string? Search,
     string? LevelCode,
     string? ClassCode,
+    string? CitizenshipStatusCode,
     AdminStudentAccountStatusFilter AccountStatus = AdminStudentAccountStatusFilter.All,
     AdminStudentPortalAccessStatusFilter PortalAccessStatus = AdminStudentPortalAccessStatusFilter.All,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus = AdminStudentEnrollmentStatusFilter.All,
