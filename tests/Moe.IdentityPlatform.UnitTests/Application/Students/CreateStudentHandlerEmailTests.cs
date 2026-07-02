@@ -94,7 +94,7 @@ public sealed class CreateStudentHandlerEmailTests
             ClassCode: "1A",
             StartDate: new DateOnly(2026, 1, 1),
             Email: "hannah@example.com",
-            Mobile: null,
+            ContactNumber: null,
             Address: null,
             IsAccountHolder: true);
 
