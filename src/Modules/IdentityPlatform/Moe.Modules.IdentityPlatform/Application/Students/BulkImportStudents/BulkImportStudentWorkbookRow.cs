@@ -15,5 +15,5 @@ public sealed record BulkImportStudentWorkbookRow(
     string ClassCode,
     DateOnly? StartDate,
     string? Email,
-    string? Mobile,
+    string? ContactNumber,
     string? Address);

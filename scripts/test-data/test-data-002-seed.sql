@@ -176,10 +176,10 @@ SET IDENTITY_INSERT person.SchoolEnrollment ON;
 (
     SELECT *
     FROM (VALUES
-        (921101, 911101, 'QA-AUTO002-101', 'UNI_Y2', 'QA-E1'),
-        (921102, 911102, 'QA-AUTO002-102', 'UNI_Y2', 'QA-E2'),
-        (921103, 911103, 'QA-AUTO002-103', 'UNI_Y2', 'QA-E3'),
-        (921104, 911104, 'QA-AUTO002-104', 'UNI_Y2', 'QA-E4')
+        (921101, 911101, 'QA-AUTO002-101', 'BACHELOR', 'QA-E1'),
+        (921102, 911102, 'QA-AUTO002-102', 'BACHELOR', 'QA-E2'),
+        (921103, 911103, 'QA-AUTO002-103', 'BACHELOR', 'QA-E3'),
+        (921104, 911104, 'QA-AUTO002-104', 'BACHELOR', 'QA-E4')
     ) v(SchoolEnrollmentId, PersonId, StudentNumber, LevelCode, ClassCode)
 )
 INSERT INTO person.SchoolEnrollment

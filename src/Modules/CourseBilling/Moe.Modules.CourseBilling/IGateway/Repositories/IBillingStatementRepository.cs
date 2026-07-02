@@ -9,5 +9,12 @@ internal interface IBillingStatementRepository
         int year,
         int month,
         DateTime utcNow,
+        BillingStatementNotificationMode notificationMode,
         CancellationToken cancellationToken);
+}
+
+internal enum BillingStatementNotificationMode
+{
+    Suppress,
+    SendMonthlyBill
 }

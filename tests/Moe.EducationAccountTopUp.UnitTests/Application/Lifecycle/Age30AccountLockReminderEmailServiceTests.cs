@@ -7,7 +7,6 @@ using Moe.Modules.EducationAccountTopUp;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
@@ -24,133 +23,115 @@ public sealed class Age30AccountLockReminderEmailServiceTests
     public async Task SendDueRemindersAsync_Sends_For_6_Month_3_Month_And_1_Week_Milestones()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         FakeOutstandingReader outstandingReader = new();
         SeedAccountHolder(dbContext, personId: 1, accountId: 101, dateOfBirth: Today.AddMonths(6).AddYears(-30));
         SeedAccountHolder(dbContext, personId: 2, accountId: 102, dateOfBirth: Today.AddMonths(3).AddYears(-30));
         SeedAccountHolder(dbContext, personId: 3, accountId: 103, dateOfBirth: Today.AddDays(7).AddYears(-30));
         outstandingReader.AmountByPersonId[2] = 42.50m;
         await dbContext.SaveChangesAsync();
-        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailGateway, outstandingReader);
+        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailQueue, outstandingReader);
 
         await service.SendDueRemindersAsync(Today, CancellationToken.None);
 
-        mailGateway.Messages.Should().HaveCount(3);
-        mailGateway.Messages.Should().Contain(message =>
-            message.PlainTextBody.Contains("6 months", StringComparison.Ordinal)
-            && message.PlainTextBody.Contains("15 Jul 2026", StringComparison.Ordinal));
-        mailGateway.Messages.Should().Contain(message =>
-            message.PlainTextBody.Contains("3 months", StringComparison.Ordinal)
-            && message.PlainTextBody.Contains("15 Apr 2026", StringComparison.Ordinal)
-            && message.PlainTextBody.Contains("Outstanding Amount: SGD 42.50", StringComparison.Ordinal));
-        mailGateway.Messages.Should().Contain(message =>
-            message.PlainTextBody.Contains("1 week", StringComparison.Ordinal)
-            && message.PlainTextBody.Contains("22 Jan 2026", StringComparison.Ordinal));
-        mailGateway.Messages.Should().OnlyContain(message =>
-            message.Subject == "Reminder: Your MOE SEEDS account will be locked soon"
-            && message.ToEmail == "student.real@example.com"
-            && message.PlainTextBody.Contains("Go to Payment Dashboard", StringComparison.Ordinal)
-            && message.HtmlBody != null
-            && message.HtmlBody.Contains("#DC343B", StringComparison.Ordinal));
+        mailQueue.Jobs.Should().HaveCount(3);
+        mailQueue.Jobs.Should().Contain(job =>
+            job.PersonId == 1
+            && job.PlainTextBody.Contains("6 months", StringComparison.Ordinal)
+            && job.PlainTextBody.Contains("15 Jul 2026", StringComparison.Ordinal));
+        mailQueue.Jobs.Should().Contain(job =>
+            job.PersonId == 2
+            && job.PlainTextBody.Contains("3 months", StringComparison.Ordinal)
+            && job.PlainTextBody.Contains("15 Apr 2026", StringComparison.Ordinal)
+            && job.PlainTextBody.Contains("Outstanding Amount: SGD 42.50", StringComparison.Ordinal));
+        mailQueue.Jobs.Should().Contain(job =>
+            job.PersonId == 3
+            && job.PlainTextBody.Contains("1 week", StringComparison.Ordinal)
+            && job.PlainTextBody.Contains("22 Jan 2026", StringComparison.Ordinal));
+        mailQueue.Jobs.Should().OnlyContain(job =>
+            job.NotificationType == "AGE-30-LOCK-REMINDER"
+            && job.Subject == "Reminder: Your Ministry of Education - Singapore account will be locked soon"
+            && job.PlainTextBody.Contains("Go to Payment Dashboard", StringComparison.Ordinal)
+            && job.HtmlBody != null
+            && job.HtmlBody.Contains("#DC343B", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task SendDueRemindersAsync_Does_Not_Send_When_No_Milestone_Matches()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         SeedAccountHolder(dbContext, personId: 1, accountId: 101, dateOfBirth: Today.AddDays(30).AddYears(-30));
         await dbContext.SaveChangesAsync();
-        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailGateway);
+        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailQueue);
 
         await service.SendDueRemindersAsync(Today, CancellationToken.None);
 
-        mailGateway.Messages.Should().BeEmpty();
+        mailQueue.Jobs.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SendDueRemindersAsync_Does_Not_Fail_When_Recipient_Is_Missing()
+    public async Task SendDueRemindersAsync_Does_Not_Fail_When_Email_Queue_Fails()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
-        SeedAccountHolder(dbContext, personId: 1, accountId: 101, dateOfBirth: Today.AddMonths(6).AddYears(-30));
-        await dbContext.SaveChangesAsync();
-        Age30AccountLockReminderEmailService service = CreateService(
-            dbContext,
-            mailGateway,
-            recipientResolver: new TestDoubles.FixedEmailRecipientResolver(null));
-
-        Func<Task> act = () => service.SendDueRemindersAsync(Today, CancellationToken.None);
-
-        await act.Should().NotThrowAsync();
-        mailGateway.Messages.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task SendDueRemindersAsync_Does_Not_Fail_When_Mail_Gateway_Fails()
-    {
-        using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new()
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new()
         {
-            ResultToReturn = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
+            Result = Result.Failure(new Error("MAIL.TEST_FAILURE", "Mail failed."))
         };
         SeedAccountHolder(dbContext, personId: 1, accountId: 101, dateOfBirth: Today.AddMonths(6).AddYears(-30));
         await dbContext.SaveChangesAsync();
-        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailGateway);
+        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailQueue);
 
         Func<Task> act = () => service.SendDueRemindersAsync(Today, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        mailGateway.Messages.Should().ContainSingle();
+        mailQueue.Jobs.Should().ContainSingle();
     }
 
     [Fact]
     public async Task SendDueRemindersAsync_Uses_Generic_Text_When_Outstanding_Is_Missing()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         SeedAccountHolder(dbContext, personId: 1, accountId: 101, dateOfBirth: Today.AddMonths(6).AddYears(-30));
         await dbContext.SaveChangesAsync();
-        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailGateway);
+        Age30AccountLockReminderEmailService service = CreateService(dbContext, mailQueue);
 
         await service.SendDueRemindersAsync(Today, CancellationToken.None);
 
-        EmailDeliveryMessage message = mailGateway.Messages.Should().ContainSingle().Which;
-        message.PlainTextBody.Should().NotContain("Outstanding Amount:");
-        message.PlainTextBody.Should().Contain("Please review and settle any outstanding charges before your account is locked.");
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Which;
+        job.PlainTextBody.Should().NotContain("Outstanding Amount:");
+        job.PlainTextBody.Should().Contain("Please review and settle any outstanding charges before your account is locked.");
     }
 
     [Fact]
-    public async Task SendDueRemindersAsync_WhenMailDeliveryDisabled_Does_Not_Call_RecipientResolver_Or_Gateway()
+    public async Task SendDueRemindersAsync_WhenMailDeliveryDisabled_Does_Not_Call_OutstandingReader_Or_Queue()
     {
         using MoeDbContext dbContext = CreateDbContext();
-        FakeEmailDeliveryGateway mailGateway = new();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         SeedAccountHolder(dbContext, personId: 1, accountId: 101, dateOfBirth: Today.AddMonths(6).AddYears(-30));
         await dbContext.SaveChangesAsync();
         Age30AccountLockReminderEmailService service = CreateService(
             dbContext,
-            mailGateway,
+            mailQueue,
             new ThrowingOutstandingReader(),
-            new ThrowingEmailRecipientResolver(),
             new TestDoubles.FixedEmailDeliverySwitch(isEnabled: false));
 
         await service.SendDueRemindersAsync(Today, CancellationToken.None);
 
-        mailGateway.Messages.Should().BeEmpty();
+        mailQueue.Jobs.Should().BeEmpty();
     }
 
     private static Age30AccountLockReminderEmailService CreateService(
         MoeDbContext dbContext,
-        FakeEmailDeliveryGateway mailGateway,
+        IEmailNotificationQueue mailQueue,
         FakeOutstandingReader? outstandingReader = null,
-        IEmailRecipientResolver? recipientResolver = null,
         IEmailDeliverySwitch? mailSwitch = null)
         => new(
             dbContext,
-            recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
-            mailGateway,
-            mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
+            new TestDoubles.RecordingEmailNotificationScheduler(mailQueue, mailSwitch),
             outstandingReader ?? new FakeOutstandingReader(),
+            new TestDoubles.FixedEmailBrandingProvider(),
             NullLogger<Age30AccountLockReminderEmailService>.Instance);
 
     private static void SeedAccountHolder(
@@ -217,27 +198,4 @@ public sealed class Age30AccountLockReminderEmailServiceTests
             => throw new InvalidOperationException("Outstanding reader should not be called when mail is disabled.");
     }
 
-    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Result ResultToReturn { get; init; } = Result.Success();
-
-        public Task<Result> SendAsync(EmailDeliveryMessage message, CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(ResultToReturn);
-        }
-    }
-
-    private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
-    {
-        public Task<EmailRecipient?> ResolveForPersonAsync(
-            long personId,
-            CancellationToken cancellationToken)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-
-        public EmailRecipient? ResolveProvided(string? providedEmail)
-            => throw new InvalidOperationException("Recipient resolver should not be called when mail is disabled.");
-    }
 }

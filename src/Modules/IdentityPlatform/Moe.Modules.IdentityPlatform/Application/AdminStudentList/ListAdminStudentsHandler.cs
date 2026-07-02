@@ -28,6 +28,7 @@ internal sealed class ListAdminStudentsHandler(
             query.Search,
             query.LevelCodes,
             query.ClassCode,
+            query.CitizenshipStatusCode,
             query.AccountStatus,
             query.PortalAccessStatus,
             query.EnrollmentStatus,

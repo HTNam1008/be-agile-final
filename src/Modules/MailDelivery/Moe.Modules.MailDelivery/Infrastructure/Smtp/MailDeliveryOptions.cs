@@ -5,10 +5,14 @@ namespace Moe.Modules.MailDelivery.Infrastructure.Smtp;
 public sealed class MailDeliveryOptions
 {
     public const string SectionName = "MailDelivery";
+    public const string DefaultAppName = "Ministry of Education - Singapore";
+    public const string DefaultPortalBaseUrl = "https://femoegovsg.azurewebsites.net";
 
     public bool Enabled { get; init; } = true;
 
-    public string AppName { get; init; } = "MOE SEEDS";
+    public string AppName { get; init; } = DefaultAppName;
+
+    public string PortalBaseUrl { get; init; } = DefaultPortalBaseUrl;
 
     public string Host { get; init; } = "smtp.gmail.com";
 
@@ -22,7 +26,7 @@ public sealed class MailDeliveryOptions
 
     public string FromEmail { get; init; } = string.Empty;
 
-    public string FromDisplayName { get; init; } = "MOE SEEDS";
+    public string FromDisplayName { get; init; } = DefaultAppName;
 
     public string? FallbackUserName { get; init; }
 
@@ -34,6 +38,13 @@ public sealed class MailDeliveryOptions
 
     public string? DevelopmentFallbackRecipient { get; init; }
 
+    public MailDeliveryWorkerOptions Worker { get; init; } = new();
+
+    public bool HasFallbackSender
+        => !string.IsNullOrWhiteSpace(FallbackUserName)
+            && !string.IsNullOrWhiteSpace(FallbackPassword)
+            && IsValidEmail(FallbackFromEmail);
+
     public static bool IsValid(MailDeliveryOptions options)
     {
         if (!options.Enabled)
@@ -42,34 +53,51 @@ public sealed class MailDeliveryOptions
         }
 
         return !string.IsNullOrWhiteSpace(options.AppName)
+            && Uri.TryCreate(options.PortalBaseUrl, UriKind.Absolute, out _)
             && !string.IsNullOrWhiteSpace(options.Host)
             && options.Port is >= 1 and <= 65535
             && !string.IsNullOrWhiteSpace(options.UserName)
             && IsValidEmail(options.FromEmail)
             && !string.IsNullOrWhiteSpace(options.FromDisplayName)
             && IsValidFallback(options)
+            && IsValidWorker(options.Worker)
             && (string.IsNullOrWhiteSpace(options.DevelopmentFallbackRecipient)
                 || IsValidEmail(options.DevelopmentFallbackRecipient));
     }
 
     private static bool IsValidFallback(MailDeliveryOptions options)
     {
-        bool hasAnyFallback = !string.IsNullOrWhiteSpace(options.FallbackUserName)
+        bool hasAnyFallbackValue = !string.IsNullOrWhiteSpace(options.FallbackUserName)
             || !string.IsNullOrWhiteSpace(options.FallbackPassword)
             || !string.IsNullOrWhiteSpace(options.FallbackFromEmail)
             || !string.IsNullOrWhiteSpace(options.FallbackFromDisplayName);
 
-        if (!hasAnyFallback)
-        {
-            return true;
-        }
-
-        return !string.IsNullOrWhiteSpace(options.FallbackUserName)
-            && !string.IsNullOrWhiteSpace(options.FallbackPassword)
-            && IsValidEmail(options.FallbackFromEmail);
+        return !hasAnyFallbackValue || options.HasFallbackSender;
     }
 
     private static bool IsValidEmail(string? emailAddress)
         => !string.IsNullOrWhiteSpace(emailAddress)
             && MailAddress.TryCreate(emailAddress.Trim(), out _);
+
+    private static bool IsValidWorker(MailDeliveryWorkerOptions worker)
+        => worker.BatchSize is >= 1 and <= 500
+            && worker.PollIntervalSeconds is >= 1 and <= 300
+            && worker.MaxAttempts is >= 1 and <= 20
+            && worker.MaxEmailsPerMinute >= 0
+            && worker.LockSeconds is >= 10 and <= 3600;
+}
+
+public sealed class MailDeliveryWorkerOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public int BatchSize { get; init; } = 20;
+
+    public int PollIntervalSeconds { get; init; } = 10;
+
+    public int MaxAttempts { get; init; } = 3;
+
+    public int MaxEmailsPerMinute { get; init; } = 60;
+
+    public int LockSeconds { get; init; } = 120;
 }

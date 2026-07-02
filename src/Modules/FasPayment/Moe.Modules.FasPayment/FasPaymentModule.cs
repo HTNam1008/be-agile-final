@@ -64,7 +64,8 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<PublicFasSearchService>();
         services.AddScoped<FasEmailNotificationService>();
         services.AddScoped<FasInAppNotificationService>();
-        services.AddScoped<PaymentFailedEmailService>();
+        services.AddScoped<PaymentNotificationEmailService>();
+        services.AddScoped<PaymentReceiptService>();
         services.AddScoped<FasApiExceptionFilter>();
         services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"]) && string.IsNullOrWhiteSpace(configuration["AzureBlob:ConnectionString"])
             ? new PrivateFileFasDocumentStorage()
@@ -101,6 +102,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICommandHandler<CancelBillingStatementPaymentCommand>, CancelBillingStatementPaymentHandler>();
         services.AddScoped<ICommandHandler<DeferBillingStatementCommand, DeferBillingStatementResponse>, DeferBillingStatementHandler>();
         services.AddScoped<IQueryHandler<ListUserPaymentHistoryQuery, PageResponse<UserPaymentHistoryResponse>>, ListUserPaymentHistoryHandler>();
+        services.AddScoped<IQueryHandler<GetPaymentReceiptQuery, PaymentReceiptResponse>, GetPaymentReceiptHandler>();
         services.AddScoped<IQueryHandler<PreviewEnrollmentCancellationQuery, EnrollmentCancellationPreviewResponse>, PreviewEnrollmentCancellationHandler>();
         services.AddScoped<ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>, CancelEnrollmentHandler>();
         services.AddScoped<IValidator<CreateCoursePaymentPlanRequest>, CreateCoursePaymentPlanRequestValidator>();
