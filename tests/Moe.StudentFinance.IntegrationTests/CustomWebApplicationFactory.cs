@@ -256,6 +256,17 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
             "sgd");
     }
 
+    public Task<StripePaymentEvidenceGatewayResult> GetPaymentEvidenceAsync(
+        string? providerCheckoutSessionId,
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        string? providerChargeId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new StripePaymentEvidenceGatewayResult(
+            providerInvoiceId is null ? null : $"https://stripe.test/invoices/{providerInvoiceId}",
+            providerInvoiceId is null ? null : $"https://stripe.test/invoices/{providerInvoiceId}.pdf",
+            providerChargeId is null ? null : $"https://stripe.test/receipts/{providerChargeId}"));
+
     public Task<StripeRefundGatewayResult> CreateRefundAsync(
         string idempotencyKey,
         string providerChargeId,

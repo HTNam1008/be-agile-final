@@ -203,6 +203,7 @@ internal sealed class ProcessStripeWebhookHandler(
             webhook.ProviderInvoiceId,
             webhook.ProviderChargeId,
             webhook.CreatedAtUtc);
+        await AttachProviderEvidenceAsync(payment, checkout, webhook, cancellationToken);
         IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken);
         foreach (PaymentAllocation allocation in allocations) allocation.MarkApplied();
         await courses.ApplyStatementPaymentAsync(
@@ -403,6 +404,7 @@ internal sealed class ProcessStripeWebhookHandler(
             webhook.ProviderChargeId,
             checkout.PaidInstallmentCount,
             webhook.CreatedAtUtc);
+        await AttachProviderEvidenceAsync(payment, checkout, webhook, cancellationToken);
         await payments.AddPaymentAsync(payment, cancellationToken);
         await courses.ApplySuccessfulPaymentAsync(
             checkout.BillId,
@@ -415,5 +417,35 @@ internal sealed class ProcessStripeWebhookHandler(
             webhook.CreatedAtUtc,
             cancellationToken);
         await paymentNotifications.SendPaymentSucceededAsync(payment, webhook.CreatedAtUtc, cancellationToken);
+    }
+
+    private async Task AttachProviderEvidenceAsync(
+        Payment payment,
+        PaymentCheckoutSession checkout,
+        ParsedPaymentWebhook webhook,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            StripePaymentEvidenceGatewayResult evidence = await stripe.GetPaymentEvidenceAsync(
+                webhook.ProviderCheckoutSessionId ?? checkout.ProviderCheckoutSessionId,
+                webhook.ProviderPaymentIntentId ?? payment.ProviderPaymentIntentId,
+                webhook.ProviderInvoiceId ?? payment.ProviderInvoiceId,
+                webhook.ProviderChargeId ?? payment.ProviderChargeId,
+                cancellationToken);
+            payment.AttachProviderEvidence(
+                evidence.HostedInvoiceUrl,
+                evidence.InvoicePdfUrl,
+                evidence.ReceiptUrl,
+                webhook.CreatedAtUtc);
+        }
+        catch (PaymentProviderUnavailableException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Stripe payment evidence could not be retrieved. PaymentId={PaymentId} CheckoutId={CheckoutId}",
+                payment.Id,
+                checkout.Id);
+        }
     }
 }

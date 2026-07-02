@@ -249,6 +249,84 @@ internal sealed class CoursePaymentGateway(
         statement.Refresh(total, total - outstanding, paidAtUtc);
     }
 
+    public async Task<IReadOnlyCollection<PaymentCheckoutLineItem>> BuildPaymentCheckoutLineItemsAsync(
+        IReadOnlyCollection<long> billIds,
+        CancellationToken cancellationToken)
+    {
+        long[] requestedBillIds = billIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+        if (requestedBillIds.Length == 0) return [];
+
+        var bills = await (
+                from bill in dbContext.Set<Bill>().AsNoTracking()
+                join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+                    on bill.CourseEnrollmentId equals enrollment.Id
+                join course in dbContext.Set<Course>().AsNoTracking()
+                    on enrollment.CourseId equals course.Id
+                where requestedBillIds.Contains(bill.Id) && bill.OutstandingAmount > 0m
+                orderby bill.CurrentDueDate, bill.SequenceNumber, bill.Id
+                select new
+                {
+                    Bill = bill,
+                    course.CourseCode,
+                    course.CourseName
+                })
+            .ToArrayAsync(cancellationToken);
+        if (bills.Length == 0) return [];
+
+        var lineRows = await (
+                from line in dbContext.Set<BillLine>().AsNoTracking()
+                where requestedBillIds.Contains(line.BillId) && line.NetAmount > 0m
+                orderby line.BillId, line.Id
+                select new
+                {
+                    Line = line
+                })
+            .ToArrayAsync(cancellationToken);
+        ILookup<long, BillLine> linesByBill = lineRows
+            .Select(row => row.Line)
+            .ToLookup(line => line.BillId);
+
+        List<PaymentCheckoutLineItem> result = [];
+        foreach (var row in bills)
+        {
+            BillLine[] lines = linesByBill[row.Bill.Id].ToArray();
+            if (lines.Length == 0 || row.Bill.NetPayableAmount <= 0m)
+            {
+                result.Add(new PaymentCheckoutLineItem(
+                    row.Bill.Id,
+                    CheckoutBillName(row.CourseCode, row.CourseName),
+                    $"Bill {row.Bill.BillNumber}",
+                    row.Bill.OutstandingAmount));
+                continue;
+            }
+
+            decimal remaining = row.Bill.OutstandingAmount;
+            for (int index = 0; index < lines.Length; index++)
+            {
+                BillLine line = lines[index];
+                decimal amount = index == lines.Length - 1
+                    ? remaining
+                    : decimal.Round(
+                        row.Bill.OutstandingAmount * line.NetAmount / row.Bill.NetPayableAmount,
+                        2,
+                        MidpointRounding.AwayFromZero);
+                remaining = decimal.Round(remaining - amount, 2, MidpointRounding.AwayFromZero);
+                if (amount <= 0m) continue;
+
+                result.Add(new PaymentCheckoutLineItem(
+                    row.Bill.Id,
+                    CheckoutLineName(line.DescriptionSnapshot),
+                    CheckoutBillName(row.CourseCode, row.CourseName),
+                    amount));
+            }
+        }
+
+        return result;
+    }
+
     public async Task<Result> DeferStatementAsync(
         long statementId,
         long personId,
@@ -324,6 +402,20 @@ internal sealed class CoursePaymentGateway(
             && enrollmentBillCount == 1
             && previousStatus != CourseEnrollmentStatusCodes.PaidInFull
             && enrollment.EnrollmentStatusCode == CourseEnrollmentStatusCodes.PaidInFull;
+
+    private static string CheckoutBillName(string courseCode, string courseName)
+        => string.IsNullOrWhiteSpace(courseCode)
+            ? courseName.Trim()
+            : $"{courseCode.Trim()} - {courseName.Trim()}";
+
+    private static string CheckoutLineName(string description)
+    {
+        string value = description.Trim();
+        int installmentIndex = value.IndexOf(" installment ", StringComparison.OrdinalIgnoreCase);
+        return installmentIndex > 0
+            ? value[..installmentIndex].Trim()
+            : value;
+    }
 
     private async Task SendCourseEnrollmentSuccessEmailAsync(
         CourseEnrollment enrollment,

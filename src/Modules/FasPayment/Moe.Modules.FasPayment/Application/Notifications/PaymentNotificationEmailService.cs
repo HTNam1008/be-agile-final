@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
+using Moe.Modules.FasPayment.Application.StatementPayments;
+using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
@@ -16,7 +18,8 @@ namespace Moe.Modules.FasPayment.Application.Notifications;
 internal sealed class PaymentNotificationEmailService(
     MoeDbContext dbContext,
     IEmailNotificationScheduler mailScheduler,
-    IEmailBrandingProvider branding)
+    IEmailBrandingProvider branding,
+    PaymentReceiptService receipts)
 {
     private const string ExpiredReason = "The payment session expired before completion. Please try again.";
 
@@ -47,6 +50,7 @@ internal sealed class PaymentNotificationEmailService(
         CancellationToken cancellationToken)
     {
         PaymentReceiptContext receipt = await ResolvePaymentReceiptContextAsync(payment, cancellationToken);
+        PaymentReceiptResponse? moeReceipt = await receipts.BuildForPaymentAsync(payment, cancellationToken);
         if (receipt.IsInstallment)
         {
             await SendPaymentStatusAsync(
@@ -60,7 +64,8 @@ internal sealed class PaymentNotificationEmailService(
                 statusLabel: "Paid On",
                 statusValue: EmailTemplateBranding.FormatDate(completedAtUtc),
                 cancellationToken: cancellationToken,
-                itemNameOverride: receipt.ItemName);
+                itemNameOverride: receipt.ItemName,
+                receipt: moeReceipt);
             return;
         }
 
@@ -75,7 +80,8 @@ internal sealed class PaymentNotificationEmailService(
             statusLabel: "Paid On",
             statusValue: EmailTemplateBranding.FormatDate(completedAtUtc),
             cancellationToken: cancellationToken,
-            itemNameOverride: receipt.ItemName);
+            itemNameOverride: receipt.ItemName,
+            receipt: moeReceipt);
     }
 
     public async Task SendPaymentCancelledAsync(
@@ -186,7 +192,8 @@ internal sealed class PaymentNotificationEmailService(
         string statusLabel,
         string statusValue,
         CancellationToken cancellationToken,
-        string? itemNameOverride = null)
+        string? itemNameOverride = null,
+        PaymentReceiptResponse? receipt = null)
     {
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
@@ -199,11 +206,17 @@ internal sealed class PaymentNotificationEmailService(
         string itemName = itemNameOverride ?? (payment.BillingStatementId is long statementId
             ? $"Monthly billing statement {statementId}"
             : $"Bill {payment.BillId}");
-        string reference = string.IsNullOrWhiteSpace(payment.ReceiptNumber)
-            ? payment.PaymentNumber
-            : payment.ReceiptNumber;
+        string reference = receipt?.ReceiptNumber
+            ?? (string.IsNullOrWhiteSpace(payment.ReceiptNumber)
+                ? payment.PaymentNumber
+                : payment.ReceiptNumber);
+        PaymentReceiptLink? receiptLink = ResolveReceiptLink(payment);
+        string receiptUrl = BuildReceiptUrl(payment.Id);
+        decimal educationPaid = receipt?.EducationAccountAmount ?? payment.EducationAccountAmount;
+        decimal onlinePaid = receipt?.OnlinePaymentAmount ?? payment.OnlinePaymentAmount;
 
-        string plainTextBody = string.Join(Environment.NewLine, [
+        List<string> plainTextLines =
+        [
             branding.AppName,
             subject,
             string.Empty,
@@ -212,12 +225,19 @@ internal sealed class PaymentNotificationEmailService(
             $"Amount: {amountDisplay}",
             $"Course/Bill: {itemName}",
             $"Reference: {reference}",
+            $"Education Account Paid: {EmailTemplateBranding.FormatMoney(educationPaid)}",
+            $"Online Paid: {EmailTemplateBranding.FormatMoney(onlinePaid)}",
             $"{statusLabel}: {statusValue}",
+            $"View MOE Receipt: {receiptUrl}",
+        ];
+        if (receiptLink is not null)
+            plainTextLines.Add($"Stripe online payment evidence: {receiptLink.Url}");
+        plainTextLines.AddRange([
             string.Empty,
             $"{actionLabel} -> {branding.PaymentDashboardUrl}",
             string.Empty,
-            footer
-        ]);
+            footer]);
+        string plainTextBody = string.Join(Environment.NewLine, plainTextLines);
         string htmlBody = BuildHtmlBody(
             title,
             studentName,
@@ -230,7 +250,10 @@ internal sealed class PaymentNotificationEmailService(
             actionLabel,
             footer,
             branding.AppName,
-            branding.PaymentDashboardUrl);
+            branding.PaymentDashboardUrl,
+            receiptLink,
+            receipt,
+            receiptUrl);
 
         await EnqueueAsync(payment, notificationType, subject, plainTextBody, htmlBody, cancellationToken);
     }
@@ -366,7 +389,10 @@ internal sealed class PaymentNotificationEmailService(
         string actionLabel,
         string footer,
         string appName,
-        string paymentDashboardUrl)
+        string paymentDashboardUrl,
+        PaymentReceiptLink? receiptLink,
+        PaymentReceiptResponse? receipt,
+        string receiptUrl)
     {
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
@@ -381,8 +407,16 @@ internal sealed class PaymentNotificationEmailService(
         EmailTemplateBranding.AppendSummaryRow(builder, "Amount", amountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
         EmailTemplateBranding.AppendSummaryRow(builder, "Course/Bill", itemName);
         EmailTemplateBranding.AppendSummaryRow(builder, "Reference", reference);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Education Account Paid", EmailTemplateBranding.FormatMoney(receipt?.EducationAccountAmount ?? 0m));
+        EmailTemplateBranding.AppendSummaryRow(builder, "Online Paid", EmailTemplateBranding.FormatMoney(receipt?.OnlinePaymentAmount ?? 0m));
         EmailTemplateBranding.AppendSummaryRow(builder, statusLabel, statusValue, "#fff7ed", "#9a3412");
+        if (receiptLink is not null)
+            EmailTemplateBranding.AppendSummaryRow(builder, "Stripe online payment evidence", receiptLink.Url);
         builder.Append("</table>");
+        AppendReceiptItems(builder, receipt);
+        EmailTemplateBranding.AppendButton(builder, receiptUrl, "View MOE Receipt");
+        if (receiptLink is not null)
+            EmailTemplateBranding.AppendButton(builder, receiptLink.Url, "View Stripe Evidence");
         EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, actionLabel);
         builder.Append("</td></tr>");
         EmailTemplateBranding.AppendFooter(builder, footer);
@@ -441,12 +475,61 @@ internal sealed class PaymentNotificationEmailService(
     private static string NormalizeReason(string reason, string fallback)
         => string.IsNullOrWhiteSpace(reason) ? fallback : reason.Trim();
 
+    private static PaymentReceiptLink? ResolveReceiptLink(Payment payment)
+    {
+        if (!string.IsNullOrWhiteSpace(payment.ProviderHostedInvoiceUrl))
+            return new PaymentReceiptLink("Stripe Invoice", payment.ProviderHostedInvoiceUrl.Trim());
+        if (!string.IsNullOrWhiteSpace(payment.ProviderInvoicePdfUrl))
+            return new PaymentReceiptLink("Stripe Invoice PDF", payment.ProviderInvoicePdfUrl.Trim());
+        if (!string.IsNullOrWhiteSpace(payment.ProviderReceiptUrl))
+            return new PaymentReceiptLink("Stripe Receipt", payment.ProviderReceiptUrl.Trim());
+        return null;
+    }
+
     private static string FormatBillName(PayableStatementBill bill)
         => string.IsNullOrWhiteSpace(bill.CourseName)
             ? $"Bill {bill.BillId}"
             : bill.CourseName.Trim();
 
+    private string BuildReceiptUrl(long paymentId)
+    {
+        if (paymentId <= 0) return branding.PaymentDashboardUrl;
+
+        string separator = branding.PaymentDashboardUrl.Contains('?', StringComparison.Ordinal)
+            ? "&"
+            : "?";
+        return $"{branding.PaymentDashboardUrl}{separator}receiptId={paymentId.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private static void AppendReceiptItems(StringBuilder builder, PaymentReceiptResponse? receipt)
+    {
+        if (receipt is null || receipt.Items.Count == 0) return;
+
+        builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
+        foreach (PaymentReceiptItemResponse item in receipt.Items.Take(5))
+        {
+            string itemName = string.IsNullOrWhiteSpace(item.CourseName)
+                ? $"Bill {item.BillId}"
+                : item.CourseName.Trim();
+            string itemReference = item.CourseCode ?? item.BillNumber ?? $"Bill {item.BillId}";
+
+            builder.Append("<tr><td style=\"padding:10px 0;border-bottom:1px solid #e2e8f0;\">");
+            builder.Append("<div style=\"font-size:14px;line-height:20px;color:#172033;font-weight:bold;\">")
+                .Append(WebUtility.HtmlEncode(itemName))
+                .Append("</div>");
+            builder.Append("<div style=\"font-size:13px;line-height:19px;color:#64748b;\">")
+                .Append(WebUtility.HtmlEncode(itemReference))
+                .Append(" · Paid ")
+                .Append(WebUtility.HtmlEncode(EmailTemplateBranding.FormatMoney(item.PaidAmount)))
+                .Append("</div>");
+            builder.Append("</td></tr>");
+        }
+        builder.Append("</table>");
+    }
+
     private sealed record PaymentReceiptContext(bool IsInstallment, string ItemName);
+
+    private sealed record PaymentReceiptLink(string Label, string Url);
 
     private sealed record PaymentReceiptBill(
         long BillId,

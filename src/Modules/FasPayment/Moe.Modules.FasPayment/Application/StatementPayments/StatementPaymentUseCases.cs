@@ -213,7 +213,8 @@ internal sealed class PayBillingStatementHandler(
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
     IClock clock,
-    PaymentNotificationEmailService paymentNotifications) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
+    PaymentNotificationEmailService paymentNotifications,
+    PaymentReceiptService receipts) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
 {
     public async Task<Result<PayBillingStatementResponse>> Handle(PayBillingStatementCommand command, CancellationToken ct)
     {
@@ -279,9 +280,10 @@ internal sealed class PayBillingStatementHandler(
                 ct);
             payment.MarkSuccessful(now);
             await paymentNotifications.SendPaymentSucceededAsync(payment, now, ct);
+            PaymentReceiptResponse? receipt = await receipts.BuildForPaymentAsync(payment, ct);
             await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
             return Result<PayBillingStatementResponse>.Success(new(
-                payment.Id, payment.PaymentStatusCode, educationAmount, 0m, null, null, null, false));
+                payment.Id, payment.PaymentStatusCode, educationAmount, 0m, null, null, null, false, receipt));
         }
 
         if (educationPart is not null)
@@ -299,11 +301,18 @@ internal sealed class PayBillingStatementHandler(
         await payments.AddCheckoutAsync(checkout, ct);
         try
         {
+            IReadOnlyCollection<PaymentCheckoutLineItem> billingLineItems =
+                await billing.BuildPaymentCheckoutLineItemsAsync(
+                    selectedBills.Select(bill => bill.BillId).ToArray(),
+                    ct);
             StripeCheckoutGatewayResult provider = await stripe.CreateCheckoutAsync(
                 new StripeCheckoutGatewayRequest(checkout.IdempotencyKey, checkout.Id, 0, 0,
                     $"Monthly billing statement {statement.BillingStatementId}", statement.CurrencyCode,
                     decimal.ToInt64(onlineAmount * 100m), 1, null,
-                    now.Add(PaymentCheckoutPolicy.Lifetime)), ct);
+                    now.Add(PaymentCheckoutPolicy.Lifetime),
+                    payment.Id,
+                    statement.BillingStatementId,
+                    ToStripeLineItems(billingLineItems, onlineAmount)), ct);
             checkout.AssignProviderCheckout(
                 provider.ProviderSessionId,
                 provider.ProviderPriceId,
@@ -438,6 +447,42 @@ internal sealed class PayBillingStatementHandler(
     private sealed record StatementFundingAllocation(
         decimal EducationAccountAmount,
         decimal OnlinePaymentAmount);
+
+    private static IReadOnlyCollection<StripeCheckoutLineItem>? ToStripeLineItems(
+        IReadOnlyCollection<PaymentCheckoutLineItem> lineItems,
+        decimal targetTotal)
+    {
+        PaymentCheckoutLineItem[] payableItems = lineItems
+            .Where(item => item.Amount > 0m)
+            .ToArray();
+        if (payableItems.Length == 0 || targetTotal <= 0m) return null;
+
+        decimal sourceTotal = payableItems.Sum(item => item.Amount);
+        if (sourceTotal <= 0m) return null;
+
+        List<StripeCheckoutLineItem> result = [];
+        long remainingMinor = ToMinorUnit(targetTotal);
+        for (int index = 0; index < payableItems.Length; index++)
+        {
+            PaymentCheckoutLineItem item = payableItems[index];
+            long amountMinor = index == payableItems.Length - 1
+                ? remainingMinor
+                : ToMinorUnit(targetTotal * item.Amount / sourceTotal);
+            remainingMinor -= amountMinor;
+            if (amountMinor <= 0) continue;
+
+            result.Add(new StripeCheckoutLineItem(
+                item.Name,
+                item.Description,
+                amountMinor,
+                Math.Max(1, item.Quantity)));
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static long ToMinorUnit(decimal amount)
+        => checked((long)Math.Round(amount * 100m, MidpointRounding.AwayFromZero));
 }
 
 internal sealed class CancelBillingStatementPaymentHandler(

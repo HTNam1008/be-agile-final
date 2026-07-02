@@ -45,7 +45,8 @@ public sealed record PayBillingStatementResponse(
     string? CheckoutUrl,
     long? PaymentCheckoutSessionId,
     DateTime? CheckoutExpiresAtUtc,
-    bool Resumed);
+    bool Resumed,
+    PaymentReceiptResponse? Receipt = null);
 
 public sealed record PendingEnrollmentPaymentResponse(
     long CourseEnrollmentId,

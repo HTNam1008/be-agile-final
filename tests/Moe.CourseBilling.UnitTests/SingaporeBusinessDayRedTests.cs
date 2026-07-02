@@ -219,6 +219,7 @@ public sealed class SingaporeBusinessDayRedTests
         public Task ApplyFullRefundForBillsAsync(IReadOnlyCollection<long> billIds, DateTime refundedAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<PayableStatement?> FindPayableStatementAsync(long statementId, long personId, CancellationToken cancellationToken) => Task.FromResult<PayableStatement?>(null);
         public Task ApplyStatementPaymentAsync(long statementId, IReadOnlyCollection<BillPaymentAllocation> allocations, DateTime paidAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyCollection<PaymentCheckoutLineItem>> BuildPaymentCheckoutLineItemsAsync(IReadOnlyCollection<long> billIds, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyCollection<PaymentCheckoutLineItem>>([]);
         public Task<Result> DeferStatementAsync(long statementId, long personId, IReadOnlyCollection<long> billIds, long actorLoginAccountId, DateTime utcNow, CancellationToken cancellationToken) => Task.FromResult(Result.Success());
     }
 

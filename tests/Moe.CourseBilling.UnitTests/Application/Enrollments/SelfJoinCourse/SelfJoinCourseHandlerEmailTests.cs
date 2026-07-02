@@ -226,6 +226,11 @@ public sealed class SelfJoinCourseHandlerEmailTests
             CancellationToken cancellationToken)
             => Task.CompletedTask;
 
+        public Task<IReadOnlyCollection<PaymentCheckoutLineItem>> BuildPaymentCheckoutLineItemsAsync(
+            IReadOnlyCollection<long> billIds,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<PaymentCheckoutLineItem>>([]);
+
         public Task<Result> DeferStatementAsync(
             long statementId,
             long personId,
