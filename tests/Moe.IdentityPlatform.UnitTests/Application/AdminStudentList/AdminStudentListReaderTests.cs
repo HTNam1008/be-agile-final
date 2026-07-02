@@ -202,6 +202,71 @@ public sealed class AdminStudentListReaderTests
     }
 
     [Fact]
+    public async Task ListAsync_FilterByCitizenshipStatus_ReturnsMatchingStudentsOnly()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1044, "Citizen Match", "S1234044W", "CITIZEN", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1045, "Permanent Resident Other", "S1234045X", "PR", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1046, "Pass Holder Other", "F1234046Y", "VALID_PASS_HOLDER", 10, "BACHELOR", "UG");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(citizenshipStatusCode: "CITIZEN", page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.TotalCount.Should().Be(1);
+        page.Items.Should().ContainSingle();
+        page.Items.Single().PersonId.Should().Be(1044);
+    }
+
+    [Fact]
+    public async Task ListAsync_FilterByInternationalStudent_ReturnsValidPassHoldersOnly()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1050, "Citizen Other", "S1234050C", "CITIZEN", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1051, "Pr Other", "S1234051D", "PR", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1052, "Pass Holder Match", "S1234052E", "VALID_PASS_HOLDER", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1053, "Second Pass Holder", "F1234053F", "VALID_PASS_HOLDER", 10, "BACHELOR", "UG");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(citizenshipStatusCode: "VALID_PASS_HOLDER", page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.TotalCount.Should().Be(2);
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1052L, 1053L]);
+    }
+
+    [Fact]
+    public async Task ListAsync_CitizenshipStatusAll_DoesNotFilterStudents()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        SeedStudent(dbContext, 1047, "All Citizen", "S1234047Z", "CITIZEN", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1048, "All Pr", "S1234048A", "PR", 10, "BACHELOR", "UG");
+        SeedStudent(dbContext, 1049, "All Pass Holder", "F1234049B", "VALID_PASS_HOLDER", 10, "BACHELOR", "UG");
+        await dbContext.SaveChangesAsync();
+        AdminStudentListReader reader = CreateReader(dbContext);
+
+        AdminStudentListPage page = await reader.ListAsync(
+            AdminStudentListCriteria.Default(citizenshipStatusCode: null, page: 1, pageSize: 20),
+            scopedOrganizationIds: [10],
+            hasGlobalAccess: false,
+            Today,
+            CancellationToken.None);
+
+        page.TotalCount.Should().Be(3);
+        page.Items.Select(x => x.PersonId).Should().BeEquivalentTo([1047L, 1048L, 1049L]);
+    }
+
+    [Fact]
     public async Task ListAsync_FilterByNoAccount_ReturnsStudentsWithoutAccountOnly()
     {
         using MoeDbContext dbContext = CreateDbContext();

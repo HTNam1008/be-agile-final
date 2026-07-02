@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Linq;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -20,8 +21,22 @@ public sealed class StudentManagementReferenceDataApiTests(CustomWebApplicationF
         JsonElement data = GetProperty(body.RootElement, "data");
 
         JsonElement levels = GetProperty(GetProperty(data, "studentProfile"), "levels");
-        Assert.Contains(levels.EnumerateArray(), option => GetProperty(option, "value").GetString() == "PRI_1");
-        Assert.Contains(levels.EnumerateArray(), option => GetProperty(option, "value").GetString() == "SEC_5");
+        var levelOptions = levels.EnumerateArray().ToArray();
+        string[] levelValues = levelOptions
+            .Select(option => GetProperty(option, "value").GetString() ?? string.Empty)
+            .ToArray();
+        Assert.Equal(["POST_SEC", "BACHELOR", "MASTER", "PHD"], levelValues);
+        Assert.DoesNotContain(levelOptions, option =>
+        {
+            string? value = GetProperty(option, "value").GetString();
+            return value is not null
+                && (value.StartsWith("PRI_", StringComparison.Ordinal)
+                    || value.StartsWith("SEC_", StringComparison.Ordinal)
+                    || value.StartsWith("UNI_Y", StringComparison.Ordinal));
+        });
+        Assert.Contains(levelOptions, option =>
+            GetProperty(option, "value").GetString() == "POST_SEC"
+            && GetProperty(option, "label").GetString() == "Post-Secondary");
         Assert.Contains(levels.EnumerateArray(), option =>
             GetProperty(option, "value").GetString() == "BACHELOR"
             && GetProperty(option, "label").GetString() == "Bachelor");
@@ -30,8 +45,20 @@ public sealed class StudentManagementReferenceDataApiTests(CustomWebApplicationF
             && GetProperty(option, "label").GetString() == "Master");
         Assert.Contains(levels.EnumerateArray(), option =>
             GetProperty(option, "value").GetString() == "PHD"
-            && GetProperty(option, "label").GetString() == "PhD");
-        Assert.DoesNotContain(levels.EnumerateArray(), option => GetProperty(option, "value").GetString() == "UNI_Y1");
+            && GetProperty(option, "label").GetString() == "Doctor");
+
+        JsonElement citizenshipStatuses = GetProperty(GetProperty(data, "studentListFilters"), "citizenshipStatuses");
+        var citizenshipOptions = citizenshipStatuses.EnumerateArray().ToArray();
+        Assert.Equal(3, citizenshipOptions.Length);
+        Assert.Contains(citizenshipOptions, option =>
+            GetProperty(option, "value").GetString() == "CITIZEN"
+            && GetProperty(option, "label").GetString() == "Singapore Citizen");
+        Assert.Contains(citizenshipOptions, option =>
+            GetProperty(option, "value").GetString() == "PR"
+            && GetProperty(option, "label").GetString() == "PR");
+        Assert.Contains(citizenshipOptions, option =>
+            GetProperty(option, "value").GetString() == "VALID_PASS_HOLDER"
+            && GetProperty(option, "label").GetString() == "International Student");
 
         JsonElement openReasons = GetProperty(GetProperty(data, "educationAccount"), "openReasons");
         Assert.Equal(JsonValueKind.Array, openReasons.ValueKind);
