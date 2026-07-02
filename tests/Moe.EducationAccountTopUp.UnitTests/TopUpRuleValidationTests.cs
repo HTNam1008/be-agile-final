@@ -44,12 +44,12 @@ public sealed class TopUpRuleValidationTests
     }
 
     [Fact]
-    public void Validator_ShouldAccept_EmptyGroupsAsRuleClear()
+    public void Validator_ShouldReject_EmptyGroups()
     {
         var command = new UpsertCampaignRulesCommand(1, []);
 
         var result = _validator.Validate(command);
-        result.IsValid.Should().BeTrue();
+        result.IsValid.Should().BeFalse();
     }
 
     [Fact]
