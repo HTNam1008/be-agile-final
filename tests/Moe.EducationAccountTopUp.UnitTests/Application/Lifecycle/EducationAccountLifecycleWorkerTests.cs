@@ -65,6 +65,29 @@ public sealed class EducationAccountLifecycleWorkerTests
     }
 
     [Fact]
+    public async Task RunIfDueAsync_UsesSingaporeBusinessDateForLifecycleDate()
+    {
+        FakeEligiblePersonLookupGateway people = new([]);
+        FakeAutomaticEducationAccountCreator creator = new();
+        FakeAutomaticEducationAccountCloser closer = new();
+        FakeEducationAccountLifecycleRunRepository runs = new(enforceUniqueScheduledRuns: true);
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "16:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 23, 16, 0, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer,
+            runs);
+
+        await worker.RunIfDueAsync(CancellationToken.None);
+
+        closer.TodayValues.Should().ContainSingle().Which.Should().Be(new DateOnly(2026, 6, 24));
+        runs.Runs.Should().ContainSingle(x =>
+            x.RunDateUtc == new DateOnly(2026, 6, 24)
+            && x.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled);
+    }
+
+    [Fact]
     public async Task RunIfDueAsync_WhenBeforeConfiguredUtcTime_DoesNotProcess()
     {
         FakeEligiblePersonLookupGateway people = new([1]);
@@ -384,6 +407,7 @@ public sealed class EducationAccountLifecycleWorkerTests
         IReadOnlyCollection<AutomaticEducationAccountClosureResult>? closedResults = null) : IAutomaticEducationAccountCloser
     {
         public int Calls { get; private set; }
+        public List<DateOnly> TodayValues { get; } = [];
 
         public Task<AutomaticEducationAccountClosureSummary> CloseEligibleAsync(
             DateOnly today,
@@ -391,6 +415,7 @@ public sealed class EducationAccountLifecycleWorkerTests
             CancellationToken cancellationToken)
         {
             Calls++;
+            TodayValues.Add(today);
             events?.Add("close");
             if (closedResults is not null)
             {
