@@ -4,13 +4,16 @@ using Moe.SharedKernel.Results;
 namespace Moe.Modules.MailDelivery.Application.Admin;
 
 public sealed record MailNotificationFilter(
+    string? Search,
     string? Status,
     string? NotificationType,
     long? PersonId,
     string? EntityType,
     string? EntityId,
     DateTime? CreatedFromUtc,
-    DateTime? CreatedToUtc);
+    DateTime? CreatedToUtc,
+    string? SortBy,
+    string? SortDirection);
 
 public sealed record MailNotificationListItem(
     long Id,

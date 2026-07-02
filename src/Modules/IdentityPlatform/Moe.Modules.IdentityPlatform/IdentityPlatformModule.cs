@@ -82,6 +82,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IStudentBulkImportWorkbookReader, ClosedXmlStudentBulkImportWorkbookReader>();
         services.AddScoped<IPersonDirectory, PersonDirectory>();
         services.AddScoped<Moe.Modules.MailDelivery.IGateway.IEmailRecipientResolver, EmailRecipientResolver>();
+        services.AddScoped<Moe.Modules.MailDelivery.Application.Admin.IMailNotificationAccessScope, MailNotificationAccessScope>();
         services.AddScoped<IEligiblePersonReader, EligiblePersonReader>();
         services.AddScoped<ILifecyclePersonDisplayReader, LifecyclePersonDisplayReader>();
         services.AddScoped<IPersonLifecycleGateway, PersonLifecycleGateway>();

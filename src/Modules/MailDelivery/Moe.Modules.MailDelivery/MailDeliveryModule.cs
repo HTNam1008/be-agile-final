@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Modules;
 using Moe.Modules.MailDelivery.Application.Admin;
@@ -27,6 +28,7 @@ public sealed class MailDeliveryModule : IModule
         services.AddSingleton<IEmailDeliveryGateway, SmtpEmailDeliveryGateway>();
         services.AddSingleton<IEmailNotificationQueue, InMemoryEmailNotificationQueue>();
         services.AddScoped<IEmailNotificationScheduler, EmailNotificationScheduler>();
+        services.TryAddScoped<IMailNotificationAccessScope, AllowAllMailNotificationAccessScope>();
         services.AddScoped<IMailNotificationAdminService, MailNotificationAdminService>();
         if (IsBackgroundJobEnabled(configuration, "MailDelivery:QueueWorker"))
         {
