@@ -5,8 +5,8 @@ public sealed record AdminAccountDetailsResponse(
     string PersonStatusCode,
     long? UserAccountId,
     string? UserAccountStatusCode,
-    long EducationAccountId,
-    string AccountNumber,
+    long? EducationAccountId,
+    string? AccountNumber,
     string? IdentityNumberMasked,
     string FullName,
     DateOnly DateOfBirth,
@@ -22,5 +22,5 @@ public sealed record AdminAccountDetailsResponse(
     string? LevelCode,
     string? ClassCode,
     string AccountStatusCode,
-    decimal CurrentBalance,
+    decimal? CurrentBalance,
     DateTime ExpectedUpdatedAtUtc);

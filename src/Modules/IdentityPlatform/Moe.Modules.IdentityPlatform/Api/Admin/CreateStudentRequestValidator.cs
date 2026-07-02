@@ -24,6 +24,10 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
 
         RuleFor(x => x.DateOfBirth).NotEmpty();
 
+        RuleFor(x => x)
+            .Must(HaveStartDateOnOrAfterDateOfBirth)
+            .WithMessage("Start date cannot be earlier than date of birth.");
+
         RuleFor(x => x.NationalityCode)
             .NotEmpty()
             .MaximumLength(30);
@@ -56,4 +60,7 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
         RuleFor(x => x.Mobile).MaximumLength(50);
         RuleFor(x => x.Address).MaximumLength(1000);
     }
+
+    private static bool HaveStartDateOnOrAfterDateOfBirth(CreateStudentRequest request)
+        => !request.StartDate.HasValue || request.StartDate.Value >= request.DateOfBirth;
 }
