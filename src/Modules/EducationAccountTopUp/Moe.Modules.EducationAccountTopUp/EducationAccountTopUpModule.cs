@@ -149,7 +149,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IQueryHandler<GetSettlementPreferenceQuery, SettlementPreferenceResponse>, GetSettlementPreferenceHandler>();
         services.AddScoped<IQueryHandler<GetCampaignsQuery, CampaignListResult>, GetCampaignsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignByIdQuery, CampaignListItem?>, GetCampaignByIdQueryHandler>();
-        services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleDto>>, GetCampaignRulesQueryHandler>();
+        services.AddScoped<IQueryHandler<GetCampaignRulesQuery, IReadOnlyList<CampaignRuleGroupDto>>, GetCampaignRulesQueryHandler>();
         services.AddScoped<IQueryHandler<GetFixedRecipientsQuery, IReadOnlyList<FixedRecipientDto>>, GetFixedRecipientsQueryHandler>();
         services.AddScoped<IQueryHandler<GetAccountTaxonomyQuery, GetAccountTaxonomyResponse>, GetAccountTaxonomyHandler>();
         services.AddScoped<IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>, PreviewCampaignQueryHandler>();

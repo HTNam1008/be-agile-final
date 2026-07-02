@@ -61,7 +61,7 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
     public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
     {
         return dbContext.Set<TopUpCampaignRule>()
-            .CountAsync(x => x.TopUpCampaignId == campaignId && x.IsActive, cancellationToken);
+            .CountAsync(x => x.TopUpCampaignId == campaignId, cancellationToken);
     }
 
     public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
@@ -70,22 +70,24 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
             .CountAsync(x => x.TopUpCampaignId == campaignId && x.IsActive, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+    public async Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Set<TopUpCampaignRule>()
+        var groups = await dbContext.Set<TopUpRuleGroup>()
             .Where(x => x.TopUpCampaignId == campaignId)
+            .Include(x => x.Rules)
             .ToListAsync(cancellationToken);
-    }
 
-    public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default)
-    {
-        dbContext.Set<TopUpCampaignRule>().RemoveRange(rules);
-        return Task.CompletedTask;
+        dbContext.Set<TopUpRuleGroup>().RemoveRange(groups);
     }
 
     public async Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpCampaignRule>().AddAsync(rule, cancellationToken);
+    }
+
+    public async Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default)
+    {
+        await dbContext.Set<TopUpRuleGroup>().AddAsync(group, cancellationToken);
     }
 
     public async Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default)

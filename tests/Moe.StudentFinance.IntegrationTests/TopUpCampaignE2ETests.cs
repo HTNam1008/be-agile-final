@@ -168,9 +168,15 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var rulesPayload = new
         {
             topUpCampaignId = campaignId,
-            rules = new[]
+            groups = new[]
             {
-                new { criterionCode = "Age", operatorCode = "GreaterThan", numericValueFrom = 7m }
+                new
+                {
+                    criteria = new object[]
+                    {
+                        new { criterionCode = "Age", operatorCode = "GreaterThan", numericValueFrom = 7m, numericValueTo = (decimal?)null, textValue = (string?)null }
+                    }
+                }
             }
         };
         var upsertResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/rules", rulesPayload);

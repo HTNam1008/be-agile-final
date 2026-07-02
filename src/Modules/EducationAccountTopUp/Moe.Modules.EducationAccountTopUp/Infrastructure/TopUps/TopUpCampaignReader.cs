@@ -159,19 +159,38 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
         };
     }
 
-    public async Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CampaignRuleGroupProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Set<TopUpCampaignRule>()
-            .AsNoTracking()
-            .Where(x => x.TopUpCampaignId == campaignId && x.IsActive)
-            .Select(x => new CampaignRuleProjection(
-                x.Id,
-                x.CriterionCode,
-                x.OperatorCode,
-                x.NumericValueFrom,
-                x.NumericValueTo,
-                x.TextValue))
+        var rows = await (
+            from ruleGroup in dbContext.Set<TopUpRuleGroup>().AsNoTracking()
+            join rule in dbContext.Set<TopUpCampaignRule>().AsNoTracking()
+                on ruleGroup.Id equals rule.TopUpRuleGroupId
+            where ruleGroup.TopUpCampaignId == campaignId
+            orderby ruleGroup.DisplayOrder, rule.DisplayOrder, rule.Id
+            select new
+            {
+                GroupId = ruleGroup.Id,
+                GroupDisplayOrder = ruleGroup.DisplayOrder,
+                Rule = new CampaignRuleProjection(
+                    rule.Id,
+                    ruleGroup.Id,
+                    rule.DisplayOrder,
+                    rule.CriterionCode,
+                    rule.OperatorCode,
+                    rule.NumericValueFrom,
+                    rule.NumericValueTo,
+                    rule.TextValue)
+            })
             .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => new { x.GroupId, x.GroupDisplayOrder })
+            .OrderBy(x => x.Key.GroupDisplayOrder)
+            .Select(x => new CampaignRuleGroupProjection(
+                x.Key.GroupId,
+                x.Key.GroupDisplayOrder,
+                x.Select(row => row.Rule).OrderBy(rule => rule.DisplayOrder).ToList()))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<ActiveRecipientProjection>> GetActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
