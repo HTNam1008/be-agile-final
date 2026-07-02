@@ -64,7 +64,7 @@ public sealed class EducationAccountLifecycleWorker(
         }
 
         DateTimeOffset now = clock.UtcNow;
-        DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         TimeOnly currentTime = TimeOnly.FromDateTime(now.UtcDateTime);
 
         if (currentTime < runAtUtc)

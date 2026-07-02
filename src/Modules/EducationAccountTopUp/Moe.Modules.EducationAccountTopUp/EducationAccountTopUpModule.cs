@@ -103,6 +103,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountReasonCodeGateway, EducationAccountReasonCodeGateway>();
         services.AddScoped<IEducationAccountPaymentGateway, EducationAccountPaymentGateway>();
         services.AddScoped<IAutomaticEducationAccountCreator, AutomaticEducationAccountCreator>();
+        services.AddScoped<IAutomaticEducationAccountSettlementGateway, AutomaticEducationAccountSettlementGateway>();
         services.AddScoped<IAutomaticEducationAccountCloser, AutomaticEducationAccountCloser>();
         services.AddScoped<IAge30AccountLockReminderEmailService, Age30AccountLockReminderEmailService>();
         services.AddScoped<IAccountLockReminderOutstandingReader, AccountLockReminderOutstandingReader>();
