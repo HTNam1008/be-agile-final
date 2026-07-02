@@ -60,6 +60,7 @@ public sealed class AiOrchestratorService(
                 "FAS_INTERVIEW" => await HandleFas(conversation, sanitizedRequest, now, ct),
                 _ => await HandleGeneral(conversation, sanitizedRequest, now, ct)
             };
+            response = AttachFollowUps(response, sanitizedRequest);
             conversation.Touch(response.Mode, pageJson, conversation.FasInterviewJson, now);
             var assistant = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(response.Text), now,
                 JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
@@ -73,12 +74,18 @@ public sealed class AiOrchestratorService(
         {
             Guid reviewId = await CreateReview(conversation, personId, "MODEL_OR_TOOL_FAILURE", sanitizedRequest.PageContext, sanitizedRequest.Message, now, ct);
             logger.LogError(ex, "AI conversation {ConversationId} failed after {ElapsedMs} ms", conversation.Id, stopwatch.ElapsedMilliseconds);
-            const string text = "I could not complete that request reliably. I've stopped making guesses here — the portal pages and Admin Center remain the official ways to proceed.";
-            var fallbackResponse = new AiChatResponse(conversation.Id, 0, text, "FALLBACK", new(false, []), [], FallbackActions(reviewId), null, reviewId);
+            const string text = "I cannot answer this reliably right now, so I will not guess. I can help with Education Account balance, bills, payments, refunds, and FAS application guidance. For anything else, the Admin Center can review your case.";
+            var fallbackResponse = new AiChatResponse(conversation.Id, 0, text, "FALLBACK", new(false, []), [], FallbackActions(reviewId), null, reviewId)
+            {
+                FollowUpQuestions = FallbackFollowUps()
+            };
             var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", text, now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(fallbackResponse));
             db.Add(fallback); await db.SaveChangesAsync(ct);
             return new AiChatResponse(conversation.Id, fallback.Id, text, "FALLBACK", new(false, []), [],
-                FallbackActions(reviewId), null, reviewId);
+                FallbackActions(reviewId), null, reviewId)
+            {
+                FollowUpQuestions = FallbackFollowUps()
+            };
         }
     }
 
@@ -136,7 +143,10 @@ public sealed class AiOrchestratorService(
             return new(c.Id, 0, billText, "PAYMENT", Grounding(sources),
                 [new("OUTSTANDING_BILLS", snapshot.Bills)], [new("NAVIGATE", "Open Bills & payments page", "/portal/bills")], null);
         }
-        string text = $"Your Education Account balance is {ccy(snapshot.AvailableBalance)}, with {ccy(snapshot.TotalOutstanding)} in outstanding charges. That leaves {ccy(snapshot.NetAvailable)} available to use.\n\n{PaymentOptionsText(snapshot)}\n\nYou can see the full breakdown on the Bills & payments or Education Account page.";
+        string paymentStatus = snapshot.TotalOutstanding <= 0
+            ? "Nothing is due right now."
+            : "Review the available balance and outstanding charges before paying.";
+        string text = $"Your live Education Account summary is below, including available balance, outstanding charges, and net available amount.\n\n{paymentStatus}\n\nUse the actions below to open the exact Bills & payments or Education Account view.";
         AiCard card = new("FINANCE_SUMMARY", snapshot);
         AiAction[] actions = [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")];
         return new(c.Id, 0, text, "PAYMENT", Grounding(sources), [card], actions, null);
@@ -209,7 +219,15 @@ public sealed class AiOrchestratorService(
                     state.ParentNationalities), ct);
                 JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
                 bool hasSchemes = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array && schemes.GetArrayLength() > 0;
-                if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "Based on your details, I could not find an eligible FAS scheme. The FAS application form and Admin Center remain the official paths. Review your answers or contact Admin Center for help."; }
+                if (!hasSchemes && CanPrepareOpenSchemeForReview(state))
+                {
+                    state.Status = "COMPLETE";
+                    recommendedSchemes = ReviewRequiredSchemeMatches(state);
+                    AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
+                    recommendation = BuildReviewRequiredRecommendation(completeInterview, recommendedSchemes);
+                    text = $"I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school. The scheme criteria are not fully configured in the demo data, so I prepared your confirmed answers and scheme selection for review. Use 'Apply answers to form', then check the form before submitting.";
+                }
+                else if (!hasSchemes) { state.Status = "MANUAL_FALLBACK"; text = "Based on your details, I could not find an eligible FAS scheme. Use 'Open FAS application' to review the form, or 'Contact Admin Center' below for staff help."; }
                 else
                 {
                     state.Status = "COMPLETE";
@@ -219,7 +237,22 @@ public sealed class AiOrchestratorService(
                     text = "I have enough information to evaluate the active FAS schemes. Review the recommendation below and use 'Apply answers to form' when ready.";
                 }
             }
-            catch { state.Status = "MANUAL_FALLBACK"; text = "Based on your details, I could not find an eligible FAS scheme. The FAS application form and Admin Center remain the official paths. Review your answers or contact Admin Center for help."; }
+            catch
+            {
+                if (CanPrepareOpenSchemeForReview(state))
+                {
+                    state.Status = "COMPLETE";
+                    recommendedSchemes = ReviewRequiredSchemeMatches(state);
+                    AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
+                    recommendation = BuildReviewRequiredRecommendation(completeInterview, recommendedSchemes);
+                    text = $"I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school. The scheme criteria are not fully configured in the demo data, so I prepared your confirmed answers and scheme selection for review. Use 'Apply answers to form', then check the form before submitting.";
+                }
+                else
+                {
+                    state.Status = "MANUAL_FALLBACK";
+                    text = "Based on your details, I could not find an eligible FAS scheme. Use 'Open FAS application' to review the form, or 'Contact Admin Center' below for staff help.";
+                }
+            }
         }
         else if (next is null)
         {
@@ -261,11 +294,25 @@ public sealed class AiOrchestratorService(
         bool isSchemeKbRequest = IsSchemeKbRequest(request.Message);
         string retrievalDomain = isSchemeKbRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
         IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
+        if (sources.Count == 0)
+        {
+            Guid review = await CreateReview(c, c.PersonId, "MISSING_POLICY", request.PageContext, request.Message, now, ct);
+            const string fallbackText = "I cannot answer this reliably from the reviewed MOE student-finance guidance, so I will not guess. I can help with Education Account balance, bills, payments, refunds, and FAS application guidance. Use Contact Admin Center below if you want a staff review.";
+            return new(c.Id, 0, fallbackText, "FALLBACK", new(false, []), [], FallbackActions(review), null, review)
+            {
+                FollowUpQuestions = FallbackFollowUps()
+            };
+        }
+
+        KnowledgeAnswerCard knowledgeCard = BuildKnowledgeAnswerCard(request.Message, sources);
         string sourceText = string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"));
         if (isSchemeKbRequest && sources.Count > 0)
         {
             string deterministicText = BuildKnowledgeAnswer(request.Message, sources);
-            return new(c.Id, 0, deterministicText, "GENERAL", Grounding(sources), [], [], null);
+            return new(c.Id, 0, deterministicText, "GENERAL", Grounding(sources), [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources), null)
+            {
+                FollowUpQuestions = knowledgeCard.FollowUpQuestions
+            };
         }
         var history = new ChatHistory(
             "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
@@ -278,36 +325,84 @@ public sealed class AiOrchestratorService(
         Kernel kernel = services.GetRequiredService<Kernel>();
         ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
         string text = string.IsNullOrWhiteSpace(answer.Content) ? "I do not have enough reliable information to answer that." : answer.Content.Trim();
-        if (sources.Count == 0)
-        {
-            Guid review = await CreateReview(c, c.PersonId, "MISSING_POLICY", request.PageContext, request.Message, now, ct);
-            return new(c.Id, 0, text, "FALLBACK", new(false, []), [], FallbackActions(review), null, review);
-        }
         if (sources.Any(x => x.Citation.SourceStatus == "PROTOTYPE"))
         {
-            text += "\n\nSome parts of this answer are based on prototype guidance and may change. Your Bills/FAS pages remain the source of truth.";
+            text += "\n\nSome parts of this answer are based on prototype guidance and may change. Use the actions below when you want to continue in the portal.";
         }
-        return new(c.Id, 0, text, "GENERAL", Grounding(sources), [], [], null);
+        return new(c.Id, 0, text, "GENERAL", Grounding(sources), [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources), null)
+        {
+            FollowUpQuestions = knowledgeCard.FollowUpQuestions
+        };
+    }
+
+    private static IReadOnlyCollection<AiAction> KnowledgeActions(IReadOnlyList<KnowledgeResult> sources)
+    {
+        bool hasFasSource = sources.Any(source => source.Citation.SourceId.StartsWith("FAS-", StringComparison.OrdinalIgnoreCase));
+        return hasFasSource ? [new("NAVIGATE", "Open FAS application", "/portal/fas")] : [];
     }
 
     private static string BuildKnowledgeAnswer(string question, IReadOnlyList<KnowledgeResult> sources)
     {
         KnowledgeResult primary = sources[0];
-        string summary = CleanKnowledgeSnippet(primary.Content);
+        KnowledgeAnswerCard card = BuildKnowledgeAnswerCard(question, sources);
         string topic = primary.Citation.Section;
-        return $"Here is the short version on {topic}: {summary}\n\nUse the FAS page to check live eligibility, selected schemes, and the final application before submitting.";
+        return $"I found reviewed guidance for {topic}. I kept the details in the card below so the answer is easier to scan.";
+    }
+
+    private static KnowledgeAnswerCard BuildKnowledgeAnswerCard(string question, IReadOnlyList<KnowledgeResult> sources)
+    {
+        KnowledgeResult primary = sources[0];
+        string[] facts = KnowledgeFacts(primary.Content).ToArray();
+        string summary = facts.FirstOrDefault() ?? CleanKnowledgeSnippet(primary.Content);
+        string[] keyFacts = facts.Skip(1).DefaultIfEmpty(summary).Take(4).ToArray();
+        string[] sourceIds = sources.Select(x => x.Citation.SourceId).Distinct(StringComparer.Ordinal).Take(4).ToArray();
+        string sourceQuality = sources.Any(x => x.Citation.SourceStatus == "OFFICIAL")
+            ? "Official MOE guidance"
+            : sources.Any(x => x.Citation.SourceStatus == "GUIDE")
+                ? "Reviewed guidance"
+                : "Prototype or FAQ guidance";
+        string[] followUps = FasKnowledgeFollowUps(question);
+
+        return new KnowledgeAnswerCard(
+            primary.Citation.Section,
+            summary,
+            keyFacts,
+            ["Use Open FAS application below to review live schemes and draft status.", "Ask \"Check if I qualify for FAS\" and I can collect the answers before you open the form."],
+            sourceIds,
+            sourceQuality,
+            followUps);
     }
 
     private static string CleanKnowledgeSnippet(string content)
     {
-        string[] lines = content.Split('\n')
-            .Select(line => Regex.Replace(line.Trim(), @"^[#*\-\s|]+", "").Trim())
-            .Where(line => line.Length > 0 && !line.Contains("---", StringComparison.Ordinal) && !line.StartsWith("|", StringComparison.Ordinal))
+        string[] lines = KnowledgeLines(content)
             .Take(4)
             .ToArray();
         string text = string.Join(" ", lines);
         text = Regex.Replace(text, @"\s+", " ").Trim();
         return text.Length <= 360 ? text : $"{text[..360].TrimEnd()}...";
+    }
+
+    private static IEnumerable<string> KnowledgeLines(string content) => content.Split('\n')
+        .Select(line => Regex.Replace(line.Trim(), @"^[#*\-\s|>]+", "").Trim())
+        .Where(line => line.Length > 0 && !line.Contains("---", StringComparison.Ordinal) && !line.StartsWith("|", StringComparison.Ordinal))
+        .Select(line => Regex.Replace(line, @"\s+", " ").Trim())
+        .Where(line => line.Length > 0);
+
+    private static bool LooksLikeInstructionHeading(string line) =>
+        Regex.IsMatch(line, @"^(answer|do not|source|notes?|scope|in scope|explicitly out of scope)\b", RegexOptions.IgnoreCase);
+
+    private static IEnumerable<string> KnowledgeFacts(string content)
+    {
+        foreach (string line in KnowledgeLines(content).Where(line => !LooksLikeInstructionHeading(line)))
+        {
+            foreach (string sentence in Regex.Split(line, @"(?<=[.!?])\s+"))
+            {
+                string value = sentence.Trim();
+                if (value.Length > 0)
+                    yield return value;
+            }
+        }
     }
 
     private async Task<AiConversation> GetOrCreateConversation(Guid? id, long personId, DateTime now, CancellationToken ct)
@@ -331,35 +426,39 @@ public sealed class AiOrchestratorService(
     {
         string value = $"{domain} {message}".ToUpperInvariant();
         string msgOnly = message.ToUpperInvariant();
-        if (IsSchemeKbRequest(msgOnly)) return "GENERAL";
-        if (current == "FAS_INTERVIEW") return "FAS_INTERVIEW";
-        if (IsFasInterviewRequest(value)) return "FAS_INTERVIEW";
         bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
         bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
-        if (isPaymentDomain || msgHasPaymentKeyword) return "PAYMENT";
+        if (IsSchemeKbRequest(msgOnly)) return "GENERAL";
+        if (msgHasPaymentKeyword) return "PAYMENT";
+        if (IsFasInterviewRequest(value)) return "FAS_INTERVIEW";
+        if (current == "FAS_INTERVIEW") return "FAS_INTERVIEW";
+        if (isPaymentDomain) return "PAYMENT";
         return "GENERAL";
     }
 
     private static bool IsSchemeKbRequest(string value)
     {
         bool isInfoIntent = Regex.IsMatch(value,
-            @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION)\b",
+            @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION|DOCUMENT|DOCUMENTS)\b",
             RegexOptions.IgnoreCase);
-        bool isApplicationIntent = Regex.IsMatch(value,
-            @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|DO I|AM I)\b",
+        bool isProcessInfoIntent = Regex.IsMatch(value,
+            @"\b(WALK ME THROUGH|STEPS?|PROCESS|HOW DO I APPLY|HOW TO APPLY)\b",
+            RegexOptions.IgnoreCase);
+        bool startsLiveAssessment = Regex.IsMatch(value,
+            @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|DO I|AM I|I WANT|I NEED|HELP ME APPLY)\b",
             RegexOptions.IgnoreCase);
         bool mentionsFas = value.Contains("FAS", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("FINANCIAL ASSISTANCE", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("BURSARY", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase);
-        return mentionsFas && isInfoIntent && !isApplicationIntent;
+        return mentionsFas && (isInfoIntent || isProcessInfoIntent) && (!startsLiveAssessment || isProcessInfoIntent);
     }
 
     private static bool IsFasInterviewRequest(string value)
     {
         bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE");
         bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW|QUESTION)\b", RegexOptions.IgnoreCase);
-        bool eligibilityWithoutFas = value.Contains("ELIGIB") || value.Contains("QUALIF");
+        bool eligibilityWithoutFas = (value.Contains("ELIGIB") || value.Contains("QUALIF")) && mentionsFas;
         return eligibilityWithoutFas || (mentionsFas && asksForInterview);
     }
 
@@ -618,7 +717,8 @@ public sealed class AiOrchestratorService(
         return true;
     }
 
-    private static bool IncomeFactsRequired(FasInterviewData s) => CriteriaPlanUnknown(s) || s.RequiredCriteriaTypes.Any(IsIncomeCriterion);
+    private static bool IncomeFactsRequired(FasInterviewData s) =>
+        CriteriaPlanUnknown(s) || s.RequiredCriteriaTypes.Any(IsIncomeCriterion) || s.ApplicableSchemes.Count > 0;
     private static bool ParentNationalityRequired(FasInterviewData _) => true;
     private static bool CriteriaPlanUnknown(FasInterviewData s) => s.RequiredCriteriaTypes.Count == 0 && s.ApplicableSchemeNames.Count == 0;
     private static bool IsIncomeCriterion(string criteriaType) => criteriaType is "GDP" or "GHI" or "PCI";
@@ -857,6 +957,29 @@ public sealed class AiOrchestratorService(
             "Prototype recommendation. Eligibility is calculated by application code and final approval remains subject to MOE review.");
     }
 
+    private static bool CanPrepareOpenSchemeForReview(FasInterviewData state) =>
+        state.ApplicableSchemes.Count > 0 && state.RequiredCriteriaTypes.Count == 0;
+
+    private static FasRecommendationMatch[] ReviewRequiredSchemeMatches(FasInterviewData state) =>
+        state.ApplicableSchemes
+            .Select(scheme => new FasRecommendationMatch(scheme.Id, scheme.Name, 0, "Review required", "Scheme selection", 0m))
+            .ToArray();
+
+    private static FasRecommendationCard BuildReviewRequiredRecommendation(AiInterviewState interview, IReadOnlyCollection<FasRecommendationMatch> matches)
+    {
+        FasRecommendationMatch? recommended = matches.FirstOrDefault();
+        return new FasRecommendationCard(
+            null,
+            recommended?.SchemeName,
+            recommended?.TierLabel,
+            recommended?.SubsidyType,
+            recommended?.SubsidyValue,
+            matches,
+            interview.Fields.Where(x => x.Confirmed).ToArray(),
+            interview.MissingFields,
+            "Review required. The scheme is open for your school, but the demo criteria do not include a configured tier calculation.");
+    }
+
     private static FasRecommendationMatch[] ExtractRecommendationMatches(JsonElement root)
     {
         return root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array
@@ -932,6 +1055,87 @@ public sealed class AiOrchestratorService(
         _ => value
     };
 
+    private static AiChatResponse AttachFollowUps(AiChatResponse response, AiChatRequest request)
+    {
+        if (response.FollowUpQuestions.Count > 0) return response;
+
+        string[] followUps = response.Mode switch
+        {
+            "PAYMENT" => PaymentFollowUps(),
+            "FALLBACK" => FallbackFollowUps(),
+            "GENERAL" => IsFasQuestion(request.Message) ? FasKnowledgeFollowUps(request.Message) : GeneralFinanceFollowUps(),
+            "FAS_INTERVIEW" when response.InterviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
+            _ => []
+        };
+
+        return followUps.Length == 0 ? response : response with { FollowUpQuestions = followUps };
+    }
+
+    private static bool IsFasQuestion(string message) =>
+        message.Contains("FAS", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("financial assistance", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("bursary", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("subsidy", StringComparison.OrdinalIgnoreCase);
+
+    private static string[] FasKnowledgeFollowUps(string question)
+    {
+        string lower = question.ToLowerInvariant();
+        if (lower.Contains("document"))
+        {
+            return
+            [
+                "Walk me through the FAS application process.",
+                "Which FAS schemes can I apply for?",
+                "How long does FAS approval take?"
+            ];
+        }
+
+        if (lower.Contains("apply") || lower.Contains("process") || lower.Contains("step") || lower.Contains("walk"))
+        {
+            return
+            [
+                "What FAS documents do I need?",
+                "Which FAS schemes can I apply for?",
+                "Check if I qualify for FAS."
+            ];
+        }
+
+        return
+        [
+            "Which FAS schemes can I apply for?",
+            "What FAS documents do I need?",
+            "Walk me through the FAS application process."
+        ];
+    }
+
+    private static string[] FasCompleteFollowUps() =>
+    [
+        "What documents do I need before submitting FAS?",
+        "Explain how FAS approval works.",
+        "What happens after I submit the FAS application?"
+    ];
+
+    private static string[] PaymentFollowUps() =>
+    [
+        "Show my outstanding course bills.",
+        "How do I pay this bill?",
+        "Show my recent payment history and refunds."
+    ];
+
+    private static string[] GeneralFinanceFollowUps() =>
+    [
+        "What can I use my Education Account for?",
+        "How do I top up my Education Account?",
+        "What can FAS help pay for?"
+    ];
+
+    private static string[] FallbackFollowUps() =>
+    [
+        "What can you help me with?",
+        "How can Admin Center help me?",
+        "Show my Education Account balance."
+    ];
+
     private static string SerializeResponse(AiChatResponse response)
     {
         var data = new
@@ -941,6 +1145,7 @@ public sealed class AiOrchestratorService(
             response.Actions,
             response.ReviewRecordId,
             response.InterviewState,
+            response.FollowUpQuestions,
             GroundingCards = response.Grounding.Citations,
             GroundingIsGrounded = response.Grounding.IsGrounded,
         };

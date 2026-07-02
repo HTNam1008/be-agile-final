@@ -62,9 +62,10 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             double phrase = doc.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ? 1.5 : 0;
             double domainBoost = doc.Domain == normalizedDomain ? 1.25 : 0;
             double synonymBoost = doc.Synonyms.Any(s => query.Contains(s, StringComparison.OrdinalIgnoreCase)) ? 1.0 : 0;
+            double schemeBoost = SchemeSpecificBoost(doc, terms);
             double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0);
 
-            return (Doc: doc, Score: lexical + phrase + domainBoost + synonymBoost + rankWeight);
+            return (Doc: doc, Score: lexical + phrase + domainBoost + synonymBoost + schemeBoost + rankWeight);
         })
         .Where(x => x.Score > 0.25)
         .OrderByDescending(x => x.Score)
@@ -89,6 +90,21 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private static HashSet<string> Tokenize(string value) => Regex.Matches(value.ToLowerInvariant(), "[a-z0-9]+")
         .Select(match => match.Value).Where(term => term.Length > 2).ToHashSet(StringComparer.Ordinal);
+
+    private static double SchemeSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
+    {
+        string schemeText = $"{doc.Id} {doc.Title} {doc.Section} {string.Join(' ', doc.Synonyms)}";
+        HashSet<string> schemeTerms = Tokenize(schemeText);
+        string[] schemeKeywords =
+        [
+            "bursary", "hecb", "heb", "tiered", "subsidy", "isb", "jc", "ci",
+            "apply", "application", "process", "steps", "portal", "autofill", "documents"
+        ];
+
+        return queryTerms
+            .Where(term => schemeKeywords.Contains(term, StringComparer.OrdinalIgnoreCase) && schemeTerms.Contains(term))
+            .Sum(_ => 1.75);
+    }
 
     // ── Embedded resource loader ──
 
