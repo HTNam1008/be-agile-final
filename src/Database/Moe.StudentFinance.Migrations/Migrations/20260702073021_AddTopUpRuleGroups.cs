@@ -11,17 +11,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("""
-                IF COL_LENGTH(N'communication.Notification', N'ChannelCode') IS NULL
-                    ALTER TABLE [communication].[Notification] ADD [ChannelCode] varchar(50) NOT NULL DEFAULT '';
-
-                IF COL_LENGTH(N'communication.Notification', N'ReferenceTypeCode') IS NULL
-                    ALTER TABLE [communication].[Notification] ADD [ReferenceTypeCode] varchar(50) NOT NULL DEFAULT '';
-
-                IF COL_LENGTH(N'communication.Notification', N'TemplateCode') IS NULL
-                    ALTER TABLE [communication].[Notification] ADD [TemplateCode] varchar(100) NOT NULL DEFAULT '';
-                """);
-
             migrationBuilder.CreateTable(
                 name: "TopUpRuleGroup",
                 schema: "topup",
@@ -162,17 +151,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                 name: "TopUpRuleGroupId",
                 schema: "topup",
                 table: "TopUpCampaignRule");
-
-            migrationBuilder.Sql("""
-                IF COL_LENGTH(N'communication.Notification', N'ChannelCode') IS NOT NULL
-                    ALTER TABLE [communication].[Notification] DROP COLUMN [ChannelCode];
-
-                IF COL_LENGTH(N'communication.Notification', N'ReferenceTypeCode') IS NOT NULL
-                    ALTER TABLE [communication].[Notification] DROP COLUMN [ReferenceTypeCode];
-
-                IF COL_LENGTH(N'communication.Notification', N'TemplateCode') IS NOT NULL
-                    ALTER TABLE [communication].[Notification] DROP COLUMN [TemplateCode];
-                """);
         }
     }
 }
