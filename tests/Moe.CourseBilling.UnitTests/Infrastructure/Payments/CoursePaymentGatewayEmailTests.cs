@@ -7,8 +7,10 @@ using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 using Xunit;
@@ -183,6 +185,9 @@ public sealed class CoursePaymentGatewayEmailTests
             dbContext,
             recipientResolver ?? new TestDoubles.FixedEmailRecipientResolver(),
             mailGateway,
+            new FakeStudentNotificationRecipientResolver(),
+            new FakeSchoolAdminNotificationRecipientResolver(),
+            new FakeNotificationWriter(),
             mailSwitch ?? new TestDoubles.FixedEmailDeliverySwitch(),
             NullLogger<CoursePaymentGateway>.Instance);
 
@@ -206,6 +211,24 @@ public sealed class CoursePaymentGatewayEmailTests
             Messages.Add(message);
             return Task.FromResult(ResultToReturn);
         }
+    }
+
+    private sealed class FakeStudentNotificationRecipientResolver : IStudentNotificationRecipientResolver
+    {
+        public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<long?>(1001);
+    }
+
+    private sealed class FakeSchoolAdminNotificationRecipientResolver : ISchoolAdminNotificationRecipientResolver
+    {
+        public Task<IReadOnlyCollection<long>> FindUserAccountIdsByOrganizationIdAsync(long organizationId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<long>>([2001L]);
+    }
+
+    private sealed class FakeNotificationWriter : INotificationWriter
+    {
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<long>.Success(1));
     }
 
     private sealed class ThrowingEmailRecipientResolver : IEmailRecipientResolver
