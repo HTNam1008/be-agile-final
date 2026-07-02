@@ -6,7 +6,9 @@ namespace Moe.Modules.EducationAccountTopUp.Application.History.AllTransactionsH
 public sealed record GetAllTransactionsQuery(
     TopUpHistoryFilter Filter,
     int Page,
-    int PageSize) : IQuery<PageResponse<AllTransactionsItem>>;
+    int PageSize,
+    string? SortBy = null,
+    string? SortDirection = null) : IQuery<PageResponse<AllTransactionsItem>>;
 
 public sealed record AllTransactionsItem(
     long TransactionId,

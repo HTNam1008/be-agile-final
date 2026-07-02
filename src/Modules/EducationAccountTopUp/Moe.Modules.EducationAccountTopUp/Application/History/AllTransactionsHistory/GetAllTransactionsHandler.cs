@@ -34,6 +34,8 @@ internal sealed class GetAllTransactionsHandler(
             query.Filter,
             query.Page,
             query.PageSize,
+            query.SortBy,
+            query.SortDirection,
             cancellationToken);
 
         if (page.Items.Count == 0)

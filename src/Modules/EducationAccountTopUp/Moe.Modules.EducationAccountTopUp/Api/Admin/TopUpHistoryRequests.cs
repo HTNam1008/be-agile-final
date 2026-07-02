@@ -54,6 +54,8 @@ public sealed class AllTransactionsRequest
     public string? CampaignSearch { get; init; }
     public long? OrganizationId { get; init; }
     public string? Status { get; init; }
+    public string? SortBy { get; init; }
+    public string? SortDirection { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
 }
