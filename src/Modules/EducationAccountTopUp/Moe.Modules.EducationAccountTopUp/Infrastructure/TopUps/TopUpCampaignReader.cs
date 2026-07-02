@@ -54,6 +54,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
         string? status = null,
         DateOnly? dateFrom = null,
         DateOnly? dateTo = null,
+        string? sortBy = null,
+        string? sortDirection = null,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.Set<TopUpCampaign>().AsNoTracking();
@@ -79,8 +81,7 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
 
         var totalCount = await query.CountAsync(cancellationToken);
 
-        var items = await query
-            .OrderByDescending(c => c.Id)
+        var items = await ApplyCampaignSort(query, sortBy, sortDirection)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .Select(c => new CampaignListItem(
@@ -115,6 +116,47 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
             .ToListAsync(cancellationToken);
 
         return new CampaignListResult(items, totalCount, pageNumber, pageSize);
+    }
+
+    private static IOrderedQueryable<TopUpCampaign> ApplyCampaignSort(
+        IQueryable<TopUpCampaign> query,
+        string? sortBy,
+        string? sortDirection)
+    {
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string key = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        return key switch
+        {
+            "campaign" or "campaigncode" => descending
+                ? query.OrderByDescending(c => c.CampaignCode).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.CampaignCode).ThenByDescending(c => c.Id),
+            "campaignname" or "name" => descending
+                ? query.OrderByDescending(c => c.CampaignName).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.CampaignName).ThenByDescending(c => c.Id),
+            "type" or "recipientmode" => descending
+                ? query.OrderByDescending(c => c.RecipientModeCode).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.RecipientModeCode).ThenByDescending(c => c.Id),
+            "schedule" => descending
+                ? query.OrderByDescending(c => c.ScheduleTypeCode).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.ScheduleTypeCode).ThenByDescending(c => c.Id),
+            "start" or "startdate" => descending
+                ? query.OrderByDescending(c => c.StartDate).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.StartDate).ThenByDescending(c => c.Id),
+            "end" or "enddate" => descending
+                ? query.OrderByDescending(c => c.EndDate).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.EndDate).ThenByDescending(c => c.Id),
+            "amount" => descending
+                ? query.OrderByDescending(c => c.MaxTotalAmount > 0 ? c.MaxTotalAmount : c.DefaultTopUpAmount).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.MaxTotalAmount > 0 ? c.MaxTotalAmount : c.DefaultTopUpAmount).ThenByDescending(c => c.Id),
+            "status" => descending
+                ? query.OrderByDescending(c => c.CampaignStatusCode).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.CampaignStatusCode).ThenByDescending(c => c.Id),
+            "created" or "createdat" => descending
+                ? query.OrderByDescending(c => c.CreatedAtUtc).ThenByDescending(c => c.Id)
+                : query.OrderBy(c => c.CreatedAtUtc).ThenByDescending(c => c.Id),
+            _ => query.OrderByDescending(c => c.Id)
+        };
     }
 
     public async Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)

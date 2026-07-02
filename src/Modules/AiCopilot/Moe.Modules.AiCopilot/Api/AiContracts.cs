@@ -26,6 +26,14 @@ public sealed record FasRecommendationCard(
     IReadOnlyCollection<string> MissingFacts,
     string Warning);
 public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+public sealed record KnowledgeAnswerCard(
+    string Title,
+    string Summary,
+    IReadOnlyCollection<string> KeyFacts,
+    IReadOnlyCollection<string> NextSteps,
+    IReadOnlyCollection<string> SourceIds,
+    string SourceQuality,
+    IReadOnlyCollection<string> FollowUpQuestions);
 public sealed record FasPatchParticulars(string? Email, IReadOnlyCollection<string>? ParentNationalities);
 public sealed record FasPatchIncome(
     bool? IsWelfareHomeResident, string? EmploymentStatusCode,
@@ -39,7 +47,10 @@ public sealed record AiInterviewState(string Status, string? NextQuestion,
     IReadOnlyCollection<AiInterviewField> Fields, IReadOnlyCollection<string> MissingFields, object? FormPatch);
 public sealed record AiChatResponse(Guid ConversationId, long MessageId, string Text, string Mode,
     AiGrounding Grounding, IReadOnlyCollection<AiCard> Cards, IReadOnlyCollection<AiAction> Actions,
-    AiInterviewState? InterviewState, Guid? ReviewRecordId = null);
+    AiInterviewState? InterviewState, Guid? ReviewRecordId = null)
+{
+    public IReadOnlyCollection<string> FollowUpQuestions { get; init; } = [];
+}
 public sealed record AiConversationResponse(Guid ConversationId, string Mode, string Status,
     IReadOnlyCollection<AiConversationMessageResponse> Messages, AiInterviewState? InterviewState);
 public sealed record AiConversationMessageResponse(long MessageId, string Role, string Content, DateTime CreatedAtUtc, object? ResponseData = null);

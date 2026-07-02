@@ -75,13 +75,13 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal([36.34m, 36.33m, 36.33m],
             bills.Select(x => x.GetProperty("netPayableAmount").GetDecimal()).ToArray());
 
-        DateOnly firstOfNextMonth = new(
+        DateOnly firstDueDateNextMonth = new(
             DateTime.UtcNow.Year,
             DateTime.UtcNow.Month,
-            1);
-        firstOfNextMonth = firstOfNextMonth.AddMonths(1);
+            8);
+        firstDueDateNextMonth = firstDueDateNextMonth.AddMonths(1);
         Assert.Equal(
-            [firstOfNextMonth, firstOfNextMonth.AddMonths(1), firstOfNextMonth.AddMonths(2)],
+            [firstDueDateNextMonth, firstDueDateNextMonth.AddMonths(1), firstDueDateNextMonth.AddMonths(2)],
             bills.Select(x => ReadDateOnly(x.GetProperty("currentDueDate"))).ToArray());
     }
 
@@ -865,7 +865,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             fee: 90m,
             plans: [("Three monthly payments", "INSTALLMENT", 3)]);
         await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
-        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+        DateOnly firstDueMonth = InstallmentDueDateInCurrentMonth().AddMonths(1);
         StatementInfo statement = await GetStatementAsync(student, firstDueMonth.Year, firstDueMonth.Month);
 
         using HttpResponseMessage firstPayResponse = await PayStatementAsync(student, statement.StatementId);
@@ -949,7 +949,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             fee: 99m,
             plans: [("Three monthly payments", "INSTALLMENT", 3)]);
         await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
-        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+        DateOnly firstDueMonth = InstallmentDueDateInCurrentMonth().AddMonths(1);
         StatementInfo statement = await GetStatementAsync(student, firstDueMonth.Year, firstDueMonth.Month);
 
         using HttpResponseMessage defer = await SendStudentAsync(
@@ -993,7 +993,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             plans: [("Three monthly payments", "INSTALLMENT", 3)]);
         await JoinSuccessfullyAsync(student, smallInstallmentCourse, "INSTALLMENT-3");
         await JoinSuccessfullyAsync(student, largeInstallmentCourse, "INSTALLMENT-3");
-        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+        DateOnly firstDueMonth = InstallmentDueDateInCurrentMonth().AddMonths(1);
 
         using HttpResponseMessage statementResponse = await SendStudentAsync(
             student,
@@ -1159,7 +1159,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             fee: 90m,
             plans: [("Three monthly payments", "INSTALLMENT", 3)]);
         await JoinSuccessfullyAsync(student, course, "INSTALLMENT-3");
-        DateOnly firstDueMonth = FirstOfCurrentMonth().AddMonths(1);
+        DateOnly firstDueMonth = InstallmentDueDateInCurrentMonth().AddMonths(1);
         StatementInfo statement = await GetStatementAsync(student, firstDueMonth.Year, firstDueMonth.Month);
 
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
@@ -1484,10 +1484,10 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
     private static string NewSuffix()
         => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
 
-    private static DateOnly FirstOfCurrentMonth()
+    private static DateOnly InstallmentDueDateInCurrentMonth()
     {
         DateTime now = DateTime.UtcNow;
-        return new DateOnly(now.Year, now.Month, 1);
+        return new DateOnly(now.Year, now.Month, 8);
     }
 
     private sealed record TestStudent(long PersonId, long UserAccountId);

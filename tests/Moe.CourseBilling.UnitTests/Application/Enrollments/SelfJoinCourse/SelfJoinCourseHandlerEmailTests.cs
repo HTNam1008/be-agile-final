@@ -9,6 +9,8 @@ using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Domain;
 using Moe.SharedKernel.Results;
 using Xunit;
@@ -51,6 +53,9 @@ public sealed class SelfJoinCourseHandlerEmailTests
             new FasGatewayDouble(),
             new CurrentUserDouble(),
             new StudentAccessDouble(),
+            new StudentDirectoryDouble(),
+            new StudentNotificationRecipientResolverDouble(),
+            new NotificationWriterDouble(),
             new FixedClock(Now));
 
         Result<CourseEnrollmentResponse> result = await handler.Handle(
@@ -295,6 +300,33 @@ public sealed class SelfJoinCourseHandlerEmailTests
         public bool CanAccessOwnPerson(long personId) => personId == PersonId;
         public Task<bool> CanUseSchoolServiceAsync(long organizationId, CancellationToken cancellationToken)
             => Task.FromResult(true);
+    }
+
+    private sealed class StudentDirectoryDouble : IStudentDirectory
+    {
+        public Task<StudentSummary?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<StudentSummary?>(new(personId, "Course Student", new DateOnly(2008, 2, 1), true, "School"));
+
+        public Task<IReadOnlyCollection<long>> FindActivePersonIdsByOrganizationAsync(long organizationId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<long>>([2001L]);
+
+        public Task<IReadOnlyList<AdminStudentSearchSummary>> ListByOrganizationAsync(AdminStudentSearchCriteria criteria, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AdminStudentSearchSummary>>([]);
+
+        public Task<long> CountByOrganizationAsync(AdminStudentSearchCriteria criteria, CancellationToken cancellationToken)
+            => Task.FromResult(0L);
+    }
+
+    private sealed class StudentNotificationRecipientResolverDouble : IStudentNotificationRecipientResolver
+    {
+        public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken)
+            => Task.FromResult<long?>(1003);
+    }
+
+    private sealed class NotificationWriterDouble : INotificationWriter
+    {
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<long>.Success(1));
     }
 
     private sealed class FixedClock(DateTime utcNow) : IClock

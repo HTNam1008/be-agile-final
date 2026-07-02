@@ -4,6 +4,9 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.FasPayment.Application.EnrollmentCancellations;
@@ -26,6 +29,9 @@ internal sealed class CancelEnrollmentHandler(
     IEnrollmentRefundPreviewRepository previews,
     IEnrollmentRefundProcessor refunds,
     IEnrollmentCancellationRepository cancellations,
+    IStudentDirectory students,
+    ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
+    INotificationWriter notificationWriter,
     IClock clock,
     CourseWithdrawalEmailService withdrawalEmails)
     : ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>
@@ -49,7 +55,7 @@ internal sealed class CancelEnrollmentHandler(
             return Result<EnrollmentCancellationResponse>.Failure(PaymentApplicationErrors.EnrollmentNotFound);
 
         DateTime now = clock.UtcNow.UtcDateTime;
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         EnrollmentRefundCalculation calculation = EnrollmentRefundPreviewCalculator.Calculate(
             today,
             snapshot.Course.StartDate,
@@ -89,6 +95,11 @@ internal sealed class CancelEnrollmentHandler(
         if (cancellation.IsFailure)
             return Result<EnrollmentCancellationResponse>.Failure(cancellation.Error);
 
+        await NotifyCourseExitAsync(
+            snapshot.Course.OrganizationId,
+            snapshot.Enrollment.PersonId,
+            snapshot.Course.CourseName,
+            cancellationToken);
         await withdrawalEmails.SendAsync(snapshot, calculation, refundResult, cancellationToken);
 
         return Result<EnrollmentCancellationResponse>.Success(new(
@@ -106,5 +117,29 @@ internal sealed class CancelEnrollmentHandler(
             calculation.OnlineRefundAmount,
             now));
     }
-}
 
+    private async Task NotifyCourseExitAsync(
+        long organizationId,
+        long personId,
+        string courseName,
+        CancellationToken cancellationToken)
+    {
+        StudentSummary? student = await students.FindByPersonIdAsync(personId, cancellationToken);
+        string studentName = student?.DisplayName ?? $"Student {personId}";
+
+        IReadOnlyCollection<long> userAccountIds = await schoolAdminRecipients.FindUserAccountIdsByOrganizationIdAsync(
+            organizationId,
+            cancellationToken);
+
+        foreach (long userAccountId in userAccountIds.Distinct())
+        {
+            await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId,
+                    NotificationTypeCode.CourseExit,
+                    "Course Exit",
+                    $"Result: STUDENT_CANCELLED. {studentName} cancelled enrollment in {courseName}."),
+                cancellationToken);
+        }
+    }
+}

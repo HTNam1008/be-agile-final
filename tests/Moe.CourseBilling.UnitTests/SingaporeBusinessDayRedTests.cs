@@ -18,7 +18,10 @@ using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.MailDelivery;
 using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 using Xunit;
@@ -89,6 +92,9 @@ public sealed class SingaporeBusinessDayRedTests
             fas,
             new FakeCurrentUser(),
             new FakeStudentAccess(),
+            new FakeStudentDirectory(),
+            new FakeStudentNotificationRecipientResolver(),
+            new FakeNotificationWriter(),
             new TestClock(SgtEarlyMorning));
 
         await handler.Handle(new SelfJoinCourseCommand(100, 200, [77]), CancellationToken.None);
@@ -101,7 +107,11 @@ public sealed class SingaporeBusinessDayRedTests
         DbContextOptions<MoeDbContext> options = new DbContextOptionsBuilder<MoeDbContext>()
             .UseInMemoryDatabase($"coursebilling-sgt-red-{Guid.NewGuid():N}")
             .Options;
-        return new MoeDbContext(options, [new CourseBillingModelConfiguration(), new IdentityPlatformModelConfiguration()]);
+        return new MoeDbContext(options, [
+            new CourseBillingModelConfiguration(),
+            new IdentityPlatformModelConfiguration(),
+            new MailDeliveryModelConfiguration()
+        ]);
     }
 
     private static Course CreatePublishedCourse()
@@ -187,6 +197,33 @@ public sealed class SingaporeBusinessDayRedTests
         public long? PersonId => 1;
         public bool CanAccessOwnPerson(long personId) => personId == PersonId;
         public Task<bool> CanUseSchoolServiceAsync(long organizationId, CancellationToken cancellationToken) => Task.FromResult(true);
+    }
+
+    private sealed class FakeStudentDirectory : IStudentDirectory
+    {
+        public Task<StudentSummary?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken) =>
+            Task.FromResult<StudentSummary?>(new(personId, "Student One", new DateOnly(2008, 1, 1), true, "School"));
+
+        public Task<IReadOnlyCollection<long>> FindActivePersonIdsByOrganizationAsync(long organizationId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyCollection<long>>([]);
+
+        public Task<IReadOnlyList<AdminStudentSearchSummary>> ListByOrganizationAsync(AdminStudentSearchCriteria criteria, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AdminStudentSearchSummary>>([]);
+
+        public Task<long> CountByOrganizationAsync(AdminStudentSearchCriteria criteria, CancellationToken cancellationToken) =>
+            Task.FromResult(0L);
+    }
+
+    private sealed class FakeStudentNotificationRecipientResolver : IStudentNotificationRecipientResolver
+    {
+        public Task<long?> FindUserAccountIdByPersonIdAsync(long personId, CancellationToken cancellationToken) =>
+            Task.FromResult<long?>(personId);
+    }
+
+    private sealed class FakeNotificationWriter : INotificationWriter
+    {
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result<long>.Success(1));
     }
 
     private sealed class EnabledMailSwitch : IEmailDeliverySwitch

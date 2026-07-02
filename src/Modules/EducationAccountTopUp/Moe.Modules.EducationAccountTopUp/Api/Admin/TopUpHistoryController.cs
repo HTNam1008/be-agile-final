@@ -152,7 +152,7 @@ public sealed class TopUpHistoryController(IQueryDispatcher queries) : Controlle
             ActorId: null);
 
         Result<PageResponse<AllTransactionsItem>> result = await queries.Send(
-            new GetAllTransactionsQuery(filter, request.Page, request.PageSize),
+            new GetAllTransactionsQuery(filter, request.Page, request.PageSize, request.SortBy, request.SortDirection),
             cancellationToken);
 
         return ToHistoryResponse(result, "Transactions retrieved.");

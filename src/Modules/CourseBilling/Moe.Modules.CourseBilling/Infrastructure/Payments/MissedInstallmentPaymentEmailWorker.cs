@@ -72,7 +72,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
 
         IEmailBrandingProvider branding = scope.ServiceProvider.GetRequiredService<IEmailBrandingProvider>();
 
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         DateOnly missedDueDate = today.AddDays(-1);
 
         MissedInstallmentCandidate[] candidates = await (

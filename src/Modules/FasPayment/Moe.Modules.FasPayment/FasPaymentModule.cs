@@ -26,8 +26,10 @@ using Moe.Modules.FasPayment.Application.Webhooks;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
+using Moe.Modules.CourseBilling.IGateway.Dashboard;
 using Moe.Modules.FasPayment.IGateway.Repositories;
 using Moe.Modules.FasPayment.Infrastructure.Documents;
+using Moe.Modules.FasPayment.Infrastructure.Dashboard;
 using Moe.Modules.FasPayment.Infrastructure.Audit;
 using Moe.Modules.FasPayment.Infrastructure.Payments;
 using Moe.Modules.FasPayment.Infrastructure.Repositories;
@@ -42,6 +44,7 @@ public sealed class FasPaymentModule : IModule
     {
         services.AddSingleton<IModelConfigurationContributor, FasPaymentModelConfiguration>();
         services.AddScoped<IFasSchemeRepository, FasSchemeRepository>();
+        services.AddScoped<IAdminDashboardFasMetricsReader, AdminDashboardFasMetricsReader>();
         services.AddScoped<IFasSchoolAuditResolver, FasSchoolAuditResolver>();
         services.AddScoped<IFasCourseSubsidyGateway, FasCourseSubsidyGateway>();
         services.AddScoped<ICommandHandler<CreateFasSchemeCommand, CreateFasSchemeResponse>, CreateFasSchemeHandler>();
@@ -58,6 +61,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
         services.AddScoped<StudentFasApplicationService>();
         services.AddScoped<FasEmailNotificationService>();
+        services.AddScoped<FasInAppNotificationService>();
         services.AddScoped<PaymentNotificationEmailService>();
         services.AddScoped<PaymentReceiptService>();
         services.AddScoped<FasApiExceptionFilter>();

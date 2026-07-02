@@ -10,7 +10,8 @@
     <ProjectReference Include="..\..\Modules\CourseBilling\Moe.Modules.CourseBilling\Moe.Modules.CourseBilling.csproj" />
     <ProjectReference Include="..\..\Modules\FasPayment\Moe.Modules.FasPayment\Moe.Modules.FasPayment.csproj" />
     <ProjectReference Include="..\..\Modules\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
-	  <ProjectReference Include="..\..\Modules\Mfa\Moe.Modules.Mfa\Moe.Modules.Mfa.csproj" />
+    <ProjectReference Include="..\..\Modules\Mfa\Moe.Modules.Mfa\Moe.Modules.Mfa.csproj" />
+    <ProjectReference Include="..\..\Modules\Notifications\Moe.Modules.Notifications\Moe.Modules.Notifications.csproj" />
     <ProjectReference Include="..\..\Modules\AiCopilot\Moe.Modules.AiCopilot\Moe.Modules.AiCopilot.csproj" />
   </ItemGroup>
 </Project>

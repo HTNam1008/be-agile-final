@@ -45,6 +45,7 @@ using Moe.Modules.EducationAccountTopUp.IGateway.AdminDashboard;
 using Moe.Modules.EducationAccountTopUp.IGateway.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.History;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.EducationAccountTopUp.IGateway.Dashboard;
 using Moe.Modules.EducationAccountTopUp.IGateway.RunSummary;
 using Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway.TransactionResults;
@@ -54,6 +55,7 @@ using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateway;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.History;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
+using Moe.Modules.EducationAccountTopUp.Infrastructure.Dashboard;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.RunSummary;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUpRunDispatcher;
 using Moe.Modules.EducationAccountTopUp.Infrastructure.TopUps;
@@ -74,6 +76,7 @@ public sealed class EducationAccountTopUpModule : IModule
             .BindConfiguration(TopUpWorkerOptions.SectionName);
         // Gateways & Repositories
         services.AddScoped<IEducationAccountRepository, EducationAccountRepository>();
+        services.AddScoped<IAdminDashboardFinanceMetricsReader, AdminDashboardFinanceMetricsReader>();
         services.AddScoped<IAccountHoldRepository, AccountHoldRepository>();
         services.AddScoped<ISettlementPreferenceRepository, SettlementPreferenceRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();

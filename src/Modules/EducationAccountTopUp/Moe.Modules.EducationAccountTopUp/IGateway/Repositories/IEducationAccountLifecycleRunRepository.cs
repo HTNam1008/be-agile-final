@@ -4,7 +4,7 @@ namespace Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
 
 public interface IEducationAccountLifecycleRunRepository
 {
-    Task<bool> HasScheduledRunAsync(
+    Task<bool> ScheduledRunExistsAsync(
         DateOnly runDateUtc,
         CancellationToken cancellationToken);
 
