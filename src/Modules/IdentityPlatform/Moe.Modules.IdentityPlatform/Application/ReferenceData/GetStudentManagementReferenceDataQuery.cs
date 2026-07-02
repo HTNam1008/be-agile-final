@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Messaging;
+using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 using Moe.Modules.IdentityPlatform.IGateway.ReferenceData;
@@ -19,6 +20,7 @@ public sealed record StudentListFilterReferenceData(
     IReadOnlyList<ReferenceOption> AccountStatuses,
     IReadOnlyList<ReferenceOption> PortalAccessStatuses,
     IReadOnlyList<ReferenceOption> EnrollmentStatuses,
+    IReadOnlyList<ReferenceOption> CitizenshipStatuses,
     IReadOnlyList<ReferenceOption> Levels);
 
 public sealed record StudentProfileReferenceData(
@@ -55,6 +57,12 @@ internal sealed class GetStudentManagementReferenceDataHandler(
                     Option(nameof(AdminStudentEnrollmentStatusFilter.Enrolled), "Enrolled"),
                     Option(nameof(AdminStudentEnrollmentStatusFilter.NotEnrolled), "Not enrolled")
                 ],
+                CitizenshipStatuses:
+                [
+                    Option(ResidencyStatusCodes.Citizen, "Singapore Citizen"),
+                    Option(ResidencyStatusCodes.PermanentResident, "PR"),
+                    Option(ResidencyStatusCodes.ValidPassHolder, "International Student")
+                ],
                 Levels: SchoolLevelCodes.All.Select(ToLevelOption).ToArray()),
             new StudentProfileReferenceData(
                 Levels: SchoolLevelCodes.All.Select(ToLevelOption).ToArray()),
@@ -70,20 +78,10 @@ internal sealed class GetStudentManagementReferenceDataHandler(
     private static ReferenceOption ToLevelOption(string value)
         => value switch
         {
-            SchoolLevelCodes.Primary1 => Option(value, "Primary 1"),
-            SchoolLevelCodes.Primary2 => Option(value, "Primary 2"),
-            SchoolLevelCodes.Primary3 => Option(value, "Primary 3"),
-            SchoolLevelCodes.Primary4 => Option(value, "Primary 4"),
-            SchoolLevelCodes.Primary5 => Option(value, "Primary 5"),
-            SchoolLevelCodes.Primary6 => Option(value, "Primary 6"),
-            SchoolLevelCodes.Secondary1 => Option(value, "Secondary 1"),
-            SchoolLevelCodes.Secondary2 => Option(value, "Secondary 2"),
-            SchoolLevelCodes.Secondary3 => Option(value, "Secondary 3"),
-            SchoolLevelCodes.Secondary4 => Option(value, "Secondary 4"),
-            SchoolLevelCodes.Secondary5 => Option(value, "Secondary 5"),
+            SchoolLevelCodes.PostSecondary => Option(value, "Post-Secondary"),
             SchoolLevelCodes.Bachelor => Option(value, "Bachelor"),
             SchoolLevelCodes.Master => Option(value, "Master"),
-            SchoolLevelCodes.Phd => Option(value, "PhD"),
+            SchoolLevelCodes.Phd => Option(value, "Doctor"),
             _ => Option(value, value)
         };
 }

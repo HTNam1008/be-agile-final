@@ -35,7 +35,7 @@ builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
-if (builder.Environment.IsDevelopment())
+if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
 {
     builder.Services.RemoveAll<IClock>();
     builder.Services.AddSingleton<DevelopmentManualClock>();
@@ -258,24 +258,34 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
     });
 }).AllowAnonymous();
 
-if (app.Environment.IsDevelopment())
+if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
 {
-    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(new
-    {
-        utcNow = clock.UtcNow,
-        isOverridden = clock.IsOverridden
-    }))
+    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(CreateDevelopmentClockResponse(clock)))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
     app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, DevelopmentManualClock clock) =>
     {
         clock.Set(request.UtcNow);
-        return Results.Ok(new
+        return Results.Ok(CreateDevelopmentClockResponse(clock));
+    })
+        .AllowAnonymous()
+        .RequireCors("PortalCors");
+
+    app.MapPost("/dev/clock/advance", (AdvanceDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    {
+        TimeSpan delta = request.ToTimeSpan();
+        if (delta == TimeSpan.Zero)
         {
-            utcNow = clock.UtcNow,
-            isOverridden = clock.IsOverridden
-        });
+            return Results.BadRequest(new
+            {
+                error = "DEV_CLOCK_ADVANCE_ZERO",
+                message = "At least one advance component must be non-zero."
+            });
+        }
+
+        clock.Advance(delta);
+        return Results.Ok(CreateDevelopmentClockResponse(clock));
     })
         .AllowAnonymous()
         .RequireCors("PortalCors");
@@ -283,11 +293,7 @@ if (app.Environment.IsDevelopment())
     app.MapDelete("/dev/clock", (DevelopmentManualClock clock) =>
     {
         clock.Reset();
-        return Results.Ok(new
-        {
-            utcNow = clock.UtcNow,
-            isOverridden = clock.IsOverridden
-        });
+        return Results.Ok(CreateDevelopmentClockResponse(clock));
     })
         .AllowAnonymous()
         .RequireCors("PortalCors");
@@ -385,4 +391,19 @@ static string GetSwaggerTag(string path)
 
 internal sealed record SetDevelopmentClockRequest(DateTimeOffset UtcNow);
 
-public partial class Program;
+internal sealed record AdvanceDevelopmentClockRequest(int Days = 0, int Hours = 0, int Minutes = 0, int Seconds = 0)
+{
+    public TimeSpan ToTimeSpan() => new(Days, Hours, Minutes, Seconds);
+}
+
+internal sealed record DevelopmentClockResponse(DateTimeOffset UtcNow, DateOnly UtcDate, bool IsOverridden);
+
+public partial class Program
+{
+    internal static bool IsDevelopmentClockEnabled(IHostEnvironment environment, IConfiguration configuration)
+        => !environment.IsProduction()
+           && configuration.GetValue("DevTools:Clock:Enabled", false);
+
+    internal static DevelopmentClockResponse CreateDevelopmentClockResponse(DevelopmentManualClock clock)
+        => new(clock.UtcNow, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime), clock.IsOverridden);
+}

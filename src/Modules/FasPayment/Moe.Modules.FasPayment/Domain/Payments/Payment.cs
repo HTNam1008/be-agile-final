@@ -44,6 +44,9 @@ internal sealed class Payment : Entity<long>
     public string? ProviderPaymentIntentId { get; private set; }
     public string? ProviderInvoiceId { get; private set; }
     public string? ProviderChargeId { get; private set; }
+    public string? ProviderHostedInvoiceUrl { get; private set; }
+    public string? ProviderInvoicePdfUrl { get; private set; }
+    public string? ProviderReceiptUrl { get; private set; }
     public int InstallmentNumber { get; private set; }
     public long? BillingStatementId { get; private set; }
     public decimal EducationAccountAmount { get; private set; }
@@ -108,6 +111,21 @@ internal sealed class Payment : Entity<long>
             ProviderInvoiceId = providerInvoiceId.Trim();
         if (!string.IsNullOrWhiteSpace(providerChargeId))
             ProviderChargeId = providerChargeId.Trim();
+        UpdatedAtUtc = updatedAtUtc;
+    }
+
+    public void AttachProviderEvidence(
+        string? hostedInvoiceUrl,
+        string? invoicePdfUrl,
+        string? receiptUrl,
+        DateTime updatedAtUtc)
+    {
+        if (!string.IsNullOrWhiteSpace(hostedInvoiceUrl))
+            ProviderHostedInvoiceUrl = hostedInvoiceUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(invoicePdfUrl))
+            ProviderInvoicePdfUrl = invoicePdfUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(receiptUrl))
+            ProviderReceiptUrl = receiptUrl.Trim();
         UpdatedAtUtc = updatedAtUtc;
     }
 

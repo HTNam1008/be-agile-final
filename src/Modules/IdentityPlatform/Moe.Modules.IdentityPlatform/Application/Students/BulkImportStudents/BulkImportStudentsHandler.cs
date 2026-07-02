@@ -109,7 +109,7 @@ internal sealed class BulkImportStudentsHandler(
             row.ClassCode,
             row.StartDate,
             row.Email,
-            row.Mobile,
+            row.ContactNumber,
             row.Address,
             IsAccountHolder: true);
 }
