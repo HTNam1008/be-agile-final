@@ -95,7 +95,8 @@ public sealed class SingaporeBusinessDayRedTests
             new FakeStudentDirectory(),
             new FakeStudentNotificationRecipientResolver(),
             new FakeNotificationWriter(),
-            new TestClock(SgtEarlyMorning));
+            new TestClock(SgtEarlyMorning),
+            NullLogger<SelfJoinCourseHandler>.Instance);
 
         await handler.Handle(new SelfJoinCourseCommand(100, 200, [77]), CancellationToken.None);
 

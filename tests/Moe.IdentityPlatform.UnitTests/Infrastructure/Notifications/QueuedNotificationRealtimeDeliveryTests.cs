@@ -49,6 +49,7 @@ public sealed class QueuedNotificationRealtimeDeliveryTests
 
         await worker.StartAsync(CancellationToken.None);
         await notifier.WaitForExpectedMessagesAsync();
+        await WaitForDeliveryStatusAsync(provider, NotificationRealtimeDeliveryStatusCodes.Delivered);
         await worker.StopAsync(CancellationToken.None);
 
         notifier.Messages.Should().ContainSingle();
@@ -72,7 +73,7 @@ public sealed class QueuedNotificationRealtimeDeliveryTests
 
         await worker.StartAsync(CancellationToken.None);
         await notifier.WaitForExpectedMessagesAsync();
-        await Task.Delay(100);
+        await WaitForDeliveryStatusAsync(provider, NotificationRealtimeDeliveryStatusCodes.FailedRetryable);
         await worker.StopAsync(CancellationToken.None);
 
         NotificationRealtimeDelivery delivery = await GetSingleDeliveryAsync(provider);
@@ -94,6 +95,7 @@ public sealed class QueuedNotificationRealtimeDeliveryTests
 
         await worker.StartAsync(CancellationToken.None);
         await notifier.WaitForExpectedMessagesAsync();
+        await WaitForDeliveryStatusAsync(provider, NotificationRealtimeDeliveryStatusCodes.Delivered);
         await worker.StopAsync(CancellationToken.None);
 
         NotificationRealtimeDelivery delivery = await GetSingleDeliveryAsync(provider);
@@ -153,6 +155,24 @@ public sealed class QueuedNotificationRealtimeDeliveryTests
         using IServiceScope scope = provider.CreateScope();
         MoeDbContext dbContext = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
         return await dbContext.Set<NotificationRealtimeDelivery>().SingleAsync();
+    }
+
+    private static async Task WaitForDeliveryStatusAsync(ServiceProvider provider, string expectedStatusCode)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        while (!timeout.IsCancellationRequested)
+        {
+            NotificationRealtimeDelivery delivery = await GetSingleDeliveryAsync(provider);
+            if (delivery.StatusCode == expectedStatusCode)
+            {
+                return;
+            }
+
+            await Task.Delay(50, timeout.Token);
+        }
+
+        NotificationRealtimeDelivery finalDelivery = await GetSingleDeliveryAsync(provider);
+        finalDelivery.StatusCode.Should().Be(expectedStatusCode);
     }
 
     private static NotificationCreateRequest CreateRequest()
