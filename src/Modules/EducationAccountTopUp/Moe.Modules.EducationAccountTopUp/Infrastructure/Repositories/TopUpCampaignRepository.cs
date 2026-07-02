@@ -95,11 +95,6 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
         dbContext.Set<TopUpRuleGroup>().RemoveRange(groups);
     }
 
-    public async Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default)
-    {
-        await dbContext.Set<TopUpCampaignRule>().AddAsync(rule, cancellationToken);
-    }
-
     public async Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpRuleGroup>().AddAsync(group, cancellationToken);

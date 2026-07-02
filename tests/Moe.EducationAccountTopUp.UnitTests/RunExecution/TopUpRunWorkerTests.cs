@@ -249,8 +249,6 @@ public sealed class TopUpRunWorkerTests
             => Task.CompletedTask;
         public Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
-        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
         public Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
