@@ -80,6 +80,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IAccountHoldRepository, AccountHoldRepository>();
         services.AddScoped<ISettlementPreferenceRepository, SettlementPreferenceRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
+        services.AddScoped<ITopUpCampaignRuleGroupRepository, TopUpCampaignRepository>();
         services.AddScoped<IDynamicTopUpContractRepository, DynamicTopUpContractRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
         services.AddScoped<IEducationAccountLifecycleRunRepository, EducationAccountLifecycleRunRepository>();

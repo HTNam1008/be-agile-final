@@ -7,7 +7,7 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 
-internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCampaignRepository
+internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCampaignRepository, ITopUpCampaignRuleGroupRepository
 {
     public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
