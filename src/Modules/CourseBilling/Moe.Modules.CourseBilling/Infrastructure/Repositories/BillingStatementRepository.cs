@@ -11,6 +11,7 @@ using Moe.Modules.MailDelivery.Templates;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
+using Moe.Modules.MailDelivery.Domain;
 
 namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
@@ -36,13 +37,11 @@ internal sealed class BillingStatementRepository(
                 x.StatementYear == year &&
                 x.StatementMonth == month,
                 cancellationToken);
-        bool statementCreated = false;
         if (statement is null)
         {
             statement = BillingStatement.Create(personId, year, month, utcNow);
             await dbContext.Set<BillingStatement>().AddAsync(statement, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
-            statementCreated = true;
         }
 
         var candidateBills = await (
@@ -95,7 +94,6 @@ internal sealed class BillingStatementRepository(
         List<BillingStatementItem> existingItems = await dbContext.Set<BillingStatementItem>()
             .Where(x => x.BillingStatementId == statement.Id)
             .ToListAsync(cancellationToken);
-        bool addedStatementItem = false;
         foreach (var row in bills)
         {
             BillingStatementItem? item = existingItems.SingleOrDefault(x => x.BillId == row.Bill.Id);
@@ -104,7 +102,6 @@ internal sealed class BillingStatementRepository(
                 item = new BillingStatementItem(statement.Id, row.Bill.Id, row.Bill.OutstandingAmount, utcNow);
                 await dbContext.Set<BillingStatementItem>().AddAsync(item, cancellationToken);
                 existingItems.Add(item);
-                addedStatementItem = true;
             }
             else
             {
@@ -117,7 +114,7 @@ internal sealed class BillingStatementRepository(
         await dbContext.SaveChangesAsync(cancellationToken);
         if (notificationMode == BillingStatementNotificationMode.SendMonthlyBill &&
             total > 0m &&
-            (statementCreated || addedStatementItem))
+            !await HasMonthlyBillNotificationAsync(personId, monthStart, cancellationToken))
         {
             await SendMonthlyBillEmailAsync(
                 personId,
@@ -274,6 +271,23 @@ internal sealed class BillingStatementRepository(
             "BillingStatement",
             $"{billingMonth.Year:D4}-{billingMonth.Month:D2}",
             cancellationToken);
+    }
+
+    private Task<bool> HasMonthlyBillNotificationAsync(
+        long personId,
+        DateOnly billingMonth,
+        CancellationToken cancellationToken)
+    {
+        string entityId = $"{billingMonth.Year:D4}-{billingMonth.Month:D2}";
+        return dbContext.Set<EmailNotification>()
+            .AsNoTracking()
+            .AnyAsync(
+                notification =>
+                    notification.NotificationType == "NOTI-01" &&
+                    notification.PersonId == personId &&
+                    notification.EntityType == "BillingStatement" &&
+                    notification.EntityId == entityId,
+                cancellationToken);
     }
 
     private static string BuildMonthlyBillHtmlBody(
