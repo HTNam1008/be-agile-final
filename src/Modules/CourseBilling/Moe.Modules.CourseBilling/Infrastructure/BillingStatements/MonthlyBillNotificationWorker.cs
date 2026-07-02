@@ -128,3 +128,4 @@ internal sealed class MonthlyBillNotificationWorker(
             .ToArrayAsync(cancellationToken);
     }
 }
+

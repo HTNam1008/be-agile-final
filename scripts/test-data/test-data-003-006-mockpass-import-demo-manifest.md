@@ -70,3 +70,4 @@ To remove students imported from these four workbooks, including any JIT-provisi
 ```powershell
 sqlcmd -S localhost -d StudentFinance -E -C -i scripts/test-data/test-data-003-006-mockpass-import-demo-cleanup.sql
 ```
+
