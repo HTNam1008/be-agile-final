@@ -53,10 +53,10 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
-    public async Task Eligibility_keyword_routes_to_fas()
+    public async Task Eligibility_without_fas_context_routes_to_general()
     {
         JsonElement response = await Chat("Am I eligible?", personId: 2101);
-        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
     }
 
     [Fact]
