@@ -81,6 +81,26 @@ public sealed class AdminAccountDetailsHandlerTests
     }
 
     [Fact]
+    public async Task Get_OnStudentWithoutEducationAccount_ReturnsProfileWithNoAccountStatus()
+    {
+        _profiles.DetailsByPersonId[5011] = CreateProfile(personId: 5011, organizationId: 10);
+        GetAdminAccountDetailsHandler handler = CreateGetHandler();
+
+        Result<AdminAccountDetailsResponse> result = await handler.Handle(new GetAdminAccountDetailsQuery(5011), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PersonId.Should().Be(5011);
+        result.Value.EducationAccountId.Should().BeNull();
+        result.Value.AccountNumber.Should().BeNull();
+        result.Value.DateOfBirth.Should().Be(new DateOnly(2010, 1, 1));
+        result.Value.NationalityCode.Should().Be("SG");
+        result.Value.SchoolOrganizationName.Should().Be("School One");
+        result.Value.AcademicYear.Should().Be("2026");
+        result.Value.AccountStatusCode.Should().Be("NO_ACCOUNT");
+        result.Value.CurrentBalance.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Get_OnAccountHolderWithNoOrganization_HqAdminAllowed()
     {
         _adminAccess.IsHqAdmin = true;

@@ -157,6 +157,25 @@ internal sealed class PaymentCheckoutRepository(MoeDbContext dbContext) : IPayme
     public Task<Payment?> FindPaymentAsync(long paymentId, CancellationToken cancellationToken)
         => dbContext.Set<Payment>().SingleOrDefaultAsync(payment => payment.Id == paymentId, cancellationToken);
 
+    public Task<Payment?> FindPaymentByProviderReferenceAsync(
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(providerPaymentIntentId) &&
+            string.IsNullOrWhiteSpace(providerInvoiceId))
+        {
+            return Task.FromResult<Payment?>(null);
+        }
+
+        return dbContext.Set<Payment>().SingleOrDefaultAsync(payment =>
+            (!string.IsNullOrWhiteSpace(providerPaymentIntentId) &&
+                payment.ProviderPaymentIntentId == providerPaymentIntentId) ||
+            (!string.IsNullOrWhiteSpace(providerInvoiceId) &&
+                payment.ProviderInvoiceId == providerInvoiceId),
+            cancellationToken);
+    }
+
     public Task<Payment?> FindActiveStatementPaymentAsync(
         long billingStatementId,
         long personId,

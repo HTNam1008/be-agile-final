@@ -32,9 +32,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Authentication:AdminEntra:RequireHttpsMetadata"] = "false",
-                ["Authentication:AdminEntra:LocalTokenSigningKey"] = "MOE-dev-admin-local-token-signing-key-change-before-production-2026",
-                ["Authentication:AdminEntra:LocalTokenLifetimeMinutes"] = "120"
+                ["DevTools:Clock:Enabled"] = "true"
             });
         });
 
@@ -280,6 +278,17 @@ internal sealed class IntegrationTestStripeGateway : IStripePaymentGateway
             amountMinor,
             "sgd");
     }
+
+    public Task<StripePaymentEvidenceGatewayResult> GetPaymentEvidenceAsync(
+        string? providerCheckoutSessionId,
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        string? providerChargeId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new StripePaymentEvidenceGatewayResult(
+            providerInvoiceId is null ? null : $"https://stripe.test/invoices/{providerInvoiceId}",
+            providerInvoiceId is null ? null : $"https://stripe.test/invoices/{providerInvoiceId}.pdf",
+            providerChargeId is null ? null : $"https://stripe.test/receipts/{providerChargeId}"));
 
     public Task<StripeRefundGatewayResult> CreateRefundAsync(
         string idempotencyKey,

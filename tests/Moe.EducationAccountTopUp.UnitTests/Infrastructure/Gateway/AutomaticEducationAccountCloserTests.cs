@@ -33,8 +33,10 @@ public sealed class AutomaticEducationAccountCloserTests
     private readonly FakeAuditService _audit = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeAccountHoldRepository _accountHolds = new();
+    private readonly FakeAutomaticEducationAccountSettlementGateway _settlements = new();
+    private readonly FakePersonLifecycleGateway _personLifecycle = new();
     private readonly FakePersonDirectory _personDirectory = new();
-    private readonly FakeEmailDeliveryGateway _mailGateway = new();
+    private readonly TestDoubles.RecordingEmailNotificationQueue _mailQueue = new();
     private readonly FakeStudentNotificationRecipientResolver _notificationRecipients = new();
     private readonly FakeNotificationWriter _notificationWriter = new();
 
@@ -60,9 +62,11 @@ public sealed class AutomaticEducationAccountCloserTests
         automatic.StatusCode.Should().Be(AccountStatuses.Closed);
         singpass.StatusCode.Should().Be(AccountStatuses.Closed);
         underAge.StatusCode.Should().Be(AccountStatuses.Active);
-        manual.CachedBalance.Should().Be(72.25m);
-        automatic.CachedBalance.Should().Be(15m);
-        singpass.CachedBalance.Should().Be(30m);
+        manual.CachedBalance.Should().Be(0m);
+        automatic.CachedBalance.Should().Be(0m);
+        singpass.CachedBalance.Should().Be(0m);
+        _settlements.SettledAccountIds.Should().BeEquivalentTo([1001L, 1002L, 1003L]);
+        _personLifecycle.DisabledPersonIds.Should().BeEquivalentTo([2001L, 2002L, 2003L]);
         _people.RequestedPersonIds.Should().BeEquivalentTo([2001L, 2002L, 2003L, 2004L]);
         _people.RequestedMinAge.Should().Be(30);
         _people.RequestedToday.Should().Be(Today);
@@ -70,11 +74,11 @@ public sealed class AutomaticEducationAccountCloserTests
         _audit.Calls.Select(x => x.ActionCode).Should()
             .OnlyContain(x => x == AuditActionCodes.EducationAccountClosedAutomatically);
         _unitOfWork.SaveCalls.Should().Be(3);
-        _mailGateway.Messages.Should().HaveCount(3);
+        _mailQueue.Jobs.Should().HaveCount(3);
     }
 
     [Fact]
-    public async Task EnsureClosedAsync_WhenAlreadyClosed_IsNoOpAndDoesNotAddDuplicateAudit()
+    public async Task EnsureClosedAsync_WhenRunTwice_DoesNotDoubleSettleDoubleDisableOrAddDuplicateAudit()
     {
         EducationAccount account = AddAutomaticAccount(2001, personId: 3001);
         AutomaticEducationAccountCloser closer = CreateCloser();
@@ -86,7 +90,20 @@ public sealed class AutomaticEducationAccountCloserTests
         secondResult.Closed.Should().BeFalse();
         _audit.Calls.Should().ContainSingle();
         _unitOfWork.SaveCalls.Should().Be(1);
+        _settlements.SettledAccountIds.Should().ContainSingle().Which.Should().Be(account.Id);
+        _personLifecycle.DisabledPersonIds.Should().ContainSingle().Which.Should().Be(account.PersonId);
         account.ClosedAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public async Task EnsureClosedAsync_DisablesPersonAccess()
+    {
+        EducationAccount account = AddAutomaticAccount(2051, personId: 3051);
+        AutomaticEducationAccountCloser closer = CreateCloser();
+
+        await closer.EnsureClosedAsync(account, Now, CancellationToken.None);
+
+        _personLifecycle.DisabledPersonIds.Should().ContainSingle().Which.Should().Be(3051);
     }
 
     [Fact]
@@ -104,7 +121,9 @@ public sealed class AutomaticEducationAccountCloserTests
         account.StatusCode.Should().Be(AccountStatuses.Active);
         _audit.Calls.Should().BeEmpty();
         _unitOfWork.SaveCalls.Should().Be(0);
-        _mailGateway.Messages.Should().BeEmpty();
+        _mailQueue.Jobs.Should().BeEmpty();
+        _settlements.SettledAccountIds.Should().BeEmpty();
+        _personLifecycle.DisabledPersonIds.Should().BeEmpty();
         _accountHolds.CheckedAccountIds.Should().ContainSingle().Which.Should().Be(account.Id);
         _accountHolds.CheckedUtcNow.Should().ContainSingle().Which.Should().Be(Now.UtcDateTime);
     }
@@ -126,7 +145,9 @@ public sealed class AutomaticEducationAccountCloserTests
         account.StatusCode.Should().Be(AccountStatuses.Closed);
         _audit.Calls.Should().ContainSingle();
         _unitOfWork.SaveCalls.Should().Be(1);
-        _mailGateway.Messages.Should().ContainSingle();
+        EmailNotificationJob job = _mailQueue.Jobs.Should().ContainSingle().Which;
+        job.NotificationType.Should().Be("NOTI-06-CLOSED");
+        job.PersonId.Should().Be(3102);
     }
 
     [Fact]
@@ -148,7 +169,7 @@ public sealed class AutomaticEducationAccountCloserTests
     }
 
     [Fact]
-    public async Task EnsureClosedAsync_DoesNotCreateTransactions()
+    public async Task EnsureClosedAsync_CreatesSettlementTransactionAndZerosBalance()
     {
         await using MoeDbContext dbContext = CreateDbContext();
         EducationAccount account = EducationAccount.OpenAutomatically(
@@ -163,6 +184,8 @@ public sealed class AutomaticEducationAccountCloserTests
             new EducationAccountRepository(dbContext),
             new AccountHoldRepository(dbContext),
             _people,
+            new AutomaticEducationAccountSettlementGateway(dbContext),
+            _personLifecycle,
             _audit,
             new DbUnitOfWork(dbContext),
             CreateClosureEmails(),
@@ -172,8 +195,55 @@ public sealed class AutomaticEducationAccountCloserTests
 
         await closer.EnsureClosedAsync(account, Now, CancellationToken.None);
 
-        dbContext.Set<AccountTransaction>().Should().BeEmpty();
-        account.CachedBalance.Should().Be(98.75m);
+        AccountTransaction transaction = dbContext.Set<AccountTransaction>().Should().ContainSingle().Subject;
+        transaction.EducationAccountId.Should().Be(account.Id);
+        transaction.TransactionTypeCode.Should().Be("AUTO_CLOSE_SETTLEMENT");
+        transaction.Amount.Should().Be(-98.75m);
+        transaction.ReferenceTypeCode.Should().Be("AUTO_CLOSE");
+        transaction.ReferenceId.Should().Be(account.Id);
+        transaction.IdempotencyKey.Should().Be($"AUTO-CLOSE-SETTLEMENT:{account.Id}");
+        transaction.BalanceAfter.Should().Be(0m);
+        transaction.Description.Should().Be("Auto-close settlement to CPF preference");
+        account.CachedBalance.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task EnsureClosedAsync_WhenRunTwice_CreatesOnlyOneSettlementTransaction()
+    {
+        await using MoeDbContext dbContext = CreateDbContext();
+        EducationAccount account = EducationAccount.OpenAutomatically(
+            5002,
+            "PSEA-00005002",
+            Now.AddYears(-1)).Value;
+        SetId(account, 5002);
+        account.UpdateBalance(98.75m);
+        dbContext.Set<EducationAccount>().Add(account);
+        await dbContext.SaveChangesAsync();
+        AutomaticEducationAccountCloser closer = new(
+            new EducationAccountRepository(dbContext),
+            new AccountHoldRepository(dbContext),
+            _people,
+            new AutomaticEducationAccountSettlementGateway(dbContext),
+            _personLifecycle,
+            _audit,
+            new DbUnitOfWork(dbContext),
+            CreateClosureEmails(),
+            _notificationRecipients,
+            _notificationWriter,
+            NullLogger<AutomaticEducationAccountCloser>.Instance);
+
+        await closer.EnsureClosedAsync(account, Now, CancellationToken.None);
+        AutomaticEducationAccountClosureResult secondResult =
+            await closer.EnsureClosedAsync(account, Now.AddDays(1), CancellationToken.None);
+
+        secondResult.Closed.Should().BeFalse();
+        secondResult.SkipReasonCode.Should().Be(AutomaticEducationAccountClosureSkipReasonCodes.AlreadyClosed);
+        AccountTransaction transaction = dbContext.Set<AccountTransaction>().Should().ContainSingle().Subject;
+        transaction.Amount.Should().Be(-98.75m);
+        transaction.IdempotencyKey.Should().Be($"AUTO-CLOSE-SETTLEMENT:{account.Id}");
+        account.CachedBalance.Should().Be(0m);
+        _personLifecycle.DisabledPersonIds.Should().ContainSingle().Which.Should().Be(account.PersonId);
+        _audit.Calls.Should().ContainSingle();
     }
 
     private AutomaticEducationAccountCloser CreateCloser()
@@ -181,6 +251,8 @@ public sealed class AutomaticEducationAccountCloserTests
             _educationAccounts,
             _accountHolds,
             _people,
+            _settlements,
+            _personLifecycle,
             _audit,
             _unitOfWork,
             CreateClosureEmails(),
@@ -191,10 +263,8 @@ public sealed class AutomaticEducationAccountCloserTests
     private EducationAccountClosureEmailService CreateClosureEmails()
         => new(
             _personDirectory,
-            new TestDoubles.FixedEmailRecipientResolver(),
-            _mailGateway,
-            new TestDoubles.FixedEmailDeliverySwitch(),
-            NullLogger<EducationAccountClosureEmailService>.Instance);
+            new TestDoubles.RecordingEmailNotificationScheduler(_mailQueue),
+            new TestDoubles.FixedEmailBrandingProvider());
 
     private sealed class FakeStudentNotificationRecipientResolver : IStudentNotificationRecipientResolver
     {
@@ -316,6 +386,39 @@ public sealed class AutomaticEducationAccountCloserTests
         }
     }
 
+    private sealed class FakeAutomaticEducationAccountSettlementGateway : IAutomaticEducationAccountSettlementGateway
+    {
+        public List<long> SettledAccountIds { get; } = [];
+
+        public Task SettleRemainingBalanceAsync(
+            EducationAccount account,
+            DateTimeOffset settledAtUtc,
+            CancellationToken cancellationToken)
+        {
+            SettledAccountIds.Add(account.Id);
+            if (account.CachedBalance != 0m)
+            {
+                account.UpdateBalance(-account.CachedBalance);
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakePersonLifecycleGateway : IPersonLifecycleGateway
+    {
+        public List<long> DisabledPersonIds { get; } = [];
+
+        public Task<Result> DisableAsync(long personId, DateTime utcNow, CancellationToken cancellationToken)
+        {
+            DisabledPersonIds.Add(personId);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> EnableAsync(long personId, DateTime utcNow, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+    }
+
     private sealed class FakePersonDirectory : IPersonDirectory
     {
         public Task<PersonSummary?> FindAsync(long personId, CancellationToken cancellationToken)
@@ -326,19 +429,6 @@ public sealed class AutomaticEducationAccountCloserTests
                 "SG",
                 "CITIZEN",
                 10));
-    }
-
-    private sealed class FakeEmailDeliveryGateway : IEmailDeliveryGateway
-    {
-        public List<EmailDeliveryMessage> Messages { get; } = [];
-
-        public Task<Result> SendAsync(
-            EmailDeliveryMessage message,
-            CancellationToken cancellationToken)
-        {
-            Messages.Add(message);
-            return Task.FromResult(Result.Success());
-        }
     }
 
     private sealed class FakeAuditService : IAuditService

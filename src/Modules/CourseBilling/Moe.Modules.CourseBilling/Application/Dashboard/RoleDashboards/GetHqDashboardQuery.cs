@@ -6,14 +6,12 @@ public sealed record GetHqDashboardQuery(int? Year) : IQuery<HqDashboardResponse
 
 public sealed record HqDashboardResponse(
     HqDashboardCardsResponse Cards,
-    HqDashboardYearlyGrowthResponse YearlyGrowth,
-    HqDashboardOverviewResponse Overview);
+    HqDashboardYearlyGrowthResponse YearlyGrowth);
 
 public sealed record HqDashboardCardsResponse(
-    long TotalActiveSchools,
-    long TotalActiveStudents,
-    long TotalActiveEducationAccounts,
-    long ActiveCourses);
+    DashboardCountMetricResponse TotalSchools,
+    DashboardCountMetricResponse TotalStudents,
+    DashboardCountMetricResponse TotalEducationAccounts);
 
 public sealed record HqDashboardYearlyGrowthResponse(
     int Year,
@@ -23,10 +21,3 @@ public sealed record HqDashboardMonthlyGrowthPoint(
     int Month,
     long NewStudents,
     long NewEducationAccounts);
-
-public sealed record HqDashboardOverviewResponse(
-    long NewStudentsThisMonth,
-    long NewEducationAccountsThisMonth,
-    long PendingFasApplications,
-    decimal TopUpAmountThisMonth,
-    string CurrencyCode);

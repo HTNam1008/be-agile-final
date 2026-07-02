@@ -2,6 +2,7 @@ using System.Collections;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,7 +27,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"S{suffix[..7]}A",
+            identityNumber: ValidIdentityNumber(suffix, "own-school"),
             studentNumber: $"IT-MANUAL-{suffix}");
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync(
@@ -61,7 +62,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"N{suffix[..7]}A",
+            identityNumber: ValidIdentityNumber(suffix, "no-account-holder"),
             studentNumber: $"IT-NO-AH-{suffix}",
             isAccountHolder: false);
 
@@ -90,7 +91,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"Z{suffix[..7]}A",
+            identityNumber: ValidIdentityNumber(suffix, "two-step"),
             studentNumber: $"IT-TWO-STEP-{suffix}");
 
         using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
@@ -128,7 +129,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string studentNumber = $"IT-NO-ACCOUNT-{suffix}";
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"K{suffix[..7]}A",
+            identityNumber: ValidIdentityNumber(suffix, "no-account-filter"),
             studentNumber: studentNumber);
 
         using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
@@ -155,7 +156,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: "Demo Secondary School",
-            identityNumber: $"T{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "hq-school-name"),
             studentNumber: $"IT-SYS-{suffix}");
 
         using HttpRequestMessage message = new(HttpMethod.Post, "/api/admin/v1/students");
@@ -181,7 +182,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"C{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "no-class"),
             studentNumber: $"IT-NO-CLASS-{suffix}") with
         {
             ClassCode = null
@@ -198,7 +199,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
 
         SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
-        Assert.Equal("SEC_4", enrollment.LevelCode);
+        Assert.Equal("BACHELOR", enrollment.LevelCode);
         Assert.Null(enrollment.ClassCode);
     }
 
@@ -208,7 +209,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"D{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "higher-ed"),
             studentNumber: $"IT-BACHELOR-{suffix}") with
         {
             LevelCode = "BACHELOR",
@@ -237,7 +238,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         var request = CreateRequest(
             schoolName: null,
             organizationId: 2,
-            identityNumber: $"O{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "hq-org"),
             studentNumber: $"IT-ORG-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
@@ -260,7 +261,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         var request = CreateRequest(
             schoolName: null,
             organizationId: 1,
-            identityNumber: $"P{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "in-scope"),
             studentNumber: $"IT-IN-SCOPE-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1,2");
@@ -282,7 +283,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         var request = CreateRequest(
             schoolName: null,
             organizationId: 2,
-            identityNumber: $"Q{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "out-scope"),
             studentNumber: $"IT-OUT-SCOPE-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1");
@@ -299,7 +300,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         var request = CreateRequest(
             schoolName: null,
             organizationId: 999999,
-            identityNumber: $"R{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "missing-org"),
             studentNumber: $"IT-MISSING-ORG-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
@@ -316,7 +317,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         var request = CreateRequest(
             schoolName: "Demo Secondary School",
             organizationId: 1,
-            identityNumber: $"U{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "match"),
             studentNumber: $"IT-MATCH-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
@@ -331,7 +332,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         var request = CreateRequest(
             schoolName: "Other Secondary School",
             organizationId: 1,
-            identityNumber: $"V{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "conflict"),
             studentNumber: $"IT-CONFLICT-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
@@ -347,7 +348,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: "Other Secondary School",
-            identityNumber: $"W{suffix[..7]}B",
+            identityNumber: ValidIdentityNumber(suffix, "name-scope"),
             studentNumber: $"IT-NAME-SCOPE-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1");
@@ -363,7 +364,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"F{suffix[..7]}C",
+            identityNumber: ValidIdentityNumber(suffix, "school-required"),
             studentNumber: $"IT-SYS-MISSING-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, role: "HQ_ADMIN");
@@ -379,7 +380,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"X{suffix[..7]}C",
+            identityNumber: ValidIdentityNumber(suffix, "no-scope"),
             studentNumber: $"IT-NO-SCOPE-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "none");
@@ -395,7 +396,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"Y{suffix[..7]}C",
+            identityNumber: ValidIdentityNumber(suffix, "multi-scope"),
             studentNumber: $"IT-MULTI-SCOPE-{suffix}");
 
         using HttpResponseMessage response = await SendCreateStudentAsync(request, organizationUnitIds: "1,2");
@@ -411,7 +412,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var request = CreateRequest(
             schoolName: null,
-            identityNumber: $"G{suffix[..7]}D",
+            identityNumber: ValidIdentityNumber(suffix, "login"),
             studentNumber: $"IT-LOGIN-{suffix}");
 
         using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
@@ -487,7 +488,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             "CITIZEN",
             studentNumber,
             "2026",
-            "SEC_4",
+            "BACHELOR",
             "4A",
             new DateOnly(2026, 1, 2),
             "manual.student@example.com",
@@ -512,7 +513,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             "CITIZEN",
             studentNumber,
             "2026",
-            "SEC_4",
+            "BACHELOR",
             "4A",
             new DateOnly(2026, 1, 2),
             "manual.student@example.com",
@@ -537,7 +538,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
             "CITIZEN",
             studentNumber,
             "2026",
-            "SEC_4",
+            "BACHELOR",
             "4A",
             new DateOnly(2026, 1, 2),
             "manual.student@example.com",
@@ -657,6 +658,48 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         return target.GetType().GetProperty(propertyName)!.GetValue(target);
     }
 
+    private static string ValidIdentityNumber(string suffix, string discriminator)
+    {
+        int number = StableSevenDigitNumber($"{suffix}-{discriminator}");
+        string digits = number.ToString("D7");
+        return $"S{digits}{ComputeChecksum('S', digits)}";
+    }
+
+    private static int StableSevenDigitNumber(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261;
+            foreach (byte item in Encoding.UTF8.GetBytes(value))
+            {
+                hash ^= item;
+                hash *= 16777619;
+            }
+
+            return (int)(hash % 10_000_000);
+        }
+    }
+
+    private static char ComputeChecksum(char prefix, string digits)
+    {
+        int[] weights = [2, 7, 6, 5, 4, 3, 2];
+        int sum = prefix is 'T' or 'G' ? 4 : prefix is 'M' ? 3 : 0;
+        for (int index = 0; index < weights.Length; index++)
+        {
+            sum += (digits[index] - '0') * weights[index];
+        }
+
+        string checksumTable = prefix switch
+        {
+            'S' or 'T' => "JZIHGFEDCBA",
+            'F' or 'G' => "XWUTRQPNMLK",
+            'M' => "XWUTRQPNJLK",
+            _ => throw new ArgumentOutOfRangeException(nameof(prefix), prefix, null)
+        };
+
+        return checksumTable[sum % 11];
+    }
+
     private sealed record CreateStudentRequestBody(
         string? SchoolName,
         long? OrganizationId,
@@ -671,7 +714,7 @@ public sealed class StudentCreationApiTests(CustomWebApplicationFactory factory)
         string? ClassCode,
         DateOnly? StartDate,
         string? Email,
-        string? Mobile,
+        string? ContactNumber,
         string? Address,
         bool IsAccountHolder);
 }

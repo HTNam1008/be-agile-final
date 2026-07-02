@@ -27,6 +27,7 @@ internal sealed class AdminStudentListReader(
 
         string[] normalizedLevelCodes = NormalizeCodes(criteria.LevelCodes);
         string? normalizedClassCode = NormalizeNullable(criteria.ClassCode);
+        string? normalizedCitizenshipStatusCode = NormalizeNullable(criteria.CitizenshipStatusCode);
 
         IQueryable<SchoolEnrollment> enrollmentQuery = dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()
@@ -75,7 +76,7 @@ internal sealed class AdminStudentListReader(
             return new Row(person, enrollment, account, enrolled, schoolName);
         });
 
-        rows = ApplyFilters(rows, criteria);
+        rows = ApplyFilters(rows, criteria, normalizedCitizenshipStatusCode);
 
         long total = rows.LongCount();
         AdminStudentListItem[] items = ApplySort(rows, criteria)
@@ -133,13 +134,21 @@ internal sealed class AdminStudentListReader(
             .ToArrayAsync(cancellationToken);
     }
 
-    private static IEnumerable<Row> ApplyFilters(IEnumerable<Row> rows, AdminStudentListCriteria criteria)
+    private static IEnumerable<Row> ApplyFilters(
+        IEnumerable<Row> rows,
+        AdminStudentListCriteria criteria,
+        string? normalizedCitizenshipStatusCode)
     {
         string? search = criteria.Search?.Trim();
         if (search is { Length: >= 2 })
         {
             rows = rows.Where(x => x.Person.OfficialFullName.Contains(search, StringComparison.OrdinalIgnoreCase)
                 || LastFourSearchValue(x.Person.IdentityNumberMasked).Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (normalizedCitizenshipStatusCode is not null)
+        {
+            rows = rows.Where(x => NormalizeNullable(x.Person.CitizenshipStatusCode) == normalizedCitizenshipStatusCode);
         }
 
         rows = criteria.EnrollmentStatus switch

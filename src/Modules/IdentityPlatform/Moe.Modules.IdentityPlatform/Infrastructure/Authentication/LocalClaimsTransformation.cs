@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Clock;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
+using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.IdentityPlatform.Infrastructure.Authentication;
@@ -31,16 +32,32 @@ internal sealed class LocalClaimsTransformation(MoeDbContext dbContext, IClock c
             return principal;
         }
 
-        UserAccount? account = await dbContext.Set<UserAccount>()
-            .SingleOrDefaultAsync(x => x.IdentityProviderCode == expectedIdentityProviderCode
+        AccountLoginState? accountState = await dbContext.Set<UserAccount>()
+            .Where(x => x.IdentityProviderCode == expectedIdentityProviderCode
                 && ((!string.IsNullOrWhiteSpace(subject)
                         && x.ExternalIssuer == issuer
                         && x.ExternalSubjectId == subject)
                     || (!string.IsNullOrWhiteSpace(externalObjectId)
                         && x.ExternalObjectId == externalObjectId
-                        && (x.ExternalTenantId == null || x.ExternalTenantId == externalTenantId))));
+                        && (x.ExternalTenantId == null || x.ExternalTenantId == externalTenantId))))
+            .Select(account => new AccountLoginState(
+                account,
+                account.PersonId.HasValue
+                    ? dbContext.Set<Person>()
+                        .Where(person => person.Id == account.PersonId.Value)
+                        .Select(person => person.PersonStatusCode)
+                        .SingleOrDefault()
+                    : null))
+            .SingleOrDefaultAsync();
+        UserAccount? account = accountState?.Account;
 
         if (account is null || !account.IsActiveForLogin)
+        {
+            return principal;
+        }
+
+        if (account.PersonId.HasValue
+            && accountState!.PersonStatusCode != PersonStatusCodes.Active)
         {
             return principal;
         }
@@ -72,6 +89,8 @@ internal sealed class LocalClaimsTransformation(MoeDbContext dbContext, IClock c
         principal.AddIdentity(identity);
         return principal;
     }
+
+    private sealed record AccountLoginState(UserAccount Account, string? PersonStatusCode);
 
     private async Task<string[]> AddAccessClaimsAsync(ClaimsIdentity identity, long userAccountId, DateTime utcNow)
     {

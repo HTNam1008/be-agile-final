@@ -6,6 +6,7 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.IdentityPlatform.Application.Organizations;
+using Moe.Modules.IdentityPlatform.Application.Students;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
@@ -21,7 +22,8 @@ internal sealed class CreateStudentHandler(
     IStudentOnboardingRepository students,
     IUnitOfWork unitOfWork,
     ITransactionalExecutor transactions,
-    IAuditService audit)
+    IAuditService audit,
+    StudentAccountNotificationEmailService accountNotifications)
     : ICommandHandler<CreateStudentCommand, CreateStudentResponse>
 {
     public async Task<Result<CreateStudentResponse>> Handle(
@@ -57,9 +59,21 @@ internal sealed class CreateStudentHandler(
             return Result<CreateStudentResponse>.Failure(IdentityErrors.StudentNumberAlreadyExists);
         }
 
-        return await transactions.ExecuteAsync(
+        Result<CreateStudentResponse> result = await transactions.ExecuteAsync(
             ct => CreateStudentAsync(command, school, identityNumberHash, normalizedStudentNumber, ct),
             cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            await accountNotifications.SendStudentAccountCreatedAsync(
+                result.Value.PersonId,
+                result.Value.DisplayName,
+                result.Value.SchoolName,
+                clock.UtcNow.UtcDateTime,
+                cancellationToken);
+        }
+
+        return result;
     }
 
     private async Task<Result<CreateStudentResponse>> CreateStudentAsync(
@@ -81,7 +95,7 @@ internal sealed class CreateStudentHandler(
             command.NationalityCode,
             command.CitizenshipStatusCode,
             command.Email,
-            command.Mobile,
+            command.ContactNumber,
             command.Address,
             utcNow);
 

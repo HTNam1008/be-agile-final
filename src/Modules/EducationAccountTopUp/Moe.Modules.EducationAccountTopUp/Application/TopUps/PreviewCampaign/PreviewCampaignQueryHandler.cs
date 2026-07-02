@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
@@ -17,7 +18,8 @@ internal sealed class PreviewCampaignQueryHandler(
     IDynamicRuleFilter dynamicRuleFilter,
     IAdminAccessControl adminAccess,
     ITopUpAccountProjectionRepository accounts,
-    ITopUpStudentSearchDirectory students) : IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>
+    ITopUpStudentSearchDirectory students,
+    IClock clock) : IQueryHandler<PreviewCampaignQuery, PreviewCampaignResult>
 {
     public async Task<Result<PreviewCampaignResult>> Handle(
         PreviewCampaignQuery query,
@@ -65,7 +67,7 @@ internal sealed class PreviewCampaignQueryHandler(
             if (rules.Count == 0)
                 return Result<PreviewCampaignResult>.Failure(TopUpErrors.PreviewNoRules);
 
-            DateTime nowUtc = DateTime.UtcNow;
+            DateTime nowUtc = clock.UtcNow.UtcDateTime;
 
             totalMatched = await dynamicRuleFilter.CountMatchingAccountsAsync(rules, nowUtc, cancellationToken);
             estimatedTotalAmount = totalMatched * campaign.DefaultTopUpAmount;

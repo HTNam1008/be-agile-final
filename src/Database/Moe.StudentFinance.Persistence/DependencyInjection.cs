@@ -12,6 +12,9 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("MoeDatabase")
             ?? throw new InvalidOperationException("Connection string 'MoeDatabase' not found.");
 
+        DatabaseOptions databaseOptions = configuration
+            .GetSection(DatabaseOptions.SectionName)
+            .Get<DatabaseOptions>() ?? new DatabaseOptions();
 
         services.AddDbContext<MoeDbContext>((sp, options) =>
         {
@@ -23,7 +26,19 @@ public static class DependencyInjection
             {
                 options.UseSqlServer(connectionString, sql =>
                 {
-                    sql.EnableRetryOnFailure(3);
+                    if (databaseOptions.EnableSqlRetry)
+                    {
+                        sql.EnableRetryOnFailure(
+                            databaseOptions.MaxRetryCount,
+                            TimeSpan.FromSeconds(databaseOptions.MaxRetryDelaySeconds),
+                            errorNumbersToAdd: null);
+                    }
+
+                    if (databaseOptions.CommandTimeoutSeconds > 0)
+                    {
+                        sql.CommandTimeout(databaseOptions.CommandTimeoutSeconds);
+                    }
+
                     sql.MigrationsAssembly("Moe.StudentFinance.Migrations");
                 });
             }
@@ -34,4 +49,17 @@ public static class DependencyInjection
         services.AddScoped<ITransactionalExecutor>(sp => sp.GetRequiredService<MoeDbContext>());
         return services;
     }
+}
+
+public sealed class DatabaseOptions
+{
+    public const string SectionName = "Database";
+
+    public int CommandTimeoutSeconds { get; set; } = 30;
+
+    public bool EnableSqlRetry { get; set; } = true;
+
+    public int MaxRetryCount { get; set; } = 3;
+
+    public int MaxRetryDelaySeconds { get; set; } = 10;
 }
