@@ -45,6 +45,26 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Bursary_question_prioritizes_bursary_source()
+    {
+        JsonElement response = await Chat("Explain the MOE FAS Bursary", personId: 2101);
+
+        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
+        Assert.Contains("BURSARY", firstCitation.GetProperty("sourceId").GetString());
+        Assert.Contains("bursary", firstCitation.GetProperty("section").GetString()!.ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task Fas_process_question_prioritizes_application_process_source()
+    {
+        JsonElement response = await Chat("Walk me through the FAS application process.", personId: 2101);
+
+        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
+        Assert.Contains("APPLICATION", firstCitation.GetProperty("sourceId").GetString());
+        Assert.Contains("application", firstCitation.GetProperty("section").GetString()!.ToLowerInvariant());
+    }
+
+    [Fact]
     public async Task Fas_definition_question_does_not_start_interview()
     {
         JsonElement response = await Chat("What is FAS?", personId: 2101);
