@@ -41,26 +41,32 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
 
         await using Stream stream = await response.Content.ReadAsStreamAsync();
         using XLWorkbook workbook = new(stream);
-        IXLWorksheet sheet = workbook.Worksheets.Single();
+        IXLWorksheet sheet = workbook.Worksheet("Students");
 
         string[] headers = Enumerable.Range(1, BulkImportStudentWorkbookColumns.Headers.Count)
             .Select(index => sheet.Cell(1, index).GetString())
             .ToArray();
 
         Assert.Equal(BulkImportStudentWorkbookColumns.Headers, headers);
-        Assert.Equal(2, sheet.LastRowUsed()?.RowNumber());
+        Assert.True(workbook.Worksheets.Contains("Instructions"));
+        Assert.True(sheet.LastRowUsed()?.RowNumber() >= 2);
 
         for (int i = 0; i < BulkImportStudentWorkbookColumns.Headers.Count; i++)
         {
             string header = BulkImportStudentWorkbookColumns.Headers[i];
-            string note = sheet.Cell(2, i + 1).GetString();
+            string note = sheet.Cell(1, i + 1).GetComment().Text;
             string expectedPrefix = BulkImportStudentWorkbookColumns.NullableHeaders.Contains(header)
-                ? "Nullable"
+                ? "Optional"
                 : "Required";
 
             Assert.StartsWith(expectedPrefix, note);
-            Assert.Contains("DELETE THIS ROW BEFORE IMPORT", note);
         }
+
+        Assert.Equal("TemplateRow", sheet.Cell(1, BulkImportStudentWorkbookColumns.Headers.Count + 1).GetString());
+        Assert.Equal("SAMPLE_DO_NOT_IMPORT", sheet.Cell(2, BulkImportStudentWorkbookColumns.Headers.Count + 1).GetString());
+        Assert.Equal("S1234567D", sheet.Cell(2, 3).GetString());
+        Assert.Equal("BACHELOR", sheet.Cell(2, 10).GetString());
+        Assert.NotNull(sheet.Cell(10, 10).GetDataValidation());
     }
 
     [Fact]
@@ -135,6 +141,131 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         SchoolEnrollment enrollment = await db.Set<SchoolEnrollment>().SingleAsync(x => x.PersonId == personId);
         Assert.Equal("BACHELOR", enrollment.LevelCode);
         Assert.Null(enrollment.ClassCode);
+    }
+
+    [Fact]
+    public async Task BulkImport_WithDownloadedTemplateUnedited_SkipsSampleRow()
+    {
+        using HttpResponseMessage templateResponse = await _client.GetAsync(TemplateEndpoint);
+        await AssertStatusAsync(HttpStatusCode.OK, templateResponse);
+        byte[] workbook = await templateResponse.Content.ReadAsByteArrayAsync();
+
+        using HttpResponseMessage response = await PostWorkbookBytesAsync(workbook);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        BulkImportResponse result = await ReadBulkImportResponseAsync(response);
+        Assert.Equal(1, result.TotalRows);
+        Assert.Equal(0, result.SucceededCount);
+        Assert.Equal(0, result.FailedCount);
+        Assert.Equal(1, result.SkippedCount);
+        BulkImportRowResult skipped = Assert.Single(result.Results);
+        Assert.Equal(2, skipped.RowNumber);
+        Assert.Equal("Skipped", skipped.Status);
+        Assert.Equal("BULK_IMPORT.SAMPLE_ROW_SKIPPED", skipped.ErrorCode);
+        Assert.Contains("SAMPLE_DO_NOT_IMPORT", skipped.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task BulkImport_WhenRealDataStillHasSampleMarker_ReturnsSkippedRow()
+    {
+        string suffix = UniqueSuffix();
+        StudentImportRow row = ValidRow(suffix, "MARKED");
+        byte[] workbook = CreateWorkbookWithSampleMarker(row);
+
+        using HttpResponseMessage response = await PostWorkbookBytesAsync(workbook);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        BulkImportResponse result = await ReadBulkImportResponseAsync(response);
+        Assert.Equal(1, result.TotalRows);
+        Assert.Equal(0, result.SucceededCount);
+        Assert.Equal(0, result.FailedCount);
+        Assert.Equal(1, result.SkippedCount);
+        BulkImportRowResult skipped = Assert.Single(result.Results);
+        Assert.Equal(2, skipped.RowNumber);
+        Assert.Equal("Skipped", skipped.Status);
+        Assert.Equal("BULK_IMPORT.SAMPLE_ROW_SKIPPED", skipped.ErrorCode);
+    }
+
+    [Fact]
+    public async Task BulkImport_WhenTemplateSampleRowIsReplacedWithRealData_ImportsRow()
+    {
+        string suffix = UniqueSuffix();
+        StudentImportRow row = ValidRow(suffix, "REPLACED");
+        using HttpResponseMessage templateResponse = await _client.GetAsync(TemplateEndpoint);
+        await AssertStatusAsync(HttpStatusCode.OK, templateResponse);
+        await using Stream templateStream = await templateResponse.Content.ReadAsStreamAsync();
+        using XLWorkbook workbook = new(templateStream);
+        IXLWorksheet sheet = workbook.Worksheet("Students");
+        WriteRow(sheet, rowNumber: 2, row);
+        sheet.Cell(2, BulkImportStudentWorkbookColumns.Headers.Count + 1).Clear();
+        byte[] content = SaveWorkbook(workbook);
+
+        using HttpResponseMessage response = await PostWorkbookBytesAsync(content);
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        BulkImportResponse result = await ReadBulkImportResponseAsync(response);
+        Assert.Equal(1, result.TotalRows);
+        Assert.Equal(1, result.SucceededCount);
+        Assert.Equal(0, result.FailedCount);
+        Assert.Equal(0, result.SkippedCount);
+        Assert.Equal(2, result.Results.Single().RowNumber);
+    }
+
+    [Fact]
+    public async Task BulkImport_AutoLifecycleTestDataWorkbook_ReturnsExpectedSeventeenSuccessAndThreeFailures()
+    {
+        byte[] workbook = await File.ReadAllBytesAsync(Path.Combine(
+            FindRepositoryRoot(),
+            "scripts",
+            "test-data",
+            "test-data-002-auto-lifecycle-bulk-import.xlsx"));
+
+        using HttpResponseMessage response = await PostWorkbookBytesAsync(
+            workbook,
+            configureRequest: request => request.Headers.Add("X-Test-OrganizationUnitIds", "1,2"));
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        BulkImportResponse result = await ReadBulkImportResponseAsync(response);
+        Assert.Equal(20, result.TotalRows);
+        Assert.True(
+            result.SucceededCount == 17,
+            JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        Assert.Equal(3, result.FailedCount);
+        Assert.Equal(0, result.SkippedCount);
+        Assert.Equal(3, result.Results.Count(x => x.Status == "Failed"));
+        Assert.Contains(result.Results, x => x.RowNumber == 19
+            && x.Status == "Failed"
+            && x.ErrorMessage?.Contains("valid Singapore NRIC/FIN", StringComparison.OrdinalIgnoreCase) == true);
+        Assert.Contains(result.Results, x => x.RowNumber == 20
+            && x.Status == "Failed"
+            && x.ErrorMessage?.Contains("'Full Name' must not be empty", StringComparison.OrdinalIgnoreCase) == true);
+        Assert.Contains(result.Results, x => x.RowNumber == 21
+            && x.Status == "Failed"
+            && x.ErrorMessage?.Contains("Start date cannot be earlier than date of birth", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    [Theory]
+    [InlineData("test-data-003-mockpass-import-demo.xlsx")]
+    [InlineData("test-data-004-mockpass-import-demo.xlsx")]
+    [InlineData("test-data-005-mockpass-import-demo.xlsx")]
+    [InlineData("test-data-006-mockpass-import-demo.xlsx")]
+    public async Task BulkImport_MockpassDemoWorkbook_ReturnsExpectedTwentySuccesses(string fileName)
+    {
+        byte[] workbook = await File.ReadAllBytesAsync(Path.Combine(FindRepositoryRoot(), "scripts", "test-data", fileName));
+
+        using HttpResponseMessage response = await PostWorkbookBytesAsync(
+            workbook,
+            configureRequest: request => request.Headers.Add("X-Test-OrganizationUnitIds", "1,2,3,4,5,6"));
+
+        await AssertStatusAsync(HttpStatusCode.OK, response);
+        BulkImportResponse result = await ReadBulkImportResponseAsync(response);
+        Assert.Equal(20, result.TotalRows);
+        Assert.True(
+            result.SucceededCount == 20,
+            JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        Assert.Equal(0, result.FailedCount);
+        Assert.Equal(0, result.SkippedCount);
+        Assert.All(result.Results, x => Assert.Equal("Succeeded", x.Status));
     }
 
     [Fact]
@@ -239,11 +370,23 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     private async Task<HttpResponseMessage> PostWorkbookAsync(IReadOnlyCollection<StudentImportRow> rows)
     {
         byte[] workbook = CreateWorkbook(rows);
+        return await PostWorkbookBytesAsync(workbook);
+    }
+
+    private async Task<HttpResponseMessage> PostWorkbookBytesAsync(
+        byte[] workbook,
+        Action<HttpRequestMessage>? configureRequest = null)
+    {
         using MultipartFormDataContent content = new();
         ByteArrayContent fileContent = new(workbook);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         content.Add(fileContent, "file", "students.xlsx");
-        return await _client.PostAsync(Endpoint, content);
+        using HttpRequestMessage request = new(HttpMethod.Post, Endpoint)
+        {
+            Content = content
+        };
+        configureRequest?.Invoke(request);
+        return await _client.SendAsync(request);
     }
 
     private static byte[] CreateWorkbook(IReadOnlyCollection<StudentImportRow> rows)
@@ -259,24 +402,69 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         int rowNumber = 2;
         foreach (StudentImportRow row in rows)
         {
-            sheet.Cell(rowNumber, 1).Value = row.SchoolName;
-            sheet.Cell(rowNumber, 2).Value = row.OrganizationId;
-            sheet.Cell(rowNumber, 3).Value = row.IdentityNumber;
-            sheet.Cell(rowNumber, 4).Value = row.FullName;
-            sheet.Cell(rowNumber, 5).Value = row.DateOfBirth.ToDateTime(TimeOnly.MinValue);
-            sheet.Cell(rowNumber, 6).Value = row.NationalityCode;
-            sheet.Cell(rowNumber, 7).Value = row.CitizenshipStatusCode;
-            sheet.Cell(rowNumber, 8).Value = row.StudentNumber;
-            sheet.Cell(rowNumber, 9).Value = row.AcademicYear;
-            sheet.Cell(rowNumber, 10).Value = row.LevelCode;
-            sheet.Cell(rowNumber, 11).Value = row.ClassCode;
-            sheet.Cell(rowNumber, 12).Value = row.StartDate?.ToDateTime(TimeOnly.MinValue);
-            sheet.Cell(rowNumber, 13).Value = row.Email;
-            sheet.Cell(rowNumber, 14).Value = row.Mobile;
-            sheet.Cell(rowNumber, 15).Value = row.Address;
+            WriteRow(sheet, rowNumber, row);
             rowNumber++;
         }
 
+        return SaveWorkbook(workbook);
+    }
+
+    private static byte[] CreateWorkbookWithSampleMarker(StudentImportRow row)
+    {
+        using XLWorkbook workbook = new();
+        IXLWorksheet sheet = workbook.Worksheets.Add("Students");
+
+        for (int i = 0; i < BulkImportStudentWorkbookColumns.Headers.Count; i++)
+        {
+            sheet.Cell(1, i + 1).Value = BulkImportStudentWorkbookColumns.Headers[i];
+        }
+
+        sheet.Cell(1, BulkImportStudentWorkbookColumns.Headers.Count + 1).Value =
+            BulkImportStudentWorkbookColumns.TemplateRowMarker;
+        WriteRow(sheet, rowNumber: 2, row);
+        sheet.Cell(2, BulkImportStudentWorkbookColumns.Headers.Count + 1).Value =
+            BulkImportStudentWorkbookColumns.SampleRowMarker;
+
+        return SaveWorkbook(workbook);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "scripts", "test-data")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root containing scripts/test-data.");
+    }
+
+    private static void WriteRow(IXLWorksheet sheet, int rowNumber, StudentImportRow row)
+    {
+        sheet.Cell(rowNumber, 1).Value = row.SchoolName;
+        sheet.Cell(rowNumber, 2).Value = row.OrganizationId;
+        sheet.Cell(rowNumber, 3).Value = row.IdentityNumber;
+        sheet.Cell(rowNumber, 4).Value = row.FullName;
+        sheet.Cell(rowNumber, 5).Value = row.DateOfBirth.ToDateTime(TimeOnly.MinValue);
+        sheet.Cell(rowNumber, 6).Value = row.NationalityCode;
+        sheet.Cell(rowNumber, 7).Value = row.CitizenshipStatusCode;
+        sheet.Cell(rowNumber, 8).Value = row.StudentNumber;
+        sheet.Cell(rowNumber, 9).Value = row.AcademicYear;
+        sheet.Cell(rowNumber, 10).Value = row.LevelCode;
+        sheet.Cell(rowNumber, 11).Value = row.ClassCode;
+        sheet.Cell(rowNumber, 12).Value = row.StartDate?.ToDateTime(TimeOnly.MinValue);
+        sheet.Cell(rowNumber, 13).Value = row.Email;
+        sheet.Cell(rowNumber, 14).Value = row.Mobile;
+        sheet.Cell(rowNumber, 15).Value = row.Address;
+    }
+
+    private static byte[] SaveWorkbook(XLWorkbook workbook)
+    {
         using MemoryStream stream = new();
         workbook.SaveAs(stream);
         return stream.ToArray();
@@ -414,6 +602,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         int TotalRows,
         int SucceededCount,
         int FailedCount,
+        int SkippedCount,
         IReadOnlyList<BulkImportRowResult> Results);
 
     private sealed record BulkImportRowResult(

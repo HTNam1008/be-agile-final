@@ -1,4 +1,4 @@
-# TEST-DATA-003-006 MockPass Import Demo Manifest
+﻿# TEST-DATA-003-006 MockPass Import Demo Manifest
 
 ## Purpose
 
@@ -17,17 +17,17 @@ They are independent from the AUTO lifecycle scenario in `test-data-002-auto-lif
 
 | File | Data rows | NRIC range |
 | --- | ---: | --- |
-| `scripts/test-data/test-data-003-mockpass-import-demo.xlsx` | 20 | `S7000061Q` through `S7000080L` |
-| `scripts/test-data/test-data-004-mockpass-import-demo.xlsx` | 20 | `S7000081M` through `S7000100H` |
-| `scripts/test-data/test-data-005-mockpass-import-demo.xlsx` | 20 | `S7000101J` through `S7000120E` |
-| `scripts/test-data/test-data-006-mockpass-import-demo.xlsx` | 20 | `S7000121F` through `S7000140B` |
+| `scripts/test-data/test-data-003-mockpass-import-demo.xlsx` | 20 | `S7000061Z` through `S7000080F` |
+| `scripts/test-data/test-data-004-mockpass-import-demo.xlsx` | 20 | `S7000081D` through `S7000100D` |
+| `scripts/test-data/test-data-005-mockpass-import-demo.xlsx` | 20 | `S7000101B` through `S7000120I` |
+| `scripts/test-data/test-data-006-mockpass-import-demo.xlsx` | 20 | `S7000121G` through `S7000140C` |
 
 Cleanup script: `scripts/test-data/test-data-003-006-mockpass-import-demo-cleanup.sql`.
 
 ## MockPass Accounts
 
 - Baseline before these fixtures: 60 students, ending at `S7000060P`.
-- Added by these fixtures: 80 students, `S7000061Q` through `S7000140B`.
+- Added by these fixtures: 80 students, `S7000061Z` through `S7000140C`.
 - Expected mockpass total after this manifest: 140 students.
 - `singpassId` equals `nric` for every added account.
 - UUID derivation: `uuid5(NAMESPACE_URL, f"mockpass-import-demo:{nric}")`.
@@ -37,19 +37,19 @@ Cleanup script: `scripts/test-data/test-data-003-006-mockpass-import-demo-cleanu
 
 ### test-data-003-mockpass-import-demo.xlsx
 
-`S7000061Q`, `S7000062R`, `S7000063T`, `S7000064U`, `S7000065V`, `S7000066W`, `S7000067X`, `S7000068Y`, `S7000069Z`, `S7000070A`, `S7000071B`, `S7000072C`, `S7000073D`, `S7000074E`, `S7000075F`, `S7000076G`, `S7000077H`, `S7000078J`, `S7000079K`, `S7000080L`
+`S7000061Z`, `S7000062H`, `S7000063F`, `S7000064D`, `S7000065B`, `S7000066J`, `S7000067I`, `S7000068G`, `S7000069E`, `S7000070I`, `S7000071G`, `S7000072E`, `S7000073C`, `S7000074A`, `S7000075Z`, `S7000076H`, `S7000077F`, `S7000078D`, `S7000079B`, `S7000080F`
 
 ### test-data-004-mockpass-import-demo.xlsx
 
-`S7000081M`, `S7000082N`, `S7000083P`, `S7000084Q`, `S7000085R`, `S7000086T`, `S7000087U`, `S7000088V`, `S7000089W`, `S7000090X`, `S7000091Y`, `S7000092Z`, `S7000093A`, `S7000094B`, `S7000095C`, `S7000096D`, `S7000097E`, `S7000098F`, `S7000099G`, `S7000100H`
+`S7000081D`, `S7000082B`, `S7000083J`, `S7000084I`, `S7000085G`, `S7000086E`, `S7000087C`, `S7000088A`, `S7000089Z`, `S7000090C`, `S7000091A`, `S7000092Z`, `S7000093H`, `S7000094F`, `S7000095D`, `S7000096B`, `S7000097J`, `S7000098I`, `S7000099G`, `S7000100D`
 
 ### test-data-005-mockpass-import-demo.xlsx
 
-`S7000101J`, `S7000102K`, `S7000103L`, `S7000104M`, `S7000105N`, `S7000106P`, `S7000107Q`, `S7000108R`, `S7000109T`, `S7000110U`, `S7000111V`, `S7000112W`, `S7000113X`, `S7000114Y`, `S7000115Z`, `S7000116A`, `S7000117B`, `S7000118C`, `S7000119D`, `S7000120E`
+`S7000101B`, `S7000102J`, `S7000103I`, `S7000104G`, `S7000105E`, `S7000106C`, `S7000107A`, `S7000108Z`, `S7000109H`, `S7000110A`, `S7000111Z`, `S7000112H`, `S7000113F`, `S7000114D`, `S7000115B`, `S7000116J`, `S7000117I`, `S7000118G`, `S7000119E`, `S7000120I`
 
 ### test-data-006-mockpass-import-demo.xlsx
 
-`S7000121F`, `S7000122G`, `S7000123H`, `S7000124J`, `S7000125K`, `S7000126L`, `S7000127M`, `S7000128N`, `S7000129P`, `S7000130Q`, `S7000131R`, `S7000132T`, `S7000133U`, `S7000134V`, `S7000135W`, `S7000136X`, `S7000137Y`, `S7000138Z`, `S7000139A`, `S7000140B`
+`S7000121G`, `S7000122E`, `S7000123C`, `S7000124A`, `S7000125Z`, `S7000126H`, `S7000127F`, `S7000128D`, `S7000129B`, `S7000130F`, `S7000131D`, `S7000132B`, `S7000133J`, `S7000134I`, `S7000135G`, `S7000136E`, `S7000137C`, `S7000138A`, `S7000139Z`, `S7000140C`
 
 ## Expected Import Result
 
@@ -70,3 +70,4 @@ To remove students imported from these four workbooks, including any JIT-provisi
 ```powershell
 sqlcmd -S localhost -d StudentFinance -E -C -i scripts/test-data/test-data-003-006-mockpass-import-demo-cleanup.sql
 ```
+
