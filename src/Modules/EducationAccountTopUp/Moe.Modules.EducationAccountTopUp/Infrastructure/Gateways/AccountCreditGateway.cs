@@ -314,5 +314,6 @@ internal sealed class AccountCreditGateway(
         builder.Append("</td></tr>");
     }
 
-    private static string FormatMoney(decimal amount) => $"SGD {amount:N2}";
+    private static string FormatMoney(decimal amount)
+        => $"SGD {amount.ToString("N2", CultureInfo.InvariantCulture)}";
 }

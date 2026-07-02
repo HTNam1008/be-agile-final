@@ -87,7 +87,7 @@ internal sealed class Age30AccountLockReminderEmailService(
             : candidate.StudentName.Trim();
         string lockDateDisplay = lockDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
         string? outstandingAmountDisplay = outstandingAmount is > 0m
-            ? $"SGD {outstandingAmount.Value:N2}"
+            ? $"SGD {outstandingAmount.Value.ToString("N2", CultureInfo.InvariantCulture)}"
             : null;
 
         const string subject = "Reminder: Your MOE SEEDS account will be locked soon";
