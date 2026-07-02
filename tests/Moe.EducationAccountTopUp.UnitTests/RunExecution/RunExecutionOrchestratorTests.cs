@@ -599,7 +599,6 @@ public sealed class RunExecutionOrchestratorTests
     {
         public Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AddRecipientAsync(TopUpCampaignRecipient recipient, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<bool> CampaignCodeExistsAsync(long organizationId, string campaignCode, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);

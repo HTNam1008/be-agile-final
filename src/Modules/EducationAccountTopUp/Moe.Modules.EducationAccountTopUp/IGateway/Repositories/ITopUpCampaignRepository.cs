@@ -25,7 +25,6 @@ public interface ITopUpCampaignRepository
 
     Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default);
     Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default);
-    Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default);
     Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
