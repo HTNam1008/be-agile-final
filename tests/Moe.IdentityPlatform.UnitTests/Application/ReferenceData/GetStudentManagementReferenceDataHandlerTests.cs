@@ -37,21 +37,26 @@ public sealed class GetStudentManagementReferenceDataHandlerTests
 
         response.StudentListFilters.Levels.Select(x => x.Value)
             .Should().Equal(
+                "POST_SEC", "BACHELOR", "MASTER", "PHD");
+        response.StudentListFilters.Levels.Select(x => x.Value)
+            .Should().NotContain([
                 "PRI_1", "PRI_2", "PRI_3", "PRI_4", "PRI_5", "PRI_6",
                 "SEC_1", "SEC_2", "SEC_3", "SEC_4", "SEC_5",
-                "BACHELOR", "MASTER", "PHD");
-        response.StudentListFilters.Levels.Select(x => x.Value)
-            .Should().NotContain(["UNI_Y1", "UNI_Y2", "UNI_Y3", "UNI_Y4"]);
+                "UNI_Y1", "UNI_Y2", "UNI_Y3", "UNI_Y4"
+            ]);
         response.StudentListFilters.Levels
-            .Should().ContainEquivalentOf(new ReferenceOption("PRI_1", "Primary 1"));
+            .Should().HaveCount(4);
         response.StudentListFilters.Levels
-            .Should().ContainEquivalentOf(new ReferenceOption("SEC_5", "Secondary 5"));
+            .Should().NotContain(x => x.Value.StartsWith("PRI_", StringComparison.Ordinal)
+                || x.Value.StartsWith("SEC_", StringComparison.Ordinal));
+        response.StudentListFilters.Levels
+            .Should().ContainEquivalentOf(new ReferenceOption("POST_SEC", "Post-Secondary"));
         response.StudentListFilters.Levels
             .Should().ContainEquivalentOf(new ReferenceOption("BACHELOR", "Bachelor"));
         response.StudentListFilters.Levels
             .Should().ContainEquivalentOf(new ReferenceOption("MASTER", "Master"));
         response.StudentListFilters.Levels
-            .Should().ContainEquivalentOf(new ReferenceOption("PHD", "PhD"));
+            .Should().ContainEquivalentOf(new ReferenceOption("PHD", "Doctor"));
         response.StudentProfile.Levels.Should().BeEquivalentTo(response.StudentListFilters.Levels);
 
         string serialized = JsonSerializer.Serialize(response);
