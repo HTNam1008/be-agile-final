@@ -24,6 +24,8 @@ internal sealed class GetCampaignsQueryHandler(
             query.Status,
             dateFrom,
             dateTo,
+            query.SortBy,
+            query.SortDirection,
             cancellationToken);
 
         return Result<CampaignListResult>.Success(result);

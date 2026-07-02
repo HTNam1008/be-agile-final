@@ -7,6 +7,9 @@ using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
@@ -14,9 +17,13 @@ namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICoursePaymentPlanGateway paymentPlans,
+    ICoursePaymentGateway coursePayments,
     IFasCourseSubsidyGateway fasSubsidies,
     ICurrentUser currentUser,
     IStudentAccessControl studentAccess,
+    IStudentDirectory students,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter,
     IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
@@ -106,7 +113,7 @@ internal sealed class SelfJoinCourseHandler(
 
         DateOnly enrolledDate = clock.TodayInSingapore();
         DateOnly firstDueDate = installment
-            ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(utcNow)
             : enrolledDate;
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(
@@ -151,8 +158,43 @@ internal sealed class SelfJoinCourseHandler(
                 utcNow,
                 cancellationToken);
         }
+        if (installment)
+        {
+            await coursePayments.SendInstallmentEnrollmentConfirmationAsync(
+                billingResult.Enrollment.Id,
+                cancellationToken);
+        }
+
+        await NotifyEnrollmentSuccessAsync(enrollmentResult.Value.PersonId, course, cancellationToken);
 
         return Result<CourseEnrollmentResponse>.Success(ToResponse(billingResult));
+    }
+
+    private async Task NotifyEnrollmentSuccessAsync(
+        long personId,
+        Course course,
+        CancellationToken cancellationToken)
+    {
+        StudentSummary? student = await students.FindByPersonIdAsync(personId, cancellationToken);
+        if (student is null)
+        {
+            return;
+        }
+
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(personId, cancellationToken);
+        if (userAccountId is null)
+        {
+            return;
+        }
+
+        string schoolName = student.SchoolName ?? "your school";
+        await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.EnrollSuccess,
+                $"Course Enrollment Completed: {course.CourseCode}",
+                $"Welcome {student.DisplayName}! You are now enrolled in {course.CourseName} at {schoolName}."),
+            cancellationToken);
     }
 
     private static CourseEnrollmentResponse ToResponse(CourseEnrollmentBillingResult result)

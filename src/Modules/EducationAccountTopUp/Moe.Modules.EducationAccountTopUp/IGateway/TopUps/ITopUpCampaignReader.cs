@@ -14,6 +14,8 @@ public interface ITopUpCampaignReader
         string? status = null,
         DateOnly? dateFrom = null,
         DateOnly? dateTo = null,
+        string? sortBy = null,
+        string? sortDirection = null,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default);

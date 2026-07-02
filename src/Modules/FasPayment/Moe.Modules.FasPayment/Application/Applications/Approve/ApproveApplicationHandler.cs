@@ -14,7 +14,8 @@ internal sealed class ApproveApplicationHandler(
     IFasApplicationRepository repository,
     ICurrentUser currentUser,
     IUnitOfWork unitOfWork,
-    FasEmailNotificationService fasEmails) : ICommandHandler<ApproveApplicationCommand, ApproveApplicationResponse>
+    FasEmailNotificationService fasEmails,
+    FasInAppNotificationService fasNotifications) : ICommandHandler<ApproveApplicationCommand, ApproveApplicationResponse>
 {
     public async Task<Result<ApproveApplicationResponse>> Handle(ApproveApplicationCommand command, CancellationToken cancellationToken)
     {
@@ -33,6 +34,7 @@ internal sealed class ApproveApplicationHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await fasEmails.SendApplicationApprovedAsync(application.Id, cancellationToken);
+        await fasNotifications.SendApplicationApprovedAsync(application.Id, cancellationToken);
 
         return Result<ApproveApplicationResponse>.Success(
             new ApproveApplicationResponse(application.Id, application.StatusCode, decision.Decision)

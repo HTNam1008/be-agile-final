@@ -136,6 +136,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
         TopUpHistoryFilter filter,
         int page,
         int pageSize,
+        string? sortBy,
+        string? sortDirection,
         CancellationToken cancellationToken)
     {
         var runQuery = dbContext.Set<TopUpRun>().AsNoTracking();
@@ -176,10 +178,33 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 || EF.Functions.Like(x.CampaignName, search));
         }
 
+        bool descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        string sortKey = sortBy?.Trim().ToLowerInvariant() ?? string.Empty;
+        var orderedQuery = sortKey switch
+        {
+            "account" => descending
+                ? query.OrderByDescending(x => x.EducationAccountId).ThenByDescending(x => x.TransactionId)
+                : query.OrderBy(x => x.EducationAccountId).ThenByDescending(x => x.TransactionId),
+            "campaign" => descending
+                ? query.OrderByDescending(x => x.CampaignCode).ThenByDescending(x => x.TransactionId)
+                : query.OrderBy(x => x.CampaignCode).ThenByDescending(x => x.TransactionId),
+            "amount" => descending
+                ? query.OrderByDescending(x => x.Amount).ThenByDescending(x => x.TransactionId)
+                : query.OrderBy(x => x.Amount).ThenByDescending(x => x.TransactionId),
+            "rundate" => descending
+                ? query.OrderByDescending(x => x.RunDateUtc).ThenByDescending(x => x.TransactionId)
+                : query.OrderBy(x => x.RunDateUtc).ThenByDescending(x => x.TransactionId),
+            "status" => descending
+                ? query.OrderByDescending(x => x.StatusCode).ThenByDescending(x => x.TransactionId)
+                : query.OrderBy(x => x.StatusCode).ThenByDescending(x => x.TransactionId),
+            "completed" => descending
+                ? query.OrderByDescending(x => x.CompletedAtUtc).ThenByDescending(x => x.TransactionId)
+                : query.OrderBy(x => x.CompletedAtUtc).ThenByDescending(x => x.TransactionId),
+            _ => query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.TransactionId)
+        };
+
         long totalCount = await query.LongCountAsync(cancellationToken);
-        TransactionHistoryProjection[] items = await query
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .ThenByDescending(x => x.TransactionId)
+        TransactionHistoryProjection[] items = await orderedQuery
             .Skip(checked((page - 1) * pageSize))
             .Take(pageSize)
             .Select(x => new TransactionHistoryProjection(

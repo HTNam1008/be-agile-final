@@ -13,8 +13,7 @@ internal sealed class GetSchoolDashboardHandler(
     IClock clock,
     IAdminDashboardIdentityMetricsReader identities,
     IAdminDashboardFinanceMetricsReader finance,
-    IAdminDashboardCourseMetricsReader courses,
-    IAdminDashboardFasMetricsReader fas)
+    IAdminDashboardCourseMetricsReader courses)
     : IQueryHandler<GetSchoolDashboardQuery, SchoolDashboardResponse>
 {
     public async Task<Result<SchoolDashboardResponse>> Handle(
@@ -39,29 +38,35 @@ internal sealed class GetSchoolDashboardHandler(
             return Result<SchoolDashboardResponse>.Failure(RoleDashboardErrors.InvalidYear);
         }
 
-        DateOnly currentDate = clock.TodayInSingapore();
         AdminDashboardIdentityMetrics identity = await identities.GetSchoolMetricsAsync(organizationId, year, now, cancellationToken);
-        AdminDashboardFinanceMetrics financeMetrics = await finance.GetSchoolMetricsAsync(organizationId, year, now, cancellationToken);
-        long activeCourses = await courses.CountActiveCoursesAsync(organizationId, currentDate, cancellationToken);
-        long activeEnrollments = await courses.CountActiveEnrollmentsAsync(organizationId, currentDate, cancellationToken);
-        long pendingFasApplications = await fas.CountPendingApplicationsAsync(organizationId, cancellationToken);
+        AdminDashboardSchoolFinanceMetrics financeMetrics = await finance.GetSchoolMetricsAsync(organizationId, year, now, cancellationToken);
+        long totalCourses = await courses.CountTotalCoursesAsync(organizationId, cancellationToken);
+        Dictionary<int, long?> studentsByMonth = identity.MonthlyActiveStudents.ToDictionary(point => point.Month, point => point.Value);
         Dictionary<int, decimal> topUpsByMonth = financeMetrics.MonthlyTopUpAmounts.ToDictionary(point => point.Month, point => point.Amount);
-        SchoolDashboardMonthlyTopUpPoint[] points = Enumerable.Range(1, 12)
-            .Select(month => new SchoolDashboardMonthlyTopUpPoint(month, topUpsByMonth.GetValueOrDefault(month)))
+        SchoolDashboardMonthlyMetricsPoint[] points = Enumerable.Range(1, 12)
+            .Select(month => new SchoolDashboardMonthlyMetricsPoint(
+                month,
+                studentsByMonth.GetValueOrDefault(month),
+                IsFutureMonth(year, month, now) ? null : topUpsByMonth.GetValueOrDefault(month)))
             .ToArray();
 
         return Result<SchoolDashboardResponse>.Success(new SchoolDashboardResponse(
             new SchoolDashboardCardsResponse(
-                identity.TotalActiveStudents,
-                activeCourses,
-                financeMetrics.TotalActiveEducationAccounts,
-                financeMetrics.TopUpAmountThisMonth,
-                financeMetrics.CurrencyCode),
-            new SchoolDashboardTopUpYearlyResponse(year, financeMetrics.CurrencyCode, points),
-            new SchoolDashboardOverviewResponse(
-                identity.NewStudentsThisMonth,
-                activeEnrollments,
-                pendingFasApplications,
-                financeMetrics.ActiveTopUpCampaigns)));
+                new DashboardCountMetricResponse(
+                    identity.TotalStudents,
+                    DashboardTrend.Calculate(identity.TotalStudents, identity.PreviousPeriodTotalStudents)),
+                new DashboardCountMetricResponse(
+                    totalCourses,
+                    null),
+                new DashboardAmountMetricResponse(
+                    financeMetrics.TopUpAmountThisMonth,
+                    financeMetrics.CurrencyCode,
+                    DashboardTrend.Calculate(
+                        financeMetrics.TopUpAmountThisMonth,
+                        financeMetrics.PreviousPeriodTopUpAmount))),
+            new SchoolDashboardYearlyMetricsResponse(year, financeMetrics.CurrencyCode, points)));
     }
+
+    private static bool IsFutureMonth(int year, int month, DateTimeOffset now)
+        => year > now.Year || (year == now.Year && month > now.Month);
 }

@@ -2,14 +2,12 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
@@ -20,12 +18,9 @@ namespace Moe.Modules.CourseBilling.Infrastructure.Repositories;
 
 internal sealed class CourseEnrollmentRepository(
     MoeDbContext dbContext,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
-    IEmailDeliverySwitch mailSwitch,
-    ILogger<CourseEnrollmentRepository> logger) : ICourseEnrollmentRepository
+    IEmailBrandingProvider branding,
+    IEmailNotificationScheduler mailScheduler) : ICourseEnrollmentRepository
 {
-    private const string PaymentDashboardUrl = "http://localhost:5173/portal/payments";
     private const string PaymentPlanSelectionPlaceholder = "To be confirmed after payment plan selection";
 
     public async Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken)
@@ -436,32 +431,6 @@ internal sealed class CourseEnrollmentRepository(
         CourseEnrollment enrollment,
         CancellationToken cancellationToken)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Admin-added course enrollment email skipped because MailDelivery is disabled. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}",
-                enrollment.PersonId,
-                enrollment.Id);
-            return;
-        }
-
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(enrollment.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Admin-added course enrollment recipient resolution failed. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Admin-added course enrollment email skipped because no valid recipient was found. PersonId={PersonId} CourseEnrollmentId={CourseEnrollmentId}", enrollment.PersonId, enrollment.Id);
-            return;
-        }
-
         Course course = await dbContext.Set<Course>()
             .AsNoTracking()
             .SingleAsync(x => x.Id == enrollment.CourseId, cancellationToken);
@@ -478,7 +447,7 @@ internal sealed class CourseEnrollmentRepository(
 
         string subject = $"You've Been Enrolled in {courseName}";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Course enrollment notification",
             string.Empty,
             $"Hello {studentName}, you have been enrolled in {courseName} by your school administrator.",
@@ -487,36 +456,26 @@ internal sealed class CourseEnrollmentRepository(
             $"Payment Due Date: {paymentDisplays.DueDateDisplay}",
             string.Empty,
             "Please log in to complete your payment and secure your spot in this course.",
-            $"Go to Payment Dashboard -> {PaymentDashboardUrl}"
+            $"Go to Payment Dashboard -> {branding.PaymentDashboardUrl}"
         ]);
 
         string htmlBody = BuildAdminAddedEnrollmentHtmlBody(
             studentName,
             courseName,
             paymentDisplays.FeePayableDisplay,
-            paymentDisplays.DueDateDisplay);
+            paymentDisplays.DueDateDisplay,
+            branding.AppName,
+            branding.PaymentDashboardUrl);
 
-        try
-        {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Admin-added course enrollment email failed. CourseEnrollmentId={CourseEnrollmentId} ErrorCode={ErrorCode}",
-                    enrollment.Id,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Admin-added course enrollment email threw an exception. CourseEnrollmentId={CourseEnrollmentId}",
-                enrollment.Id);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            "NOTI-04",
+            enrollment.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "CourseEnrollment",
+            enrollment.Id.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private async Task<AdminAddedEnrollmentPaymentDisplays> GetAdminAddedEnrollmentPaymentDisplaysAsync(
@@ -552,24 +511,23 @@ internal sealed class CourseEnrollmentRepository(
             .First();
 
         return new AdminAddedEnrollmentPaymentDisplays(
-            $"SGD {feePayable.ToString("N2", CultureInfo.InvariantCulture)}",
-            dueDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture));
+            EmailTemplateBranding.FormatMoney(feePayable),
+            EmailTemplateBranding.FormatDate(dueDate));
     }
 
     private static string BuildAdminAddedEnrollmentHtmlBody(
         string studentName,
         string courseName,
         string feePayableDisplay,
-        string dueDateDisplay)
+        string dueDateDisplay,
+        string appName,
+        string paymentDashboardUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedCourseName = WebUtility.HtmlEncode(courseName);
-        string encodedFeePayable = WebUtility.HtmlEncode(feePayableDisplay);
-        string encodedDueDate = WebUtility.HtmlEncode(dueDateDisplay);
-
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, $"You've been enrolled in {courseName}");
+        EmailTemplateBranding.AppendHeader(builder, $"You've been enrolled in {courseName}", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 18px;color:#172033;\">Hello ")
             .Append(encodedStudentName)
@@ -577,43 +535,16 @@ internal sealed class CourseEnrollmentRepository(
             .Append(encodedCourseName)
             .Append("</strong> by your school administrator.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Course", encodedCourseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
-        AppendSummaryRow(builder, "Fee Payable", encodedFeePayable, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Payment Due Date", encodedDueDate, "#f8fafc", "#334155");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Course", courseName, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Fee Payable", feePayableDisplay);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Payment Due Date", dueDateDisplay);
         builder.Append("</table>");
         builder.Append("<p style=\"font-size:15px;line-height:23px;margin:0 0 24px;color:#46566d;\">Please log in to complete your payment and secure your spot in this course.</p>");
-        EmailTemplateBranding.AppendButton(builder, PaymentDashboardUrl, "Go to Payment Dashboard");
+        EmailTemplateBranding.AppendButton(builder, paymentDashboardUrl, "Go to Payment Dashboard");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after your school administrator added you to a course.</td></tr>");
-        builder.Append("</table>");
-        builder.Append("</td></tr></table>");
-        builder.Append("</body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after your school administrator added you to a course.");
         return builder.ToString();
     }
-
-    private static void AppendSummaryRow(
-        StringBuilder builder,
-        string label,
-        string value,
-        string backgroundColor,
-        string valueColor)
-    {
-        builder.Append("<tr><td bgcolor=\"")
-            .Append(backgroundColor)
-            .Append("\" style=\"background-color:")
-            .Append(backgroundColor)
-            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
-        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
-            .Append(WebUtility.HtmlEncode(label))
-            .Append("</div>");
-        builder.Append("<div style=\"font-size:18px;line-height:26px;color:")
-            .Append(valueColor)
-            .Append(";font-weight:bold;padding-top:4px;\">")
-            .Append(value)
-            .Append("</div>");
-        builder.Append("</td></tr>");
-    }
-
     private sealed record AdminAddedEnrollmentPaymentDisplays(
         string FeePayableDisplay,
         string DueDateDisplay);

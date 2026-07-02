@@ -6,6 +6,9 @@ using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Contracts.Enrollments;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
@@ -16,7 +19,10 @@ internal sealed class AdminEnrollPersonHandler(
     IAdminAccessControl adminAccess,
     IClock clock,
     IAuditService audit,
-    IUnitOfWork unitOfWork) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
+    IUnitOfWork unitOfWork,
+    IStudentDirectory students,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         AdminEnrollPersonCommand command,
@@ -94,6 +100,7 @@ internal sealed class AdminEnrollPersonHandler(
 
         await enrollments.AddEnrollmentAsync(enrollmentResult.Value, cancellationToken);
         await RecordEnrollmentAuditAsync(course, enrollmentResult.Value, cancellationToken);
+        await NotifyEnrollmentSuccessAsync(enrollmentResult.Value.PersonId, course, cancellationToken);
         return Result<CourseEnrollmentResponse>.Success(ToPendingResponse(enrollmentResult.Value));
     }
 
@@ -118,6 +125,33 @@ internal sealed class AdminEnrollPersonHandler(
                     })),
             cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task NotifyEnrollmentSuccessAsync(
+        long personId,
+        Course course,
+        CancellationToken cancellationToken)
+    {
+        StudentSummary? student = await students.FindByPersonIdAsync(personId, cancellationToken);
+        if (student is null)
+        {
+            return;
+        }
+
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(personId, cancellationToken);
+        if (userAccountId is null)
+        {
+            return;
+        }
+
+        string schoolName = student.SchoolName ?? "your school";
+        await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.EnrollSuccess,
+                $"Enrolled: {schoolName}",
+                $"Welcome {student.DisplayName}! You are now enrolled in {course.CourseName} at {schoolName}."),
+            cancellationToken);
     }
 
     private static CourseEnrollmentResponse ToPendingResponse(CourseEnrollment enrollment)

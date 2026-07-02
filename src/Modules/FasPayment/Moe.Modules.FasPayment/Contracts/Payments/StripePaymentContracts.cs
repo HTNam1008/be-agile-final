@@ -39,7 +39,8 @@ public sealed record PaymentCheckoutStatusResponse(
     IReadOnlyCollection<long> BillIds,
     string? CheckoutUrl,
     DateTime? ExpiresAtUtc,
-    bool CanResume);
+    bool CanResume,
+    PaymentReceiptResponse? Receipt = null);
 
 public sealed record CreatePaymentRefundRequest(decimal Amount, string Reason);
 public sealed record PaymentRefundResponse(long PaymentRefundId, long PaymentId, decimal Amount, string RefundStatusCode);

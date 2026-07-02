@@ -44,11 +44,28 @@ internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : I
                 student.SchoolName);
     }
 
+    public async Task<IReadOnlyCollection<long>> FindActivePersonIdsByOrganizationAsync(
+        long organizationId,
+        CancellationToken cancellationToken)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        return await dbContext.Set<SchoolEnrollment>()
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId
+                && x.SchoolingStatusCode == "ACTIVE"
+                && x.StartDate <= today
+                && (x.EndDate == null || x.EndDate >= today))
+            .Select(x => x.PersonId)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AdminStudentSearchSummary>> ListByOrganizationAsync(
         AdminStudentSearchCriteria criteria,
         CancellationToken cancellationToken)
     {
-        DateOnly today = clock.TodayInSingapore();
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()
@@ -104,7 +121,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : I
         AdminStudentSearchCriteria criteria,
         CancellationToken cancellationToken)
     {
-        DateOnly today = clock.TodayInSingapore();
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()

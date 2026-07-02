@@ -14,7 +14,8 @@ internal sealed class RejectApplicationHandler(
     IFasApplicationRepository repository,
     ICurrentUser currentUser,
     IUnitOfWork unitOfWork,
-    FasEmailNotificationService fasEmails) : ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>
+    FasEmailNotificationService fasEmails,
+    FasInAppNotificationService fasNotifications) : ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>
 {
     public async Task<Result<RejectApplicationResponse>> Handle(RejectApplicationCommand command, CancellationToken cancellationToken)
     {
@@ -38,6 +39,7 @@ internal sealed class RejectApplicationHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await fasEmails.SendApplicationRejectedAsync(application.Id, command.RejectionReasonCode, cancellationToken);
+        await fasNotifications.SendApplicationRejectedAsync(application.Id, command.RejectionReasonCode, cancellationToken);
 
         return Result<RejectApplicationResponse>.Success(
             new RejectApplicationResponse(application.Id, application.StatusCode, decision.Decision, command.RejectionReasonCode)

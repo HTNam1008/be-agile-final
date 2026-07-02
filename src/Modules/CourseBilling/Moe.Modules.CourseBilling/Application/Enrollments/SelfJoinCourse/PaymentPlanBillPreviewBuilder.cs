@@ -105,7 +105,7 @@ internal sealed class PaymentPlanBillPreviewBuilder(
         DateTime now = clock.UtcNow.UtcDateTime;
         bool installment = plan.PlanTypeCode == "INSTALLMENT";
         DateOnly dueDate = installment
-            ? new DateOnly(now.Year, now.Month, 1).AddMonths(1)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(now)
             : DateOnly.FromDateTime(now);
 
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
