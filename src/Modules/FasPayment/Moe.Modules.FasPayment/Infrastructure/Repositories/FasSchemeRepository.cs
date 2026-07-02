@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Moe.Application.Abstractions.Clock;
 using Moe.Infrastructure.Shared.Api;
 using System.Linq.Expressions;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
@@ -12,7 +13,7 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Infrastructure.Repositories;
 
-internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSchemeRepository> logger) : IFasSchemeRepository
+internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSchemeRepository> logger, IClock clock) : IFasSchemeRepository
 {
     public Task<bool> SchemeCodeExistsAsync(string schemeCode, CancellationToken cancellationToken)
         => dbContext.Set<FasScheme>().AnyAsync(x => x.SchemeCode == schemeCode.Trim(), cancellationToken);
@@ -226,7 +227,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         query = ApplyStatusFilter(query, status, today);
         query = ApplySearchFilter(query, search);
         query = ApplyDurationFilter(query, durationFrom, durationTo);

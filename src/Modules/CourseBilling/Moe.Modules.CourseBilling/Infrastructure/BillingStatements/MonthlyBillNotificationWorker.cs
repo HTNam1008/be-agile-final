@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.StudentFinance.Persistence;
 
@@ -13,7 +15,8 @@ namespace Moe.Modules.CourseBilling.Infrastructure.BillingStatements;
 internal sealed class MonthlyBillNotificationWorker(
     IServiceScopeFactory scopeFactory,
     IClock clock,
-    ILogger<MonthlyBillNotificationWorker> logger) : BackgroundService
+    ILogger<MonthlyBillNotificationWorker> logger,
+    IOptions<CourseBillingWorkerOptions> options) : BackgroundService
 {
     private DateOnly? _lastProcessedMonthStart;
 
@@ -36,7 +39,7 @@ internal sealed class MonthlyBillNotificationWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
+                await Task.Delay(GetPollInterval(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -44,6 +47,9 @@ internal sealed class MonthlyBillNotificationWorker(
             }
         }
     }
+
+    private TimeSpan GetPollInterval()
+        => TimeSpan.FromSeconds(Math.Clamp(options.Value.MonthlyBillNotificationPollIntervalSeconds, 1, 86400));
 
     internal async Task RunIfDueAsync(CancellationToken cancellationToken)
     {

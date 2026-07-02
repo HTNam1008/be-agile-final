@@ -2,11 +2,13 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.Infrastructure;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.CourseBilling.Infrastructure.BillingStatements;
 using Moe.StudentFinance.Persistence;
@@ -114,7 +116,8 @@ public sealed class MonthlyBillNotificationWorkerTests
         return new MonthlyBillNotificationWorker(
             provider.GetRequiredService<IServiceScopeFactory>(),
             new FixedClock(utcNow),
-            NullLogger<MonthlyBillNotificationWorker>.Instance);
+            NullLogger<MonthlyBillNotificationWorker>.Instance,
+            Options.Create(new CourseBillingWorkerOptions()));
     }
 
     private static async Task SeedBillAsync(
