@@ -5,6 +5,7 @@ using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.CourseBilling;
 using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.Infrastructure.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
@@ -159,6 +160,42 @@ public sealed class CoursePaymentGatewayEmailTests
 
         enrollment.EnrollmentStatusCode.Should().Be(CourseEnrollmentStatusCodes.PaidInFull);
         mailQueue.Jobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task BuildPaymentCheckoutLineItemsAsync_Should_Not_Include_Installment_Text_In_Stripe_Display()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
+        (_, Bill bill) = await SeedEnrollmentAsync(
+            dbContext,
+            CourseEnrollmentSourceCodes.SelfJoin);
+        dbContext.Set<BillLine>().AddRange(
+            BillLine.FromCourseFee(
+                bill.Id,
+                feeComponentId: 1,
+                courseFeeId: 1,
+                "Lab / Workshop Fee installment 1 of 1",
+                feeValue: 40m).Value,
+            BillLine.FromCourseFee(
+                bill.Id,
+                feeComponentId: 2,
+                courseFeeId: 2,
+                "Tuition Fee installment 1 of 1",
+                feeValue: 80m).Value);
+        await dbContext.SaveChangesAsync();
+        CoursePaymentGateway gateway = CreateGateway(dbContext, mailQueue);
+
+        IReadOnlyCollection<PaymentCheckoutLineItem> lineItems =
+            await gateway.BuildPaymentCheckoutLineItemsAsync([bill.Id], CancellationToken.None);
+
+        lineItems.Should().HaveCount(2);
+        lineItems.Select(x => x.Name).Should().Equal(["Lab / Workshop Fee", "Tuition Fee"]);
+        lineItems.Select(x => x.Description).Should().OnlyContain(x => x == "DT101 - Design Thinking 101");
+        lineItems.Should().OnlyContain(x => !x.Name.Contains("installment", StringComparison.OrdinalIgnoreCase));
+        lineItems.Select(x => x.Description ?? string.Empty)
+            .Should()
+            .OnlyContain(x => !x.Contains("installment", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<(CourseEnrollment Enrollment, Bill Bill)> SeedEnrollmentAsync(

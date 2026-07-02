@@ -696,6 +696,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
         Assert.Equal("SUCCESSFUL", payment.PaymentStatusCode);
         Assert.Equal(40m, payment.EducationAccountAmount);
         Assert.Equal(69m, payment.OnlinePaymentAmount);
+        Assert.Equal($"https://stripe.test/receipts/ch_test_{checkoutId}", payment.ProviderReceiptUrl);
         Assert.Equal(["CAPTURED", "SUCCESSFUL"], parts.Select(x => x.PartStatusCode).ToArray());
         Assert.Equal("PAID", bill.BillStatusCode);
     }

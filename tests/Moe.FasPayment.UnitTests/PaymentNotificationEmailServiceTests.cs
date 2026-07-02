@@ -7,7 +7,9 @@ using Moe.Modules.CourseBilling.Domain.Billing;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.FasPayment.Application.Notifications;
+using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Domain.Payments;
+using Moe.Modules.FasPayment.Infrastructure.Persistence;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.SharedKernel.Results;
@@ -39,6 +41,46 @@ public sealed class PaymentNotificationEmailServiceTests
         job.PlainTextBody.Should().Contain("Amount: SGD 120.00");
         job.PlainTextBody.Should().Contain("Payment Course 101");
         job.HtmlBody.Should().Contain("Full payment received");
+    }
+
+    [Fact]
+    public async Task SendPaymentSucceededAsync_WithStripeInvoiceUrl_IncludesReceiptLink()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        RecordingEmailNotificationQueue mailQueue = new();
+        Payment payment = await AddDirectBillPaymentAsync(dbContext, billCount: 1);
+        payment.AttachProviderEvidence(
+            "https://stripe.test/invoices/in_123",
+            "https://stripe.test/invoices/in_123.pdf",
+            "https://stripe.test/receipts/ch_123",
+            Now);
+        await dbContext.SaveChangesAsync();
+        PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
+
+        await service.SendPaymentSucceededAsync(payment, Now, CancellationToken.None);
+
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.PlainTextBody.Should().Contain("View MOE Receipt: http://localhost:5173/portal/payments?receiptId=");
+        job.PlainTextBody.Should().Contain("Stripe online payment evidence: https://stripe.test/invoices/in_123");
+        job.HtmlBody.Should().Contain("View MOE Receipt");
+        job.HtmlBody.Should().Contain("View Stripe Evidence");
+        job.HtmlBody.Should().Contain("https://stripe.test/invoices/in_123");
+    }
+
+    [Fact]
+    public async Task SendPaymentSucceededAsync_UsesReceiptUrlWhenInvoiceUrlsMissing()
+    {
+        using MoeDbContext dbContext = CreateDbContext();
+        RecordingEmailNotificationQueue mailQueue = new();
+        Payment payment = await AddDirectBillPaymentAsync(dbContext, billCount: 1);
+        payment.AttachProviderEvidence(null, null, "https://stripe.test/receipts/ch_123", Now);
+        await dbContext.SaveChangesAsync();
+        PaymentNotificationEmailService service = CreateService(dbContext, mailQueue);
+
+        await service.SendPaymentSucceededAsync(payment, Now, CancellationToken.None);
+
+        EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
+        job.PlainTextBody.Should().Contain("Stripe online payment evidence: https://stripe.test/receipts/ch_123");
     }
 
     [Fact]
@@ -316,7 +358,8 @@ public sealed class PaymentNotificationEmailServiceTests
         => new(
             dbContext,
             new RecordingEmailNotificationScheduler(mailQueue, mailSwitch),
-            new FixedEmailBrandingProvider());
+            new FixedEmailBrandingProvider(),
+            new PaymentReceiptService(dbContext));
 
     private static MoeDbContext CreateDbContext()
     {
@@ -332,8 +375,9 @@ public sealed class PaymentNotificationEmailServiceTests
         public void Configure(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Person>().HasKey(x => x.Id);
-            modelBuilder.Entity<Payment>().HasKey(x => x.Id);
-            modelBuilder.Entity<PaymentAllocation>().HasKey(x => x.Id);
+            modelBuilder.ApplyConfiguration(new PaymentConfiguration());
+            modelBuilder.ApplyConfiguration(new PaymentPartConfiguration());
+            modelBuilder.ApplyConfiguration(new PaymentAllocationConfiguration());
             new CourseBillingModelConfiguration().Configure(modelBuilder);
         }
     }

@@ -103,7 +103,8 @@ public sealed class DeferBillingStatementHandlerEmailTests
         PaymentNotificationEmailService notifications = new(
             dbContext,
             new RecordingEmailNotificationScheduler(mailQueue, new FixedEmailDeliverySwitch()),
-            new FixedEmailBrandingProvider());
+            new FixedEmailBrandingProvider(),
+            new PaymentReceiptService(dbContext));
 
         return new TestContext(
             dbContext,
@@ -184,6 +185,11 @@ public sealed class DeferBillingStatementHandlerEmailTests
             DateTime paidAtUtc,
             CancellationToken cancellationToken)
             => Task.CompletedTask;
+
+        public Task<IReadOnlyCollection<PaymentCheckoutLineItem>> BuildPaymentCheckoutLineItemsAsync(
+            IReadOnlyCollection<long> billIds,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<PaymentCheckoutLineItem>>([]);
 
         public Task<Result> DeferStatementAsync(
             long statementId,
