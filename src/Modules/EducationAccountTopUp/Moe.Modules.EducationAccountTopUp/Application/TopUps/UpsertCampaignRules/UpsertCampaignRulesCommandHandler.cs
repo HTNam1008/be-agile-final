@@ -11,6 +11,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 
 internal sealed class UpsertCampaignRulesCommandHandler(
     ITopUpCampaignRepository campaigns,
+    ITopUpCampaignRuleGroupRepository ruleGroups,
     IUnitOfWork unitOfWork,
     ITransactionalExecutor transactions,
     IAdminAccessControl adminAccess,
@@ -46,7 +47,7 @@ internal sealed class UpsertCampaignRulesCommandHandler(
         TopUpCampaign campaign,
         CancellationToken cancellationToken)
     {
-        await campaigns.DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
+        await ruleGroups.DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
 
         int totalCriteria = 0;
         DateTime utcNow = DateTime.UtcNow;
@@ -69,7 +70,7 @@ internal sealed class UpsertCampaignRulesCommandHandler(
                 totalCriteria++;
             }
 
-            await campaigns.AddRuleGroupAsync(group, cancellationToken);
+            await ruleGroups.AddRuleGroupAsync(group, cancellationToken);
         }
 
         await audit.RecordSchoolActionAsync(

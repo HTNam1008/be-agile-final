@@ -2,7 +2,7 @@ using Moe.SharedKernel.Domain;
 
 namespace Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 
-public sealed class TopUpRuleGroup : Entity<long>
+internal sealed class TopUpRuleGroup : Entity<long>
 {
     private TopUpRuleGroup() : base(0) { }
 
