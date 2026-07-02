@@ -1,5 +1,4 @@
-using Microsoft.Extensions.Logging;
-using Moe.Modules.Notifications.Application;
+using Microsoft.Extensions.Options;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.StudentFinance.Persistence;
@@ -9,8 +8,7 @@ namespace Moe.Modules.Notifications.Infrastructure.Notifications;
 
 public sealed class NotificationWriter(
     MoeDbContext dbContext,
-    INotificationRealtimeNotifier realtimeNotifier,
-    ILogger<NotificationWriter> logger) : INotificationWriter
+    IOptions<NotificationRealtimeOptions> realtimeOptions) : INotificationWriter
 {
     public async Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default)
     {
@@ -28,27 +26,19 @@ public sealed class NotificationWriter(
             DateTime.UtcNow);
 
         dbContext.Set<Notification>().Add(notification);
-        await dbContext.SaveChangesAsync(cancellationToken);
 
-        try
+        if (realtimeOptions.Value.Enabled)
         {
-            await realtimeNotifier.NotifyUserAccountAsync(
+            NotificationRealtimeDelivery delivery = NotificationRealtimeDelivery.Create(
+                notification,
                 request.RecipientUserAccountId,
-                new NotificationRealtimeMessage(
-                    notification.Id,
-                    notification.NotificationTypeCode,
-                    notification.Title,
-                    notification.Body),
-                cancellationToken);
+                notification.CreatedAtUtc,
+                realtimeOptions.Value.Worker.MaxAttempts);
+
+            dbContext.Set<NotificationRealtimeDelivery>().Add(delivery);
         }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(
-                exception,
-                "Realtime notification delivery failed. NotificationId={NotificationId}, RecipientUserAccountId={RecipientUserAccountId}",
-                notification.Id,
-                request.RecipientUserAccountId);
-        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<long>.Success(notification.Id);
     }

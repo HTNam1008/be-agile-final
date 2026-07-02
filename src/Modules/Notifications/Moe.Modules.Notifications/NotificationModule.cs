@@ -20,6 +20,11 @@ public sealed class NotificationModule : IModule
 
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
+        services.AddOptions<NotificationRealtimeOptions>()
+            .BindConfiguration(NotificationRealtimeOptions.SectionName)
+            .Validate(NotificationRealtimeOptions.IsValid, "Notifications realtime configuration is invalid.")
+            .ValidateOnStart();
+
         services.AddSingleton<IModelConfigurationContributor, NotificationModelConfiguration>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<INotificationRealtimeNotifier, SignalRNotificationRealtimeNotifier>();
@@ -27,6 +32,11 @@ public sealed class NotificationModule : IModule
         services.AddScoped<IQueryHandler<GetMyNotificationsQuery, Moe.Infrastructure.Shared.Api.PageResponse<MyNotificationItem>>, GetMyNotificationsHandler>();
         services.AddScoped<IQueryHandler<GetUnreadNotificationCountQuery, long>, GetUnreadNotificationCountHandler>();
         services.AddScoped<ICommandHandler<MarkNotificationAsReadCommand>, MarkNotificationAsReadHandler>();
+
+        if (IsBackgroundJobEnabled(configuration, "Notifications:RealtimeWorker"))
+        {
+            services.AddHostedService<QueuedNotificationRealtimeDeliveryWorker>();
+        }
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -34,4 +44,8 @@ public sealed class NotificationModule : IModule
         endpoints.MapHub<NotificationHub>("/hubs/notifications")
             .RequireCors("PortalCors");
     }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }
