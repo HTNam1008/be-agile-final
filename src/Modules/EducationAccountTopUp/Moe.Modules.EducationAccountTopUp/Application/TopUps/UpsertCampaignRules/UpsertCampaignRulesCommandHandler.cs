@@ -12,6 +12,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 internal sealed class UpsertCampaignRulesCommandHandler(
     ITopUpCampaignRepository campaigns,
     IUnitOfWork unitOfWork,
+    ITransactionalExecutor transactions,
     IAdminAccessControl adminAccess,
     IAuditService audit) : ICommandHandler<UpsertCampaignRulesCommand>
 {
@@ -35,8 +36,16 @@ internal sealed class UpsertCampaignRulesCommandHandler(
             return Result.Failure(TopUpErrors.InvalidCampaignStatus);
         }
 
-        await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
+        return await transactions.ExecuteAsync(
+            ct => ReplaceRulesAsync(command, campaign, ct),
+            cancellationToken);
+    }
 
+    private async Task<Result> ReplaceRulesAsync(
+        UpsertCampaignRulesCommand command,
+        TopUpCampaign campaign,
+        CancellationToken cancellationToken)
+    {
         await campaigns.DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
 
         int totalCriteria = 0;
@@ -77,7 +86,6 @@ internal sealed class UpsertCampaignRulesCommandHandler(
             cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success();
     }
