@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Moe.Application.Abstractions.Clock;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -147,6 +148,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         await SendFas("4", cid);
+        await SendFas("0", cid);
         // "12345" contains standalone digits that the number regex matches
         JsonElement response = await SendFas("12345", cid);
         Assert.Equal("CLARIFYING", GetInterviewStatus(response));
@@ -160,6 +162,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         await SendFas("4", cid);
+        await SendFas("0", cid);
         JsonElement response = await SendFas("A", cid);
         Assert.Equal("CLARIFYING", GetInterviewStatus(response));
     }
@@ -170,6 +173,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         await SendFas("4", cid);
+        await SendFas("0", cid);
         string longText = new string('x', 121);
         JsonElement response = await SendFas(longText, cid);
         Assert.Equal("CLARIFYING", GetInterviewStatus(response));
@@ -211,6 +215,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         await SendFas("4", cid);
+        await SendFas("0", cid);
         JsonElement response = await SendFas(answer, cid);
         JsonElement field = GetField(response, "parentNationalities");
         Assert.True(field.GetProperty("confirmed").GetBoolean());
@@ -305,6 +310,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         await SendFas("4", cid);
+        await SendFas("0", cid);
 
         JsonElement response = await SendFas("idk, what are the options?", cid);
 
@@ -323,6 +329,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         await SendFas("No", cid);
         await SendFas("3000", cid);
         await SendFas("4", cid);
+        await SendFas("0", cid);
         JsonElement completed = await SendFas("Singaporean", cid);
 
         JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
@@ -330,6 +337,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Assert.Equal("AI_CONFIRMED", meta.GetProperty("isWelfareHomeResident").GetProperty("provenance").GetString());
         Assert.Equal("AI_CONFIRMED", meta.GetProperty("monthlyHouseholdIncome").GetProperty("provenance").GetString());
         Assert.Equal("AI_CONFIRMED", meta.GetProperty("householdMemberCount").GetProperty("provenance").GetString());
+        Assert.Equal("AI_CONFIRMED", meta.GetProperty("otherMonthlyIncome").GetProperty("provenance").GetString());
         Assert.Equal("AI_CONFIRMED", meta.GetProperty("parentNationalities").GetProperty("provenance").GetString());
         Assert.Equal("HIGH", meta.GetProperty("isWelfareHomeResident").GetProperty("confidence").GetString());
         Assert.NotNull(meta.GetProperty("monthlyHouseholdIncome").GetProperty("explanation").GetString());
@@ -428,6 +436,72 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task FieldKey_can_focus_other_monthly_income()
+    {
+        Guid cid = await StartNoWelfare();
+        JsonElement response = await SendFas("none", cid, new { fieldKey = "otherMonthlyIncome" });
+        JsonElement otherIncome = GetField(response, "otherMonthlyIncome");
+        Assert.True(otherIncome.GetProperty("confirmed").GetBoolean());
+        Assert.Equal(0m, otherIncome.GetProperty("value").GetDecimal());
+    }
+
+    [Fact]
+    public async Task FieldKey_can_focus_email()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("student@example.com", cid, new { fieldKey = "email" });
+        JsonElement email = GetField(response, "email");
+        Assert.True(email.GetProperty("confirmed").GetBoolean());
+        Assert.Equal("student@example.com", email.GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public async Task FieldKey_question_persists_as_next_answer_target()
+    {
+        Guid cid = await StartInterview();
+        JsonElement prompt = await SendFas("Help me fill parent's nationality for my FAS application.", cid, new { fieldKey = "parentNationalities" });
+        Assert.Contains("Singapore Citizen", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement response = await SendFas("Singaporean", cid);
+        JsonElement nationality = GetField(response, "parentNationalities");
+        JsonElement welfareHome = GetField(response, "isWelfareHomeResident");
+        Assert.True(nationality.GetProperty("confirmed").GetBoolean());
+        Assert.Equal("Singapore Citizen", nationality.GetProperty("value")[0].GetString());
+        Assert.False(welfareHome.GetProperty("confirmed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task First_turn_fieldKey_help_asks_for_requested_field()
+    {
+        JsonElement prompt = await SendFas("Help me choose the parent or guardian nationality for the particulars section of my FAS application.", null, new { fieldKey = "parentNationalities" });
+
+        Assert.Equal("COLLECTING", GetInterviewStatus(prompt));
+        Assert.Contains("parent or guardian", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("welfare home? Please answer yes or no", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Scheme_guidance_does_not_count_as_bad_answer_to_pending_field()
+    {
+        Guid cid = await StartInterview();
+        JsonElement response = await SendFas("Which FAS schemes can I apply for?", cid);
+
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        Assert.DoesNotContain("couldn't safely prefill", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("welfare home", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FieldKey_can_focus_employment_status()
+    {
+        Guid cid = await StartNoWelfare();
+        JsonElement response = await SendFas("self employed", cid, new { fieldKey = "employmentStatusCode" });
+        JsonElement employment = GetField(response, "employmentStatusCode");
+        Assert.True(employment.GetProperty("confirmed").GetBoolean());
+        Assert.Equal("SELF_EMPLOYED", employment.GetProperty("value").GetString());
+    }
+
+    [Fact]
     public async Task FieldKey_does_not_bypass_prerequisite_welfare_home()
     {
         Guid cid = await StartInterview();
@@ -465,13 +539,14 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
             grantCode = $"AI-FAS-GRANT-{suffix}",
             name = $"AI FAS {suffix}",
             description = "AI copilot integration scheme",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
-                new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 1 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 1 },
+                new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 2 }
             },
             tiers = new object[]
             {
@@ -482,7 +557,8 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null }
+                        new { displayOrder = 1, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null }
                     }
                 }
             }

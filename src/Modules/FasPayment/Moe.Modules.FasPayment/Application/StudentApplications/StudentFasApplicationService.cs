@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Moe.Application.Abstractions.Audit;
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
@@ -27,6 +28,7 @@ public sealed class StudentFasApplicationService(
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
          currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"));
     private long Actor() => currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED");
+    private static DateOnly Today() => SingaporeBusinessDay.FromUtc(DateTime.UtcNow);
 
     private async Task<ProfileRow> Profile(CancellationToken ct)
     {
@@ -35,8 +37,8 @@ public sealed class StudentFasApplicationService(
             ?? throw new KeyNotFoundException("FAS.PROFILE_REQUIRED");
         var enrollment = await db.Set<SchoolEnrollment>().AsNoTracking()
             .Where(x => x.PersonId == personId && x.SchoolingStatusCode == "ACTIVE" &&
-                        x.StartDate <= DateOnly.FromDateTime(DateTime.UtcNow) &&
-                        (x.EndDate == null || x.EndDate >= DateOnly.FromDateTime(DateTime.UtcNow)))
+                        x.StartDate <= Today() &&
+                        (x.EndDate == null || x.EndDate >= Today()))
             .OrderByDescending(x => x.StartDate).FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("FAS.CURRENT_SCHOOL_REQUIRED");
         string? schoolName = (await organizations.FindActiveSchoolByIdAsync(enrollment.OrganizationId, ct))?.UnitName
@@ -68,13 +70,58 @@ public sealed class StudentFasApplicationService(
         };
     }
 
+    public async Task<EligibilityCriteriaPlan> EligibilityCriteriaPlan(CancellationToken ct)
+    {
+        var p = await Profile(ct);
+        var accountType = await ResolveAccountType(p.PersonId, ct);
+        var today = Today();
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var openSchemes = await db.Set<FasScheme>()
+            .AsNoTracking()
+            .Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id))
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(ct);
+
+        long[] schemeIds = openSchemes.Select(x => x.Id).ToArray();
+        string[] requiredCriteriaTypes = schemeIds.Length == 0
+            ? []
+            : await (
+                from tier in db.Set<FasTier>().AsNoTracking()
+                join criteria in db.Set<FasTierCriteria>().AsNoTracking()
+                    on tier.Id equals criteria.FasTierId
+                where schemeIds.Contains(tier.FasSchemeId)
+                select criteria.CriteriaType)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToArrayAsync(ct);
+
+        List<string> profileFacts = [$"school: {p.SchoolName}", $"student nationality: {p.NationalityCode}", $"account type: {accountType}", "date of birth"];
+        if (!string.IsNullOrWhiteSpace(p.Email)) profileFacts.Add("email");
+
+        List<string> userRequiredFacts = ["welfare home status"];
+        if (requiredCriteriaTypes.Any(IsIncomeCriterion))
+        {
+            userRequiredFacts.Add("monthly household income");
+            userRequiredFacts.Add("household member count");
+            userRequiredFacts.Add("other monthly income");
+        }
+        userRequiredFacts.Add("parent or guardian nationality");
+
+        return new EligibilityCriteriaPlan(
+            openSchemes.Select(x => new EligibilitySchemeOption(x.Id, x.Name)).OrderBy(x => x.Name).ToArray(),
+            openSchemes.Select(x => x.Name).OrderBy(x => x).ToArray(),
+            requiredCriteriaTypes,
+            profileFacts,
+            userRequiredFacts.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
     public async Task<object> ListSchemes(int page, int pageSize, string? search, CancellationToken ct)
     {
         if (page < 1 || pageSize is < 1 or > 100) throw new ArgumentException("FAS.INVALID_PAGING");
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         if (search?.Length > 255) throw new ArgumentException("FAS.SEARCH_TOO_LONG");
 
-        var p = await Profile(ct); var today = DateOnly.FromDateTime(DateTime.UtcNow); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var p = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
         IQueryable<FasScheme> query = db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id));
         if (search is not null) query = query.Where(x => x.Name.Contains(search) || (x.Description != null && x.Description.Contains(search)));
         long totalCount = await query.LongCountAsync(ct);
@@ -96,7 +143,7 @@ public sealed class StudentFasApplicationService(
 
     public async Task<object> SchemeDetail(long id, CancellationToken ct)
     {
-        var profile = await Profile(ct); var today = DateOnly.FromDateTime(DateTime.UtcNow); var applicable = await ApplicableSchemeIds(profile.SchoolOrganizationId, ct);
+        var profile = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(profile.SchoolOrganizationId, ct);
         var scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.StatusCode == "ACTIVE", ct)
             ?? throw new KeyNotFoundException("FAS.SCHEME_NOT_FOUND");
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == id).OrderBy(x => x.DisplayOrder)
@@ -551,7 +598,7 @@ public sealed class StudentFasApplicationService(
                 ?? throw new ArgumentException("FAS.INVALID_TIER");
             var scheme = await db.Set<FasScheme>().AsNoTracking().SingleAsync(x => x.Id == item.FasSchemeId, ct);
 
-            DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+            DateOnly today = Today();
             if (scheme.StatusCode != "ACTIVE" || scheme.EndDate < today) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
 
             DateTime now = DateTime.UtcNow;
@@ -906,7 +953,7 @@ public sealed class StudentFasApplicationService(
         if (courseId <= 0) throw new ArgumentException("FAS.COURSE_REQUIRED");
         var (person, _) = Identity();
         var profile = await Profile(ct);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = Today();
         var courseExists = await db.Set<Course>()
             .AsNoTracking()
             .AnyAsync(x => x.Id == courseId && x.OrganizationId == profile.SchoolOrganizationId, ct);
@@ -1061,7 +1108,7 @@ public sealed class StudentFasApplicationService(
 
     private async Task<List<long>> OpenApplicableSchemeIds(long schoolId, IReadOnlyCollection<long> schemeIds, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = Today();
         var applicable = await ApplicableSchemeIds(schoolId, ct);
         return await db.Set<FasScheme>()
             .AsNoTracking()
@@ -1093,6 +1140,7 @@ public sealed class StudentFasApplicationService(
     }
 
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";
+    private static bool IsIncomeCriterion(string criteriaType) => criteriaType is "GDP" or "GHI" or "PCI";
     private static string SchemeAvailabilityStatus(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? "AVAILABLE" : "NOT_AVAILABLE";
     private static string? SchemeAvailabilityMessage(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? null : "This FAS scheme is no longer available.";
     private static string StudentVisibleStatus(string itemStatus, string schemeStatus)
@@ -1264,7 +1312,7 @@ public sealed class StudentFasApplicationService(
             .ToArray();
         if (criteria.Length == 0) return true;
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = Today();
         int? age = app.DateOfBirth.HasValue ? today.Year - app.DateOfBirth.Value.Year : null;
         if (age.HasValue && app.DateOfBirth!.Value.AddYears(age.Value) > today) age--;
 
