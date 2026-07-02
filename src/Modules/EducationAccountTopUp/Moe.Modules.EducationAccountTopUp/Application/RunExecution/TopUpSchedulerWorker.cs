@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
@@ -13,7 +14,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 public sealed class TopUpSchedulerWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<TopUpSchedulerWorker> logger,
-    IClock clock) : BackgroundService
+    IClock clock,
+    IOptions<TopUpWorkerOptions> options) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -32,9 +34,12 @@ public sealed class TopUpSchedulerWorker(
                     "Unhandled error while polling for scheduled top-up runs.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            await Task.Delay(GetPollInterval(), stoppingToken);
         }
     }
+
+    private TimeSpan GetPollInterval()
+        => TimeSpan.FromSeconds(Math.Clamp(options.Value.SchedulerPollIntervalSeconds, 1, 86400));
 
     private async Task PollAndScheduleRunsAsync(CancellationToken cancellationToken)
     {

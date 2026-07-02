@@ -8,7 +8,6 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.Domain.TopUps;
 using Moe.Modules.EducationAccountTopUp.IGateway;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Templates;
 using Moe.SharedKernel.Results;
@@ -24,14 +23,12 @@ internal sealed class AccountCreditGateway(
     MoeDbContext dbContext,
     IClock clock,
     ITopUpExecutionMetrics metrics,
-    IEmailRecipientResolver recipientResolver,
-    IEmailDeliveryGateway mailGateway,
-    IEmailDeliverySwitch mailSwitch,
+    IEmailNotificationScheduler mailScheduler,
+    IEmailBrandingProvider branding,
     ILogger<AccountCreditGateway> logger) : IAccountCreditGateway
 {
     private const string CreditTransactionTypeCode = "CREDIT";
     private const string TopUpReferenceTypeCode = "TOPUP";
-    private const string AccountDashboardUrl = "http://localhost:5173/portal/accounts";
 
     public async Task<Result<CreditAccountResult>> CreditAccountForTopUpAsync(
         long educationAccountId,
@@ -164,32 +161,6 @@ internal sealed class AccountCreditGateway(
         DateTime creditedAtUtc,
         CancellationToken cancellationToken)
     {
-        if (!mailSwitch.IsEnabled)
-        {
-            logger.LogInformation(
-                "Top-up email skipped because MailDelivery is disabled. PersonId={PersonId} EducationAccountId={EducationAccountId}",
-                account.PersonId,
-                account.Id);
-            return;
-        }
-
-        EmailRecipient? recipient;
-        try
-        {
-            recipient = await recipientResolver.ResolveForPersonAsync(account.PersonId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Top-up email recipient resolution failed. PersonId={PersonId} EducationAccountId={EducationAccountId}", account.PersonId, account.Id);
-            return;
-        }
-
-        if (recipient is null)
-        {
-            logger.LogWarning("Top-up email skipped because no valid recipient was found. PersonId={PersonId} EducationAccountId={EducationAccountId}", account.PersonId, account.Id);
-            return;
-        }
-
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == account.PersonId, cancellationToken);
@@ -197,16 +168,16 @@ internal sealed class AccountCreditGateway(
         string studentName = string.IsNullOrWhiteSpace(person?.OfficialFullName)
             ? "Student"
             : person.OfficialFullName.Trim();
-        string amountDisplay = FormatMoney(amount);
-        string updatedBalanceDisplay = FormatMoney(updatedBalance);
+        string amountDisplay = EmailTemplateBranding.FormatMoney(amount);
+        string updatedBalanceDisplay = EmailTemplateBranding.FormatMoney(updatedBalance);
         string campaignDisplay = string.IsNullOrWhiteSpace(campaignReason)
             ? "Government top-up"
             : campaignReason.Trim();
-        string creditedDateDisplay = creditedAtUtc.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture);
+        string creditedDateDisplay = EmailTemplateBranding.FormatDate(creditedAtUtc);
 
         const string subject = "Funds Credited to Your Education Account";
         string plainTextBody = string.Join(Environment.NewLine, [
-            "MOE SEEDS",
+            branding.AppName,
             "Education Account top-up",
             string.Empty,
             $"Hello {studentName},",
@@ -218,7 +189,7 @@ internal sealed class AccountCreditGateway(
             string.Empty,
             $"Updated Balance: {updatedBalanceDisplay}",
             string.Empty,
-            $"View My Account -> {AccountDashboardUrl}"
+            $"View My Account -> {branding.AccountPortalUrl}"
         ]);
 
         string htmlBody = BuildTopUpCreditedHtmlBody(
@@ -226,31 +197,19 @@ internal sealed class AccountCreditGateway(
             amountDisplay,
             campaignDisplay,
             creditedDateDisplay,
-            updatedBalanceDisplay);
+            updatedBalanceDisplay,
+            branding.AppName,
+            branding.AccountPortalUrl);
 
-        try
-        {
-            Result result = await mailGateway.SendAsync(
-                new EmailDeliveryMessage(recipient.EmailAddress, subject, plainTextBody, htmlBody),
-                cancellationToken);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "Top-up credited email notification failed. EducationAccountId={EducationAccountId} AccountTransactionDate={CreditedAtUtc} ErrorCode={ErrorCode}",
-                    account.Id,
-                    creditedAtUtc,
-                    result.Error.Code);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                ex,
-                "Top-up credited email notification threw an exception. EducationAccountId={EducationAccountId} AccountTransactionDate={CreditedAtUtc}",
-                account.Id,
-                creditedAtUtc);
-        }
+        await mailScheduler.EnqueueForPersonAsync(
+            "NOTI-02",
+            account.PersonId,
+            subject,
+            plainTextBody,
+            htmlBody,
+            "EducationAccount",
+            account.Id.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
     }
 
     private static string BuildTopUpCreditedHtmlBody(
@@ -258,17 +217,16 @@ internal sealed class AccountCreditGateway(
         string amountDisplay,
         string campaignDisplay,
         string creditedDateDisplay,
-        string updatedBalanceDisplay)
+        string updatedBalanceDisplay,
+        string appName,
+        string accountPortalUrl)
     {
         string encodedStudentName = WebUtility.HtmlEncode(studentName);
         string encodedAmount = WebUtility.HtmlEncode(amountDisplay);
-        string encodedCampaign = WebUtility.HtmlEncode(campaignDisplay);
-        string encodedCreditedDate = WebUtility.HtmlEncode(creditedDateDisplay);
-        string encodedUpdatedBalance = WebUtility.HtmlEncode(updatedBalanceDisplay);
 
         StringBuilder builder = new();
         EmailTemplateBranding.AppendShellStart(builder);
-        EmailTemplateBranding.AppendHeader(builder, "Funds credited to your Education Account");
+        EmailTemplateBranding.AppendHeader(builder, "Funds credited to your Education Account", appName);
         builder.Append("<tr><td style=\"padding:30px;\">");
         builder.Append("<p style=\"font-size:16px;line-height:24px;margin:0 0 16px;color:#172033;\">Hello ")
             .Append(encodedStudentName)
@@ -277,42 +235,14 @@ internal sealed class AccountCreditGateway(
             .Append(encodedAmount)
             .Append("</strong> has been credited to your Education Account.</p>");
         builder.Append("<table role=\"presentation\" width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;margin:0 0 24px;\">");
-        AppendSummaryRow(builder, "Amount Credited", encodedAmount, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
-        AppendSummaryRow(builder, "Updated Balance", encodedUpdatedBalance, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Reason/Campaign", encodedCampaign, "#f8fafc", "#334155");
-        AppendSummaryRow(builder, "Date Credited", encodedCreditedDate, "#fff7ed", "#9a3412");
+        EmailTemplateBranding.AppendSummaryRow(builder, "Amount Credited", amountDisplay, EmailTemplateBranding.PrimarySoftColor, EmailTemplateBranding.PrimaryTextColor);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Updated Balance", updatedBalanceDisplay);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Reason/Campaign", campaignDisplay);
+        EmailTemplateBranding.AppendSummaryRow(builder, "Date Credited", creditedDateDisplay, "#fff7ed", "#9a3412");
         builder.Append("</table>");
-        EmailTemplateBranding.AppendButton(builder, AccountDashboardUrl, "View My Account");
+        EmailTemplateBranding.AppendButton(builder, accountPortalUrl, "View My Account");
         builder.Append("</td></tr>");
-        builder.Append("<tr><td bgcolor=\"#f8fafc\" style=\"background-color:#f8fafc;padding:18px 30px;color:#64748b;font-size:12px;line-height:18px;\">This message was sent by MOE SEEDS after a completed Education Account top-up.</td></tr>");
-        builder.Append("</table>");
-        builder.Append("</td></tr></table>");
-        builder.Append("</body></html>");
+        EmailTemplateBranding.AppendFooter(builder, $"This message was sent by {appName} after a completed Education Account top-up.");
         return builder.ToString();
     }
-
-    private static void AppendSummaryRow(
-        StringBuilder builder,
-        string label,
-        string value,
-        string backgroundColor,
-        string valueColor)
-    {
-        builder.Append("<tr><td bgcolor=\"")
-            .Append(backgroundColor)
-            .Append("\" style=\"background-color:")
-            .Append(backgroundColor)
-            .Append(";padding:14px 16px;border-bottom:8px solid #ffffff;\">");
-        builder.Append("<div style=\"font-size:12px;line-height:18px;color:#64748b;text-transform:uppercase;font-weight:bold;letter-spacing:1px;\">")
-            .Append(WebUtility.HtmlEncode(label))
-            .Append("</div>");
-        builder.Append("<div style=\"font-size:22px;line-height:28px;color:")
-            .Append(valueColor)
-            .Append(";font-weight:bold;padding-top:4px;\">")
-            .Append(value)
-            .Append("</div>");
-        builder.Append("</td></tr>");
-    }
-
-    private static string FormatMoney(decimal amount) => $"SGD {amount:N2}";
 }

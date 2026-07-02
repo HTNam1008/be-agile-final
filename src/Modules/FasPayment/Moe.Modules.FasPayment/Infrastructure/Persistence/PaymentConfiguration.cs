@@ -29,6 +29,9 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(x => x.ProviderPaymentIntentId).HasMaxLength(100);
         builder.Property(x => x.ProviderInvoiceId).HasMaxLength(100);
         builder.Property(x => x.ProviderChargeId).HasMaxLength(100);
+        builder.Property(x => x.ProviderHostedInvoiceUrl).HasMaxLength(1000);
+        builder.Property(x => x.ProviderInvoicePdfUrl).HasMaxLength(1000);
+        builder.Property(x => x.ProviderReceiptUrl).HasMaxLength(1000);
         builder.Property(x => x.EducationAccountAmount).HasPrecision(19, 2);
         builder.Property(x => x.OnlinePaymentAmount).HasPrecision(19, 2);
         builder.Property(x => x.PaymentModeCode).HasMaxLength(50).IsUnicode(false);

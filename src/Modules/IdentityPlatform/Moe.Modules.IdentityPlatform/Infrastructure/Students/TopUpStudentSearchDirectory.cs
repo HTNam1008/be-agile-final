@@ -158,7 +158,7 @@ internal sealed class TopUpStudentSearchDirectory(MoeDbContext dbContext, IClock
             query = query.Where(x => x.Enrollment.ClassCode == classCode);
         }
 
-        DateOnly today = clock.TodayInSingapore();
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
 
         if (criteria.AgeFrom.HasValue)
         {
