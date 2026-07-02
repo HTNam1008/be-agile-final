@@ -359,7 +359,7 @@ public sealed class AiOrchestratorService(
     {
         bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE");
         bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW|QUESTION)\b", RegexOptions.IgnoreCase);
-        bool eligibilityWithoutFas = value.Contains("ELIGIB") || value.Contains("QUALIF");
+        bool eligibilityWithoutFas = (value.Contains("ELIGIB") || value.Contains("QUALIF")) && mentionsFas;
         return eligibilityWithoutFas || (mentionsFas && asksForInterview);
     }
 
