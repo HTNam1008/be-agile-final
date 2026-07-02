@@ -6766,7 +6766,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Moe.Modules.IdentityPlatform.Domain.Notifications.Notification", b =>
+            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.Notification", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -6775,19 +6775,21 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("ChannelCode")
+                    b.Property<string>("Body")
                         .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2")
                         .HasColumnName("CreatedAt");
 
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ReadAt");
+
+                    b.Property<long>("RecipientUserAccountId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("NotificationStatusCode")
                         .IsRequired()
@@ -6801,36 +6803,16 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<long?>("RecipientLoginAccountId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("RecipientPersonId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("ReferenceId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("ReferenceTypeCode")
+                    b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<DateTime?>("SentAtUtc")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("SentAt");
-
-                    b.Property<string>("TemplateCode")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(100)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RecipientLoginAccountId");
+                    b.HasIndex("RecipientUserAccountId", "CreatedAtUtc");
 
-                    b.HasIndex("RecipientPersonId");
+                    b.HasIndex("RecipientUserAccountId", "ReadAtUtc");
 
                     b.ToTable("Notification", "communication");
                 });

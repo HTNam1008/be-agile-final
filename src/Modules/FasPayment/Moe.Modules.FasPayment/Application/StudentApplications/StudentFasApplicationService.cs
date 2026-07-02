@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
@@ -11,6 +12,10 @@ using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Application.StudentApplications;
@@ -22,7 +27,11 @@ public sealed class StudentFasApplicationService(
     IFasDocumentScanner scanner,
     IOrganizationUnitRepository organizations,
     IAuditService audit,
-    FasEmailNotificationService fasEmails)
+    FasEmailNotificationService fasEmails,
+    IStudentNotificationRecipientResolver studentNotificationRecipients,
+    ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
+    INotificationWriter notificationWriter,
+    ILogger<StudentFasApplicationService> logger)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
@@ -619,6 +628,7 @@ public sealed class StudentFasApplicationService(
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             await fasEmails.SendSchemeApprovedAsync(item.Id, ct);
+            await NotifyStudentForApprovedSchemeAsync(item.FasApplicationId, tier.Label, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, selectedTierId = tier.Id, item.ApprovedAmount, item.ValidFrom, item.ValidTo };
         });
@@ -650,6 +660,7 @@ public sealed class StudentFasApplicationService(
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             await fasEmails.SendSchemeRejectedAsync(item.Id, r.Notes, ct);
+            await NotifyStudentForRejectedSchemeAsync(item.FasApplicationId, r.Notes, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, item.RejectionNotes };
         });
@@ -717,7 +728,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-            await fasEmails.SendSubmissionAcknowledgementAsync(app.Id, ct);
+            await NotifySubmissionAsync(app.Id, ct);
             return await ApplicationReview(id, ct);
         });
     }
@@ -1401,6 +1412,97 @@ public sealed class StudentFasApplicationService(
         catch (JsonException)
         {
             return null;
+        }
+    }
+    private async Task NotifySubmissionAsync(long applicationId, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        if (app.SchoolOrganizationId is null) return;
+
+        IReadOnlyCollection<long> userAccountIds = await schoolAdminRecipients.FindUserAccountIdsByOrganizationIdAsync(
+            app.SchoolOrganizationId.Value,
+            ct);
+        if (userAccountIds.Count == 0) return;
+
+        foreach (long userAccountId in userAccountIds.Distinct())
+        {
+            Result<long> result = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId,
+                    NotificationTypeCode.FasSubmitted,
+                    $"FAS Application Submitted: {app.ApplicationNo}",
+                    $"New FAS application {app.ApplicationNo} for {app.SchoolName} was submitted."),
+                ct);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "FAS submit notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                    applicationId,
+                    userAccountId,
+                    result.Error.Code);
+            }
+        }
+    }
+
+    private async Task NotifyStudentForApprovedSchemeAsync(long applicationId, string tierName, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        FasScheme? scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == app.FasSchemeId, ct);
+        string schemeName = scheme?.Name ?? "FAS Scheme";
+
+        long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
+        if (userAccountId is null) return;
+
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.FasEligible,
+                $"FAS Application Approved: {app.ApplicationNo}",
+                $"Your FAS application {app.ApplicationNo} for {schemeName} was approved. You qualify for {tierName}."),
+            ct);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "FAS approve notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                applicationId,
+                userAccountId,
+                result.Error.Code);
+        }
+    }
+
+    private async Task NotifyStudentForRejectedSchemeAsync(long applicationId, string rejectionNotes, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        FasScheme? scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == app.FasSchemeId, ct);
+        string schemeName = scheme?.Name ?? "FAS Scheme";
+
+        long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
+        if (userAccountId is null) return;
+
+        string reason = string.IsNullOrWhiteSpace(rejectionNotes) ? "No rejection reason was provided." : rejectionNotes.Trim();
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.FasRejected,
+                $"FAS Application Rejected: {app.ApplicationNo}",
+                $"Your FAS application {app.ApplicationNo} for {schemeName} was rejected. Reason: {reason}."),
+            ct);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "FAS reject notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                applicationId,
+                userAccountId,
+                result.Error.Code);
         }
     }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);

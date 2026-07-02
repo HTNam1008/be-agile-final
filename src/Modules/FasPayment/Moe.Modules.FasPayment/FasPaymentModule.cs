@@ -61,6 +61,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
         services.AddScoped<StudentFasApplicationService>();
         services.AddScoped<FasEmailNotificationService>();
+        services.AddScoped<FasInAppNotificationService>();
         services.AddScoped<PaymentFailedEmailService>();
         services.AddScoped<FasApiExceptionFilter>();
         services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"]) && string.IsNullOrWhiteSpace(configuration["AzureBlob:ConnectionString"])

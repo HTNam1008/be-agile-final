@@ -10,7 +10,6 @@ public sealed class IdentityPlatformModelConfiguration : IModelConfigurationCont
     {
         modelBuilder.ApplyConfiguration(new AuditLogConfiguration());
         modelBuilder.ApplyConfiguration(new IdentityProvisioningRequestConfiguration());
-        modelBuilder.ApplyConfiguration(new NotificationConfiguration());
         modelBuilder.ApplyConfiguration(new OrganizationUnitConfiguration());
         modelBuilder.ApplyConfiguration(new PermissionConfiguration());
         modelBuilder.ApplyConfiguration(new PersonConfiguration());
