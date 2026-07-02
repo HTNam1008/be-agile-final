@@ -8,6 +8,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.FasPayment.Application.EnrollmentCancellations;
 
@@ -33,7 +34,8 @@ internal sealed class CancelEnrollmentHandler(
     ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
     INotificationWriter notificationWriter,
     IClock clock,
-    CourseWithdrawalEmailService withdrawalEmails)
+    CourseWithdrawalEmailService withdrawalEmails,
+    ILogger<CancelEnrollmentHandler> logger)
     : ICommandHandler<CancelEnrollmentCommand, EnrollmentCancellationResponse>
 {
     public async Task<Result<EnrollmentCancellationResponse>> Handle(
@@ -133,12 +135,14 @@ internal sealed class CancelEnrollmentHandler(
 
         foreach (long userAccountId in userAccountIds.Distinct())
         {
-            await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.CourseExit,
                     "Course Exit",
                     $"Result: STUDENT_CANCELLED. {studentName} cancelled enrollment in {courseName}."),
+                logger,
+                "FAS enrollment cancellation school admin notification",
                 cancellationToken);
         }
     }

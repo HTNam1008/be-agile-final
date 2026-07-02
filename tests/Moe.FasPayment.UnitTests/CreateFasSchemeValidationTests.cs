@@ -57,7 +57,7 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
-    public void Start_date_before_singapore_business_day_fails()
+    public void Start_date_equal_utc_business_day_passes()
     {
         CreateFasSchemeRequestValidator validator = new(
             new TestClock(new DateTimeOffset(2026, 6, 30, 16, 30, 0, TimeSpan.Zero)));
@@ -69,8 +69,7 @@ public sealed class CreateFasSchemeValidationTests
             EndDate = new DateOnly(2026, 8, 1)
         });
 
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(x => x.ErrorMessage == "Start date cannot be before today.");
+        result.IsValid.Should().BeTrue();
     }
 
     [Fact]

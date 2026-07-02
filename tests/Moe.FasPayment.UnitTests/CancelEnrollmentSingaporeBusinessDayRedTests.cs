@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
@@ -33,7 +34,8 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
             new FakeSchoolAdminNotificationRecipientResolver(),
             new FakeNotificationWriter(),
             new TestClock(SgtEarlyMorning),
-            CreateEmailService());
+            CreateEmailService(),
+            NullLogger<CancelEnrollmentHandler>.Instance);
 
         Result<EnrollmentCancellationResponse> result = await handler.Handle(
             new CancelEnrollmentCommand(500, new CancelEnrollmentRequest("sgt-red")),
