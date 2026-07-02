@@ -9,6 +9,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.CourseBilling.Application.AdminCourses.Enrollments;
 
@@ -39,7 +40,8 @@ internal sealed class RemoveAdminCourseEnrollmentCommandHandler(
     IUnitOfWork unitOfWork,
     IStudentDirectory students,
     ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
-    INotificationWriter notificationWriter)
+    INotificationWriter notificationWriter,
+    ILogger<RemoveAdminCourseEnrollmentCommandHandler> logger)
     : ICommandHandler<RemoveAdminCourseEnrollmentCommand, AdminCourseEnrollmentDto>
 {
     public async Task<Result<AdminCourseEnrollmentDto>> Handle(
@@ -129,12 +131,14 @@ internal sealed class RemoveAdminCourseEnrollmentCommandHandler(
 
         foreach (long userAccountId in userAccountIds.Distinct())
         {
-            await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.CourseExit,
                     $"Student Removed from Course: {courseName}",
                     $"Student {student.DisplayName} was removed from {courseName}."),
+                logger,
+                "Admin course enrollment removal",
                 cancellationToken);
         }
     }
