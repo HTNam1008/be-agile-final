@@ -45,6 +45,8 @@ internal static class SingaporeIdentityNumberValidator
         {
             'S' or 'T' => "JZIHGFEDCBA",
             'F' or 'G' => "XWUTRQPNMLK",
+            // M-series FIN uses offset 3 and an inverted checksum index, matching the
+            // public singapore-nric package's M example M1235467X.
             'M' => "XWUTRQPNJLK",
             _ => throw new InvalidOperationException("Unsupported NRIC/FIN prefix.")
         };

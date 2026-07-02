@@ -60,6 +60,7 @@ public sealed class CreateStudentValidatorTests
     [InlineData("F1234567N")]
     [InlineData("G5872776N")]
     [InlineData("M1234567K")]
+    [InlineData("M1235467X")]
     public void ApplicationValidator_AllowsValidNricAndFin(string identityNumber)
     {
         CreateStudentValidator validator = new();
@@ -78,6 +79,7 @@ public sealed class CreateStudentValidatorTests
     [InlineData("F1234567N")]
     [InlineData("G5872776N")]
     [InlineData("M1234567K")]
+    [InlineData("M1235467X")]
     public void ApiValidator_AllowsValidNricAndFin(string identityNumber)
     {
         CreateStudentRequestValidator validator = new();
