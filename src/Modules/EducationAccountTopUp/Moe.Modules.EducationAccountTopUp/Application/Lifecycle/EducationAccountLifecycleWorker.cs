@@ -199,10 +199,6 @@ public sealed class EducationAccountLifecycleWorker(
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return new EducationAccountLifecycleRunResult(createdCount, closureSummary.ClosedCount);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
         catch (Exception exception)
         {
             run.Fail(exception.Message, clock.UtcNow);

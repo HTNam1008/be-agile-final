@@ -302,6 +302,39 @@ public sealed class EducationAccountLifecycleWorkerTests
             .HaveCount(2);
     }
 
+    [Fact]
+    public async Task ProcessAsync_WhenCancellationOccursAfterRunStarts_MarksRunFailed()
+    {
+        DateOnly today = new(2026, 6, 24);
+        FakeEligiblePersonLookupGateway people = new([10]);
+        FakeAutomaticEducationAccountCreator creator = new()
+        {
+            ExceptionToThrow = new OperationCanceledException("request was canceled")
+        };
+        FakeAutomaticEducationAccountCloser closer = new();
+        FakeEducationAccountLifecycleRunRepository runs = new();
+        EducationAccountLifecycleWorker worker = CreateWorker(
+            new EducationAccountLifecycleOptions { Enabled = true, RunAtUtc = "02:00" },
+            new FakeClock(new DateTimeOffset(2026, 6, 24, 2, 5, 0, TimeSpan.Zero)),
+            people,
+            creator,
+            closer,
+            runs);
+        using CancellationTokenSource cancellation = new();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => worker.ProcessAsync(
+            today,
+            new DateTimeOffset(2026, 6, 24, 2, 0, 0, TimeSpan.Zero),
+            EducationAccountLifecycleRunTriggerTypes.Manual,
+            cancellation.Token));
+
+        EducationAccountLifecycleRun run = runs.Runs.Should().ContainSingle().Subject;
+        run.StatusCode.Should().Be(EducationAccountLifecycleRunStatusCodes.Failed);
+        run.CompletedAtUtc.Should().Be(new DateTimeOffset(2026, 6, 24, 2, 5, 0, TimeSpan.Zero));
+        run.ErrorMessage.Should().Be("request was canceled");
+    }
+
     private static EducationAccountLifecycleWorker CreateWorker(
         EducationAccountLifecycleOptions options,
         IClock clock,
@@ -384,6 +417,7 @@ public sealed class EducationAccountLifecycleWorkerTests
     {
         private readonly IReadOnlyCollection<long>? _createdPersonIds = createdPersonIds;
         public List<long> CreatedPersonIds { get; } = [];
+        public Exception? ExceptionToThrow { get; init; }
 
         public Task<AutomaticEducationAccountCreationResult> EnsureCreatedAsync(
             long personId,
@@ -392,6 +426,11 @@ public sealed class EducationAccountLifecycleWorkerTests
         {
             CreatedPersonIds.Add(personId);
             events?.Add($"open:{personId}");
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
             bool created = _createdPersonIds is null || _createdPersonIds.Contains(personId);
             return Task.FromResult(new AutomaticEducationAccountCreationResult(
                 personId,
