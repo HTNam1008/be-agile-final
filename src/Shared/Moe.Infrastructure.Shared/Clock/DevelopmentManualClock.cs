@@ -39,6 +39,16 @@ public sealed class DevelopmentManualClock : IClock
         }
     }
 
+    public DateTimeOffset Advance(TimeSpan delta)
+    {
+        lock (sync)
+        {
+            DateTimeOffset nextUtcNow = (overriddenUtcNow ?? DateTimeOffset.UtcNow).Add(delta).ToUniversalTime();
+            overriddenUtcNow = nextUtcNow;
+            return nextUtcNow;
+        }
+    }
+
     public void Reset()
     {
         lock (sync)
