@@ -8,6 +8,7 @@ using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetAdminAuthFlow;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetCurrentIdentity;
+using Moe.Modules.IdentityPlatform.Application.Authentication.RecordAdminLogin;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
@@ -16,7 +17,9 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 [ApiVersion(1.0)]
 [Route("api/admin/v{version:apiVersion}/auth")]
 [EnableCors("AdminCors")]
-public sealed class AdminAuthController(IQueryDispatcher queries) : ControllerBase
+public sealed class AdminAuthController(
+    IQueryDispatcher queries,
+    ICommandDispatcher commands) : ControllerBase
 {
     [HttpGet("flow")]
     [AllowAnonymous]
@@ -36,7 +39,7 @@ public sealed class AdminAuthController(IQueryDispatcher queries) : ControllerBa
 
     [HttpPost("session")]
     [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
-    public IActionResult EstablishSession()
+    public async Task<IActionResult> EstablishSession(CancellationToken cancellationToken)
     {
         string? bearer = Request.Headers.Authorization.ToString();
 
@@ -45,6 +48,15 @@ public sealed class AdminAuthController(IQueryDispatcher queries) : ControllerBa
         {
             return ApiResponseFactory.Failure(
                 new("IDENTITY.ADMIN_TOKEN_REQUIRED", "A validated Microsoft Entra ID bearer token is required."),
+                ApiResponseCodes.Unauthorized,
+                HttpContext.TraceIdentifier);
+        }
+
+        var loginResult = await commands.Send(new RecordAdminLoginCommand(), cancellationToken);
+        if (loginResult.IsFailure)
+        {
+            return ApiResponseFactory.Failure(
+                loginResult.Error,
                 ApiResponseCodes.Unauthorized,
                 HttpContext.TraceIdentifier);
         }

@@ -140,6 +140,9 @@ public sealed class CreateStudentHandlerEmailTests
             CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyCollection<OrganizationUnitSummary>>([School]);
 
+        public Task<OrganizationUnitSummary?> FindActiveByIdAsync(long organizationId, CancellationToken cancellationToken)
+            => Task.FromResult<OrganizationUnitSummary?>(School);
+
         public Task<OrganizationUnitSummary?> FindActiveSchoolByNameAsync(string schoolName, CancellationToken cancellationToken)
             => Task.FromResult<OrganizationUnitSummary?>(School);
 

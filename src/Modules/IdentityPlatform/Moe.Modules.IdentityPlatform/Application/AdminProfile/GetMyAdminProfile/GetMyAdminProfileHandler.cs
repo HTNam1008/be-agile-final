@@ -1,6 +1,7 @@
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.IdentityPlatform.Application;
+using Moe.Modules.IdentityPlatform.Application.Organizations;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
 using Moe.SharedKernel.Results;
@@ -9,7 +10,8 @@ namespace Moe.Modules.IdentityPlatform.Application.AdminProfile.GetMyAdminProfil
 
 internal sealed class GetMyAdminProfileHandler(
     ICurrentUser currentUser,
-    IUserAccountRepository userAccounts)
+    IUserAccountRepository userAccounts,
+    IOrganizationUnitRepository organizations)
     : IQueryHandler<GetMyAdminProfileQuery, AdminProfileResponse>
 {
     public async Task<Result<AdminProfileResponse>> Handle(GetMyAdminProfileQuery query, CancellationToken cancellationToken)
@@ -26,6 +28,11 @@ internal sealed class GetMyAdminProfileHandler(
             return Result<AdminProfileResponse>.Failure(IdentityErrors.UserAccountNotFound);
         }
 
-        return Result<AdminProfileResponse>.Success(AdminProfileMapper.ToResponse(account, currentUser));
+        OrganizationUnitSummary? organization = account.AdminOrganizationId is long organizationId
+            ? await organizations.FindActiveByIdAsync(organizationId, cancellationToken)
+            : null;
+
+        return Result<AdminProfileResponse>.Success(
+            AdminProfileMapper.ToResponse(account, currentUser, organization));
     }
 }
