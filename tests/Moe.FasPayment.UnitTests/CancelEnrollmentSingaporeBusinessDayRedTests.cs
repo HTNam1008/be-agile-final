@@ -8,7 +8,9 @@ using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.MailDelivery.IGateway;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 using Xunit;
@@ -29,6 +31,9 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
             new FakePreviewRepository(CreateSnapshot()),
             new NoopRefundProcessor(),
             cancellations,
+            new FakeStudentDirectory(),
+            new FakeSchoolAdminNotificationRecipientResolver(),
+            new FakeNotificationWriter(),
             new TestClock(SgtEarlyMorning),
             CreateEmailService());
 
@@ -138,6 +143,33 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
         public string Portal => "ESERVICE";
         public bool IsAuthenticated => true;
         public bool HasPermission(string permission) => false;
+    }
+
+    private sealed class FakeStudentDirectory : IStudentDirectory
+    {
+        public Task<StudentSummary?> FindByPersonIdAsync(long personId, CancellationToken cancellationToken) =>
+            Task.FromResult<StudentSummary?>(new(personId, "Student One", new DateOnly(2008, 1, 1), true, "School"));
+
+        public Task<IReadOnlyCollection<long>> FindActivePersonIdsByOrganizationAsync(long organizationId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyCollection<long>>([]);
+
+        public Task<IReadOnlyList<AdminStudentSearchSummary>> ListByOrganizationAsync(AdminStudentSearchCriteria criteria, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AdminStudentSearchSummary>>([]);
+
+        public Task<long> CountByOrganizationAsync(AdminStudentSearchCriteria criteria, CancellationToken cancellationToken) =>
+            Task.FromResult(0L);
+    }
+
+    private sealed class FakeSchoolAdminNotificationRecipientResolver : ISchoolAdminNotificationRecipientResolver
+    {
+        public Task<IReadOnlyCollection<long>> FindUserAccountIdsByOrganizationIdAsync(long organizationId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyCollection<long>>([99]);
+    }
+
+    private sealed class FakeNotificationWriter : INotificationWriter
+    {
+        public Task<Result<long>> CreateAsync(NotificationCreateRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result<long>.Success(1));
     }
 
     private sealed class DisabledMailSwitch : IEmailDeliverySwitch
