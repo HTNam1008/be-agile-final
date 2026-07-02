@@ -9,6 +9,8 @@ public sealed record UpsertCampaignRuleDto(
     decimal? NumericValueTo,
     string? TextValue);
 
+public sealed record UpsertRuleGroupDto(List<UpsertCampaignRuleDto> Criteria);
+
 public sealed record UpsertCampaignRulesCommand(
     long TopUpCampaignId,
-    List<UpsertCampaignRuleDto> Rules) : ICommand;
+    List<UpsertRuleGroupDto> Groups) : ICommand;
