@@ -6,25 +6,19 @@ public sealed record GetSchoolDashboardQuery(int? Year) : IQuery<SchoolDashboard
 
 public sealed record SchoolDashboardResponse(
     SchoolDashboardCardsResponse Cards,
-    SchoolDashboardTopUpYearlyResponse TopUpYearly,
-    SchoolDashboardOverviewResponse Overview);
+    SchoolDashboardYearlyMetricsResponse YearlyMetrics);
 
 public sealed record SchoolDashboardCardsResponse(
-    long TotalActiveStudents,
-    long ActiveCourses,
-    long TotalActiveEducationAccounts,
-    decimal TopUpAmountThisMonth,
-    string CurrencyCode);
+    DashboardCountMetricResponse TotalStudents,
+    DashboardCountMetricResponse TotalCourses,
+    DashboardAmountMetricResponse TopUpAmountThisMonth);
 
-public sealed record SchoolDashboardTopUpYearlyResponse(
+public sealed record SchoolDashboardYearlyMetricsResponse(
     int Year,
     string CurrencyCode,
-    IReadOnlyCollection<SchoolDashboardMonthlyTopUpPoint> Points);
+    IReadOnlyCollection<SchoolDashboardMonthlyMetricsPoint> Points);
 
-public sealed record SchoolDashboardMonthlyTopUpPoint(int Month, decimal Amount);
-
-public sealed record SchoolDashboardOverviewResponse(
-    long NewStudentsThisMonth,
-    long ActiveCourseEnrollments,
-    long PendingFasApplications,
-    long ActiveTopUpCampaigns);
+public sealed record SchoolDashboardMonthlyMetricsPoint(
+    int Month,
+    long? ActiveStudents,
+    decimal? TopUpAmount);
