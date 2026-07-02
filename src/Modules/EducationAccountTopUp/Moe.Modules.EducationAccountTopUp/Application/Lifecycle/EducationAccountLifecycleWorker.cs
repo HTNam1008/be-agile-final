@@ -69,7 +69,7 @@ public sealed class EducationAccountLifecycleWorker(
         }
 
         DateTimeOffset now = clock.UtcNow;
-        DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         TimeOnly currentTime = TimeOnly.FromDateTime(now.UtcDateTime);
 
         if (currentTime < runAtUtc)
@@ -209,10 +209,6 @@ public sealed class EducationAccountLifecycleWorker(
             run.Complete(createdCount, closureSummary.ClosedCount, lifecycleAtUtc);
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return new EducationAccountLifecycleRunResult(createdCount, closureSummary.ClosedCount);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
         }
         catch (Exception exception)
         {

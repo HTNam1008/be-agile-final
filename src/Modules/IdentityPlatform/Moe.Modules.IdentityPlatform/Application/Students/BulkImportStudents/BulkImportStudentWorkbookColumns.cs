@@ -17,6 +17,8 @@ public static class BulkImportStudentWorkbookColumns
     public const string Email = nameof(Email);
     public const string ContactNumber = "Mobile";
     public const string Address = nameof(Address);
+    public const string TemplateRowMarker = "TemplateRow";
+    public const string SampleRowMarker = "SAMPLE_DO_NOT_IMPORT";
 
     public static IReadOnlyList<string> Headers { get; } =
     [
