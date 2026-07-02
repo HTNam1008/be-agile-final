@@ -29,13 +29,19 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
         StripePaymentOptions configuration = RequiredConfiguration();
         StripeConfiguration.ApiKey = configuration.SecretKey;
 
-        string priceId = request.ProviderPriceId ?? await CreatePriceAsync(request, cancellationToken);
+        string? priceId = request.LineItems is { Count: > 0 }
+            ? request.ProviderPriceId
+            : request.ProviderPriceId ?? await CreatePriceAsync(request, cancellationToken);
         var metadata = new Dictionary<string, string>
         {
             ["checkoutId"] = request.CheckoutId.ToString(),
             ["billId"] = request.BillId.ToString(),
             ["courseId"] = request.CourseId.ToString()
         };
+        if (request.PaymentId is long paymentId)
+            metadata["paymentId"] = paymentId.ToString();
+        if (request.BillingStatementId is long billingStatementId)
+            metadata["billingStatementId"] = billingStatementId.ToString();
         var session = await new SessionService().CreateAsync(
             new SessionCreateOptions
             {
@@ -44,8 +50,19 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
                 CancelUrl = configuration.CancelUrl.Replace("{CHECKOUT_ID}", request.CheckoutId.ToString(), StringComparison.Ordinal),
                 PaymentMethodTypes = ["card", "paynow", "alipay"],
                 ExpiresAt = request.ExpiresAtUtc,
-                LineItems = [new SessionLineItemOptions { Price = priceId, Quantity = 1 }],
+                LineItems = BuildLineItems(request, priceId),
                 Metadata = metadata,
+                InvoiceCreation = new SessionInvoiceCreationOptions
+                {
+                    Enabled = true,
+                    InvoiceData = new SessionInvoiceCreationInvoiceDataOptions
+                    {
+                        Description = request.BillingStatementId is long statementId
+                            ? $"Monthly billing statement {statementId}"
+                            : request.CourseName,
+                        Metadata = metadata
+                    }
+                },
                 PaymentIntentData = new SessionPaymentIntentDataOptions
                 {
                     Metadata = metadata
@@ -56,7 +73,67 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
 
         if (string.IsNullOrWhiteSpace(session.Url))
             throw new InvalidOperationException("Stripe did not return a Checkout URL.");
-        return new(session.Id, priceId, session.Url, session.ExpiresAt);
+        return new(session.Id, priceId ?? "line_items", session.Url, session.ExpiresAt);
+    }
+
+    public async Task<StripePaymentEvidenceGatewayResult> GetPaymentEvidenceAsync(
+        string? providerCheckoutSessionId,
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        string? providerChargeId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            StripeConfiguration.ApiKey = RequiredConfiguration().SecretKey;
+
+            string? invoiceId = providerInvoiceId;
+            string? paymentIntentId = providerPaymentIntentId;
+            string? chargeId = providerChargeId;
+            if (!string.IsNullOrWhiteSpace(providerCheckoutSessionId))
+            {
+                var session = await new SessionService().GetAsync(
+                    providerCheckoutSessionId,
+                    cancellationToken: cancellationToken);
+                invoiceId ??= session.InvoiceId;
+                paymentIntentId ??= session.PaymentIntentId;
+            }
+
+            string? hostedInvoiceUrl = null;
+            string? invoicePdfUrl = null;
+            if (!string.IsNullOrWhiteSpace(invoiceId))
+            {
+                var invoice = await new InvoiceService().GetAsync(invoiceId, cancellationToken: cancellationToken);
+                hostedInvoiceUrl = invoice.HostedInvoiceUrl;
+                invoicePdfUrl = invoice.InvoicePdf;
+            }
+
+            string? receiptUrl = null;
+            if (!string.IsNullOrWhiteSpace(paymentIntentId))
+            {
+                var paymentIntent = await new PaymentIntentService().GetAsync(
+                    paymentIntentId,
+                    new PaymentIntentGetOptions
+                    {
+                        Expand = ["latest_charge"]
+                    },
+                    cancellationToken: cancellationToken);
+                chargeId ??= paymentIntent.LatestChargeId;
+                receiptUrl = paymentIntent.LatestCharge?.ReceiptUrl;
+            }
+
+            if (receiptUrl is null && !string.IsNullOrWhiteSpace(chargeId))
+            {
+                var charge = await new ChargeService().GetAsync(chargeId, cancellationToken: cancellationToken);
+                receiptUrl = charge.ReceiptUrl;
+            }
+
+            return new StripePaymentEvidenceGatewayResult(hostedInvoiceUrl, invoicePdfUrl, receiptUrl);
+        }
+        catch (StripeException)
+        {
+            throw new PaymentProviderUnavailableException();
+        }
     }
 
     public async Task<StripeScheduleGatewayResult> AttachFiniteScheduleAsync(
@@ -90,6 +167,37 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
             },
             cancellationToken: cancellationToken);
         return new(schedule.Id);
+    }
+
+    private static List<SessionLineItemOptions> BuildLineItems(
+        StripeCheckoutGatewayRequest request,
+        string? priceId)
+    {
+        if (request.LineItems is { Count: > 0 })
+        {
+            return request.LineItems
+                .Where(item => item.AmountMinor > 0)
+                .Select(item => new SessionLineItemOptions
+                {
+                    Quantity = item.Quantity <= 0 ? 1 : item.Quantity,
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = request.CurrencyCode.ToLowerInvariant(),
+                        UnitAmount = item.AmountMinor,
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = item.Name,
+                            Description = item.Description
+                        }
+                    }
+                })
+                .ToList();
+        }
+
+        if (string.IsNullOrWhiteSpace(priceId))
+            throw new InvalidOperationException("Stripe Checkout requires either a price or line items.");
+
+        return [new SessionLineItemOptions { Price = priceId, Quantity = 1 }];
     }
 
     public async Task ExpireCheckoutAsync(
@@ -253,12 +361,17 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
         => OptionalText(element, name) ?? throw new JsonException($"{name} is missing.");
 
     private static string? OptionalText(JsonElement element, string name, bool when = true)
-        => when && element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+        => when &&
+           element.ValueKind == JsonValueKind.Object &&
+           element.TryGetProperty(name, out JsonElement value) &&
+           value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
 
     private static string? Metadata(JsonElement element, string name)
-        => element.TryGetProperty("metadata", out JsonElement metadata) &&
+        => element.ValueKind == JsonValueKind.Object &&
+           element.TryGetProperty("metadata", out JsonElement metadata) &&
+           metadata.ValueKind == JsonValueKind.Object &&
            metadata.TryGetProperty(name, out JsonElement value) &&
            value.ValueKind == JsonValueKind.String
             ? value.GetString()
@@ -267,7 +380,15 @@ internal sealed class StripePaymentGateway(IOptions<StripePaymentOptions> option
     private static string? NestedText(JsonElement element, params string[] path)
     {
         foreach (string part in path)
-            if (!element.TryGetProperty(part, out element)) return null;
+        {
+            if (element.ValueKind != JsonValueKind.Object ||
+                !element.TryGetProperty(part, out element) ||
+                element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+        }
+
         return element.ValueKind == JsonValueKind.String ? element.GetString() : null;
     }
 }

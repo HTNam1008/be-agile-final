@@ -17,6 +17,7 @@ internal sealed class BulkImportStudentsHandler(
     : ICommandHandler<BulkImportStudentsCommand, BulkImportStudentsResponse>
 {
     private const int MaxRows = 1000;
+    private const string SampleRowSkipped = "BULK_IMPORT.SAMPLE_ROW_SKIPPED";
     private const string RowValidationFailed = "BULK_IMPORT.ROW_VALIDATION_FAILED";
     private const string RowLimitExceeded = "BULK_IMPORT.ROW_LIMIT_EXCEEDED";
 
@@ -38,6 +39,15 @@ internal sealed class BulkImportStudentsHandler(
         List<CreateStudentResponse> createdStudents = [];
         foreach (BulkImportStudentWorkbookRow row in rows)
         {
+            if (row.IsTemplateSampleRow)
+            {
+                results.Add(BulkImportStudentRowResult.Skipped(
+                    row.RowNumber,
+                    SampleRowSkipped,
+                    "This row was skipped because TemplateRow is SAMPLE_DO_NOT_IMPORT. Clear that marker before importing real student data."));
+                continue;
+            }
+
             CreateStudentCommand createCommand = ToCreateStudentCommand(row);
             var validation = await validator.ValidateAsync(createCommand, cancellationToken);
             if (!validation.IsValid)
@@ -66,6 +76,7 @@ internal sealed class BulkImportStudentsHandler(
         }
 
         int succeededCount = results.Count(x => x.Status == "Succeeded");
+        int skippedCount = results.Count(x => x.Status == "Skipped");
         foreach (var schoolGroup in createdStudents.GroupBy(x => x.OrganizationId))
         {
             await audit.RecordSchoolActionAsync(
@@ -88,7 +99,8 @@ internal sealed class BulkImportStudentsHandler(
         BulkImportStudentsResponse response = new(
             rows.Count,
             succeededCount,
-            rows.Count - succeededCount,
+            rows.Count - succeededCount - skippedCount,
+            skippedCount,
             results);
 
         return Result<BulkImportStudentsResponse>.Success(response);
@@ -109,7 +121,7 @@ internal sealed class BulkImportStudentsHandler(
             row.ClassCode,
             row.StartDate,
             row.Email,
-            row.Mobile,
+            row.ContactNumber,
             row.Address,
             IsAccountHolder: true);
 }

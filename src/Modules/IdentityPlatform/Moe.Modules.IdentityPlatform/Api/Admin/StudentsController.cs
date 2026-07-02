@@ -12,6 +12,7 @@ using Moe.Modules.IdentityPlatform.Application.AdminStudentList;
 using Moe.Modules.IdentityPlatform.Application.Students.BulkImportStudents;
 using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 using Moe.Modules.IdentityPlatform.Application.Students.SetStudentAccess;
+using Moe.Modules.IdentityPlatform.Domain.Schooling;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -39,6 +40,7 @@ public sealed class StudentsController(
                 request.Search,
                 string.IsNullOrWhiteSpace(request.LevelCode) ? [] : [request.LevelCode],
                 request.ClassCode,
+                request.CitizenshipStatusCode,
                 request.AccountStatus,
                 request.PortalAccessStatus,
                 request.EnrollmentStatus,
@@ -161,7 +163,7 @@ public sealed class StudentsController(
             request.ClassCode,
             request.StartDate,
             request.Email,
-            request.Mobile,
+            request.ContactNumber,
             request.Address,
             request.IsAccountHolder);
 
@@ -232,19 +234,35 @@ public sealed class StudentsController(
     {
         using XLWorkbook workbook = new();
         IXLWorksheet sheet = workbook.Worksheets.Add("Students");
+        AddBulkImportInstructionsSheet(workbook);
 
         for (int i = 0; i < BulkImportStudentWorkbookColumns.Headers.Count; i++)
         {
             string header = BulkImportStudentWorkbookColumns.Headers[i];
-            sheet.Cell(1, i + 1).Value = header;
-            sheet.Cell(2, i + 1).Value = BulkImportStudentWorkbookColumns.NullableHeaders.Contains(header)
-                ? "Nullable - DELETE THIS ROW BEFORE IMPORT"
-                : "Required - DELETE THIS ROW BEFORE IMPORT";
+            IXLCell headerCell = sheet.Cell(1, i + 1);
+            bool isOptional = BulkImportStudentWorkbookColumns.NullableHeaders.Contains(header);
+            headerCell.Value = header;
+            headerCell.Style.Font.Bold = true;
+            headerCell.Style.Fill.BackgroundColor = isOptional ? XLColor.LightGray : XLColor.LightGreen;
+            headerCell.CreateComment().AddText($"{(isOptional ? "Optional" : "Required")}: {GetBulkImportColumnHint(header)}");
         }
+
+        int markerColumn = BulkImportStudentWorkbookColumns.Headers.Count + 1;
+        sheet.Cell(1, markerColumn).Value = BulkImportStudentWorkbookColumns.TemplateRowMarker;
+        sheet.Cell(1, markerColumn).Style.Font.Bold = true;
+        sheet.Cell(1, markerColumn).Style.Font.FontColor = XLColor.Gray;
+        sheet.Cell(1, markerColumn).Style.Font.Italic = true;
+        sheet.Cell(1, markerColumn).Style.Fill.BackgroundColor = XLColor.LightGray;
+        sheet.Cell(1, markerColumn).CreateComment()
+            .AddText("Keep SAMPLE_DO_NOT_IMPORT only on the sample row. Clear this cell when replacing the sample row with real data.");
+
+        WriteBulkImportSampleRow(sheet);
+        AddBulkImportLevelValidation(sheet);
 
         sheet.Row(1).Style.Font.Bold = true;
         sheet.Row(2).Style.Font.Italic = true;
         sheet.Row(2).Style.Fill.BackgroundColor = XLColor.LightYellow;
+        sheet.SheetView.FreezeRows(1);
         sheet.Columns().AdjustToContents();
 
         using MemoryStream stream = new();
@@ -255,6 +273,78 @@ public sealed class StudentsController(
             BulkImportTemplateContentType,
             "student-bulk-import-template.xlsx");
     }
+
+    private static void AddBulkImportInstructionsSheet(XLWorkbook workbook)
+    {
+        IXLWorksheet instructions = workbook.Worksheets.Add("Instructions");
+        instructions.Cell(1, 1).Value = "How to use this template";
+        instructions.Cell(1, 1).Style.Font.Bold = true;
+        instructions.Cell(2, 1).Value = "1. Use the Students sheet for import data. Do not rename the header row.";
+        instructions.Cell(3, 1).Value = "2. Row 2 is a sample and is ignored while TemplateRow is SAMPLE_DO_NOT_IMPORT.";
+        instructions.Cell(4, 1).Value = "3. Replace row 2 with real data and clear TemplateRow, or start entering real data from row 3.";
+        instructions.Cell(5, 1).Value = "4. Green headers are required. Gray headers are optional.";
+        instructions.Cell(6, 1).Value = "5. LevelCode must be one of POST_SEC, BACHELOR, MASTER, PHD.";
+        instructions.Columns().AdjustToContents();
+    }
+
+    private static void WriteBulkImportSampleRow(IXLWorksheet sheet)
+    {
+        sheet.Cell(2, 1).Value = "Sample Polytechnic";
+        sheet.Cell(2, 2).Value = 10;
+        sheet.Cell(2, 3).Value = "S1234567D";
+        sheet.Cell(2, 4).Value = "Sample Student";
+        sheet.Cell(2, 5).Value = new DateTime(2008, 5, 12);
+        sheet.Cell(2, 6).Value = "SG";
+        sheet.Cell(2, 7).Value = "CITIZEN";
+        sheet.Cell(2, 8).Value = "SAMPLE-2026-001";
+        sheet.Cell(2, 9).Value = "2026";
+        sheet.Cell(2, 10).Value = SchoolLevelCodes.Bachelor;
+        sheet.Cell(2, 11).Value = "UG1";
+        sheet.Cell(2, 12).Value = new DateTime(2026, 1, 2);
+        sheet.Cell(2, 13).Value = "sample.student@example.com";
+        sheet.Cell(2, 14).Value = "+6591234567";
+        sheet.Cell(2, 15).Value = "1 Sample Road";
+        IXLCell markerCell = sheet.Cell(2, BulkImportStudentWorkbookColumns.Headers.Count + 1);
+        markerCell.Value = BulkImportStudentWorkbookColumns.SampleRowMarker;
+        markerCell.Style.Font.FontColor = XLColor.Gray;
+        markerCell.Style.Font.Italic = true;
+        markerCell.Style.Fill.BackgroundColor = XLColor.LightGray;
+        sheet.Cell(2, 5).Style.DateFormat.Format = "yyyy-mm-dd";
+        sheet.Cell(2, 12).Style.DateFormat.Format = "yyyy-mm-dd";
+    }
+
+    private static void AddBulkImportLevelValidation(IXLWorksheet sheet)
+    {
+        int levelColumn = BulkImportStudentWorkbookColumns.Headers
+            .Select((header, index) => new { header, index })
+            .Single(x => x.header == BulkImportStudentWorkbookColumns.LevelCode)
+            .index + 1;
+        string validLevels = string.Join(",", SchoolLevelCodes.All);
+        sheet.Range(2, levelColumn, 1001, levelColumn)
+            .CreateDataValidation()
+            .List($"\"{validLevels}\"");
+    }
+
+    private static string GetBulkImportColumnHint(string header)
+        => header switch
+        {
+            BulkImportStudentWorkbookColumns.SchoolName => "School name. Optional when OrganizationId is supplied or school can be resolved.",
+            BulkImportStudentWorkbookColumns.OrganizationId => "Numeric school organization id. Optional when SchoolName is supplied or school can be resolved.",
+            BulkImportStudentWorkbookColumns.IdentityNumber => "Valid Singapore NRIC/FIN, including checksum. Example: S1234567D.",
+            BulkImportStudentWorkbookColumns.FullName => "Student full name, maximum 200 characters.",
+            BulkImportStudentWorkbookColumns.DateOfBirth => "Use a real Excel date or yyyy-mm-dd. Student age must be 6 to 40 years.",
+            BulkImportStudentWorkbookColumns.NationalityCode => "Nationality code, maximum 30 characters. Example: SG.",
+            BulkImportStudentWorkbookColumns.CitizenshipStatusCode => "Citizenship code, maximum 30 characters. Example: CITIZEN.",
+            BulkImportStudentWorkbookColumns.StudentNumber => "School student number, maximum 50 characters.",
+            BulkImportStudentWorkbookColumns.AcademicYear => "Academic year text, maximum 20 characters. Example: 2026.",
+            BulkImportStudentWorkbookColumns.LevelCode => "Choose one: POST_SEC, BACHELOR, MASTER, PHD.",
+            BulkImportStudentWorkbookColumns.ClassCode => "Class code, maximum 30 characters.",
+            BulkImportStudentWorkbookColumns.StartDate => "Use a real Excel date or yyyy-mm-dd. Must not be earlier than DateOfBirth.",
+            BulkImportStudentWorkbookColumns.Email => "Valid email address, maximum 320 characters.",
+            BulkImportStudentWorkbookColumns.ContactNumber => "Mobile/contact number, maximum 50 characters.",
+            BulkImportStudentWorkbookColumns.Address => "Residential address, maximum 1000 characters.",
+            _ => "Follow the column format shown in the sample row."
+        };
 
     private static int GetFailureStatusCode(string errorCode)
         => errorCode switch

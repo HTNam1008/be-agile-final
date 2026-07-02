@@ -16,7 +16,7 @@ public sealed record CreateStudentCommand(
     string? ClassCode,
     DateOnly? StartDate,
     string? Email,
-    string? Mobile,
+    string? ContactNumber,
     string? Address,
     [property: Obsolete("Manual student creation now always creates an education account. This field is accepted for backward compatibility and ignored.")]
     bool IsAccountHolder) : ICommand<CreateStudentResponse>;

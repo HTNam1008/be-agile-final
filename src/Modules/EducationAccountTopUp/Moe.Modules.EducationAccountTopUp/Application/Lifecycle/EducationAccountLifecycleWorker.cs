@@ -19,6 +19,8 @@ public sealed class EducationAccountLifecycleWorker(
     ILogger<EducationAccountLifecycleWorker> logger,
     IClock clock) : BackgroundService
 {
+    private DateOnly? _lastScheduledRunDate;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Education Account lifecycle worker started");
@@ -40,7 +42,7 @@ public sealed class EducationAccountLifecycleWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                await Task.Delay(GetPollInterval(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -48,6 +50,9 @@ public sealed class EducationAccountLifecycleWorker(
             }
         }
     }
+
+    private TimeSpan GetPollInterval()
+        => TimeSpan.FromSeconds(Math.Clamp(options.Value.PollIntervalSeconds, 1, 86400));
 
     internal async Task RunIfDueAsync(CancellationToken cancellationToken)
     {
@@ -64,10 +69,15 @@ public sealed class EducationAccountLifecycleWorker(
         }
 
         DateTimeOffset now = clock.UtcNow;
-        DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         TimeOnly currentTime = TimeOnly.FromDateTime(now.UtcDateTime);
 
         if (currentTime < runAtUtc)
+        {
+            return;
+        }
+
+        if (_lastScheduledRunDate == today)
         {
             return;
         }
@@ -77,6 +87,7 @@ public sealed class EducationAccountLifecycleWorker(
             now,
             EducationAccountLifecycleRunTriggerTypes.Scheduled,
             cancellationToken);
+        _lastScheduledRunDate = today;
     }
 
     internal async Task<EducationAccountLifecycleRunResult> ProcessAsync(
@@ -198,10 +209,6 @@ public sealed class EducationAccountLifecycleWorker(
             run.Complete(createdCount, closureSummary.ClosedCount, lifecycleAtUtc);
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return new EducationAccountLifecycleRunResult(createdCount, closureSummary.ClosedCount);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
         }
         catch (Exception exception)
         {

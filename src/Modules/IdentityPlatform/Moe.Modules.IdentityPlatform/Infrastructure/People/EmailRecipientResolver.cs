@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
-using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 using Moe.StudentFinance.Persistence;
 
@@ -18,20 +19,31 @@ public sealed class EmailRecipientResolver(
         long personId,
         CancellationToken cancellationToken)
     {
-        string? contactEmail = await db.Set<UserAccount>()
+        List<string?> contactEmails = await db.Set<UserAccount>()
             .AsNoTracking()
             .Where(account => account.PersonId == personId && account.RoleCode == RoleCodes.Student)
             .OrderByDescending(account => account.Id)
             .Select(account => account.ContactEmail)
+            .ToListAsync(cancellationToken);
+
+        EmailRecipient? contactRecipient = contactEmails
+            .Select(email => ValidRecipient(email, EmailRecipientSourceCodes.Contact))
+            .FirstOrDefault(recipient => recipient is not null);
+
+        if (contactRecipient is not null)
+        {
+            return contactRecipient;
+        }
+
+        string? officialEmail = await db.Set<Person>()
+            .AsNoTracking()
+            .Where(person => person.Id == personId)
+            .Select(person => person.OfficialEmail)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return ValidRecipient(contactEmail, EmailRecipientSourceCodes.Contact)
+        return ValidRecipient(officialEmail, EmailRecipientSourceCodes.Official)
             ?? DevelopmentFallback();
     }
-
-    public EmailRecipient? ResolveProvided(string? emailAddress)
-        => ValidRecipient(emailAddress, EmailRecipientSourceCodes.Provided)
-            ?? DevelopmentFallback();
 
     private EmailRecipient? DevelopmentFallback()
         => environment.IsDevelopment()

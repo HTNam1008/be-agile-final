@@ -8,6 +8,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.CourseBilling.Application.AdminCourses.Courses;
 
@@ -228,7 +229,8 @@ internal sealed class PublishCourseCommandHandler(
     IUnitOfWork unitOfWork,
     IStudentDirectory students,
     IStudentNotificationRecipientResolver notificationRecipients,
-    INotificationWriter notificationWriter)
+    INotificationWriter notificationWriter,
+    ILogger<PublishCourseCommandHandler> logger)
     : ICommandHandler<PublishCourseCommand, CourseDetailDto>
 {
     public async Task<Result<CourseDetailDto>> Handle(PublishCourseCommand command, CancellationToken cancellationToken)
@@ -324,12 +326,14 @@ internal sealed class PublishCourseCommandHandler(
 
         foreach (long userAccountId in userAccountIds.Distinct())
         {
-            await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.EnrollOpen,
                     $"Course Enrollment Open: {course.CourseCode}",
                     $"Registration for {course.CourseName} is open until {course.EnrollmentCloseAtUtc:yyyy-MM-dd HH:mm}."),
+                logger,
+                "Course publish enrollment open",
                 cancellationToken);
         }
     }
@@ -340,7 +344,8 @@ internal sealed class DisableCourseCommandHandler(
     IAuditService audit,
     IUnitOfWork unitOfWork,
     INotificationWriter notificationWriter,
-    IStudentNotificationRecipientResolver notificationRecipients)
+    IStudentNotificationRecipientResolver notificationRecipients,
+    ILogger<DisableCourseCommandHandler> logger)
     : ICommandHandler<DisableCourseCommand, CourseDetailDto>
 {
     public async Task<Result<CourseDetailDto>> Handle(DisableCourseCommand command, CancellationToken cancellationToken)
@@ -380,12 +385,14 @@ internal sealed class DisableCourseCommandHandler(
                 continue;
             }
 
-            await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId.Value,
                     NotificationTypeCode.CourseDisabled,
                     $"Course Disabled: {courseCode}",
                     $"Reason: MOE administrative action. The course {courseCode} ({courseName}) is currently unavailable."),
+                logger,
+                "Course disable enrolled student notification",
                 cancellationToken);
         }
     }

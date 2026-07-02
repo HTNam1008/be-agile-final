@@ -581,22 +581,15 @@ internal sealed class AdminCourseRepository(
             return;
         }
 
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.BillIssued,
                 $"Bill Issued: {billNumber}",
                 $"New bill for {course.CourseName}. Net Payable: {netPayableAmount:N2}. Due: {dueDate:yyyy-MM-dd}."),
+            logger,
+            "Course bill issued student notification",
             cancellationToken);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "Bill issued notification failed. PersonId={PersonId} BillNumber={BillNumber} Error={ErrorCode}",
-                personId,
-                billNumber,
-                result.Error.Code);
-        }
 
         IReadOnlyCollection<long> schoolAdminUserAccountIds = await schoolAdminRecipients.FindUserAccountIdsByOrganizationIdAsync(
             course.OrganizationId,
@@ -604,22 +597,15 @@ internal sealed class AdminCourseRepository(
 
         foreach (long schoolAdminUserAccountId in schoolAdminUserAccountIds.Distinct())
         {
-            Result<long> adminResult = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     schoolAdminUserAccountId,
                     NotificationTypeCode.BillIssued,
                     $"Bill Issued: {billNumber}",
                     $"New bill for {course.CourseName}. Net Payable: {netPayableAmount:N2}. Due: {dueDate:yyyy-MM-dd}."),
+                logger,
+                "Course bill issued school admin notification",
                 cancellationToken);
-
-            if (adminResult.IsFailure)
-            {
-                logger.LogWarning(
-                    "Bill issued notification failed for school admin. OrganizationId={OrganizationId} BillNumber={BillNumber} Error={ErrorCode}",
-                    course.OrganizationId,
-                    billNumber,
-                    adminResult.Error.Code);
-            }
         }
     }
 }

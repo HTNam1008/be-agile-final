@@ -207,12 +207,14 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             campaign.Id,
             userAccountId);
 
-        await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId,
                 NotificationTypeCode.CampaignLaunch,
                 $"Top-up Campaign Started: {campaign.CampaignCode}",
                 $"{campaign.CampaignName} has been launched for eligible students."),
+            logger,
+            "Top-up campaign launched",
             cancellationToken);
 
         logger.LogInformation(
@@ -235,12 +237,14 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             nextRunAt,
             campaign.FrequencyCode ?? "N/A");
 
-        await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId,
                 NotificationTypeCode.RecurringAlert,
                 "Recurring Top-up Scheduled",
                 $"Your next support payment is scheduled for {nextRunAt} (Frequency: {campaign.FrequencyCode ?? "N/A"})."),
+            logger,
+            "Top-up recurring alert scheduled",
             cancellationToken);
 
         logger.LogInformation(

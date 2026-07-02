@@ -1,11 +1,15 @@
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.IdentityPlatform.Application.Organizations;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
 
 namespace Moe.Modules.IdentityPlatform.Application.AdminProfile;
 
 internal static class AdminProfileMapper
 {
-    public static AdminProfileResponse ToResponse(UserAccount account, ICurrentUser currentUser)
+    public static AdminProfileResponse ToResponse(
+        UserAccount account,
+        ICurrentUser currentUser,
+        OrganizationUnitSummary? organization)
     {
         return new AdminProfileResponse(
             account.Id,
@@ -30,6 +34,13 @@ internal static class AdminProfileMapper
             account.UpdatedAtUtc,
             currentUser.OrganizationUnitIds,
             currentUser.Roles,
-            currentUser.Permissions);
+            currentUser.Permissions,
+            organization is null
+                ? null
+                : new AdminProfileOrganizationResponse(
+                    organization.OrganizationUnitId,
+                    organization.UnitCode,
+                    organization.UnitName,
+                    organization.UnitTypeCode));
     }
 }

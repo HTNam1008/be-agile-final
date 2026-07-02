@@ -192,7 +192,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         }
     }
 
-    private DateOnly Today() => _clock?.TodayInSingapore() ?? SingaporeBusinessDay.FromUtc(DateTime.UtcNow);
+    private DateOnly Today() => (_clock is null ? DateOnly.FromDateTime(DateTime.UtcNow) : DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime));
     private static bool BeTrimmed(string? value) => value is not null && value == value.Trim();
     private static bool BeTrimmedOrEmpty(string? value) => value is null || value == value.Trim();
 }

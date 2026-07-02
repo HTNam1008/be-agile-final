@@ -9,5 +9,6 @@ public sealed class NotificationModelConfiguration : IModelConfigurationContribu
     public void Configure(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new NotificationConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationRealtimeDeliveryConfiguration());
     }
 }

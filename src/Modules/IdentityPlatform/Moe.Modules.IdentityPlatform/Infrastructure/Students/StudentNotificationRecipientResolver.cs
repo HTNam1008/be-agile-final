@@ -12,7 +12,12 @@ internal sealed class StudentNotificationRecipientResolver(MoeDbContext dbContex
         return await dbContext.Set<UserAccount>()
             .AsNoTracking()
             .Where(x => x.PersonId == personId && x.PortalAccessCode == PortalAccessCodes.EService)
+            .OrderByDescending(x => x.AccountStatusCode == UserAccountStatusCodes.Active)
+            .ThenByDescending(x => x.AccountStatusCode == UserAccountStatusCodes.PendingFirstLogin)
+            .ThenByDescending(x => x.LastLoginAtUtc)
+            .ThenByDescending(x => x.UpdatedAtUtc)
+            .ThenByDescending(x => x.Id)
             .Select(x => (long?)x.Id)
-            .SingleOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

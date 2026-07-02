@@ -3,7 +3,9 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
@@ -35,14 +37,15 @@ builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
-if (builder.Environment.IsDevelopment())
+if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
 {
     builder.Services.RemoveAll<IClock>();
     builder.Services.AddSingleton<DevelopmentManualClock>();
     builder.Services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
 }
 builder.Services.AddMoePersistence(builder.Configuration);
-builder.Services.AddSignalR();
+ConfigureSignalR(builder.Services, builder.Configuration);
+
 
 IModule[] modules =
 [
@@ -258,36 +261,42 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
     });
 }).AllowAnonymous();
 
-if (app.Environment.IsDevelopment())
+if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
 {
-    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(new
-    {
-        utcNow = clock.UtcNow,
-        isOverridden = clock.IsOverridden
-    }))
+    app.MapGet("/dev/clock", ([FromServices] DevelopmentManualClock clock) => Results.Ok(CreateDevelopmentClockResponse(clock)))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         clock.Set(request.UtcNow);
-        return Results.Ok(new
-        {
-            utcNow = clock.UtcNow,
-            isOverridden = clock.IsOverridden
-        });
+        return Results.Ok(CreateDevelopmentClockResponse(clock));
     })
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapDelete("/dev/clock", (DevelopmentManualClock clock) =>
+    app.MapPost("/dev/clock/advance", (AdvanceDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
+    {
+        TimeSpan delta = request.ToTimeSpan();
+        if (delta == TimeSpan.Zero)
+        {
+            return Results.BadRequest(new
+            {
+                error = "DEV_CLOCK_ADVANCE_ZERO",
+                message = "At least one advance component must be non-zero."
+            });
+        }
+
+        clock.Advance(delta);
+        return Results.Ok(CreateDevelopmentClockResponse(clock));
+    })
+        .AllowAnonymous()
+        .RequireCors("PortalCors");
+
+    app.MapDelete("/dev/clock", ([FromServices] DevelopmentManualClock clock) =>
     {
         clock.Reset();
-        return Results.Ok(new
-        {
-            utcNow = clock.UtcNow,
-            isOverridden = clock.IsOverridden
-        });
+        return Results.Ok(CreateDevelopmentClockResponse(clock));
     })
         .AllowAnonymous()
         .RequireCors("PortalCors");
@@ -385,4 +394,47 @@ static string GetSwaggerTag(string path)
 
 internal sealed record SetDevelopmentClockRequest(DateTimeOffset UtcNow);
 
-public partial class Program;
+internal sealed record AdvanceDevelopmentClockRequest(int Days = 0, int Hours = 0, int Minutes = 0, int Seconds = 0)
+{
+    public TimeSpan ToTimeSpan() => new(Days, Hours, Minutes, Seconds);
+}
+
+internal sealed record DevelopmentClockResponse(DateTimeOffset UtcNow, DateOnly UtcDate, bool IsOverridden);
+
+public partial class Program
+{
+    internal static bool IsDevelopmentClockEnabled(IHostEnvironment _, IConfiguration configuration)
+        => configuration.GetValue("DevTools:Clock:Enabled", false);
+
+    internal static DevelopmentClockResponse CreateDevelopmentClockResponse(DevelopmentManualClock clock)
+        => new(clock.UtcNow, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime), clock.IsOverridden);
+
+    internal static void ConfigureSignalR(IServiceCollection services, IConfiguration configuration)
+    {
+        string provider = configuration["SignalR:Provider"]?.Trim() ?? "Local";
+        ISignalRServerBuilder signalR = services.AddSignalR();
+
+        if (string.Equals(provider, "Local", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!string.Equals(provider, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported SignalR provider '{provider}'. Use 'Local' or 'Azure'.");
+        }
+
+        string? connectionString =
+            configuration["SignalR:AzureConnectionString"]
+            ?? configuration["Azure:SignalR:ConnectionString"];
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "SignalR Azure provider requires SignalR:AzureConnectionString or Azure:SignalR:ConnectionString.");
+        }
+
+        signalR.AddAzureSignalR(connectionString);
+    }
+}
