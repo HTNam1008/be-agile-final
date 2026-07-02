@@ -422,13 +422,6 @@ public sealed class EducationAccountLifecycleWorkerTests
         private readonly List<EducationAccountLifecycleRun> _pendingRuns = [];
         public List<EducationAccountLifecycleRun> Runs { get; } = [];
 
-        public Task<bool> HasScheduledRunAsync(
-            DateOnly runDateUtc,
-            CancellationToken cancellationToken)
-            => Task.FromResult(Runs.Any(run =>
-                run.RunDateUtc == runDateUtc
-                && run.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled));
-
         public Task AddAsync(
             EducationAccountLifecycleRun run,
             CancellationToken cancellationToken)
@@ -436,6 +429,13 @@ public sealed class EducationAccountLifecycleWorkerTests
             _pendingRuns.Add(run);
             return Task.CompletedTask;
         }
+
+        public Task<bool> ScheduledRunExistsAsync(
+            DateOnly runDateUtc,
+            CancellationToken cancellationToken)
+            => Task.FromResult(Runs.Any(run =>
+                run.RunDateUtc == runDateUtc
+                && run.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled));
 
         public void SaveChanges()
         {

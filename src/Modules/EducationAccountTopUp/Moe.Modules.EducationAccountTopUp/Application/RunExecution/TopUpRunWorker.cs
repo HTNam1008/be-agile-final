@@ -58,6 +58,7 @@ public sealed class TopUpRunWorker(
         });
 
         logger.LogInformation("Top-up worker picked up run {TopUpRunId}", runId);
+        Console.WriteLine($"[TopUp][Worker] Picked up run {runId}");
 
         using IServiceScope scope = scopeFactory.CreateScope();
         IServiceProvider services = scope.ServiceProvider;
@@ -114,6 +115,7 @@ public sealed class TopUpRunWorker(
             runId,
             totalRecipients,
             ChunkSize);
+        Console.WriteLine($"[TopUp][Worker] Run {runId} resolved {totalRecipients} recipients");
 
         if (maxTotalAmount.HasValue && campaign is not null)
         {
@@ -176,6 +178,7 @@ public sealed class TopUpRunWorker(
                 execution.Value.TotalFailed,
                 execution.Value.TotalSkipped,
                 execution.Value.TotalAmount);
+            Console.WriteLine($"[TopUp][Worker] Run {runId} completed status={execution.Value.TerminalStatus}, succeeded={execution.Value.TotalSucceeded}, failed={execution.Value.TotalFailed}, skipped={execution.Value.TotalSkipped}, amount={execution.Value.TotalAmount:0.00}");
         }
         else
         {
@@ -183,6 +186,7 @@ public sealed class TopUpRunWorker(
                 "Top-up run {TopUpRunId} execution failed: {ErrorCode}",
                 runId,
                 execution.Error.Code);
+            Console.WriteLine($"[TopUp][Worker] Run {runId} failed execution error={execution.Error.Code}");
         }
 
         Result<ReconciliationResult> reconciliationResult = await reconciliation.ReconcileRunAsync(

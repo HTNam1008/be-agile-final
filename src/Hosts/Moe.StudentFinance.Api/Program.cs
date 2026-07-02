@@ -22,6 +22,7 @@ using Moe.Modules.FasPayment;
 using Moe.Modules.IdentityPlatform;
 using Moe.Modules.MailDelivery;
 using Moe.Modules.Mfa;
+using Moe.Modules.Notifications;
 using Moe.StudentFinance.Api.CompositionRoot;
 using Moe.StudentFinance.Persistence;
 using NSwag;
@@ -41,6 +42,7 @@ if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
     builder.Services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
 }
 builder.Services.AddMoePersistence(builder.Configuration);
+builder.Services.AddSignalR();
 
 IModule[] modules =
 [
@@ -49,6 +51,7 @@ IModule[] modules =
     new CourseBillingModule(),
     new FasPaymentModule(),
     new MfaModule(),
+    new NotificationModule(),
     new AiCopilotModule(),
     new MailDeliveryModule()
 ];
@@ -76,6 +79,7 @@ builder.Services.AddControllers(options =>
     .AddApplicationPart(typeof(IdentityPlatformModule).Assembly)
     .AddApplicationPart(typeof(FasPaymentModule).Assembly)
     .AddApplicationPart(typeof(MfaModule).Assembly)
+    .AddApplicationPart(typeof(NotificationModule).Assembly)
     .AddApplicationPart(typeof(AiCopilotModule).Assembly)
     .AddApplicationPart(typeof(MailDeliveryModule).Assembly);
 

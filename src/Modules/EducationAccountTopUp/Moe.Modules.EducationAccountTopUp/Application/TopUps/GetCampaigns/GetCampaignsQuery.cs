@@ -8,7 +8,9 @@ public sealed record GetCampaignsQuery(
     string? Search = null,
     string? Status = null,
     string? DateFrom = null,
-    string? DateTo = null) : IQuery<CampaignListResult>;
+    string? DateTo = null,
+    string? SortBy = null,
+    string? SortDirection = null) : IQuery<CampaignListResult>;
 
 public sealed record CampaignListResult(
     IReadOnlyList<CampaignListItem> Items,

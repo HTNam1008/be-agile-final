@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
@@ -11,6 +12,10 @@ using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
+using Moe.SharedKernel.Results;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.FasPayment.Application.StudentApplications;
@@ -23,12 +28,17 @@ public sealed class StudentFasApplicationService(
     IOrganizationUnitRepository organizations,
     IAuditService audit,
     FasEmailNotificationService fasEmails,
-    IClock clock)
+    IClock clock,
+    IStudentNotificationRecipientResolver studentNotificationRecipients,
+    ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
+    INotificationWriter notificationWriter,
+    ILogger<StudentFasApplicationService> logger)
 {
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
          currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"));
     private long Actor() => currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED");
+    private DateOnly Today() => DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
 
     private async Task<ProfileRow> Profile(CancellationToken ct)
     {
@@ -71,13 +81,58 @@ public sealed class StudentFasApplicationService(
         };
     }
 
+    public async Task<EligibilityCriteriaPlan> EligibilityCriteriaPlan(CancellationToken ct)
+    {
+        var p = await Profile(ct);
+        var accountType = await ResolveAccountType(p.PersonId, ct);
+        var today = Today();
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var openSchemes = await db.Set<FasScheme>()
+            .AsNoTracking()
+            .Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id))
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(ct);
+
+        long[] schemeIds = openSchemes.Select(x => x.Id).ToArray();
+        string[] requiredCriteriaTypes = schemeIds.Length == 0
+            ? []
+            : await (
+                from tier in db.Set<FasTier>().AsNoTracking()
+                join criteria in db.Set<FasTierCriteria>().AsNoTracking()
+                    on tier.Id equals criteria.FasTierId
+                where schemeIds.Contains(tier.FasSchemeId)
+                select criteria.CriteriaType)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToArrayAsync(ct);
+
+        List<string> profileFacts = [$"school: {p.SchoolName}", $"student nationality: {p.NationalityCode}", $"account type: {accountType}", "date of birth"];
+        if (!string.IsNullOrWhiteSpace(p.Email)) profileFacts.Add("email");
+
+        List<string> userRequiredFacts = ["welfare home status"];
+        if (requiredCriteriaTypes.Any(IsIncomeCriterion))
+        {
+            userRequiredFacts.Add("monthly household income");
+            userRequiredFacts.Add("household member count");
+            userRequiredFacts.Add("other monthly income");
+        }
+        userRequiredFacts.Add("parent or guardian nationality");
+
+        return new EligibilityCriteriaPlan(
+            openSchemes.Select(x => new EligibilitySchemeOption(x.Id, x.Name)).OrderBy(x => x.Name).ToArray(),
+            openSchemes.Select(x => x.Name).OrderBy(x => x).ToArray(),
+            requiredCriteriaTypes,
+            profileFacts,
+            userRequiredFacts.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
     public async Task<object> ListSchemes(int page, int pageSize, string? search, CancellationToken ct)
     {
         if (page < 1 || pageSize is < 1 or > 100) throw new ArgumentException("FAS.INVALID_PAGING");
         search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         if (search?.Length > 255) throw new ArgumentException("FAS.SEARCH_TOO_LONG");
 
-        var p = await Profile(ct); var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var p = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
         IQueryable<FasScheme> query = db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id));
         if (search is not null) query = query.Where(x => x.Name.Contains(search) || (x.Description != null && x.Description.Contains(search)));
         long totalCount = await query.LongCountAsync(ct);
@@ -99,7 +154,7 @@ public sealed class StudentFasApplicationService(
 
     public async Task<object> SchemeDetail(long id, CancellationToken ct)
     {
-        var profile = await Profile(ct); var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime); var applicable = await ApplicableSchemeIds(profile.SchoolOrganizationId, ct);
+        var profile = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(profile.SchoolOrganizationId, ct);
         var scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.StatusCode == "ACTIVE", ct)
             ?? throw new KeyNotFoundException("FAS.SCHEME_NOT_FOUND");
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == id).OrderBy(x => x.DisplayOrder)
@@ -554,7 +609,7 @@ public sealed class StudentFasApplicationService(
                 ?? throw new ArgumentException("FAS.INVALID_TIER");
             var scheme = await db.Set<FasScheme>().AsNoTracking().SingleAsync(x => x.Id == item.FasSchemeId, ct);
 
-            DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+            DateOnly today = Today();
             if (scheme.StatusCode != "ACTIVE" || scheme.EndDate < today) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
 
             DateTime now = clock.UtcNow.UtcDateTime;
@@ -575,6 +630,7 @@ public sealed class StudentFasApplicationService(
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             await fasEmails.SendSchemeApprovedAsync(item.Id, ct);
+            await NotifyStudentForApprovedSchemeAsync(item.FasApplicationId, tier.Label, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, selectedTierId = tier.Id, item.ApprovedAmount, item.ValidFrom, item.ValidTo };
         });
@@ -606,6 +662,7 @@ public sealed class StudentFasApplicationService(
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             await fasEmails.SendSchemeRejectedAsync(item.Id, r.Notes, ct);
+            await NotifyStudentForRejectedSchemeAsync(item.FasApplicationId, r.Notes, ct);
 
             return new { applicationSchemeId = item.Id, status = item.StatusCode, item.RejectionNotes };
         });
@@ -673,7 +730,7 @@ public sealed class StudentFasApplicationService(
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-            await fasEmails.SendSubmissionAcknowledgementAsync(app.Id, ct);
+            await NotifySubmissionAsync(app.Id, ct);
             return await ApplicationReview(id, ct);
         });
     }
@@ -909,7 +966,7 @@ public sealed class StudentFasApplicationService(
         if (courseId <= 0) throw new ArgumentException("FAS.COURSE_REQUIRED");
         var (person, _) = Identity();
         var profile = await Profile(ct);
-        var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        var today = Today();
         var courseExists = await db.Set<Course>()
             .AsNoTracking()
             .AnyAsync(x => x.Id == courseId && x.OrganizationId == profile.SchoolOrganizationId, ct);
@@ -1064,7 +1121,7 @@ public sealed class StudentFasApplicationService(
 
     private async Task<List<long>> OpenApplicableSchemeIds(long schoolId, IReadOnlyCollection<long> schemeIds, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        var today = Today();
         var applicable = await ApplicableSchemeIds(schoolId, ct);
         return await db.Set<FasScheme>()
             .AsNoTracking()
@@ -1096,6 +1153,7 @@ public sealed class StudentFasApplicationService(
     }
 
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";
+    private static bool IsIncomeCriterion(string criteriaType) => criteriaType is "GDP" or "GHI" or "PCI";
     private static string SchemeAvailabilityStatus(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? "AVAILABLE" : "NOT_AVAILABLE";
     private static string? SchemeAvailabilityMessage(string schemeStatus) => SchemeIsAvailable(schemeStatus) ? null : "This FAS scheme is no longer available.";
     private static string StudentVisibleStatus(string itemStatus, string schemeStatus)
@@ -1355,6 +1413,97 @@ public sealed class StudentFasApplicationService(
         catch (JsonException)
         {
             return null;
+        }
+    }
+    private async Task NotifySubmissionAsync(long applicationId, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        if (app.SchoolOrganizationId is null) return;
+
+        IReadOnlyCollection<long> userAccountIds = await schoolAdminRecipients.FindUserAccountIdsByOrganizationIdAsync(
+            app.SchoolOrganizationId.Value,
+            ct);
+        if (userAccountIds.Count == 0) return;
+
+        foreach (long userAccountId in userAccountIds.Distinct())
+        {
+            Result<long> result = await notificationWriter.CreateAsync(
+                new NotificationCreateRequest(
+                    userAccountId,
+                    NotificationTypeCode.FasSubmitted,
+                    $"FAS Application Submitted: {app.ApplicationNo}",
+                    $"New FAS application {app.ApplicationNo} for {app.SchoolName} was submitted."),
+                ct);
+
+            if (result.IsFailure)
+            {
+                logger.LogWarning(
+                    "FAS submit notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                    applicationId,
+                    userAccountId,
+                    result.Error.Code);
+            }
+        }
+    }
+
+    private async Task NotifyStudentForApprovedSchemeAsync(long applicationId, string tierName, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        FasScheme? scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == app.FasSchemeId, ct);
+        string schemeName = scheme?.Name ?? "FAS Scheme";
+
+        long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
+        if (userAccountId is null) return;
+
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.FasEligible,
+                $"FAS Application Approved: {app.ApplicationNo}",
+                $"Your FAS application {app.ApplicationNo} for {schemeName} was approved. You qualify for {tierName}."),
+            ct);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "FAS approve notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                applicationId,
+                userAccountId,
+                result.Error.Code);
+        }
+    }
+
+    private async Task NotifyStudentForRejectedSchemeAsync(long applicationId, string rejectionNotes, CancellationToken ct)
+    {
+        FasApplication? app = await db.Set<FasApplication>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == applicationId, ct);
+        if (app is null) return;
+
+        FasScheme? scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == app.FasSchemeId, ct);
+        string schemeName = scheme?.Name ?? "FAS Scheme";
+
+        long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
+        if (userAccountId is null) return;
+
+        string reason = string.IsNullOrWhiteSpace(rejectionNotes) ? "No rejection reason was provided." : rejectionNotes.Trim();
+        Result<long> result = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.FasRejected,
+                $"FAS Application Rejected: {app.ApplicationNo}",
+                $"Your FAS application {app.ApplicationNo} for {schemeName} was rejected. Reason: {reason}."),
+            ct);
+
+        if (result.IsFailure)
+        {
+            logger.LogWarning(
+                "FAS reject notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
+                applicationId,
+                userAccountId,
+                result.Error.Code);
         }
     }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);

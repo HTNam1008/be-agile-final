@@ -8,8 +8,12 @@ public static class AiRetentionCleanup
 {
     public static async Task<int> CleanupExpiredAsync(MoeDbContext db, DateTime cutoffUtc, CancellationToken ct = default)
     {
-        List<AiConversation> expired = await db.Set<AiConversation>().Where(x => x.ExpiresAtUtc < cutoffUtc)
-            .Take(500).ToListAsync(ct);
+        List<AiConversation> expired = await db.Set<AiConversation>()
+            .Where(x => x.ExpiresAtUtc < cutoffUtc)
+            .OrderBy(x => x.ExpiresAtUtc)
+            .ThenBy(x => x.Id)
+            .Take(500)
+            .ToListAsync(ct);
 
         if (expired.Count == 0) return 0;
 

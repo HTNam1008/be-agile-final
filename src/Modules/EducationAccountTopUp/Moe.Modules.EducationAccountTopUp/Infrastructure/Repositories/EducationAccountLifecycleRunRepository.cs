@@ -8,14 +8,15 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 internal sealed class EducationAccountLifecycleRunRepository(MoeDbContext dbContext)
     : IEducationAccountLifecycleRunRepository
 {
-    public Task<bool> HasScheduledRunAsync(
+    public async Task<bool> ScheduledRunExistsAsync(
         DateOnly runDateUtc,
         CancellationToken cancellationToken)
-        => dbContext.Set<EducationAccountLifecycleRun>()
+        => await dbContext
+            .Set<EducationAccountLifecycleRun>()
             .AsNoTracking()
             .AnyAsync(
-                run => run.RunDateUtc == runDateUtc
-                    && run.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled,
+                x => x.RunDateUtc == runDateUtc
+                     && x.TriggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled,
                 cancellationToken);
 
     public async Task AddAsync(

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Moe.Application.Abstractions.Clock;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -32,12 +33,15 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("No", conversationId);
         await SendFasMessage("3000", conversationId);
         await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
 
-        JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+        JsonElement completed = await SendFasMessage("Foreigner", conversationId);
 
         Assert.Equal("MANUAL_FALLBACK", completed.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.Contains("could not find an eligible FAS scheme", completed.GetProperty("text").GetString());
         Assert.DoesNotContain(completed.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
+        Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "CONTACT_ADMIN_CENTER");
+        Assert.True(completed.TryGetProperty("reviewRecordId", out JsonElement review) && review.ValueKind == JsonValueKind.String);
     }
 
     [Fact]
@@ -48,6 +52,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("No", conversationId);
         await SendFasMessage("3000", conversationId);
         await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
 
         JsonElement completed = await SendFasMessage("Singaporean", conversationId);
 
@@ -62,18 +67,44 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Assert.False(patch.GetProperty("income").GetProperty("isWelfareHomeResident").GetBoolean());
         Assert.Equal(3000m, patch.GetProperty("income").GetProperty("monthlyHouseholdIncome").GetDecimal());
         Assert.Equal(4, patch.GetProperty("income").GetProperty("householdMemberCount").GetInt32());
+        Assert.Equal(0m, patch.GetProperty("income").GetProperty("otherMonthlyIncome").GetDecimal());
         Assert.Equal("Singapore Citizen", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
         Assert.True(patch.GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
         Assert.Contains("AI FAS", patch.GetProperty("schemes").GetProperty("recommendedSchemeNames")[0].GetString());
 
         Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "APPLY_FAS_PATCH");
+        JsonElement openAction = completed.GetProperty("actions").EnumerateArray().Single(x => x.GetProperty("label").GetString() == "Open FAS application");
+        Assert.True(openAction.GetProperty("payload").GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
+    }
+
+    [Fact]
+    public async Task Fas_interview_welfare_home_path_prepares_scheme_patch()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("Yes", conversationId);
+
+        JsonElement completed = await SendFasMessage("Singapore Citizen", conversationId);
+
+        Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("welfare-home status", completed.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
+        Assert.True(patch.GetProperty("income").GetProperty("isWelfareHomeResident").GetBoolean());
+        Assert.Equal("Singapore Citizen", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
+        Assert.True(patch.GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
+        Assert.Equal("AI_CONFIRMED", patch.GetProperty("meta").GetProperty("schemeIds").GetProperty("provenance").GetString());
+        Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "APPLY_FAS_PATCH");
+        JsonElement openAction = completed.GetProperty("actions").EnumerateArray().Single(x => x.GetProperty("label").GetString() == "Open FAS application");
+        Assert.True(openAction.GetProperty("payload").GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
     }
 
     private async Task<Guid> StartFasInterview()
     {
         JsonElement started = await SendFasMessage("Can you check my FAS eligibility?", null);
         Assert.Equal("FAS_INTERVIEW", started.GetProperty("mode").GetString());
-        Assert.Equal("Are you currently residing in an approved welfare home? Please answer yes or no.", started.GetProperty("text").GetString());
+        Assert.Contains("MOE record facts", started.GetProperty("text").GetString());
+        Assert.Contains("I still need", started.GetProperty("text").GetString());
+        Assert.Contains("Are you currently residing in an approved welfare home? Please answer yes or no.", started.GetProperty("text").GetString());
         Assert.Equal("isWelfareHomeResident", started.GetProperty("interviewState").GetProperty("missingFields")[0].GetString());
         return started.GetProperty("conversationId").GetGuid();
     }
@@ -123,16 +154,17 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             grantCode = $"AI-FAS-NO-GRANT-{suffix}",
             name = $"AI FAS No Match {suffix}",
             description = "AI copilot no-match scheme",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
                 new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
-                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 2 },
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 3 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 4 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 4 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 5 }
             },
             tiers = new object[]
             {
@@ -143,10 +175,11 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 13m, numberTo = 25m, nationalities = (string[]?)null },
-                        new { displayOrder = 2, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null },
-                        new { displayOrder = 3, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
-                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                        new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
+                        new { displayOrder = 3, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null },
+                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
+                        new { displayOrder = 5, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
                     }
                 }
             }
@@ -184,16 +217,17 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             grantCode = $"AI-FAS-GRANT-{suffix}",
             name = $"AI FAS {suffix}",
             description = "AI copilot integration scheme",
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = Array.Empty<long>(),
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
                 new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
-                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 2 },
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 3 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 4 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 4 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 5 }
             },
             tiers = new object[]
             {
@@ -204,10 +238,11 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 13m, numberTo = 25m, nationalities = (string[]?)null },
-                        new { displayOrder = 2, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
-                        new { displayOrder = 3, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
-                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                        new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 2, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
+                        new { displayOrder = 3, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
+                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
+                        new { displayOrder = 5, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
                     }
                 }
             }

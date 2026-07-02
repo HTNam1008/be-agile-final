@@ -27,8 +27,41 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     public async Task Financial_assistance_definition_stays_general()
     {
         JsonElement response = await Chat("Tell me about financial assistance", personId: 2101);
-        Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
         Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Theory]
+    [InlineData("Explain the MOE FAS Bursary")]
+    [InlineData("What is the Tiered Fee Subsidy scheme?")]
+    [InlineData("How does the JC/CI FAS scheme work?")]
+    public async Task Fas_scheme_information_routes_to_knowledge_base(string message)
+    {
+        JsonElement response = await Chat(message, personId: 2101);
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.True(response.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        Assert.NotEmpty(response.GetProperty("grounding").GetProperty("citations").EnumerateArray());
+        Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Bursary_question_prioritizes_bursary_source()
+    {
+        JsonElement response = await Chat("Explain the MOE FAS Bursary", personId: 2101);
+
+        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
+        Assert.Contains("BURSARY", firstCitation.GetProperty("sourceId").GetString());
+        Assert.Contains("bursary", firstCitation.GetProperty("section").GetString()!.ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task Fas_process_question_prioritizes_application_process_source()
+    {
+        JsonElement response = await Chat("Walk me through the FAS application process.", personId: 2101);
+
+        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
+        Assert.Contains("APPLICATION", firstCitation.GetProperty("sourceId").GetString());
+        Assert.Contains("application", firstCitation.GetProperty("section").GetString()!.ToLowerInvariant());
     }
 
     [Fact]
@@ -40,10 +73,10 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
-    public async Task Eligibility_keyword_routes_to_fas()
+    public async Task Eligibility_without_fas_context_routes_to_general()
     {
         JsonElement response = await Chat("Am I eligible?", personId: 2101);
-        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
     }
 
     [Fact]
@@ -96,6 +129,39 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     {
         JsonElement response = await Chat("How do I pay my course fees?", personId: 2101);
         Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+    }
+
+    [Theory]
+    [InlineData("i want to do fas, help me")]
+    [InlineData("help me with fas")]
+    [InlineData("i want to apply for financial assistance")]
+    [InlineData("can you guide me through fas")]
+    [InlineData("how do i do fas")]
+    [InlineData("i have a question about fas")]
+    public async Task Natural_fas_phrasing_routes_to_fas_interview(string message)
+    {
+        JsonElement response = await Chat(message, personId: 2101);
+        string? mode = response.GetProperty("mode").GetString();
+        Assert.True(mode == "FAS_INTERVIEW",
+            $"Expected FAS_INTERVIEW for \"{message}\", got {mode}");
+    }
+
+    [Fact]
+    public async Task Fas_on_payment_page_does_not_get_contaminated()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
+        request.Headers.Add("X-Test-PersonId", "2101");
+        request.Content = JsonContent.Create(new
+        {
+            message = "help me with fas",
+            pageContext = new { domain = "PAYMENT", surface = "PORTAL", path = "/portal/bills" }
+        });
+        using HttpResponseMessage response = await _client.SendAsync(request);
+        JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement root = doc.RootElement.Clone();
+        JsonElement data = root.TryGetProperty("data", out JsonElement d) ? d : root;
+        string? mode = data.GetProperty("mode").GetString();
+        Assert.Equal("FAS_INTERVIEW", mode);
     }
 
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)

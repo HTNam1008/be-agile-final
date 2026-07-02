@@ -112,10 +112,10 @@ public sealed class EducationAccountLifecycleWorker(
         IUnitOfWork unitOfWork = runScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         if (triggerTypeCode == EducationAccountLifecycleRunTriggerTypes.Scheduled
-            && await runs.HasScheduledRunAsync(today, cancellationToken))
+            && await runs.ScheduledRunExistsAsync(today, cancellationToken))
         {
             logger.LogInformation(
-                "Scheduled lifecycle run already exists for {RunDateUtc}, skipping.",
+                "Scheduled lifecycle run already claimed for {RunDateUtc}, skipping.",
                 today);
             return new EducationAccountLifecycleRunResult(0, 0, Skipped: true);
         }

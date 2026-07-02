@@ -49,15 +49,16 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
         if (fees.Count == 0)
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
         DateTime now = clock.UtcNow.UtcDateTime;
+        DateOnly today = clock.TodayInSingapore();
         bool installment = plan.PlanTypeCode == "INSTALLMENT";
         DateOnly dueDate = installment
             ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(now)
-            : DateOnly.FromDateTime(now);
+            : today;
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(
                 personId,
                 enrollment.CourseId,
-                DateOnly.FromDateTime(now),
+                today,
                 command.FasApplicationSchemeIds,
                 ct);
         int requestedFasCount = command.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;

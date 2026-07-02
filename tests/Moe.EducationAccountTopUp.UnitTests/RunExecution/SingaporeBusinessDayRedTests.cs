@@ -75,7 +75,7 @@ public sealed class SingaporeBusinessDayRedTests
     private sealed class EmptyCampaignReader : ITopUpCampaignReader
     {
         public Task<CampaignListItem?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult<CampaignListItem?>(null);
-        public Task<CampaignListResult> GetCampaignsAsync(IReadOnlyCollection<long>? accessibleOrgIds, int pageNumber = 1, int pageSize = 50, string? search = null, string? status = null, DateOnly? dateFrom = null, DateOnly? dateTo = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<CampaignListResult> GetCampaignsAsync(IReadOnlyCollection<long>? accessibleOrgIds, int pageNumber = 1, int pageSize = 50, string? search = null, string? status = null, DateOnly? dateFrom = null, DateOnly? dateTo = null, string? sortBy = null, string? sortDirection = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CampaignRuleProjection>>([]);
         public Task<IReadOnlyList<ActiveRecipientProjection>> GetActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ActiveRecipientProjection>>([]);
         public Task<(int TotalCount, IReadOnlyList<PreviewFixedRecipient> Items)> GetFixedRecipientsForPreviewAsync(long campaignId, int skip, int take, CancellationToken cancellationToken = default) => Task.FromResult<(int, IReadOnlyList<PreviewFixedRecipient>)>((0, []));

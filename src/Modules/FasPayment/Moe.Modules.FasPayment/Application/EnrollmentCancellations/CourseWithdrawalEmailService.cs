@@ -21,6 +21,11 @@ internal sealed class CourseWithdrawalEmailService(
         EnrollmentRefundExecutionResult? refundResult,
         CancellationToken cancellationToken)
     {
+        if (!mailScheduler.IsEnabled)
+        {
+            return;
+        }
+
         Person? person = await dbContext.Set<Person>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == snapshot.Enrollment.PersonId, cancellationToken);

@@ -19,6 +19,7 @@ internal sealed class ProcessStripeWebhookHandler(
     ICoursePaymentGateway courses,
     IFasCourseSubsidyGateway fasSubsidies,
     IEducationAccountPaymentGateway accounts,
+    FasInAppNotificationService fasNotifications,
     IClock clock,
     IPaymentPersistenceTracker persistenceTracker,
     IStripeWebhookCoordinator coordinator,
@@ -217,6 +218,7 @@ internal sealed class ProcessStripeWebhookHandler(
             cancellationToken);
         payment.MarkSuccessful(webhook.CreatedAtUtc);
         checkout.RecordSuccessfulPayment(webhook.CreatedAtUtc);
+        await fasNotifications.SendPaymentSucceededAsync(payment.Id, cancellationToken);
         await CancelCompetingStatementPaymentsAsync(payment, webhook.CreatedAtUtc, cancellationToken);
         await paymentNotifications.SendPaymentSucceededAsync(payment, webhook.CreatedAtUtc, cancellationToken);
     }
@@ -288,6 +290,7 @@ internal sealed class ProcessStripeWebhookHandler(
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Failed, failedAtUtc);
         payment.MarkFailed(failedAtUtc);
         checkout.RecordPaymentFailure(failedAtUtc);
+        await fasNotifications.SendPaymentFailedAsync(payment.Id, cancellationToken);
         await paymentNotifications.SendStatementPaymentFailedAsync(
             payment,
             "The payment provider reported a failed payment. Please try again.",

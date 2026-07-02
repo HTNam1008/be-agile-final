@@ -231,13 +231,6 @@ internal sealed class PayBillingStatementHandler(
         IReadOnlyCollection<PayableStatementBill> selectedBills = selectedBillsResult.Value;
         decimal selectedOutstandingAmount = selectedBills.Sum(bill => bill.OutstandingAmount);
 
-        Result<PayBillingStatementResponse?> existingAttempt =
-            await ResumeOrCloseExistingAttemptAsync(statement.BillingStatementId, personId, ct);
-        if (!existingAttempt.IsSuccess)
-            return Result<PayBillingStatementResponse>.Failure(existingAttempt.Error);
-        if (existingAttempt.Value is not null)
-            return Result<PayBillingStatementResponse>.Success(existingAttempt.Value);
-
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
         Result<StatementFundingAllocation> allocationResult = ResolveFundingAllocation(
             command.Request.FundingOptionCode,
@@ -249,6 +242,21 @@ internal sealed class PayBillingStatementHandler(
         decimal educationAmount = allocationResult.Value.EducationAccountAmount;
         decimal onlineAmount = allocationResult.Value.OnlinePaymentAmount;
         DateTime now = clock.UtcNow.UtcDateTime;
+
+        if (onlineAmount == 0m)
+        {
+            await CancelExistingAttemptAsync(statement.BillingStatementId, personId, ct);
+        }
+        else
+        {
+            Result<PayBillingStatementResponse?> existingAttempt =
+                await ResumeOrCloseExistingAttemptAsync(statement.BillingStatementId, personId, ct);
+            if (!existingAttempt.IsSuccess)
+                return Result<PayBillingStatementResponse>.Failure(existingAttempt.Error);
+            if (existingAttempt.Value is not null)
+                return Result<PayBillingStatementResponse>.Success(existingAttempt.Value);
+        }
+
         Payment payment = Payment.StartStatementPayment(statement.BillingStatementId, personId,
             selectedOutstandingAmount, educationAmount, onlineAmount, command.Request.IdempotencyKey, now);
         List<PaymentPart> parts = [];
@@ -408,6 +416,55 @@ internal sealed class PayBillingStatementHandler(
         await paymentNotifications.SendPaymentExpiredAsync(activePayment, cancellationToken);
         await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, cancellationToken);
         return Result<PayBillingStatementResponse?>.Success(null);
+    }
+
+    private async Task CancelExistingAttemptAsync(
+        long billingStatementId,
+        long personId,
+        CancellationToken cancellationToken)
+    {
+        Payment? activePayment = await payments.FindActiveStatementPaymentAsync(
+            billingStatementId,
+            personId,
+            cancellationToken);
+        if (activePayment is null)
+        {
+            return;
+        }
+
+        StatementPaymentCheckoutSession? checkout = await payments.FindCheckoutByPaymentAsync(
+            activePayment.Id,
+            cancellationToken);
+        if (!string.IsNullOrWhiteSpace(checkout?.ProviderCheckoutSessionId))
+        {
+            try
+            {
+                await stripe.ExpireCheckoutAsync(checkout.ProviderCheckoutSessionId, cancellationToken);
+            }
+            catch (PaymentProviderUnavailableException)
+            {
+                // If the hosted checkout is already closed remotely, we still cancel the local attempt
+                // so the student can continue with Education Account payment.
+            }
+        }
+
+        DateTime now = clock.UtcNow.UtcDateTime;
+        IReadOnlyCollection<PaymentPart> parts = await payments.ListPaymentPartsAsync(
+            activePayment.Id,
+            cancellationToken);
+        PaymentPart? educationPart = parts.SingleOrDefault(
+            part => part.PaymentMethodCode == PaymentMethodCodes.EducationAccount);
+        if (educationPart?.AccountHoldId is long holdId)
+        {
+            await accounts.ReleaseAsync(holdId, cancellationToken);
+            educationPart.MarkCompleted(PaymentPartStatusCodes.Released, now);
+        }
+
+        parts.SingleOrDefault(part => part.PaymentMethodCode == PaymentMethodCodes.OnlinePayment)
+            ?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
+        checkout?.CancelBeforePayment(now);
+        activePayment.MarkCancelled(now);
+        await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, cancellationToken);
     }
 
     private static Result<StatementFundingAllocation> ResolveFundingAllocation(

@@ -4,6 +4,9 @@ using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.Students;
+using Moe.Modules.Notifications.Domain.Notifications;
+using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
@@ -11,6 +14,8 @@ namespace Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 internal sealed class SetSettlementPreferenceHandler(
     IEducationAccountRepository educationAccounts,
     ISettlementPreferenceRepository settlementPreferences,
+    IStudentNotificationRecipientResolver notificationRecipients,
+    INotificationWriter notificationWriter,
     IClock clock,
     IUnitOfWork unitOfWork)
     : ICommandHandler<SetSettlementPreferenceCommand, SettlementPreferenceResponse>
@@ -58,9 +63,36 @@ internal sealed class SetSettlementPreferenceHandler(
 
         await settlementPreferences.AddAsync(preference, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await NotifySettlementPreferenceAsync(account.PersonId, preference, cancellationToken);
 
         return Result<SettlementPreferenceResponse>.Success(
             SettlementPreferenceResponse.Applicable(GetSettlementPreferenceHandler.ToDto(preference)));
+    }
+
+    private async Task NotifySettlementPreferenceAsync(
+        long personId,
+        SettlementPreference preference,
+        CancellationToken cancellationToken)
+    {
+        long? userAccountId = await notificationRecipients.FindUserAccountIdByPersonIdAsync(personId, cancellationToken);
+        if (userAccountId is null)
+        {
+            return;
+        }
+
+        string status = preference.IsVerified ? "VERIFIED" : "UNVERIFIED";
+        Result<long> create = await notificationWriter.CreateAsync(
+            new NotificationCreateRequest(
+                userAccountId.Value,
+                NotificationTypeCode.SettlementPref,
+                "Settlement Preference Updated",
+                $"Destination: {preference.DestinationMasked}. Status: {status}."),
+            cancellationToken);
+
+        if (create.IsFailure)
+        {
+            return;
+        }
     }
 
     private static Result<DestinationDetails> CreateDestinationDetails(SetSettlementPreferenceCommand command)
