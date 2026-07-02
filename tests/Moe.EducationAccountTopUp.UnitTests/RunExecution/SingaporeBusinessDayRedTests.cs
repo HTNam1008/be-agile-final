@@ -62,7 +62,6 @@ public sealed class SingaporeBusinessDayRedTests
         public Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
         public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRule>>([]);
         public Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);

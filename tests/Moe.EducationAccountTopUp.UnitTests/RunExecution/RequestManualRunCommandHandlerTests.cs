@@ -296,14 +296,6 @@ public sealed class RequestManualRunCommandHandlerTests
                 .ToList());
         }
 
-        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(
-            long campaignId,
-            CancellationToken cancellationToken = default)
-        {
-            IReadOnlyList<TopUpCampaignRule> rules = [];
-            return Task.FromResult(rules);
-        }
-
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetActiveRecipientsAsync(
             long campaignId,
             CancellationToken cancellationToken = default)

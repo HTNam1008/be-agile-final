@@ -8,15 +8,16 @@ public sealed class UpsertCampaignRulesCommandValidator : AbstractValidator<Upse
     public UpsertCampaignRulesCommandValidator()
     {
         RuleFor(x => x.TopUpCampaignId).GreaterThan(0);
-        RuleFor(x => x.Groups).NotNull();
-        RuleFor(x => x.Groups).Must(groups => groups.Count <= 10).WithMessage("Max 10 rule groups.");
+        RuleFor(x => x.Groups).NotNull().NotEmpty();
+        RuleFor(x => x.Groups).Must(groups => groups is null || groups.Count <= 10).WithMessage("Max 10 rule groups.");
 
         RuleForEach(x => x.Groups).ChildRules(group =>
         {
             group.RuleFor(x => x.Criteria).NotNull().NotEmpty();
-            group.RuleFor(x => x.Criteria).Must(criteria => criteria.Count <= 10).WithMessage("Max 10 criteria per group.");
+            group.RuleFor(x => x.Criteria).Must(criteria => criteria is null || criteria.Count <= 10).WithMessage("Max 10 criteria per group.");
             group.RuleFor(x => x.Criteria)
-                .Must(criteria => criteria.Select(r => r.CriterionCode.ToUpperInvariant()).Distinct().Count() == criteria.Count)
+                .Must(criteria => criteria is null ||
+                    criteria.Select(r => r.CriterionCode.ToUpperInvariant()).Distinct().Count() == criteria.Count)
                 .WithMessage("Duplicate criteria are not allowed within a group.");
 
             group.RuleForEach(x => x.Criteria).SetValidator(new UpsertCampaignRuleDtoValidator());
