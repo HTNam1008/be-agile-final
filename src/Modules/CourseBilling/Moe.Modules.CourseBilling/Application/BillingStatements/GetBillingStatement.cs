@@ -30,6 +30,7 @@ internal sealed class GetBillingStatementHandler(
             query.Year,
             query.Month,
             clock.UtcNow.UtcDateTime,
+            BillingStatementNotificationMode.Suppress,
             cancellationToken));
     }
 }

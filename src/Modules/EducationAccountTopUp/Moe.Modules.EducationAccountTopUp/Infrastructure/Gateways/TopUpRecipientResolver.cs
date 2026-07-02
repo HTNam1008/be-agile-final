@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
@@ -13,6 +14,7 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 internal sealed class TopUpRecipientResolver(
     MoeDbContext dbContext,
     IDynamicRuleFilter dynamicRuleFilter,
+    IClock clock,
     ILogger<TopUpRecipientResolver> logger) : IRecipientResolver
 {
     public async Task<IReadOnlyList<RecipientInfo>> GetRecipientsChunkAsync(
@@ -66,7 +68,7 @@ internal sealed class TopUpRecipientResolver(
             .Select(r => new CampaignRuleProjection(r.Id, r.CriterionCode, r.OperatorCode, r.NumericValueFrom, r.NumericValueTo, r.TextValue))
             .ToList();
 
-        return await dynamicRuleFilter.CountMatchingAccountsAsync(projections, DateTime.UtcNow, cancellationToken);
+        return await dynamicRuleFilter.CountMatchingAccountsAsync(projections, clock.UtcNow.UtcDateTime, cancellationToken);
     }
 
     public async Task<decimal> GetTotalResolvedAmountAsync(
@@ -164,7 +166,7 @@ internal sealed class TopUpRecipientResolver(
             .ToList();
 
         IReadOnlyList<long> accountIds = await dynamicRuleFilter.FilterAccountIdsAsync(
-            projections, offset, chunkSize, DateTime.UtcNow, cancellationToken);
+            projections, offset, chunkSize, clock.UtcNow.UtcDateTime, cancellationToken);
 
         return accountIds
             .Select(id => new RecipientInfo

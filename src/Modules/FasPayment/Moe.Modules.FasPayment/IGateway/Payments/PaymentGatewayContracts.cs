@@ -33,6 +33,10 @@ internal interface IPaymentCheckoutRepository
     Task<bool> PaymentReferenceExistsAsync(string providerReference, CancellationToken cancellationToken);
     Task AddPaymentAsync(Payment payment, CancellationToken cancellationToken);
     Task<Payment?> FindPaymentAsync(long paymentId, CancellationToken cancellationToken);
+    Task<Payment?> FindPaymentByProviderReferenceAsync(
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        CancellationToken cancellationToken);
     Task<Payment?> FindActiveStatementPaymentAsync(
         long billingStatementId,
         long personId,
@@ -133,7 +137,16 @@ internal sealed record StripeCheckoutGatewayRequest(
     long UnitAmountMinor,
     int InstallmentCount,
     string? ProviderPriceId,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc,
+    long? PaymentId = null,
+    long? BillingStatementId = null,
+    IReadOnlyCollection<StripeCheckoutLineItem>? LineItems = null);
+
+internal sealed record StripeCheckoutLineItem(
+    string Name,
+    string? Description,
+    long AmountMinor,
+    long Quantity = 1);
 
 internal sealed record StripeCheckoutGatewayResult(
     string ProviderSessionId,
@@ -172,6 +185,11 @@ internal sealed record ParsedPaymentWebhook(
 
 internal sealed record StripeRefundGatewayResult(string ProviderRefundId);
 
+internal sealed record StripePaymentEvidenceGatewayResult(
+    string? HostedInvoiceUrl,
+    string? InvoicePdfUrl,
+    string? ReceiptUrl);
+
 internal interface IStripePaymentGateway
 {
     Task<StripeCheckoutGatewayResult> CreateCheckoutAsync(
@@ -189,6 +207,13 @@ internal interface IStripePaymentGateway
         CancellationToken cancellationToken);
 
     ParsedPaymentWebhook ParseWebhook(string payload, string signatureHeader);
+    Task<StripePaymentEvidenceGatewayResult> GetPaymentEvidenceAsync(
+        string? providerCheckoutSessionId,
+        string? providerPaymentIntentId,
+        string? providerInvoiceId,
+        string? providerChargeId,
+        CancellationToken cancellationToken);
+
     Task<StripeRefundGatewayResult> CreateRefundAsync(
         string idempotencyKey,
         string providerChargeId,

@@ -41,6 +41,13 @@ public sealed record PayableStatementBill(
 
 public sealed record BillPaymentAllocation(long BillId, decimal Amount);
 
+public sealed record PaymentCheckoutLineItem(
+    long BillId,
+    string Name,
+    string? Description,
+    decimal Amount,
+    int Quantity = 1);
+
 public interface ICoursePaymentPlanGateway
 {
     Task<CourseBillingPlan?> FindPlanAsync(
@@ -64,6 +71,10 @@ public interface ICoursePaymentGateway
         DateTime paidAtUtc,
         CancellationToken cancellationToken);
 
+    Task SendInstallmentEnrollmentConfirmationAsync(
+        long courseEnrollmentId,
+        CancellationToken cancellationToken);
+
     Task ApplyPaymentFailureAsync(
         long billId,
         string failureReason,
@@ -83,6 +94,10 @@ public interface ICoursePaymentGateway
         long statementId,
         IReadOnlyCollection<BillPaymentAllocation> allocations,
         DateTime paidAtUtc,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyCollection<PaymentCheckoutLineItem>> BuildPaymentCheckoutLineItemsAsync(
+        IReadOnlyCollection<long> billIds,
         CancellationToken cancellationToken);
 
     Task<Result> DeferStatementAsync(

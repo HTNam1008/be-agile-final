@@ -14,9 +14,8 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
         RuleFor(x => x.IdentityNumber)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .MaximumLength(30)
-            .Matches("^[A-Za-z0-9]+$")
-            .WithMessage("Identity number can contain only letters and numbers.");
+            .Must(SingaporeIdentityNumberValidator.IsValid)
+            .WithMessage("Identity number must be a valid Singapore NRIC/FIN.");
 
         RuleFor(x => x.FullName)
             .NotEmpty()
@@ -25,6 +24,10 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
         RuleFor(x => x.DateOfBirth)
             .Must(BeReasonableStudentAge)
             .WithMessage("Student age must be between 6 and 40 years.");
+
+        RuleFor(x => x)
+            .Must(HaveStartDateOnOrAfterDateOfBirth)
+            .WithMessage("Start date cannot be earlier than date of birth.");
 
         RuleFor(x => x.NationalityCode)
             .NotEmpty()
@@ -55,7 +58,7 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
             .MaximumLength(320)
             .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
-        RuleFor(x => x.Mobile).MaximumLength(50);
+        RuleFor(x => x.ContactNumber).MaximumLength(50);
         RuleFor(x => x.Address).MaximumLength(1000);
     }
 
@@ -71,4 +74,7 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
 
         return age is >= 6 and <= 40;
     }
+
+    private static bool HaveStartDateOnOrAfterDateOfBirth(CreateStudentCommand command)
+        => !command.StartDate.HasValue || command.StartDate.Value >= command.DateOfBirth;
 }

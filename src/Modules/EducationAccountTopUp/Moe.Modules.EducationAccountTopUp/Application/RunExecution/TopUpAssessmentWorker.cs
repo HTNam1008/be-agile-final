@@ -52,7 +52,7 @@ public sealed class TopUpAssessmentWorker(
         var distributedLock = scope.ServiceProvider.GetRequiredService<IDistributedLock>();
 
         DateTime nowUtc = clock.UtcNow.UtcDateTime;
-        DateOnly today = clock.TodayInSingapore();
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         var activeCampaigns = await campaignRepo.GetDueForAssessmentAsync(today, ct);
 
         foreach (var campaign in activeCampaigns)

@@ -23,5 +23,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Moe.StudentFinance.IntegrationTests" />
     <InternalsVisibleTo Include="Moe.Modules.FasPayment" />
+    <InternalsVisibleTo Include="Moe.FasPayment.UnitTests" />
   </ItemGroup>
 </Project>
