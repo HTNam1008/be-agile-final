@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
@@ -285,25 +286,19 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         => new(
             SchoolName: null,
             OrganizationId: null,
-            IdentityNumber: $"U{suffix[..7]}{IdentityFragment(rowSuffix)}",
+            IdentityNumber: ValidIdentityNumber(suffix, rowSuffix),
             FullName: $"UM015 Student {suffix} {rowSuffix}",
             DateOfBirth: new DateOnly(2008, 5, 12),
             NationalityCode: "SG",
             CitizenshipStatusCode: "CITIZEN",
             StudentNumber: $"UM015-{rowSuffix}-{suffix}",
             AcademicYear: "2026",
-            LevelCode: "SEC_4",
+            LevelCode: "BACHELOR",
             ClassCode: "4A",
             StartDate: new DateOnly(2026, 1, 2),
             Email: $"um015.{suffix}.{rowSuffix}@example.com",
             Mobile: "+6591234567",
             Address: $"UM015 address {suffix}");
-
-    private static string IdentityFragment(string value)
-        => new(value
-            .Where(char.IsLetterOrDigit)
-            .Take(12)
-            .ToArray());
 
     private static async Task<BulkImportResponse> ReadBulkImportResponseAsync(HttpResponseMessage response)
     {
@@ -344,6 +339,48 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
 
     private static string UniqueSuffix()
         => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+    private static string ValidIdentityNumber(string suffix, string rowSuffix)
+    {
+        int number = StableSevenDigitNumber($"{suffix}-{rowSuffix}");
+        string digits = number.ToString("D7");
+        return $"S{digits}{ComputeChecksum('S', digits)}";
+    }
+
+    private static int StableSevenDigitNumber(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261;
+            foreach (byte item in Encoding.UTF8.GetBytes(value))
+            {
+                hash ^= item;
+                hash *= 16777619;
+            }
+
+            return (int)(hash % 10_000_000);
+        }
+    }
+
+    private static char ComputeChecksum(char prefix, string digits)
+    {
+        int[] weights = [2, 7, 6, 5, 4, 3, 2];
+        int sum = prefix is 'T' or 'G' ? 4 : prefix is 'M' ? 3 : 0;
+        for (int index = 0; index < weights.Length; index++)
+        {
+            sum += (digits[index] - '0') * weights[index];
+        }
+
+        string checksumTable = prefix switch
+        {
+            'S' or 'T' => "JZIHGFEDCBA",
+            'F' or 'G' => "XWUTRQPNMLK",
+            'M' => "XWUTRQPNJLK",
+            _ => throw new ArgumentOutOfRangeException(nameof(prefix), prefix, null)
+        };
+
+        return checksumTable[sum % 11];
+    }
 
     private static async Task AssertStatusAsync(HttpStatusCode expected, HttpResponseMessage response)
     {
