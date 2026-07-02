@@ -401,8 +401,7 @@ internal sealed record DevelopmentClockResponse(DateTimeOffset UtcNow, DateOnly 
 public partial class Program
 {
     internal static bool IsDevelopmentClockEnabled(IHostEnvironment environment, IConfiguration configuration)
-        => !environment.IsProduction()
-           && configuration.GetValue("DevTools:Clock:Enabled", false);
+        => configuration.GetValue("DevTools:Clock:Enabled", false);
 
     internal static DevelopmentClockResponse CreateDevelopmentClockResponse(DevelopmentManualClock clock)
         => new(clock.UtcNow, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime), clock.IsOverridden);

@@ -5,11 +5,13 @@
       - people, student enrollments, login accounts, roles and permissions
       - organizations/schools
       - shared fee component catalogue
+      - MFA credentials
       - education accounts (their balances and lifecycle state are reset)
       - EF migration history
 
     Deleted domains:
-      course, billing, topup, payment, fas, communication, audit and ai.
+      course, billing, topup, payment, fas, communication, mail, audit and ai;
+      transient identity provisioning requests, MFA challenges and MFA audit events.
 
     The script is intentionally blocked until @ConfirmReset is changed to 1.
 */
@@ -38,7 +40,7 @@ INSERT INTO @TargetTables (ObjectId, SchemaName, TableName)
 SELECT t.object_id, s.name, t.name
 FROM sys.tables t
 JOIN sys.schemas s ON s.schema_id = t.schema_id
-WHERE (s.name IN ('course', 'billing', 'topup', 'payment', 'fas', 'communication', 'audit', 'ai')
+WHERE (s.name IN ('course', 'billing', 'topup', 'payment', 'fas', 'communication', 'mail', 'audit', 'ai')
        AND NOT (s.name = 'course' AND t.name = 'FeeComponent'))
    OR (s.name = 'account' AND t.name IN
       (
@@ -48,6 +50,12 @@ WHERE (s.name IN ('course', 'billing', 'topup', 'payment', 'fas', 'communication
           'SettlementPreference',
           'EducationAccountLifecycleRunItem',
           'EducationAccountLifecycleRun'
+      ))
+   OR (s.name = 'iam' AND t.name IN
+      (
+          'IdentityProvisioningRequest',
+          'LoginMfaAuditEvent',
+          'LoginMfaChallenge'
       ));
 
 IF NOT EXISTS (SELECT 1 FROM @TargetTables)
