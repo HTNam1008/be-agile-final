@@ -47,6 +47,19 @@ public sealed class StudentManagementReferenceDataApiTests(CustomWebApplicationF
             GetProperty(option, "value").GetString() == "PHD"
             && GetProperty(option, "label").GetString() == "Doctor");
 
+        JsonElement citizenshipStatuses = GetProperty(GetProperty(data, "studentListFilters"), "citizenshipStatuses");
+        var citizenshipOptions = citizenshipStatuses.EnumerateArray().ToArray();
+        Assert.Equal(3, citizenshipOptions.Length);
+        Assert.Contains(citizenshipOptions, option =>
+            GetProperty(option, "value").GetString() == "CITIZEN"
+            && GetProperty(option, "label").GetString() == "Singapore Citizen");
+        Assert.Contains(citizenshipOptions, option =>
+            GetProperty(option, "value").GetString() == "PR"
+            && GetProperty(option, "label").GetString() == "PR");
+        Assert.Contains(citizenshipOptions, option =>
+            GetProperty(option, "value").GetString() == "VALID_PASS_HOLDER"
+            && GetProperty(option, "label").GetString() == "International Student");
+
         JsonElement openReasons = GetProperty(GetProperty(data, "educationAccount"), "openReasons");
         Assert.Equal(JsonValueKind.Array, openReasons.ValueKind);
         Assert.Empty(openReasons.EnumerateArray());

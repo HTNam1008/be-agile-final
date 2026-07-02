@@ -8,6 +8,7 @@ internal sealed record ListAdminStudentsQuery(
     string? Search,
     IReadOnlyCollection<string> LevelCodes,
     string? ClassCode,
+    string? CitizenshipStatusCode,
     AdminStudentAccountStatusFilter AccountStatus,
     AdminStudentPortalAccessStatusFilter PortalAccessStatus,
     AdminStudentEnrollmentStatusFilter EnrollmentStatus,
