@@ -1429,22 +1429,15 @@ public sealed class StudentFasApplicationService(
 
         foreach (long userAccountId in userAccountIds.Distinct())
         {
-            Result<long> result = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.FasSubmitted,
                     $"FAS Application Submitted: {app.ApplicationNo}",
                     $"New FAS application {app.ApplicationNo} for {app.SchoolName} was submitted."),
+                logger,
+                "FAS application submitted school admin notification",
                 ct);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "FAS submit notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                    applicationId,
-                    userAccountId,
-                    result.Error.Code);
-            }
         }
     }
 
@@ -1459,22 +1452,15 @@ public sealed class StudentFasApplicationService(
         long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
         if (userAccountId is null) return;
 
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.FasEligible,
                 $"FAS Application Approved: {app.ApplicationNo}",
                 $"Your FAS application {app.ApplicationNo} for {schemeName} was approved. You qualify for {tierName}."),
+            logger,
+            "FAS application approved student notification",
             ct);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS approve notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                applicationId,
-                userAccountId,
-                result.Error.Code);
-        }
     }
 
     private async Task NotifyStudentForRejectedSchemeAsync(long applicationId, string rejectionNotes, CancellationToken ct)
@@ -1489,22 +1475,15 @@ public sealed class StudentFasApplicationService(
         if (userAccountId is null) return;
 
         string reason = string.IsNullOrWhiteSpace(rejectionNotes) ? "No rejection reason was provided." : rejectionNotes.Trim();
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.FasRejected,
                 $"FAS Application Rejected: {app.ApplicationNo}",
                 $"Your FAS application {app.ApplicationNo} for {schemeName} was rejected. Reason: {reason}."),
+            logger,
+            "FAS application rejected student notification",
             ct);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS reject notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                applicationId,
-                userAccountId,
-                result.Error.Code);
-        }
     }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);
     private sealed record ChecklistItem(string ChecklistItemCode, string Label, bool IsMandatory, object? Document, bool IsComplete);
