@@ -17,6 +17,7 @@ using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignTransactionHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.ContractStatus;
 using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
+using Moe.Modules.EducationAccountTopUp.Application.Interest;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle.RunHistory;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
@@ -72,6 +73,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddSingleton<IModelConfigurationContributor, EducationAccountTopUpModelConfiguration>();
         services.AddOptions<EducationAccountLifecycleOptions>()
             .BindConfiguration(EducationAccountLifecycleOptions.SectionName);
+        services.AddOptions<EducationAccountInterestOptions>()
+            .BindConfiguration(EducationAccountInterestOptions.SectionName);
         services.AddOptions<TopUpWorkerOptions>()
             .BindConfiguration(TopUpWorkerOptions.SectionName);
         // Gateways & Repositories
@@ -88,6 +91,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
         services.AddScoped<ITopUpCampaignReader, TopUpCampaignReader>();
         services.AddScoped<IEducationAccountReader, EducationAccountReader>();
+        services.AddScoped<IEducationAccountInterestHistoryReader, EducationAccountReader>();
+        services.AddScoped<IAnnualInterestProcessor, AnnualInterestProcessor>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<IEducationAccountLifecycleHistoryReader, EducationAccountLifecycleHistoryReader>();
         services.AddScoped<IAccountTransactionHistoryReader, AccountTransactionHistoryReader>();
@@ -138,6 +143,10 @@ public sealed class EducationAccountTopUpModule : IModule
         {
             services.AddHostedService<TopUpAssessmentWorker>();
         }
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:AnnualInterest"))
+        {
+            services.AddHostedService<AnnualInterestWorker>();
+        }
         services.AddSingleton<EducationAccountLifecycleWorker>();
         if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Lifecycle"))
         {
@@ -159,6 +168,7 @@ public sealed class EducationAccountTopUpModule : IModule
         // Queries
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
         services.AddScoped<IQueryHandler<GetMyEducationAccountTransactionsQuery, MyEducationAccountTransactionsPage>, GetMyEducationAccountTransactionsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetMyEducationAccountInterestHistoryQuery, EducationAccountInterestHistoryResponse>, GetMyEducationAccountInterestHistoryHandler>();
         services.AddScoped<IQueryHandler<GetSettlementPreferenceQuery, SettlementPreferenceResponse>, GetSettlementPreferenceHandler>();
         services.AddScoped<IQueryHandler<GetCampaignsQuery, CampaignListResult>, GetCampaignsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignByIdQuery, CampaignListItem?>, GetCampaignByIdQueryHandler>();
