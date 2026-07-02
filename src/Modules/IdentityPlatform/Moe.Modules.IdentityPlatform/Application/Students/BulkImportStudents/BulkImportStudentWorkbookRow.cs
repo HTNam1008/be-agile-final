@@ -16,4 +16,5 @@ public sealed record BulkImportStudentWorkbookRow(
     DateOnly? StartDate,
     string? Email,
     string? ContactNumber,
-    string? Address);
+    string? Address,
+    bool IsTemplateSampleRow = false);

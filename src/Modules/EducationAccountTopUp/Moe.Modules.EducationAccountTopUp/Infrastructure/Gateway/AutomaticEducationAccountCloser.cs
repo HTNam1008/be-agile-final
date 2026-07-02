@@ -6,6 +6,7 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
@@ -18,6 +19,8 @@ internal sealed class AutomaticEducationAccountCloser(
     IEducationAccountRepository educationAccounts,
     IAccountHoldRepository accountHolds,
     IEligiblePersonLookupGateway people,
+    IAutomaticEducationAccountSettlementGateway settlements,
+    IPersonLifecycleGateway personLifecycle,
     IAuditService auditService,
     IUnitOfWork unitOfWork,
     EducationAccountClosureEmailService closureEmails,
@@ -91,6 +94,17 @@ internal sealed class AutomaticEducationAccountCloser(
                 account.PersonId,
                 Closed: false,
                 SkipReasonCode: AutomaticEducationAccountClosureSkipReasonCodes.AlreadyClosed);
+        }
+
+        await settlements.SettleRemainingBalanceAsync(account, closedAtUtc, cancellationToken);
+
+        Result disableResult = await personLifecycle.DisableAsync(
+            account.PersonId,
+            closedAtUtc.UtcDateTime,
+            cancellationToken);
+        if (disableResult.IsFailure)
+        {
+            throw new InvalidOperationException(disableResult.Error.Message);
         }
 
         string detailsJson = JsonSerializer.Serialize(new
