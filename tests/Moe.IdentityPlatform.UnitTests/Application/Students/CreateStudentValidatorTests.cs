@@ -9,6 +9,7 @@ namespace Moe.IdentityPlatform.UnitTests.Application.Students;
 public sealed class CreateStudentValidatorTests
 {
     private const string IdentityNumberErrorMessage = "Identity number must be a valid Singapore NRIC/FIN.";
+    private const string StartDateBeforeBirthErrorMessage = "Start date cannot be earlier than date of birth.";
 
     [Fact]
     public void ApplicationValidator_AllowsMissingCitizenshipStatusCode()
@@ -128,6 +129,98 @@ public sealed class CreateStudentValidatorTests
         result.Errors.Should().Contain(error =>
             error.PropertyName == nameof(CreateStudentRequest.IdentityNumber) &&
             error.ErrorMessage == IdentityNumberErrorMessage);
+    }
+
+    [Fact]
+    public void ApplicationValidator_RejectsStartDateBeforeDateOfBirth()
+    {
+        CreateStudentValidator validator = new();
+
+        var result = validator.Validate(ValidCommand() with
+        {
+            DateOfBirth = new DateOnly(2008, 1, 1),
+            StartDate = new DateOnly(2007, 12, 31)
+        });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error =>
+            error.ErrorMessage == StartDateBeforeBirthErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(2008, 1, 1)]
+    [InlineData(2026, 1, 1)]
+    public void ApplicationValidator_AllowsStartDateOnOrAfterDateOfBirth(int startYear, int startMonth, int startDay)
+    {
+        CreateStudentValidator validator = new();
+
+        var result = validator.Validate(ValidCommand() with
+        {
+            DateOfBirth = new DateOnly(2008, 1, 1),
+            StartDate = new DateOnly(startYear, startMonth, startDay)
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplicationValidator_AllowsMissingStartDate()
+    {
+        CreateStudentValidator validator = new();
+
+        var result = validator.Validate(ValidCommand() with
+        {
+            DateOfBirth = new DateOnly(2008, 1, 1),
+            StartDate = null
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApiValidator_RejectsStartDateBeforeDateOfBirth()
+    {
+        CreateStudentRequestValidator validator = new();
+
+        var result = validator.Validate(ValidRequest() with
+        {
+            DateOfBirth = new DateOnly(2008, 1, 1),
+            StartDate = new DateOnly(2007, 12, 31)
+        });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error =>
+            error.ErrorMessage == StartDateBeforeBirthErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(2008, 1, 1)]
+    [InlineData(2026, 1, 1)]
+    public void ApiValidator_AllowsStartDateOnOrAfterDateOfBirth(int startYear, int startMonth, int startDay)
+    {
+        CreateStudentRequestValidator validator = new();
+
+        var result = validator.Validate(ValidRequest() with
+        {
+            DateOfBirth = new DateOnly(2008, 1, 1),
+            StartDate = new DateOnly(startYear, startMonth, startDay)
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApiValidator_AllowsMissingStartDate()
+    {
+        CreateStudentRequestValidator validator = new();
+
+        var result = validator.Validate(ValidRequest() with
+        {
+            DateOfBirth = new DateOnly(2008, 1, 1),
+            StartDate = null
+        });
+
+        result.IsValid.Should().BeTrue();
     }
 
     private static CreateStudentCommand ValidCommand()

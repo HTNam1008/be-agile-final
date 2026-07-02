@@ -33,7 +33,7 @@ internal sealed class GetAdminAccountDetailsHandler(
         EducationAccountLookupSummary? account = await educationAccounts.FindByPersonIdAsync(query.PersonId, cancellationToken);
         if (account is null)
         {
-            return Result<AdminAccountDetailsResponse>.Failure(IdentityErrors.EducationAccountNotFound);
+            return Result<AdminAccountDetailsResponse>.Success(AdminAccountDetailsMapper.ToNoAccountResponse(profile));
         }
 
         return Result<AdminAccountDetailsResponse>.Success(AdminAccountDetailsMapper.ToResponse(profile, account));

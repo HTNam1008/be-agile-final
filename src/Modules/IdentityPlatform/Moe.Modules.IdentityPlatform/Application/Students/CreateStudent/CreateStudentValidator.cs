@@ -25,6 +25,10 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
             .Must(BeReasonableStudentAge)
             .WithMessage("Student age must be between 6 and 40 years.");
 
+        RuleFor(x => x)
+            .Must(HaveStartDateOnOrAfterDateOfBirth)
+            .WithMessage("Start date cannot be earlier than date of birth.");
+
         RuleFor(x => x.NationalityCode)
             .NotEmpty()
             .MaximumLength(30);
@@ -70,4 +74,7 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
 
         return age is >= 6 and <= 40;
     }
+
+    private static bool HaveStartDateOnOrAfterDateOfBirth(CreateStudentCommand command)
+        => !command.StartDate.HasValue || command.StartDate.Value >= command.DateOfBirth;
 }
