@@ -11,35 +11,16 @@ namespace Moe.StudentFinance.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "ChannelCode",
-                schema: "communication",
-                table: "Notification",
-                type: "varchar(50)",
-                unicode: false,
-                maxLength: 50,
-                nullable: false,
-                defaultValue: "");
+            migrationBuilder.Sql("""
+                IF COL_LENGTH(N'communication.Notification', N'ChannelCode') IS NULL
+                    ALTER TABLE [communication].[Notification] ADD [ChannelCode] varchar(50) NOT NULL DEFAULT '';
 
-            migrationBuilder.AddColumn<string>(
-                name: "ReferenceTypeCode",
-                schema: "communication",
-                table: "Notification",
-                type: "varchar(50)",
-                unicode: false,
-                maxLength: 50,
-                nullable: false,
-                defaultValue: "");
+                IF COL_LENGTH(N'communication.Notification', N'ReferenceTypeCode') IS NULL
+                    ALTER TABLE [communication].[Notification] ADD [ReferenceTypeCode] varchar(50) NOT NULL DEFAULT '';
 
-            migrationBuilder.AddColumn<string>(
-                name: "TemplateCode",
-                schema: "communication",
-                table: "Notification",
-                type: "varchar(100)",
-                unicode: false,
-                maxLength: 100,
-                nullable: false,
-                defaultValue: "");
+                IF COL_LENGTH(N'communication.Notification', N'TemplateCode') IS NULL
+                    ALTER TABLE [communication].[Notification] ADD [TemplateCode] varchar(100) NOT NULL DEFAULT '';
+                """);
 
             migrationBuilder.CreateTable(
                 name: "TopUpRuleGroup",
@@ -182,20 +163,16 @@ namespace Moe.StudentFinance.Migrations.Migrations
                 schema: "topup",
                 table: "TopUpCampaignRule");
 
-            migrationBuilder.DropColumn(
-                name: "ChannelCode",
-                schema: "communication",
-                table: "Notification");
+            migrationBuilder.Sql("""
+                IF COL_LENGTH(N'communication.Notification', N'ChannelCode') IS NOT NULL
+                    ALTER TABLE [communication].[Notification] DROP COLUMN [ChannelCode];
 
-            migrationBuilder.DropColumn(
-                name: "ReferenceTypeCode",
-                schema: "communication",
-                table: "Notification");
+                IF COL_LENGTH(N'communication.Notification', N'ReferenceTypeCode') IS NOT NULL
+                    ALTER TABLE [communication].[Notification] DROP COLUMN [ReferenceTypeCode];
 
-            migrationBuilder.DropColumn(
-                name: "TemplateCode",
-                schema: "communication",
-                table: "Notification");
+                IF COL_LENGTH(N'communication.Notification', N'TemplateCode') IS NOT NULL
+                    ALTER TABLE [communication].[Notification] DROP COLUMN [TemplateCode];
+                """);
         }
     }
 }
