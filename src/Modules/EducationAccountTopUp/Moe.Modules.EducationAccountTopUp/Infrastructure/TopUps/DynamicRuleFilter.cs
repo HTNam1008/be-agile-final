@@ -238,11 +238,9 @@ internal sealed class DynamicRuleFilter(MoeDbContext dbContext) : IDynamicRuleFi
         {
             bool wantsAccount = string.Equals(rule.TextValue, "YES", StringComparison.OrdinalIgnoreCase);
 
-            query = wantsAccount
-                ? query.Where(acc => dbContext.Set<EducationAccount>()
-                    .Any(other => other.PersonId == acc.PersonId && other.StatusCode == AccountStatuses.Active))
-                : query.Where(acc => !dbContext.Set<EducationAccount>()
-                    .Any(other => other.PersonId == acc.PersonId && other.StatusCode == AccountStatuses.Active));
+            // The base query already contains active education accounts; "NO" cannot yield top-up recipients.
+            if (!wantsAccount)
+                query = query.Where(_ => false);
         }
 
         return query;
