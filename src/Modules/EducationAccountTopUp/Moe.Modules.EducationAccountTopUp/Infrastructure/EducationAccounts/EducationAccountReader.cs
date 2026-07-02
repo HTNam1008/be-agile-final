@@ -1,12 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
+using Moe.Modules.EducationAccountTopUp.Application.Interest;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.EducationAccounts;
 using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.EducationAccounts;
 
-internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducationAccountReader
+internal sealed class EducationAccountReader(
+    MoeDbContext dbContext,
+    Microsoft.Extensions.Options.IOptions<EducationAccountInterestOptions> interestOptions)
+    : IEducationAccountReader, IEducationAccountInterestHistoryReader
 {
     public async Task<MyEducationAccountDto?> GetMyEducationAccountAsync(long personId, CancellationToken cancellationToken = default)
     {
@@ -148,6 +152,9 @@ internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducatio
                 transaction.ReferenceTypeCode == "ENROLLMENT_REFUND"),
             "REVERSAL" => query.Where(transaction =>
                 transaction.ReversalOfTransactionId != null),
+            "INTEREST" => query.Where(transaction =>
+                transaction.TransactionTypeCode == EducationAccountInterestCodes.TransactionTypeCode &&
+                transaction.ReferenceTypeCode == EducationAccountInterestCodes.ReferenceTypeCode),
             _ => query
         };
     }
@@ -172,6 +179,49 @@ internal sealed class EducationAccountReader(MoeDbContext dbContext) : IEducatio
             return "REFUND";
         }
 
+        if (transactionTypeCode == EducationAccountInterestCodes.TransactionTypeCode
+            && referenceTypeCode == EducationAccountInterestCodes.ReferenceTypeCode)
+        {
+            return EducationAccountInterestCodes.Category;
+        }
+
         return reversalOfTransactionId is not null ? "REVERSAL" : "OTHER";
+    }
+
+    public async Task<EducationAccountInterestHistoryResponse?> GetMyInterestHistoryAsync(
+        long personId,
+        CancellationToken cancellationToken = default)
+    {
+        long? educationAccountId = await dbContext.Set<EducationAccount>()
+            .AsNoTracking()
+            .Where(account => account.PersonId == personId)
+            .Select(account => (long?)account.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (educationAccountId is null)
+        {
+            return null;
+        }
+
+        EducationAccountInterestHistoryItem[] items = await dbContext.Set<AccountTransaction>()
+            .AsNoTracking()
+            .Where(transaction =>
+                transaction.EducationAccountId == educationAccountId.Value &&
+                transaction.TransactionTypeCode == EducationAccountInterestCodes.TransactionTypeCode &&
+                transaction.ReferenceTypeCode == EducationAccountInterestCodes.ReferenceTypeCode)
+            .OrderBy(transaction => transaction.ReferenceId)
+            .ThenBy(transaction => transaction.TransactionAtUtc)
+            .Select(transaction => new EducationAccountInterestHistoryItem(
+                (int)(transaction.ReferenceId ?? transaction.TransactionAtUtc.Year - 1),
+                transaction.BalanceAfter - transaction.Amount,
+                transaction.Amount,
+                transaction.BalanceAfter,
+                transaction.TransactionAtUtc))
+            .ToArrayAsync(cancellationToken);
+
+        return new EducationAccountInterestHistoryResponse(
+            AnnualInterestRate: interestOptions.Value.AnnualRate,
+            CurrencyCode: CurrencyCodes.SingaporeDollar,
+            Items: items);
     }
 }

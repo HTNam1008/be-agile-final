@@ -11,19 +11,22 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.SelfJoinCourse;
 
 internal sealed class SelfJoinCourseHandler(
     ICourseEnrollmentRepository enrollments,
     ICoursePaymentPlanGateway paymentPlans,
+    ICoursePaymentGateway coursePayments,
     IFasCourseSubsidyGateway fasSubsidies,
     ICurrentUser currentUser,
     IStudentAccessControl studentAccess,
     IStudentDirectory students,
     IStudentNotificationRecipientResolver notificationRecipients,
     INotificationWriter notificationWriter,
-    IClock clock) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
+    IClock clock,
+    ILogger<SelfJoinCourseHandler> logger) : ICommandHandler<SelfJoinCourseCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         SelfJoinCourseCommand command,
@@ -112,7 +115,7 @@ internal sealed class SelfJoinCourseHandler(
 
         DateOnly enrolledDate = clock.TodayInSingapore();
         DateOnly firstDueDate = installment
-            ? new DateOnly(enrolledDate.Year, enrolledDate.Month, 1).AddMonths(1)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(utcNow)
             : enrolledDate;
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(
@@ -157,6 +160,12 @@ internal sealed class SelfJoinCourseHandler(
                 utcNow,
                 cancellationToken);
         }
+        if (installment)
+        {
+            await coursePayments.SendInstallmentEnrollmentConfirmationAsync(
+                billingResult.Enrollment.Id,
+                cancellationToken);
+        }
 
         await NotifyEnrollmentSuccessAsync(enrollmentResult.Value.PersonId, course, cancellationToken);
 
@@ -181,12 +190,14 @@ internal sealed class SelfJoinCourseHandler(
         }
 
         string schoolName = student.SchoolName ?? "your school";
-        await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.EnrollSuccess,
                 $"Course Enrollment Completed: {course.CourseCode}",
                 $"Welcome {student.DisplayName}! You are now enrolled in {course.CourseName} at {schoolName}."),
+            logger,
+            "Course self enrollment success",
             cancellationToken);
     }
 

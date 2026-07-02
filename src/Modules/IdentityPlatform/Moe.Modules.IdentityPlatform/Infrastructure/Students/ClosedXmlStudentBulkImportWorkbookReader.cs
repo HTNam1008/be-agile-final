@@ -27,6 +27,8 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
                 continue;
             }
 
+            bool isTemplateSampleRow = IsTemplateSampleRow(row, columns);
+
             rows.Add(new BulkImportStudentWorkbookRow(
                 row.RowNumber(),
                 Text(row, columns, BulkImportStudentWorkbookColumns.SchoolName),
@@ -42,8 +44,9 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
                 Text(row, columns, BulkImportStudentWorkbookColumns.ClassCode) ?? string.Empty,
                 Date(row, columns, BulkImportStudentWorkbookColumns.StartDate),
                 Text(row, columns, BulkImportStudentWorkbookColumns.Email),
-                Text(row, columns, BulkImportStudentWorkbookColumns.Mobile),
-                Text(row, columns, BulkImportStudentWorkbookColumns.Address)));
+                Text(row, columns, BulkImportStudentWorkbookColumns.ContactNumber),
+                Text(row, columns, BulkImportStudentWorkbookColumns.Address),
+                isTemplateSampleRow));
         }
 
         return Task.FromResult<IReadOnlyList<BulkImportStudentWorkbookRow>>(rows);
@@ -64,6 +67,13 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
 
     private static bool IsBlank(IXLRangeRow row, IEnumerable<int> columnNumbers)
         => columnNumbers.All(columnNumber => row.Cell(columnNumber).IsEmpty());
+
+    private static bool IsTemplateSampleRow(IXLRangeRow row, IReadOnlyDictionary<string, int> columns)
+        => columns.TryGetValue(BulkImportStudentWorkbookColumns.TemplateRowMarker, out int columnNumber)
+            && string.Equals(
+                row.Cell(columnNumber).GetString().Trim(),
+                BulkImportStudentWorkbookColumns.SampleRowMarker,
+                StringComparison.OrdinalIgnoreCase);
 
     private static string? Text(IXLRangeRow row, IReadOnlyDictionary<string, int> columns, string name)
     {

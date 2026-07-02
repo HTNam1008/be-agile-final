@@ -3626,13 +3626,25 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("ProviderHostedInvoiceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("ProviderInvoiceId")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("ProviderInvoicePdfUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("ProviderPaymentIntentId")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ProviderReceiptUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<string>("ReceiptNumber")
                         .HasMaxLength(50)
@@ -5716,6 +5728,10 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasIndex("LoginEmailNormalized");
 
                     b.HasIndex("PersonId");
+
+                    b.HasIndex("PersonId", "PortalAccessCode")
+                        .IsUnique()
+                        .HasFilter("[PersonId] IS NOT NULL");
 
                     b.HasIndex("IdentityProviderCode", "ExternalIssuer", "ExternalSubjectId")
                         .IsUnique();
@@ -9668,7 +9684,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y1-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 2L,
                             PersonId = 2001L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9683,7 +9699,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y2-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 2L,
                             PersonId = 2002L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9698,7 +9714,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y3-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 2L,
                             PersonId = 2003L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9713,7 +9729,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y4-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 2L,
                             PersonId = 2004L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9728,7 +9744,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y1-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 2L,
                             PersonId = 2005L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9743,7 +9759,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y2-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 2L,
                             PersonId = 2006L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9758,7 +9774,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y3-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 2L,
                             PersonId = 2007L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9773,7 +9789,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y4-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 2L,
                             PersonId = 2008L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9788,7 +9804,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y1-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 2L,
                             PersonId = 2009L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9803,7 +9819,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NUS-Y2-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 2L,
                             PersonId = 2010L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9818,7 +9834,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y1-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 3L,
                             PersonId = 2011L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9833,7 +9849,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y2-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 3L,
                             PersonId = 2012L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9848,7 +9864,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y3-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 3L,
                             PersonId = 2013L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9863,7 +9879,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y4-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 3L,
                             PersonId = 2014L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9878,7 +9894,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y1-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 3L,
                             PersonId = 2015L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9893,7 +9909,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y2-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 3L,
                             PersonId = 2016L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9908,7 +9924,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y3-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 3L,
                             PersonId = 2017L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9923,7 +9939,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y4-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 3L,
                             PersonId = 2018L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9938,7 +9954,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y1-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 3L,
                             PersonId = 2019L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9953,7 +9969,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "NTU-Y2-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 3L,
                             PersonId = 2020L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9968,7 +9984,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y1-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 4L,
                             PersonId = 2021L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9983,7 +9999,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y2-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 4L,
                             PersonId = 2022L,
                             SchoolingStatusCode = "ACTIVE",
@@ -9998,7 +10014,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y3-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 4L,
                             PersonId = 2023L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10013,7 +10029,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y4-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 4L,
                             PersonId = 2024L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10028,7 +10044,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y1-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 4L,
                             PersonId = 2025L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10043,7 +10059,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y2-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 4L,
                             PersonId = 2026L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10058,7 +10074,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y3-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 4L,
                             PersonId = 2027L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10073,7 +10089,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y4-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 4L,
                             PersonId = 2028L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10088,7 +10104,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y1-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 4L,
                             PersonId = 2029L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10103,7 +10119,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SMU-Y2-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 4L,
                             PersonId = 2030L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10118,7 +10134,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y1-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 5L,
                             PersonId = 2031L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10133,7 +10149,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y2-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 5L,
                             PersonId = 2032L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10148,7 +10164,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y3-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 5L,
                             PersonId = 2033L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10163,7 +10179,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y4-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 5L,
                             PersonId = 2034L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10178,7 +10194,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y1-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 5L,
                             PersonId = 2035L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10193,7 +10209,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y2-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 5L,
                             PersonId = 2036L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10208,7 +10224,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y3-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 5L,
                             PersonId = 2037L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10223,7 +10239,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y4-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 5L,
                             PersonId = 2038L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10238,7 +10254,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y1-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 5L,
                             PersonId = 2039L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10253,7 +10269,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SUTD-Y2-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 5L,
                             PersonId = 2040L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10268,7 +10284,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y1-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 6L,
                             PersonId = 2041L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10283,7 +10299,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y2-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 6L,
                             PersonId = 2042L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10298,7 +10314,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y3-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 6L,
                             PersonId = 2043L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10313,7 +10329,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y4-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 6L,
                             PersonId = 2044L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10328,7 +10344,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y1-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 6L,
                             PersonId = 2045L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10343,7 +10359,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y2-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 6L,
                             PersonId = 2046L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10358,7 +10374,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y3-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y3",
+                            LevelCode = "MASTER",
                             OrganizationId = 6L,
                             PersonId = 2047L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10373,7 +10389,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y4-02",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y4",
+                            LevelCode = "PHD",
                             OrganizationId = 6L,
                             PersonId = 2048L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10388,7 +10404,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y1-03",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y1",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 6L,
                             PersonId = 2049L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10403,7 +10419,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             AcademicYear = "2026",
                             ClassCode = "SIT-Y2-01",
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            LevelCode = "UNI_Y2",
+                            LevelCode = "BACHELOR",
                             OrganizationId = 6L,
                             PersonId = 2050L,
                             SchoolingStatusCode = "ACTIVE",
@@ -10412,6 +10428,107 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             StudentNumber = "SIT-2026-010",
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
+                });
+
+            modelBuilder.Entity("Moe.Modules.MailDelivery.Domain.EmailNotification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("EmailNotificationId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EntityId")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("HtmlBody")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<long>("PersonId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PlainTextBody")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RecipientSourceCode")
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("ResolvedToEmailMasked")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StatusCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("NotificationType", "PersonId", "EntityType", "EntityId")
+                        .HasDatabaseName("IX_EmailNotification_Dedupe");
+
+                    b.HasIndex("StatusCode", "NextAttemptAtUtc", "Priority", "CreatedAtUtc")
+                        .HasDatabaseName("IX_EmailNotification_Queue");
+
+                    b.ToTable("EmailNotification", "mail");
                 });
 
             modelBuilder.Entity("Moe.Modules.Mfa.Domain.LoginMfaAuditEvent", b =>
@@ -10651,6 +10768,70 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.ToTable("Notification", "communication");
                 });
 
+            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.NotificationRealtimeDelivery", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("NotificationRealtimeDeliveryId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeliveredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("NotificationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("NotificationId");
+
+                    b.Property<long>("RecipientUserAccountId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("RecipientUserAccountId");
+
+                    b.Property<string>("StatusCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NotificationId")
+                        .HasDatabaseName("IX_NotificationRealtimeDelivery_NotificationId");
+
+                    b.HasIndex("RecipientUserAccountId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_NotificationRealtimeDelivery_Recipient_CreatedAt");
+
+                    b.HasIndex("StatusCode", "NextAttemptAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("IX_NotificationRealtimeDelivery_Queue");
+
+                    b.ToTable("NotificationRealtimeDelivery", "communication");
+                });
+
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.BillPaymentCheckoutSession", b =>
                 {
                     b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
@@ -10851,6 +11032,17 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .HasForeignKey("FasApplicationSchemeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.NotificationRealtimeDelivery", b =>
+                {
+                    b.HasOne("Moe.Modules.Notifications.Domain.Notifications.Notification", "Notification")
+                        .WithMany()
+                        .HasForeignKey("NotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Notification");
                 });
 
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRun", b =>

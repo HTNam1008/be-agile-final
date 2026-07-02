@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 using Moe.Modules.IdentityPlatform;
 using Moe.Modules.IdentityPlatform.Domain.Iam;
 using Moe.Modules.IdentityPlatform.Domain.People;
-using Moe.Modules.IdentityPlatform.IGateway.People;
+using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.IdentityPlatform.Infrastructure.People;
 using Moe.Modules.MailDelivery.Infrastructure.Smtp;
 using Moe.StudentFinance.Persistence;
@@ -72,7 +72,7 @@ public sealed class EmailRecipientResolverTests
     }
 
     [Fact]
-    public async Task ResolveForPersonAsync_DoesNotUsePersonEmails()
+    public async Task ResolveForPersonAsync_UsesOfficialEmailWhenContactEmailIsMissing()
     {
         await using MoeDbContext db = CreateDbContext();
         Person person = CreatePerson("official@example.com");
@@ -83,7 +83,61 @@ public sealed class EmailRecipientResolverTests
         EmailRecipient? result = await CreateResolver(db, Environments.Production)
             .ResolveForPersonAsync(person.Id, CancellationToken.None);
 
-        result.Should().BeNull();
+        result.Should().Be(new EmailRecipient("official@example.com", EmailRecipientSourceCodes.Official));
+    }
+
+    [Fact]
+    public async Task ResolveForPersonAsync_UsesOfficialEmailWhenContactEmailIsInvalid()
+    {
+        await using MoeDbContext db = CreateDbContext();
+        Person person = CreatePerson("official@example.com");
+        UserAccount account = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        account.UpdateContactDetails("not-an-email", null, DateTime.UtcNow);
+        db.AddRange(person, account);
+        await db.SaveChangesAsync();
+
+        EmailRecipient? result = await CreateResolver(db, Environments.Production)
+            .ResolveForPersonAsync(person.Id, CancellationToken.None);
+
+        result.Should().Be(new EmailRecipient("official@example.com", EmailRecipientSourceCodes.Official));
+    }
+
+    [Fact]
+    public async Task ResolveForPersonAsync_UsesOlderValidContactBeforeOfficialEmail()
+    {
+        await using MoeDbContext db = CreateDbContext();
+        Person person = CreatePerson("official@example.com");
+        UserAccount olderAccount = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject-old",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        olderAccount.UpdateContactDetails("old-contact@example.com", null, DateTime.UtcNow);
+        typeof(UserAccount).GetProperty(nameof(UserAccount.Id))!.SetValue(olderAccount, 10);
+        UserAccount newerAccount = UserAccount.CreateStudentSingpass(
+            person.Id,
+            "issuer",
+            "subject-new",
+            "Student",
+            null,
+            DateTime.UtcNow);
+        newerAccount.UpdateContactDetails(null, null, DateTime.UtcNow);
+        typeof(UserAccount).GetProperty(nameof(UserAccount.Id))!.SetValue(newerAccount, 11);
+        db.AddRange(person, olderAccount, newerAccount);
+        await db.SaveChangesAsync();
+
+        EmailRecipient? result = await CreateResolver(db, Environments.Production)
+            .ResolveForPersonAsync(person.Id, CancellationToken.None);
+
+        result.Should().Be(new EmailRecipient("old-contact@example.com", EmailRecipientSourceCodes.Contact));
     }
 
     [Fact]
@@ -100,18 +154,6 @@ public sealed class EmailRecipientResolverTests
             "fallback@example.com",
             EmailRecipientSourceCodes.DevelopmentFallback));
         production.Should().BeNull();
-    }
-
-    [Fact]
-    public void ResolveProvided_UsesApplicationEmailBeforeDevelopmentFallback()
-    {
-        using MoeDbContext db = CreateDbContext();
-        EmailRecipientResolver resolver = CreateResolver(db, Environments.Development);
-
-        resolver.ResolveProvided("fas-applicant@example.com").Should().Be(
-            new EmailRecipient("fas-applicant@example.com", EmailRecipientSourceCodes.Provided));
-        resolver.ResolveProvided("invalid-address").Should().Be(
-            new EmailRecipient("fallback@example.com", EmailRecipientSourceCodes.DevelopmentFallback));
     }
 
     private static MoeDbContext CreateDbContext()

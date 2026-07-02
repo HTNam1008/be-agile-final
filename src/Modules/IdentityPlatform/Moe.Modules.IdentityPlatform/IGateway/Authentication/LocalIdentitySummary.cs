@@ -6,6 +6,7 @@ public sealed record LocalIdentitySummary(
     string DisplayName,
     string IdentityProviderCode,
     string PortalAccessCode,
+    string RoleCode,
     string AccountStatusCode,
     int? Age,
     bool IsAccountHolder,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Moe.Modules.EducationAccountTopUp.Contracts.TopUps.Enums;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
@@ -13,6 +14,7 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Gateways;
 internal sealed class TopUpRecipientResolver(
     MoeDbContext dbContext,
     IDynamicRuleFilter dynamicRuleFilter,
+    IClock clock,
     ILogger<TopUpRecipientResolver> logger) : IRecipientResolver
 {
     public async Task<IReadOnlyList<RecipientInfo>> GetRecipientsChunkAsync(
@@ -62,7 +64,7 @@ internal sealed class TopUpRecipientResolver(
         if (groups.Count == 0)
             return 0;
 
-        return await dynamicRuleFilter.CountMatchingAccountsAsync(groups, DateTime.UtcNow, cancellationToken);
+        return await dynamicRuleFilter.CountMatchingAccountsAsync(groups, clock.UtcNow.UtcDateTime, cancellationToken);
     }
 
     public async Task<decimal> GetTotalResolvedAmountAsync(
@@ -155,7 +157,7 @@ internal sealed class TopUpRecipientResolver(
             return [];
 
         IReadOnlyList<long> accountIds = await dynamicRuleFilter.FilterAccountIdsAsync(
-            groups, offset, chunkSize, DateTime.UtcNow, cancellationToken);
+            groups, offset, chunkSize, clock.UtcNow.UtcDateTime, cancellationToken);
 
         return accountIds
             .Select(id => new RecipientInfo

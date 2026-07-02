@@ -17,6 +17,7 @@ using Moe.Modules.EducationAccountTopUp.Application.History.CampaignHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.CampaignTransactionHistory;
 using Moe.Modules.EducationAccountTopUp.Application.History.ContractStatus;
 using Moe.Modules.EducationAccountTopUp.Application.History.RunHistory;
+using Moe.Modules.EducationAccountTopUp.Application.Interest;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle.RunHistory;
 using Moe.Modules.EducationAccountTopUp.Application.OpenAccount;
@@ -72,6 +73,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddSingleton<IModelConfigurationContributor, EducationAccountTopUpModelConfiguration>();
         services.AddOptions<EducationAccountLifecycleOptions>()
             .BindConfiguration(EducationAccountLifecycleOptions.SectionName);
+        services.AddOptions<EducationAccountInterestOptions>()
+            .BindConfiguration(EducationAccountInterestOptions.SectionName);
         services.AddOptions<TopUpWorkerOptions>()
             .BindConfiguration(TopUpWorkerOptions.SectionName);
         // Gateways & Repositories
@@ -89,6 +92,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ITopUpAccountProjectionRepository, TopUpAccountProjectionRepository>();
         services.AddScoped<ITopUpCampaignReader, TopUpCampaignReader>();
         services.AddScoped<IEducationAccountReader, EducationAccountReader>();
+        services.AddScoped<IEducationAccountInterestHistoryReader, EducationAccountReader>();
+        services.AddScoped<IAnnualInterestProcessor, AnnualInterestProcessor>();
         services.AddScoped<ITopUpHistoryReader, TopUpHistoryReader>();
         services.AddScoped<IEducationAccountLifecycleHistoryReader, EducationAccountLifecycleHistoryReader>();
         services.AddScoped<IAccountTransactionHistoryReader, AccountTransactionHistoryReader>();
@@ -104,6 +109,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IEducationAccountReasonCodeGateway, EducationAccountReasonCodeGateway>();
         services.AddScoped<IEducationAccountPaymentGateway, EducationAccountPaymentGateway>();
         services.AddScoped<IAutomaticEducationAccountCreator, AutomaticEducationAccountCreator>();
+        services.AddScoped<IAutomaticEducationAccountSettlementGateway, AutomaticEducationAccountSettlementGateway>();
         services.AddScoped<IAutomaticEducationAccountCloser, AutomaticEducationAccountCloser>();
         services.AddScoped<IAge30AccountLockReminderEmailService, Age30AccountLockReminderEmailService>();
         services.AddScoped<IAccountLockReminderOutstandingReader, AccountLockReminderOutstandingReader>();
@@ -126,11 +132,27 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IRunReconciliationService, RunReconciliationService>();
         services.AddScoped<IPendingTransactionRecoveryService, PendingTransactionRecoveryService>();
         // Workers
-        services.AddHostedService<TopUpRunWorker>();
-        services.AddHostedService<TopUpSchedulerWorker>();
-        services.AddHostedService<TopUpAssessmentWorker>();
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:RunWorker"))
+        {
+            services.AddHostedService<TopUpRunWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Scheduler"))
+        {
+            services.AddHostedService<TopUpSchedulerWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Assessment"))
+        {
+            services.AddHostedService<TopUpAssessmentWorker>();
+        }
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:AnnualInterest"))
+        {
+            services.AddHostedService<AnnualInterestWorker>();
+        }
         services.AddSingleton<EducationAccountLifecycleWorker>();
-        services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
+        if (IsBackgroundJobEnabled(configuration, "EducationAccountTopUp:Lifecycle"))
+        {
+            services.AddHostedService(sp => sp.GetRequiredService<EducationAccountLifecycleWorker>());
+        }
         services.AddScoped<ITopUpAccountSelectionResolver, TopUpAccountSelectionResolver>();
 
         // Commands
@@ -147,6 +169,7 @@ public sealed class EducationAccountTopUpModule : IModule
         // Queries
         services.AddScoped<IQueryHandler<GetMyEducationAccountQuery, MyEducationAccountDto>, GetMyEducationAccountQueryHandler>();
         services.AddScoped<IQueryHandler<GetMyEducationAccountTransactionsQuery, MyEducationAccountTransactionsPage>, GetMyEducationAccountTransactionsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetMyEducationAccountInterestHistoryQuery, EducationAccountInterestHistoryResponse>, GetMyEducationAccountInterestHistoryHandler>();
         services.AddScoped<IQueryHandler<GetSettlementPreferenceQuery, SettlementPreferenceResponse>, GetSettlementPreferenceHandler>();
         services.AddScoped<IQueryHandler<GetCampaignsQuery, CampaignListResult>, GetCampaignsQueryHandler>();
         services.AddScoped<IQueryHandler<GetCampaignByIdQuery, CampaignListItem?>, GetCampaignByIdQueryHandler>();
@@ -188,4 +211,8 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandValidator>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
+
+    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
+        => configuration.GetValue("BackgroundJobs:Enabled", true)
+           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }

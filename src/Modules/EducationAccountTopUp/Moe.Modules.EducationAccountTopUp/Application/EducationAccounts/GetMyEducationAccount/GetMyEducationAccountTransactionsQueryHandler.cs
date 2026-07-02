@@ -52,7 +52,7 @@ internal sealed class GetMyEducationAccountTransactionsQueryHandler(
         }
 
         string normalized = category.Trim().ToUpperInvariant();
-        return normalized is "TOP_UP" or "PAYMENT" or "REFUND" or "REVERSAL"
+        return normalized is "TOP_UP" or "PAYMENT" or "REFUND" or "REVERSAL" or "INTEREST"
             ? normalized
             : null;
     }

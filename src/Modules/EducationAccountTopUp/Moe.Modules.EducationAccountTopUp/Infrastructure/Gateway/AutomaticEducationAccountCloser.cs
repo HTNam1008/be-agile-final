@@ -6,6 +6,7 @@ using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.EducationAccountTopUp.IGateway.People;
 using Moe.Modules.EducationAccountTopUp.IGateway.Repositories;
+using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
@@ -18,6 +19,8 @@ internal sealed class AutomaticEducationAccountCloser(
     IEducationAccountRepository educationAccounts,
     IAccountHoldRepository accountHolds,
     IEligiblePersonLookupGateway people,
+    IAutomaticEducationAccountSettlementGateway settlements,
+    IPersonLifecycleGateway personLifecycle,
     IAuditService auditService,
     IUnitOfWork unitOfWork,
     EducationAccountClosureEmailService closureEmails,
@@ -93,6 +96,17 @@ internal sealed class AutomaticEducationAccountCloser(
                 SkipReasonCode: AutomaticEducationAccountClosureSkipReasonCodes.AlreadyClosed);
         }
 
+        await settlements.SettleRemainingBalanceAsync(account, closedAtUtc, cancellationToken);
+
+        Result disableResult = await personLifecycle.DisableAsync(
+            account.PersonId,
+            closedAtUtc.UtcDateTime,
+            cancellationToken);
+        if (disableResult.IsFailure)
+        {
+            throw new InvalidOperationException(disableResult.Error.Message);
+        }
+
         string detailsJson = JsonSerializer.Serialize(new
         {
             personId = account.PersonId,
@@ -133,21 +147,14 @@ internal sealed class AutomaticEducationAccountCloser(
         }
 
         string closingReason = "Automatic closure when the account holder reached age 30";
-        Result<long> create = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.AccClosed,
                 "Account Closed",
                 $"Reason: {closingReason}."),
+            logger,
+            "Automatic education account closed",
             cancellationToken);
-
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create ACC_CLOSED notification for user account {UserAccountId} in education account {EducationAccountId}: {ErrorCode}",
-                userAccountId.Value,
-                account.Id,
-                create.Error.Code);
-        }
     }
 }

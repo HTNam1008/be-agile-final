@@ -7,7 +7,6 @@ using Moe.Application.Abstractions.Security;
 using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
-using Moe.Modules.IdentityPlatform.IGateway.People;
 using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.MailDelivery.IGateway;
 using Moe.Modules.Notifications.IGateway.Notifications;
@@ -35,7 +34,8 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
             new FakeSchoolAdminNotificationRecipientResolver(),
             new FakeNotificationWriter(),
             new TestClock(SgtEarlyMorning),
-            CreateEmailService());
+            CreateEmailService(),
+            NullLogger<CancelEnrollmentHandler>.Instance);
 
         Result<EnrollmentCancellationResponse> result = await handler.Handle(
             new CancelEnrollmentCommand(500, new CancelEnrollmentRequest("sgt-red")),
@@ -104,10 +104,8 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
             .Options;
         return new CourseWithdrawalEmailService(
             new MoeDbContext(options, []),
-            new NullRecipientResolver(),
-            new NoopEmailGateway(),
-            new DisabledMailSwitch(),
-            NullLogger<CourseWithdrawalEmailService>.Instance);
+            new DisabledEmailNotificationScheduler(),
+            new FixedBrandingProvider());
     }
 
     private sealed class FakePreviewRepository(EnrollmentCancellationSnapshot snapshot) : IEnrollmentRefundPreviewRepository
@@ -172,20 +170,28 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
             Task.FromResult(Result<long>.Success(1));
     }
 
-    private sealed class DisabledMailSwitch : IEmailDeliverySwitch
+    private sealed class DisabledEmailNotificationScheduler : IEmailNotificationScheduler
     {
         public bool IsEnabled => false;
+
+        public Task<bool> EnqueueForPersonAsync(
+            string notificationType,
+            long personId,
+            string subject,
+            string plainTextBody,
+            string? htmlBody,
+            string? entityType,
+            string? entityId,
+            CancellationToken cancellationToken) => Task.FromResult(false);
     }
 
-    private sealed class NullRecipientResolver : IEmailRecipientResolver
+    private sealed class FixedBrandingProvider : IEmailBrandingProvider
     {
-        public Task<EmailRecipient?> ResolveForPersonAsync(long personId, CancellationToken cancellationToken) => Task.FromResult<EmailRecipient?>(null);
-        public EmailRecipient? ResolveProvided(string? emailAddress) => null;
-    }
-
-    private sealed class NoopEmailGateway : IEmailDeliveryGateway
-    {
-        public Task<Result> SendAsync(EmailDeliveryMessage message, CancellationToken cancellationToken) => Task.FromResult(Result.Success());
+        public string AppName => "Ministry of Education - Singapore";
+        public string PaymentDashboardUrl => "http://localhost:5173/portal/payments";
+        public string FasPortalUrl => "http://localhost:5173/portal/fas";
+        public string AccountPortalUrl => "http://localhost:5173/portal/account";
+        public string CourseDetailUrl(long courseId) => $"http://localhost:5173/portal/courses/{courseId}";
     }
 
     private sealed class TestClock(DateTimeOffset utcNow) : IClock

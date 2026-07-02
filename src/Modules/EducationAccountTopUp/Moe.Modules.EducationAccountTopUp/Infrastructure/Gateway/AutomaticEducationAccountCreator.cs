@@ -99,21 +99,14 @@ internal sealed class AutomaticEducationAccountCreator(
             return;
         }
 
-        Result<long> create = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.AccOpened,
                 $"Account Opened: {account.AccountNumber}",
                 "Reason: Automatic creation when the account holder became eligible."),
+            logger,
+            "Automatic education account created",
             cancellationToken);
-
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create ACC_OPENED notification for user account {UserAccountId} in education account {EducationAccountId}: {ErrorCode}",
-                userAccountId.Value,
-                account.Id,
-                create.Error.Code);
-        }
     }
 }

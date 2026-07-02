@@ -28,6 +28,7 @@ public sealed class StudentFasApplicationService(
     IOrganizationUnitRepository organizations,
     IAuditService audit,
     FasEmailNotificationService fasEmails,
+    IClock clock,
     IStudentNotificationRecipientResolver studentNotificationRecipients,
     ISchoolAdminNotificationRecipientResolver schoolAdminRecipients,
     INotificationWriter notificationWriter,
@@ -37,17 +38,18 @@ public sealed class StudentFasApplicationService(
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
          currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"));
     private long Actor() => currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED");
-    private static DateOnly Today() => SingaporeBusinessDay.FromUtc(DateTime.UtcNow);
+    private DateOnly Today() => DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
 
     private async Task<ProfileRow> Profile(CancellationToken ct)
     {
         var (personId, _) = Identity();
+        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
         var person = await db.Set<Person>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == personId, ct)
             ?? throw new KeyNotFoundException("FAS.PROFILE_REQUIRED");
         var enrollment = await db.Set<SchoolEnrollment>().AsNoTracking()
             .Where(x => x.PersonId == personId && x.SchoolingStatusCode == "ACTIVE" &&
-                        x.StartDate <= Today() &&
-                        (x.EndDate == null || x.EndDate >= Today()))
+                        x.StartDate <= today &&
+                        (x.EndDate == null || x.EndDate >= today))
             .OrderByDescending(x => x.StartDate).FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("FAS.CURRENT_SCHOOL_REQUIRED");
         string? schoolName = (await organizations.FindActiveSchoolByIdAsync(enrollment.OrganizationId, ct))?.UnitName
@@ -186,7 +188,7 @@ public sealed class StudentFasApplicationService(
         var p = await Profile(ct); var pci = (request.MonthlyHouseholdIncome + request.OtherMonthlyIncome) / request.HouseholdMemberCount;
         var parentNationalities = request.ParentNationalities?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
         var accountType = await ResolveAccountType(p.PersonId, ct);
-        var age = DateTime.UtcNow.Year - p.DateOfBirth.Year;
+        var age = clock.UtcNow.Year - p.DateOfBirth.Year;
         var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id)).ToListAsync(ct);
         var matches = new List<object>();
         foreach (var scheme in schemes)
@@ -247,7 +249,7 @@ public sealed class StudentFasApplicationService(
         long[] ids = ValidateSelectedSchemeIds(request.SchemeIds);
         var p = await Profile(ct);
         var (personId, actorId) = Identity();
-        DateTime now = DateTime.UtcNow;
+        DateTime now = clock.UtcNow.UtcDateTime;
 
         var valid = await OpenApplicableSchemeIds(p.SchoolOrganizationId, ids, ct);
         if (valid.Count != ids.Length) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
@@ -301,7 +303,7 @@ public sealed class StudentFasApplicationService(
         if (valid.Count != ids.Length) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
 
         await EnsureNoDuplicateApplications(personId, ids, app.Id, ct);
-        DateTime now = DateTime.UtcNow;
+        DateTime now = clock.UtcNow.UtcDateTime;
         var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
         await db.SaveChangesAsync(ct);
 
@@ -332,7 +334,7 @@ public sealed class StudentFasApplicationService(
     {
         var (person, actor) = Identity();
         var app = await OwnedEditable(id, person, ct);
-        DateTime now = DateTime.UtcNow;
+        DateTime now = clock.UtcNow.UtcDateTime;
 
         app.UpdateEmail(r.Email, actor, now);
         app.UpdateParentNationalities(r.ParentNationalities, actor, now);
@@ -346,7 +348,7 @@ public sealed class StudentFasApplicationService(
         var (person, actor) = Identity();
         var app = await OwnedEditable(id, person, ct);
 
-        app.UpdateIncome(r.IsWelfareHomeResident, r.EmploymentStatusCode, r.MonthlyHouseholdIncome, r.HouseholdMemberCount, r.OtherMonthlyIncome, actor, DateTime.UtcNow);
+        app.UpdateIncome(r.IsWelfareHomeResident, r.EmploymentStatusCode, r.MonthlyHouseholdIncome, r.HouseholdMemberCount, r.OtherMonthlyIncome, actor, clock.UtcNow.UtcDateTime);
         await db.SaveChangesAsync(ct);
 
         return await RequiredDocuments(id, ct);
@@ -379,8 +381,8 @@ public sealed class StudentFasApplicationService(
     {
         var (person, actor) = Identity(); await OwnedEditable(id, person, ct); if (!r.TrueAndAccurate || !r.AcceptTerms) throw new ArgumentException("FAS.DECLARATIONS_REQUIRED");
         var old = await db.Set<FasDeclaration>().Where(x => x.FasApplicationId == id).ToListAsync(ct); db.RemoveRange(old);
-        db.Add(FasDeclaration.Accept(id, "TRUE_AND_ACCURATE", r.TrueAndAccurateText, actor, DateTime.UtcNow, ip, agent));
-        db.Add(FasDeclaration.Accept(id, "ACCEPT_TERMS", r.AcceptTermsText, actor, DateTime.UtcNow, ip, agent)); await db.SaveChangesAsync(ct);
+        db.Add(FasDeclaration.Accept(id, "TRUE_AND_ACCURATE", r.TrueAndAccurateText, actor, clock.UtcNow.UtcDateTime, ip, agent));
+        db.Add(FasDeclaration.Accept(id, "ACCEPT_TERMS", r.AcceptTermsText, actor, clock.UtcNow.UtcDateTime, ip, agent)); await db.SaveChangesAsync(ct);
         return new { applicationId = id, declarationsComplete = true };
     }
 
@@ -388,15 +390,15 @@ public sealed class StudentFasApplicationService(
     {
         var (person, actor) = Identity(); await OwnedEditable(id, person, ct); ValidateFile(fileName, mime, size);
         var app = await OwnedEditable(id, person, ct); var required = await BuildChecklist(app, ct); if (!required.Any(x => x.ChecklistItemCode == checklistCode)) throw new ArgumentException("FAS.INVALID_CHECKLIST_ITEM");
-        var key = await storage.UploadAsync(id, fileName, stream, ct); var doc = FasDocument.Create(id, checklistCode, checklistCode, true, fileName, key, mime, size, actor, DateTime.UtcNow, scanner.RequiresScan);
+        var key = await storage.UploadAsync(id, fileName, stream, ct); var doc = FasDocument.Create(id, checklistCode, checklistCode, true, fileName, key, mime, size, actor, clock.UtcNow.UtcDateTime, scanner.RequiresScan);
         db.Add(doc); await db.SaveChangesAsync(ct); return new { id = doc.Id, doc.FileName, doc.MimeType, doc.FileSizeBytes, scanStatus = doc.UploadStatusCode };
     }
 
     public async Task RemoveDocument(long id, long documentId, CancellationToken ct)
-    { var (person, actor) = Identity(); await OwnedEditable(id, person, ct); var d = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); d.Remove(actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); await storage.DeleteAsync(d.BlobKey, ct); }
+    { var (person, actor) = Identity(); await OwnedEditable(id, person, ct); var d = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); d.Remove(actor, clock.UtcNow.UtcDateTime); await db.SaveChangesAsync(ct); await storage.DeleteAsync(d.BlobKey, ct); }
 
     public async Task<object> ReplaceDocument(long id, long documentId, string fileName, string mime, long size, Stream stream, CancellationToken ct)
-    { var (person, actor) = Identity(); await OwnedEditable(id, person, ct); var old = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); ValidateFile(fileName, mime, size); var key = await storage.UploadAsync(id, fileName, stream, ct); var replacement = FasDocument.Create(id, old.DocumentTypeCode, old.ChecklistItemCode, old.IsMandatory, fileName, key, mime, size, actor, DateTime.UtcNow, scanner.RequiresScan); db.Add(replacement); await db.SaveChangesAsync(ct); old.Replace(replacement.Id, actor, DateTime.UtcNow); await db.SaveChangesAsync(ct); await storage.DeleteAsync(old.BlobKey, ct); return new { id = replacement.Id, replacement.FileName, replacement.MimeType, replacement.FileSizeBytes, scanStatus = replacement.UploadStatusCode }; }
+    { var (person, actor) = Identity(); await OwnedEditable(id, person, ct); var old = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId && x.FasApplicationId == id && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); ValidateFile(fileName, mime, size); var key = await storage.UploadAsync(id, fileName, stream, ct); var replacement = FasDocument.Create(id, old.DocumentTypeCode, old.ChecklistItemCode, old.IsMandatory, fileName, key, mime, size, actor, clock.UtcNow.UtcDateTime, scanner.RequiresScan); db.Add(replacement); await db.SaveChangesAsync(ct); old.Replace(replacement.Id, actor, clock.UtcNow.UtcDateTime); await db.SaveChangesAsync(ct); await storage.DeleteAsync(old.BlobKey, ct); return new { id = replacement.Id, replacement.FileName, replacement.MimeType, replacement.FileSizeBytes, scanStatus = replacement.UploadStatusCode }; }
 
     public async Task<(Stream Stream, string Mime, string Name)> DownloadDocument(long documentId, CancellationToken ct)
     { var (person, _) = Identity(); var doc = await db.Set<FasDocument>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == documentId && x.UploadStatusCode != "REMOVED", ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); await Owned(doc.FasApplicationId, person, ct); return (await storage.OpenReadAsync(doc.BlobKey, ct), doc.MimeType, doc.FileName); }
@@ -404,7 +406,7 @@ public sealed class StudentFasApplicationService(
     public async Task<object> RecordScanResult(long documentId, bool passed, CancellationToken ct) { Actor(); var doc = await db.Set<FasDocument>().SingleOrDefaultAsync(x => x.Id == documentId, ct) ?? throw new KeyNotFoundException("FAS.DOCUMENT_NOT_FOUND"); if (passed) doc.MarkScanPassed(); else doc.MarkScanFailed(); await db.SaveChangesAsync(ct); return new { id = doc.Id, scanStatus = doc.UploadStatusCode }; }
 
     public async Task<object> Activate(long itemId, CancellationToken ct)
-    { var (person, actor) = Identity(); return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () => { await using var tx = await db.Database.BeginTransactionAsync(ct); var item = await (from i in db.Set<FasApplicationScheme>() join a in db.Set<FasApplication>() on i.FasApplicationId equals a.Id where i.Id == itemId && a.StudentPersonId == person select i).SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND"); if (item.ValidFrom == null || item.ValidTo == null) throw new InvalidOperationException("FAS.APPROVAL_VALIDITY_REQUIRED"); if (await db.Set<FasActiveScheme>().AnyAsync(x => x.FasApplicationSchemeId == item.Id && x.StatusCode == "ACTIVE", ct)) return new { applicationSchemeId = item.Id, status = "ACTIVE", item.ValidFrom, item.ValidTo }; var now = DateTime.UtcNow; item.Activate(now); db.Add(FasActiveScheme.Activate(person, item.Id, item.FasSchemeId, item.ValidFrom.Value, item.ValidTo.Value, actor, now)); db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "APPROVED", "ACTIVE", null, actor, "STUDENT", now)); await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new { applicationSchemeId = item.Id, status = "ACTIVE", item.ValidFrom, item.ValidTo }; }); }
+    { var (person, actor) = Identity(); return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () => { await using var tx = await db.Database.BeginTransactionAsync(ct); var item = await (from i in db.Set<FasApplicationScheme>() join a in db.Set<FasApplication>() on i.FasApplicationId equals a.Id where i.Id == itemId && a.StudentPersonId == person select i).SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND"); if (item.ValidFrom == null || item.ValidTo == null) throw new InvalidOperationException("FAS.APPROVAL_VALIDITY_REQUIRED"); if (await db.Set<FasActiveScheme>().AnyAsync(x => x.FasApplicationSchemeId == item.Id && x.StatusCode == "ACTIVE", ct)) return new { applicationSchemeId = item.Id, status = "ACTIVE", item.ValidFrom, item.ValidTo }; var now = clock.UtcNow.UtcDateTime; item.Activate(now); db.Add(FasActiveScheme.Activate(person, item.Id, item.FasSchemeId, item.ValidFrom.Value, item.ValidTo.Value, actor, now)); db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "APPROVED", "ACTIVE", null, actor, "STUDENT", now)); await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return new { applicationSchemeId = item.Id, status = "ACTIVE", item.ValidFrom, item.ValidTo }; }); }
 
     private static void ValidateFile(string name, string mime, long size) { var extensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" }; var mimes = new[] { "application/pdf", "image/jpeg", "image/png" }; if (size <= 0 || size > 20 * 1024 * 1024) throw new ArgumentException("FAS.FILE_SIZE_INVALID"); if (!extensions.Contains(Path.GetExtension(name).ToLowerInvariant()) || !mimes.Contains(mime.ToLowerInvariant())) throw new ArgumentException("FAS.FILE_TYPE_INVALID"); }
 
@@ -474,7 +476,7 @@ public sealed class StudentFasApplicationService(
             string? recommendedTier = tiers
                 .Where(t => t.FasSchemeId == row.selection.FasSchemeId)
                 .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical))
+                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)))
                 .Select(t => t.Label)
                 .FirstOrDefault();
 
@@ -548,7 +550,7 @@ public sealed class StudentFasApplicationService(
             recommendedTierId = tiers
                 .Where(t => t.FasSchemeId == item.FasSchemeId)
                 .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical))
+                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)))
                 .Select(t => (long?)t.Id)
                 .FirstOrDefault()
         }).ToArray();
@@ -610,7 +612,7 @@ public sealed class StudentFasApplicationService(
             DateOnly today = Today();
             if (scheme.StatusCode != "ACTIVE" || scheme.EndDate < today) throw new InvalidOperationException("FAS.SCHEME_NOT_AVAILABLE");
 
-            DateTime now = DateTime.UtcNow;
+            DateTime now = clock.UtcNow.UtcDateTime;
             string components = JsonSerializer.Serialize(new { tierId = tier.Id, tier.Label, tier.SubsidyType, tier.SubsidyValue });
             item.Approve(actor, tier.SubsidyValue, components, scheme.StartDate, scheme.EndDate, now);
             db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "APPROVED", r.Remarks, actor, "ADMIN", now));
@@ -642,7 +644,7 @@ public sealed class StudentFasApplicationService(
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             var item = await db.Set<FasApplicationScheme>().SingleOrDefaultAsync(x => x.Id == id, ct)
                 ?? throw new KeyNotFoundException("FAS.APPLICATION_SCHEME_NOT_FOUND");
-            DateTime now = DateTime.UtcNow;
+            DateTime now = clock.UtcNow.UtcDateTime;
 
             item.Reject(actor, r.Notes, now);
             db.Add(FasStatusHistory.Create(item.FasApplicationId, item.Id, "PENDING", "REJECTED", r.Notes, actor, "ADMIN", now));
@@ -708,7 +710,7 @@ public sealed class StudentFasApplicationService(
             if (string.IsNullOrWhiteSpace(app.StudentName) || string.IsNullOrWhiteSpace(app.NricFinMasked) || app.DateOfBirth == null || string.IsNullOrWhiteSpace(app.NationalityCode) || string.IsNullOrWhiteSpace(app.ParentNationalitiesJson) || string.IsNullOrWhiteSpace(app.Mobile) || string.IsNullOrWhiteSpace(app.Address) || app.SchoolOrganizationId == null || string.IsNullOrWhiteSpace(app.StudentNumber) || string.IsNullOrWhiteSpace(app.Email) || app.IsWelfareHomeResident == null || (app.IsWelfareHomeResident == false && (app.MonthlyHouseholdIncome == null || app.HouseholdMemberCount == null || string.IsNullOrWhiteSpace(app.EmploymentStatusCode))) || !await DocumentsComplete(id, ct) || await db.Set<FasDeclaration>().CountAsync(x => x.FasApplicationId == id && x.IsAccepted, ct) < 2)
                 throw new InvalidOperationException("FAS.SUBMISSION_INCOMPLETE");
 
-            DateTime now = DateTime.UtcNow;
+            DateTime now = clock.UtcNow.UtcDateTime;
             app.SubmitDraft(actor, now);
             db.Add(FasStatusHistory.Create(id, null, FasApplicationStatuses.Draft, FasApplicationStatuses.Submitted, "Application submitted", actor, "STUDENT", now));
             foreach (var item in items)
@@ -750,7 +752,7 @@ public sealed class StudentFasApplicationService(
             }
 
             string previousStatus = app.StatusCode;
-            var now = DateTime.UtcNow;
+            var now = clock.UtcNow.UtcDateTime;
             app.Withdraw(actor, now);
             db.Add(FasStatusHistory.Create(id, null, previousStatus, FasApplicationStatuses.Withdrawn, "Application withdrawn by student", actor, "STUDENT", now));
 
@@ -794,7 +796,7 @@ public sealed class StudentFasApplicationService(
                 throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY");
             }
 
-            DateTime now = DateTime.UtcNow;
+            DateTime now = clock.UtcNow.UtcDateTime;
             string previousSchemeStatus = target.Scheme.StatusCode;
             target.Scheme.Withdraw();
             db.Add(FasStatusHistory.Create(
@@ -1315,7 +1317,7 @@ public sealed class StudentFasApplicationService(
             .AnyAsync(x => x.PersonId == personId, ct);
         return hasEducationAccount ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
     }
-    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteriaGroup> allGroups, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues)
+    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteriaGroup> allGroups, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues, DateOnly today)
     {
         var criteria = allCriteria
             .Where(x => x.FasTierId == tierId)
@@ -1323,7 +1325,6 @@ public sealed class StudentFasApplicationService(
             .ToArray();
         if (criteria.Length == 0) return true;
 
-        var today = Today();
         int? age = app.DateOfBirth.HasValue ? today.Year - app.DateOfBirth.Value.Year : null;
         if (age.HasValue && app.DateOfBirth!.Value.AddYears(age.Value) > today) age--;
 
@@ -1428,22 +1429,15 @@ public sealed class StudentFasApplicationService(
 
         foreach (long userAccountId in userAccountIds.Distinct())
         {
-            Result<long> result = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.FasSubmitted,
                     $"FAS Application Submitted: {app.ApplicationNo}",
                     $"New FAS application {app.ApplicationNo} for {app.SchoolName} was submitted."),
+                logger,
+                "FAS application submitted school admin notification",
                 ct);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "FAS submit notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                    applicationId,
-                    userAccountId,
-                    result.Error.Code);
-            }
         }
     }
 
@@ -1458,22 +1452,15 @@ public sealed class StudentFasApplicationService(
         long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
         if (userAccountId is null) return;
 
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.FasEligible,
                 $"FAS Application Approved: {app.ApplicationNo}",
                 $"Your FAS application {app.ApplicationNo} for {schemeName} was approved. You qualify for {tierName}."),
+            logger,
+            "FAS application approved student notification",
             ct);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS approve notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                applicationId,
-                userAccountId,
-                result.Error.Code);
-        }
     }
 
     private async Task NotifyStudentForRejectedSchemeAsync(long applicationId, string rejectionNotes, CancellationToken ct)
@@ -1488,22 +1475,15 @@ public sealed class StudentFasApplicationService(
         if (userAccountId is null) return;
 
         string reason = string.IsNullOrWhiteSpace(rejectionNotes) ? "No rejection reason was provided." : rejectionNotes.Trim();
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.FasRejected,
                 $"FAS Application Rejected: {app.ApplicationNo}",
                 $"Your FAS application {app.ApplicationNo} for {schemeName} was rejected. Reason: {reason}."),
+            logger,
+            "FAS application rejected student notification",
             ct);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS reject notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                applicationId,
-                userAccountId,
-                result.Error.Code);
-        }
     }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);
     private sealed record ChecklistItem(string ChecklistItemCode, string Label, bool IsMandatory, object? Document, bool IsComplete);

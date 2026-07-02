@@ -10,6 +10,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.CourseBilling.Application.Enrollments.AdminEnrollPerson;
 
@@ -22,7 +23,8 @@ internal sealed class AdminEnrollPersonHandler(
     IUnitOfWork unitOfWork,
     IStudentDirectory students,
     IStudentNotificationRecipientResolver notificationRecipients,
-    INotificationWriter notificationWriter) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
+    INotificationWriter notificationWriter,
+    ILogger<AdminEnrollPersonHandler> logger) : ICommandHandler<AdminEnrollPersonCommand, CourseEnrollmentResponse>
 {
     public async Task<Result<CourseEnrollmentResponse>> Handle(
         AdminEnrollPersonCommand command,
@@ -145,12 +147,14 @@ internal sealed class AdminEnrollPersonHandler(
         }
 
         string schoolName = student.SchoolName ?? "your school";
-        await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.EnrollSuccess,
                 $"Enrolled: {schoolName}",
                 $"Welcome {student.DisplayName}! You are now enrolled in {course.CourseName} at {schoolName}."),
+            logger,
+            "Admin course enrollment success",
             cancellationToken);
     }
 

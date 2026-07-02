@@ -28,12 +28,11 @@ internal sealed class SmtpEmailDeliveryGateway(
             return Result.Success();
         }
 
-        if (string.IsNullOrWhiteSpace(value.Password))
+        SmtpAccount primaryAccount = SmtpAccount.Primary(value);
+        if (string.IsNullOrWhiteSpace(primaryAccount.Password))
         {
             return Result.Failure(MailDeliveryErrors.MissingSmtpPassword);
         }
-
-        SmtpAccount primaryAccount = SmtpAccount.Primary(value);
 
         try
         {
@@ -53,6 +52,12 @@ internal sealed class SmtpEmailDeliveryGateway(
             try
             {
                 await SendWithAccountAsync(value, fallbackAccount, message, cancellationToken);
+
+                logger.LogInformation(
+                    "Email delivery succeeded with fallback SMTP account. ToEmail={ToEmail} Subject={Subject}",
+                    message.ToEmail,
+                    message.Subject);
+
                 return Result.Success();
             }
             catch (Exception fallbackException) when (fallbackException is not OperationCanceledException)
@@ -134,7 +139,8 @@ internal sealed class SmtpEmailDeliveryGateway(
             string message = current.Message;
             if (message.Contains("5.4.5", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("Daily user sending limit exceeded", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("quota", StringComparison.OrdinalIgnoreCase))
+                || message.Contains("quota", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("limit exceeded", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -158,17 +164,15 @@ internal sealed class SmtpEmailDeliveryGateway(
 
         public static SmtpAccount? TryFallback(MailDeliveryOptions options)
         {
-            if (string.IsNullOrWhiteSpace(options.FallbackUserName)
-                || string.IsNullOrWhiteSpace(options.FallbackPassword)
-                || string.IsNullOrWhiteSpace(options.FallbackFromEmail))
+            if (!options.HasFallbackSender)
             {
                 return null;
             }
 
             return new SmtpAccount(
-                options.FallbackUserName,
-                NormalizePassword(options.FallbackPassword),
-                options.FallbackFromEmail,
+                options.FallbackUserName!,
+                NormalizePassword(options.FallbackPassword!),
+                options.FallbackFromEmail!,
                 string.IsNullOrWhiteSpace(options.FallbackFromDisplayName)
                     ? options.FromDisplayName
                     : options.FallbackFromDisplayName);

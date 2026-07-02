@@ -4,6 +4,7 @@ public sealed record BulkImportStudentsResponse(
     int TotalRows,
     int SucceededCount,
     int FailedCount,
+    int SkippedCount,
     IReadOnlyList<BulkImportStudentRowResult> Results);
 
 public sealed record BulkImportStudentRowResult(
@@ -18,4 +19,7 @@ public sealed record BulkImportStudentRowResult(
 
     public static BulkImportStudentRowResult Failed(int rowNumber, string errorCode, string errorMessage)
         => new(rowNumber, "Failed", null, errorCode, errorMessage);
+
+    public static BulkImportStudentRowResult Skipped(int rowNumber, string errorCode, string message)
+        => new(rowNumber, "Skipped", null, errorCode, message);
 }
