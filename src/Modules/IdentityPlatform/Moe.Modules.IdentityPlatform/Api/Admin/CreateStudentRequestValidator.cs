@@ -1,4 +1,5 @@
 using FluentValidation;
+using Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 
 namespace Moe.Modules.IdentityPlatform.Api.Admin;
 
@@ -14,9 +15,8 @@ public sealed class CreateStudentRequestValidator : AbstractValidator<CreateStud
         RuleFor(x => x.IdentityNumber)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .MaximumLength(30)
-            .Matches("^[A-Za-z0-9]+$")
-            .WithMessage("Identity number can contain only letters and numbers.");
+            .Must(SingaporeIdentityNumberValidator.IsValid)
+            .WithMessage("Identity number must be a valid Singapore NRIC/FIN.");
 
         RuleFor(x => x.FullName)
             .NotEmpty()

@@ -39,6 +39,7 @@ public sealed class StudentsController(
                 request.Search,
                 string.IsNullOrWhiteSpace(request.LevelCode) ? [] : [request.LevelCode],
                 request.ClassCode,
+                request.CitizenshipStatusCode,
                 request.AccountStatus,
                 request.PortalAccessStatus,
                 request.EnrollmentStatus,

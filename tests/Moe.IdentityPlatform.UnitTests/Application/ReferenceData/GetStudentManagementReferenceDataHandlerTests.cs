@@ -57,6 +57,10 @@ public sealed class GetStudentManagementReferenceDataHandlerTests
             .Should().ContainEquivalentOf(new ReferenceOption("MASTER", "Master"));
         response.StudentListFilters.Levels
             .Should().ContainEquivalentOf(new ReferenceOption("PHD", "Doctor"));
+        response.StudentListFilters.CitizenshipStatuses.Should().Equal(
+            new ReferenceOption("CITIZEN", "Singapore Citizen"),
+            new ReferenceOption("PR", "PR"),
+            new ReferenceOption("VALID_PASS_HOLDER", "International Student"));
         response.StudentProfile.Levels.Should().BeEquivalentTo(response.StudentListFilters.Levels);
 
         string serialized = JsonSerializer.Serialize(response);

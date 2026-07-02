@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Messaging;
+using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
 using Moe.Modules.IdentityPlatform.IGateway.Accounts;
 using Moe.Modules.IdentityPlatform.IGateway.ReferenceData;
@@ -19,6 +20,7 @@ public sealed record StudentListFilterReferenceData(
     IReadOnlyList<ReferenceOption> AccountStatuses,
     IReadOnlyList<ReferenceOption> PortalAccessStatuses,
     IReadOnlyList<ReferenceOption> EnrollmentStatuses,
+    IReadOnlyList<ReferenceOption> CitizenshipStatuses,
     IReadOnlyList<ReferenceOption> Levels);
 
 public sealed record StudentProfileReferenceData(
@@ -54,6 +56,12 @@ internal sealed class GetStudentManagementReferenceDataHandler(
                 [
                     Option(nameof(AdminStudentEnrollmentStatusFilter.Enrolled), "Enrolled"),
                     Option(nameof(AdminStudentEnrollmentStatusFilter.NotEnrolled), "Not enrolled")
+                ],
+                CitizenshipStatuses:
+                [
+                    Option(ResidencyStatusCodes.Citizen, "Singapore Citizen"),
+                    Option(ResidencyStatusCodes.PermanentResident, "PR"),
+                    Option(ResidencyStatusCodes.ValidPassHolder, "International Student")
                 ],
                 Levels: SchoolLevelCodes.All.Select(ToLevelOption).ToArray()),
             new StudentProfileReferenceData(

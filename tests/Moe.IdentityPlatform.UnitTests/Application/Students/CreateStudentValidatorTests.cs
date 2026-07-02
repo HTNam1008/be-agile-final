@@ -8,6 +8,8 @@ namespace Moe.IdentityPlatform.UnitTests.Application.Students;
 
 public sealed class CreateStudentValidatorTests
 {
+    private const string IdentityNumberErrorMessage = "Identity number must be a valid Singapore NRIC/FIN.";
+
     [Fact]
     public void ApplicationValidator_AllowsMissingCitizenshipStatusCode()
     {
@@ -52,11 +54,85 @@ public sealed class CreateStudentValidatorTests
         person.CitizenshipStatusCode.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("S1234567D")]
+    [InlineData("T1234567J")]
+    [InlineData("F1234567N")]
+    [InlineData("G5872776N")]
+    [InlineData("M1234567K")]
+    public void ApplicationValidator_AllowsValidNricAndFin(string identityNumber)
+    {
+        CreateStudentValidator validator = new();
+
+        var result = validator.Validate(ValidCommand() with
+        {
+            IdentityNumber = identityNumber
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("S1234567D")]
+    [InlineData("T1234567J")]
+    [InlineData("F1234567N")]
+    [InlineData("G5872776N")]
+    [InlineData("M1234567K")]
+    public void ApiValidator_AllowsValidNricAndFin(string identityNumber)
+    {
+        CreateStudentRequestValidator validator = new();
+
+        var result = validator.Validate(ValidRequest() with
+        {
+            IdentityNumber = identityNumber
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("A1234567D")]
+    [InlineData("S123456D")]
+    [InlineData("S1234567A")]
+    public void ApplicationValidator_RejectsInvalidNricAndFin(string identityNumber)
+    {
+        CreateStudentValidator validator = new();
+
+        var result = validator.Validate(ValidCommand() with
+        {
+            IdentityNumber = identityNumber
+        });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error =>
+            error.PropertyName == nameof(CreateStudentCommand.IdentityNumber) &&
+            error.ErrorMessage == IdentityNumberErrorMessage);
+    }
+
+    [Theory]
+    [InlineData("A1234567D")]
+    [InlineData("S123456D")]
+    [InlineData("S1234567A")]
+    public void ApiValidator_RejectsInvalidNricAndFin(string identityNumber)
+    {
+        CreateStudentRequestValidator validator = new();
+
+        var result = validator.Validate(ValidRequest() with
+        {
+            IdentityNumber = identityNumber
+        });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error =>
+            error.PropertyName == nameof(CreateStudentRequest.IdentityNumber) &&
+            error.ErrorMessage == IdentityNumberErrorMessage);
+    }
+
     private static CreateStudentCommand ValidCommand()
         => new(
             SchoolName: null,
             OrganizationId: 1,
-            IdentityNumber: "S1234567A",
+            IdentityNumber: "S1234567D",
             FullName: "Valid Student",
             DateOfBirth: new DateOnly(2008, 1, 1),
             NationalityCode: "SG",
@@ -75,7 +151,7 @@ public sealed class CreateStudentValidatorTests
         => new(
             SchoolName: null,
             OrganizationId: 1,
-            IdentityNumber: "S1234567A",
+            IdentityNumber: "S1234567D",
             FullName: "Valid Student",
             DateOfBirth: new DateOnly(2008, 1, 1),
             NationalityCode: "SG",
