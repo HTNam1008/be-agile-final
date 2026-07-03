@@ -212,11 +212,14 @@ public sealed class StudentFasApplicationService(
         var parentNationalities = request.ParentNationalities?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
         var accountType = await ResolveAccountType(p.PersonId, ct);
         var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
-        var schemes = await db.Set<FasScheme>()
+        var pendingApplications = await PendingSchemeApplications(p.PersonId, ct);
+        var schemeRows = await db.Set<FasScheme>()
             .AsNoTracking()
             .Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id))
-            .Select(x => new FasRecommendationScheme(x.Id, x.Name, x.Description))
+            .Select(x => new { x.Id, x.Name, x.Description, x.EndDate })
             .ToListAsync(ct);
+        var schemes = schemeRows.Select(x => new FasRecommendationScheme(x.Id, x.Name, x.Description)).ToList();
+        var schemeEndDates = schemeRows.ToDictionary(x => x.Id, x => x.EndDate);
         FasRecommendationResult recommendation = await RecommendAsync(
             schemes,
             new FasRecommendationFacts(
@@ -231,7 +234,21 @@ public sealed class StudentFasApplicationService(
             .Select(x => x.SubsidyType.ToUpperInvariant())
             .Distinct(StringComparer.Ordinal)
             .Count() <= 1;
-        FasRecommendationMatch? recommended = recommendation.Recommended;
+        EligibilitySchemeMatch[] rankedMatches = RankEligibilityMatches(recommendation.MatchedSchemes
+            .Select((match, index) =>
+            {
+                bool hasPendingApplication = pendingApplications.TryGetValue(match.SchemeId, out long pendingApplicationId);
+                return ToEligibilityMatch(
+                    match,
+                    index + 1,
+                    comparable,
+                    schemeEndDates.GetValueOrDefault(match.SchemeId, DateOnly.MaxValue),
+                    !hasPendingApplication,
+                    hasPendingApplication,
+                    hasPendingApplication ? pendingApplicationId : null);
+            })
+            .ToArray());
+        EligibilitySchemeMatch? recommended = rankedMatches.FirstOrDefault(IsActionable);
         return new EligibilityResponse(
             new { id = p.SchoolOrganizationId, name = p.SchoolName },
             CalculateAge(p.DateOfBirth, today),
@@ -241,7 +258,7 @@ public sealed class StudentFasApplicationService(
             parentNationalities,
             accountType,
             decimal.Round(pci, 2),
-            recommendation.MatchedSchemes.Select((match, index) => ToEligibilityMatch(match, index + 1, comparable)).ToArray(),
+            rankedMatches,
             recommended is null ? null : new EligibilityRecommendedScheme(recommended.SchemeId, recommended.SchemeName, recommended.Description),
             recommended is null ? null : new EligibilityRecommendedTier(recommended.TierId, recommended.TierLabel, recommended.SubsidyType, recommended.SubsidyValue),
             recommendation.RecommendationStatus,
@@ -1188,7 +1205,14 @@ public sealed class StudentFasApplicationService(
         return RecommendationService.Recommend(schemes, tiers, groups, criteria, categorical, facts);
     }
 
-    private static EligibilitySchemeMatch ToEligibilityMatch(FasRecommendationMatch match, int rank, bool comparable)
+    private static EligibilitySchemeMatch ToEligibilityMatch(
+        FasRecommendationMatch match,
+        int rank,
+        bool comparable,
+        DateOnly applicationEndDate,
+        bool canApply,
+        bool hasPendingApplication,
+        long? pendingApplicationId)
     {
         string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
             ? $"{match.SubsidyValue:N0}% subsidy"
@@ -1207,11 +1231,14 @@ public sealed class StudentFasApplicationService(
             match.TierLabel,
             match.SubsidyType,
             match.SubsidyValue,
-            DateOnly.MaxValue,
+            applicationEndDate,
             rank,
             reason,
             comparable ? "HIGH" : "REVIEW_REQUIRED",
-            comparable);
+            comparable,
+            canApply,
+            hasPendingApplication,
+            pendingApplicationId);
     }
 
     private static FasRecommendationFacts ToRecommendationFacts(FasApplication app, DateOnly today)
