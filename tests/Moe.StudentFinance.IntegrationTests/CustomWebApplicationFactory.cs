@@ -66,6 +66,29 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             })
             .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", options => { });
 
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                ReplaceSchemeHandler(options, AuthenticationSchemes.AdminEntra);
+                ReplaceSchemeHandler(options, AuthenticationSchemes.EServiceSingpass);
+
+                static void ReplaceSchemeHandler(AuthenticationOptions options, string schemeName)
+                {
+                    var scheme = options.Schemes.FirstOrDefault(candidate => candidate.Name == schemeName);
+                    if (scheme is null)
+                    {
+                        options.AddScheme(schemeName, addedScheme =>
+                        {
+                            addedScheme.DisplayName = schemeName;
+                            addedScheme.HandlerType = typeof(TestAuthHandler);
+                        });
+                        return;
+                    }
+
+                    scheme.DisplayName = schemeName;
+                    scheme.HandlerType = typeof(TestAuthHandler);
+                }
+            });
+
             services.Configure<Microsoft.AspNetCore.Authorization.AuthorizationOptions>(options =>
             {
                 options.AddPolicy(AuthorizationPolicies.AdminPortal, policy =>
@@ -517,6 +540,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         if (!Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
         {
             claims.Add(new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"));
+            claims.Add(new Claim(ClaimNames.Permission, "FAS_REVIEW"));
         }
 
         if (Request.Headers.ContainsKey("X-Test-Ai-Review-Permission"))

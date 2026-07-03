@@ -46,6 +46,7 @@ internal sealed class FasCriteriaEvaluator
                 return true;
 
             case "GDP":
+            case "GHI":
                 if (!gdpValue.HasValue) return false;
                 if (c.NumberFrom.HasValue && gdpValue.Value < c.NumberFrom.Value) return false;
                 if (c.NumberTo.HasValue && gdpValue.Value > c.NumberTo.Value) return false;

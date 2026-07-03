@@ -278,6 +278,19 @@ public static class DependencyInjection
         {
             OnMessageReceived = context =>
             {
+                bool isNotificationHubRequest = context.Request.Path.StartsWithSegments(
+                    "/hubs/notifications",
+                    StringComparison.OrdinalIgnoreCase);
+
+                if (isNotificationHubRequest
+                    && string.IsNullOrWhiteSpace(context.Token)
+                    && context.Request.Query.TryGetValue("access_token", out var accessToken)
+                    && !string.IsNullOrWhiteSpace(accessToken))
+                {
+                    context.Token = accessToken;
+                    return Task.CompletedTask;
+                }
+
                 if (authenticationScheme == AuthenticationSchemes.AdminEntra
                     && IsAdminSessionEstablishmentRequest(context.Request))
                 {
@@ -291,6 +304,7 @@ public static class DependencyInjection
                     context.Token = cookieToken;
                 }
                 else if (authenticationScheme == AuthenticationSchemes.AdminEntra
+                    && !isNotificationHubRequest
                     && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     context.NoResult();

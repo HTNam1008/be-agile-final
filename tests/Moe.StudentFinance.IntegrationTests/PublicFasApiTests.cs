@@ -57,7 +57,7 @@ public sealed class PublicFasApiTests(CustomWebApplicationFactory factory) : ICl
     public async Task Search_matches_income_tier_and_marks_profile_criteria_for_login_verification()
     {
         string schemeName = $"Public income scheme {Guid.NewGuid():N}";
-        await SeedPublicScheme(schemeName);
+        await SeedPublicScheme(schemeName, includeBetterTier: true);
 
         using HttpResponseMessage response = await _client.PostAsJsonAsync("/api/public/v1/fas/search", new
         {
@@ -70,8 +70,8 @@ public sealed class PublicFasApiTests(CustomWebApplicationFactory factory) : ICl
         using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         JsonElement match = document.RootElement.GetProperty("data").GetProperty("matchedSchemes")
             .EnumerateArray()
-            .Single(item => item.GetProperty("name").GetString() == schemeName);
-        Assert.Equal("Income support", match.GetProperty("benefit").GetProperty("tierLabel").GetString());
+            .First(item => item.GetProperty("name").GetString() == schemeName);
+        Assert.Equal("Better income support", match.GetProperty("benefit").GetProperty("tierLabel").GetString());
         Assert.True(match.GetProperty("requiresLoginVerification").GetBoolean());
     }
 
@@ -92,7 +92,7 @@ public sealed class PublicFasApiTests(CustomWebApplicationFactory factory) : ICl
         Assert.Contains("FAS.INVALID_PUBLIC_SEARCH", await response.Content.ReadAsStringAsync());
     }
 
-    private async Task SeedPublicScheme(string name)
+    private async Task SeedPublicScheme(string name, bool includeBetterTier = false)
     {
         using IServiceScope scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
@@ -124,6 +124,22 @@ public sealed class PublicFasApiTests(CustomWebApplicationFactory factory) : ICl
         db.Add(FasTierCriteria.Create(tier.Id, group.Id, "GHI", 0m, 4000m, null, 1, utcNow));
         db.Add(FasTierCriteria.Create(tier.Id, group.Id, "PCI", 0m, 1000m, null, 2, utcNow));
         db.Add(FasTierCriteria.Create(tier.Id, group.Id, "NATIONALITY", null, null, null, 3, utcNow));
+
+        if (includeBetterTier)
+        {
+            FasTier betterTier = FasTier.Create(scheme.Id, "Better income support", "PERCENTAGE", 95m, 2, utcNow);
+            db.Add(betterTier);
+            await db.SaveChangesAsync();
+
+            FasTierCriteriaGroup betterGroup = FasTierCriteriaGroup.Create(betterTier.Id, 1, utcNow);
+            db.Add(betterGroup);
+            await db.SaveChangesAsync();
+
+            db.Add(FasTierCriteria.Create(betterTier.Id, betterGroup.Id, "GHI", 0m, 4000m, null, 1, utcNow));
+            db.Add(FasTierCriteria.Create(betterTier.Id, betterGroup.Id, "PCI", 0m, 1000m, null, 2, utcNow));
+            db.Add(FasTierCriteria.Create(betterTier.Id, betterGroup.Id, "NATIONALITY", null, null, null, 3, utcNow));
+        }
+
         await db.SaveChangesAsync();
     }
 }
