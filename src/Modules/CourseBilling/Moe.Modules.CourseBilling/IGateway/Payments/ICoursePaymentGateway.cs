@@ -48,6 +48,8 @@ public sealed record PaymentCheckoutLineItem(
     decimal Amount,
     int Quantity = 1);
 
+public sealed record BillSchoolOrganization(long BillId, long OrganizationId);
+
 public interface ICoursePaymentPlanGateway
 {
     Task<CourseBillingPlan?> FindPlanAsync(
@@ -63,6 +65,10 @@ public interface ICoursePaymentGateway
         CancellationToken cancellationToken);
 
     Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyCollection<BillSchoolOrganization>> FindBillOrganizationIdsAsync(
+        IReadOnlyCollection<long> billIds,
+        CancellationToken cancellationToken);
 
     Task ApplySuccessfulPaymentAsync(
         long billId,

@@ -8,6 +8,8 @@ using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.CourseBilling.IGateway.Repositories;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
+using Moe.Application.Abstractions.Audit;
+using Moe.Modules.FasPayment.Application.Audit;
 using Moe.Modules.FasPayment.Application;
 using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Contracts.Payments;
@@ -214,6 +216,7 @@ internal sealed class PayBillingStatementHandler(
     ICurrentUser currentUser,
     IClock clock,
     PaymentNotificationEmailService paymentNotifications,
+    IPaymentSchoolAuditRecorder paymentAudit,
     PaymentReceiptService receipts) : ICommandHandler<PayBillingStatementCommand, PayBillingStatementResponse>
 {
     public async Task<Result<PayBillingStatementResponse>> Handle(PayBillingStatementCommand command, CancellationToken ct)
@@ -287,6 +290,15 @@ internal sealed class PayBillingStatementHandler(
                 now,
                 ct);
             payment.MarkSuccessful(now);
+            await paymentAudit.RecordPaymentAsync(
+                AuditActionCodes.PaymentCompleted,
+                payment,
+                allocations.Select(x => x.BillId).ToArray(),
+                "Payment completed",
+                PaymentStatusCodes.Initiated,
+                payment.PaymentStatusCode,
+                "EDUCATION_ACCOUNT_PAYMENT",
+                ct);
             await paymentNotifications.SendPaymentSucceededAsync(payment, now, ct);
             PaymentReceiptResponse? receipt = await receipts.BuildForPaymentAsync(payment, ct);
             await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
@@ -548,6 +560,7 @@ internal sealed class CancelBillingStatementPaymentHandler(
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
     IClock clock,
+    IPaymentSchoolAuditRecorder paymentAudit,
     PaymentNotificationEmailService paymentNotifications) : ICommandHandler<CancelBillingStatementPaymentCommand>
 {
     public async Task<Result> Handle(CancelBillingStatementPaymentCommand command, CancellationToken ct)
@@ -593,7 +606,18 @@ internal sealed class CancelBillingStatementPaymentHandler(
         parts.SingleOrDefault(part => part.PaymentMethodCode == PaymentMethodCodes.OnlinePayment)
             ?.MarkCompleted(PaymentPartStatusCodes.Failed, now);
         checkout?.CancelBeforePayment(now);
+        string beforeStatus = payment.PaymentStatusCode;
         payment.MarkCancelled(now);
+        IReadOnlyCollection<PaymentAllocation> allocations = await payments.ListPaymentAllocationsAsync(payment.Id, ct);
+        await paymentAudit.RecordPaymentAsync(
+            AuditActionCodes.PaymentCancelled,
+            payment,
+            allocations.Select(x => x.BillId).ToArray(),
+            "Payment cancelled",
+            beforeStatus,
+            payment.PaymentStatusCode,
+            "STUDENT_CANCELLED",
+            ct);
         try
         {
             await payments.ExecuteInTransactionAsync(_ => Task.CompletedTask, ct);
