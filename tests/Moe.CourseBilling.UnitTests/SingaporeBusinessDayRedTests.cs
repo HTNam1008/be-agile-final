@@ -156,7 +156,7 @@ public sealed class SingaporeBusinessDayRedTests
     private sealed class RecordingFasGateway : IFasCourseSubsidyGateway
     {
         public DateOnly? ObservedEnrolledDate { get; private set; }
-        public Task<IReadOnlyCollection<CourseFasSubsidy>> ListEligibleSubsidiesAsync(long personId, long courseId, DateOnly enrolledDate, IReadOnlyCollection<long>? fasApplicationSchemeIds, CancellationToken cancellationToken)
+        public Task<IReadOnlyCollection<CourseFasSubsidy>> ListEligibleSubsidiesAsync(long personId, long courseId, DateOnly enrolledDate, long? courseEnrollmentId, IReadOnlyCollection<long>? fasApplicationSchemeIds, CancellationToken cancellationToken)
         {
             ObservedEnrolledDate = enrolledDate;
             return Task.FromResult<IReadOnlyCollection<CourseFasSubsidy>>([new(77, "FIXED", 10m)]);

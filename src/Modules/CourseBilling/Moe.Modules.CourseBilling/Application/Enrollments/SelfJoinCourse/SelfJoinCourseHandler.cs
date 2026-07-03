@@ -122,6 +122,7 @@ internal sealed class SelfJoinCourseHandler(
                 personId.Value,
                 command.CourseId,
                 enrolledDate,
+                null,
                 command.FasApplicationSchemeIds,
                 cancellationToken);
         int requestedFasCount = command.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;
