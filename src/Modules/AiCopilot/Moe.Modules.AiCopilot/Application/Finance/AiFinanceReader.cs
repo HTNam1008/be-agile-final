@@ -39,7 +39,7 @@ public sealed class AiFinanceReader(
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
 
-        DateOnly currentBillingPeriod = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly currentBillingPeriod = clock.TodayInSingapore();
         var statementResult = await queries.Send(
             new GetBillingStatementQuery(currentBillingPeriod.Year, currentBillingPeriod.Month), ct);
         BillingStatementResponse? statement = statementResult.IsSuccess ? statementResult.Value : null;
