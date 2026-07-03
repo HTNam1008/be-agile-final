@@ -1,7 +1,9 @@
 using FluentValidation;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
+using Moe.Modules.FasPayment.Application.Audit;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -71,6 +73,7 @@ internal sealed class CreatePaymentRefundHandler(
     IPaymentCheckoutRepository payments,
     IStripePaymentGateway stripe,
     ICurrentUser currentUser,
+    IPaymentSchoolAuditRecorder paymentAudit,
     IClock clock) : ICommandHandler<CreatePaymentRefundCommand, PaymentRefundResponse>
 {
     public async Task<Result<PaymentRefundResponse>> Handle(
@@ -104,6 +107,16 @@ internal sealed class CreatePaymentRefundHandler(
                 cancellationToken);
             created.Value.AssignProviderRefund(provider.ProviderRefundId);
             await payments.AddRefundAsync(created.Value, cancellationToken);
+            IReadOnlyCollection<PaymentAllocation> allocations =
+                await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken);
+            await paymentAudit.RecordRefundAsync(
+                AuditActionCodes.RefundRequestedByAdmin,
+                payment,
+                created.Value.Id,
+                allocations.Select(x => x.BillId).ToArray(),
+                "Admin refund requested",
+                "ADMIN_ACTION",
+                cancellationToken);
         }
         catch (PaymentProviderUnavailableException)
         {

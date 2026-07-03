@@ -250,6 +250,7 @@ public sealed class SingaporeBusinessDayRedTests
     {
         public Task<PayableCourseBill?> FindPayableBillAsync(long billId, long personId, CancellationToken cancellationToken) => Task.FromResult<PayableCourseBill?>(null);
         public Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken) => Task.FromResult<long?>(10);
+        public Task<IReadOnlyCollection<BillSchoolOrganization>> FindBillOrganizationIdsAsync(IReadOnlyCollection<long> billIds, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyCollection<BillSchoolOrganization>>([]);
         public Task ApplySuccessfulPaymentAsync(long billId, decimal amount, bool paidInFull, DateTime paidAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SendInstallmentEnrollmentConfirmationAsync(long courseEnrollmentId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ApplyPaymentFailureAsync(long billId, string failureReason, CancellationToken cancellationToken) => Task.CompletedTask;

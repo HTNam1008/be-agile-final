@@ -43,6 +43,7 @@ public sealed class FasPaymentModule : IModule
         services.AddSingleton<IModelConfigurationContributor, FasPaymentModelConfiguration>();
         services.AddScoped<IFasSchemeRepository, FasSchemeRepository>();
         services.AddScoped<IFasSchoolAuditResolver, FasSchoolAuditResolver>();
+        services.AddScoped<IPaymentSchoolAuditRecorder, PaymentSchoolAuditRecorder>();
         services.AddScoped<IFasCourseSubsidyGateway, FasCourseSubsidyGateway>();
         services.AddScoped<ICommandHandler<CreateFasSchemeCommand, CreateFasSchemeResponse>, CreateFasSchemeHandler>();
         services.AddScoped<ICommandHandler<SaveFasSchemeDraftCommand, CreateFasSchemeResponse>, SaveFasSchemeDraftHandler>();
