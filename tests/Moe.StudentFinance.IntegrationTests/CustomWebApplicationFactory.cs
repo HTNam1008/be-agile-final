@@ -540,6 +540,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         if (!Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
         {
             claims.Add(new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"));
+            claims.Add(new Claim(ClaimNames.Permission, "FAS_REVIEW"));
         }
 
         if (Request.Headers.ContainsKey("X-Test-Ai-Review-Permission"))

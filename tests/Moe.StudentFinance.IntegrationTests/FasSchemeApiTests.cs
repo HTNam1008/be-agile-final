@@ -337,6 +337,7 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
     }
 
     private static string NewSuffix() => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-    private static DateOnly FutureStartDate() => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-    private static DateOnly FutureEndDate() => DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1));
+    private static DateOnly FutureStartDate() => SingaporeDateToday().AddDays(1);
+    private static DateOnly FutureEndDate() => SingaporeDateToday().AddYears(1);
+    private static DateOnly SingaporeDateToday() => DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
 }
