@@ -14,14 +14,14 @@ namespace Moe.StudentFinance.Migrations.Migrations
                 """
                 IF EXISTS (
                     SELECT 1
-                    WHERE NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4002)
-                       OR NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4003)
-                       OR NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4004)
+                    WHERE NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4002 OR [PersonId] = 2002 OR [AccountNumber] = N'EA-NUS-002')
+                       OR NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4003 OR [PersonId] = 2003 OR [AccountNumber] = N'EA-NUS-003')
+                       OR NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4004 OR [PersonId] = 2004 OR [AccountNumber] = N'EA-NUS-004')
                 )
                 BEGIN
                     SET IDENTITY_INSERT [account].[EducationAccount] ON;
 
-                    IF NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4002)
+                    IF NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4002 OR [PersonId] = 2002 OR [AccountNumber] = N'EA-NUS-002')
                     BEGIN
                         INSERT INTO [account].[EducationAccount] (
                             [EducationAccountId],
@@ -47,7 +47,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             0.00);
                     END
 
-                    IF NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4003)
+                    IF NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4003 OR [PersonId] = 2003 OR [AccountNumber] = N'EA-NUS-003')
                     BEGIN
                         INSERT INTO [account].[EducationAccount] (
                             [EducationAccountId],
@@ -73,7 +73,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             0.00);
                     END
 
-                    IF NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4004)
+                    IF NOT EXISTS (SELECT 1 FROM [account].[EducationAccount] WHERE [EducationAccountId] = 4004 OR [PersonId] = 2004 OR [AccountNumber] = N'EA-NUS-004')
                     BEGIN
                         INSERT INTO [account].[EducationAccount] (
                             [EducationAccountId],
