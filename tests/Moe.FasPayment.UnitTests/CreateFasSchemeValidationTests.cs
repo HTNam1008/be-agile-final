@@ -77,9 +77,12 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
-    public void Duplicate_or_nonpositive_courses_fail_while_global_scheme_is_allowed()
+    public void Missing_duplicate_or_nonpositive_courses_fail()
     {
-        _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] }).IsValid.Should().BeTrue();
+        FluentValidation.Results.ValidationResult missingCourses = _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] });
+        missingCourses.IsValid.Should().BeFalse();
+        missingCourses.Errors.Should().Contain(error => error.ErrorMessage == "Select at least one eligible course.");
+
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [1, 1] }).IsValid.Should().BeFalse();
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [0] }).IsValid.Should().BeFalse();
     }
