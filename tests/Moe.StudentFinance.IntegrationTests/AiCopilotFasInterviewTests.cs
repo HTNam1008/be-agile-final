@@ -218,7 +218,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             description = "AI copilot no-match scheme",
             startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
-            courseIds = Array.Empty<long>(),
+            courseIds = new[] { courseId },
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
@@ -285,7 +285,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             description = "AI copilot integration scheme",
             startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
-            courseIds = Array.Empty<long>(),
+            courseIds = new[] { courseId },
             subsidyType,
             criteriaTemplate = new object[]
             {

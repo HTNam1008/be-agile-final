@@ -17,4 +17,5 @@ public sealed record CreateStudentRequest(
     string? ContactNumber,
     string? Address,
     [property: Obsolete("Manual student creation now always creates an education account. This field is accepted for backward compatibility and ignored.")]
-    bool IsAccountHolder = true);
+    bool IsAccountHolder = true,
+    string? MockPassPersonId = null);

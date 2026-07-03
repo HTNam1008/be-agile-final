@@ -61,6 +61,27 @@ internal sealed class CoursePaymentGateway(
             .Select(course => (long?)course.OrganizationId)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyCollection<BillSchoolOrganization>> FindBillOrganizationIdsAsync(
+        IReadOnlyCollection<long> billIds,
+        CancellationToken cancellationToken)
+    {
+        long[] requestedBillIds = billIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+        if (requestedBillIds.Length == 0) return [];
+
+        return await (
+                from bill in dbContext.Set<Bill>().AsNoTracking()
+                join enrollment in dbContext.Set<CourseEnrollment>().AsNoTracking()
+                    on bill.CourseEnrollmentId equals enrollment.Id
+                join course in dbContext.Set<Course>().AsNoTracking()
+                    on enrollment.CourseId equals course.Id
+                where requestedBillIds.Contains(bill.Id)
+                select new BillSchoolOrganization(bill.Id, course.OrganizationId))
+            .ToArrayAsync(cancellationToken);
+    }
+
     public async Task ApplySuccessfulPaymentAsync(
         long billId,
         decimal amount,

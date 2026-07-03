@@ -9,7 +9,7 @@
       - EF migration history
 
     Deleted domains:
-      course, billing, topup, payment, fas, communication, audit and ai.
+      course, billing, topup, payment, fas, communication, mail, audit and ai.
 
     The script is intentionally blocked until @ConfirmReset is changed to 1.
 */
@@ -38,7 +38,7 @@ INSERT INTO @TargetTables (ObjectId, SchemaName, TableName)
 SELECT t.object_id, s.name, t.name
 FROM sys.tables t
 JOIN sys.schemas s ON s.schema_id = t.schema_id
-WHERE (s.name IN ('course', 'billing', 'topup', 'payment', 'fas', 'communication', 'audit', 'ai')
+WHERE (s.name IN ('course', 'billing', 'topup', 'payment', 'fas', 'communication', 'mail', 'audit', 'ai')
        AND NOT (s.name = 'course' AND t.name = 'FeeComponent'))
    OR (s.name = 'account' AND t.name IN
       (

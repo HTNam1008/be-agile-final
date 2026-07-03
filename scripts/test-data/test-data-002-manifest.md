@@ -2,7 +2,8 @@
 
 ## Step 0 Findings
 
-- UM-015 bulk import reads the first worksheet and uses exact, case-insensitive headers: `SchoolName`, `OrganizationId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `NationalityCode`, `CitizenshipStatusCode`, `StudentNumber`, `AcademicYear`, `LevelCode`, `ClassCode`, `StartDate`, `Email`, `Mobile`, `Address`.
+- UM-015 bulk import reads the first worksheet and uses exact, case-insensitive headers: `SchoolName`, `OrganizationId`, `MockPassPersonId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `NationalityCode`, `CitizenshipStatusCode`, `StudentNumber`, `AcademicYear`, `LevelCode`, `ClassCode`, `StartDate`, `Email`, `Mobile`, `Address`.
+- `MockPassPersonId` is optional. Rows that correspond to `mock-identities.json` include the matching UUID so login can resolve the imported person by MockPass subject id; AUTO lifecycle-only rows may leave it blank and fall back to a generated external reference.
 - Date cells are real Excel date values in the fixture and display as `yyyy-mm-dd`. The parser also accepts parseable date text, but this fixture uses typed dates.
 - Happy-path workbook rows resolve the school by `SchoolName = National University of Singapore` and leave `OrganizationId` blank. The final workbook row intentionally supplies both `OrganizationId = 2` and `SchoolName = QA TEST AUTO002 School B` to exercise the school-identifier conflict path.
 - `PersonStatusCode` is not part of the bulk-import row shape. The non-ACTIVE person case is direct-seeded as `DISABLED`.
