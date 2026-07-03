@@ -10,9 +10,10 @@ They are independent from the AUTO lifecycle scenario in `test-data-002-auto-lif
 
 - Sheet: `BulkImport`
 - Data rows per file: `20`
-- Header: `SchoolName`, `OrganizationId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `NationalityCode`, `CitizenshipStatusCode`, `StudentNumber`, `AcademicYear`, `LevelCode`, `ClassCode`, `StartDate`, `Email`, `Mobile`, `Address`
+- Header: `SchoolName`, `OrganizationId`, `MockPassPersonId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `NationalityCode`, `CitizenshipStatusCode`, `StudentNumber`, `AcademicYear`, `LevelCode`, `ClassCode`, `StartDate`, `Email`, `Mobile`, `Address`
 - Date columns use typed Excel dates with `yyyy-mm-dd` formatting.
-- `IdentityNumber`, `FullName`, `DateOfBirth`, `StudentNumber`, `Email`, `Mobile`, and `Address` mirror the matching records in `mock-identities.json`.
+- `MockPassPersonId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `StudentNumber`, `Email`, `Mobile`, and `Address` mirror the matching records in `mock-identities.json`.
+- `MockPassPersonId` stores the mockpass UUID/subject id so deployed login can resolve `Person.MockPassPersonId` directly.
 - `SchoolName` is blank and `OrganizationId` is `2` for every row so the fixture imports against the seeded school used by the backend test host.
 - Rows 19, 20, and 21 intentionally fail import: invalid identity format, missing full name, and start date before date of birth.
 

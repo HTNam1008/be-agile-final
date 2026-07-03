@@ -33,6 +33,7 @@ internal sealed class ClosedXmlStudentBulkImportWorkbookReader : IStudentBulkImp
                 row.RowNumber(),
                 Text(row, columns, BulkImportStudentWorkbookColumns.SchoolName),
                 Long(row, columns, BulkImportStudentWorkbookColumns.OrganizationId),
+                Text(row, columns, BulkImportStudentWorkbookColumns.MockPassPersonId),
                 Text(row, columns, BulkImportStudentWorkbookColumns.IdentityNumber) ?? string.Empty,
                 Text(row, columns, BulkImportStudentWorkbookColumns.FullName) ?? string.Empty,
                 Date(row, columns, BulkImportStudentWorkbookColumns.DateOfBirth) ?? DateOnly.MinValue,
