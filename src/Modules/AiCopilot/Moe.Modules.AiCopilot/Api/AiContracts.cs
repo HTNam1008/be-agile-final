@@ -25,7 +25,8 @@ public sealed record FasRecommendationCard(
     IReadOnlyCollection<AiInterviewField> ConfirmedFacts,
     IReadOnlyCollection<string> MissingFacts,
     string Warning);
-public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue,
+    int RecommendationRank = 0, string? RecommendationReason = null);
 public sealed record KnowledgeAnswerCard(
     string Title,
     string Summary,

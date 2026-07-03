@@ -78,6 +78,33 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task Fas_interview_returns_multiple_ranked_scheme_matches()
+    {
+        string lowerScheme = await CreateEligibleScheme(label: "Partial", subsidyValue: 60m);
+        string higherScheme = await CreateEligibleScheme(label: "Full", subsidyValue: 95m);
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
+
+        JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+
+        JsonElement data = completed.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION").GetProperty("data");
+        JsonElement[] matches = data.GetProperty("matchedSchemes").EnumerateArray().ToArray();
+        Assert.Contains(matches, x => x.GetProperty("schemeName").GetString() == lowerScheme);
+        Assert.Contains(matches, x => x.GetProperty("schemeName").GetString() == higherScheme);
+
+        int lowerIndex = Array.FindIndex(matches, x => x.GetProperty("schemeName").GetString() == lowerScheme);
+        int higherIndex = Array.FindIndex(matches, x => x.GetProperty("schemeName").GetString() == higherScheme);
+        Assert.True(higherIndex >= 0 && lowerIndex >= 0 && higherIndex < lowerIndex,
+            $"Expected higher subsidy scheme before lower subsidy scheme. Matches: {string.Join(", ", matches.Select(x => x.GetProperty("schemeName").GetString()))}");
+        Assert.True(matches[higherIndex].GetProperty("recommendationRank").GetInt32() < matches[lowerIndex].GetProperty("recommendationRank").GetInt32());
+        Assert.Contains("Best fit", matches[0].GetProperty("recommendationReason").GetString());
+    }
+
+
+    [Fact]
     public async Task Fas_interview_welfare_home_path_prepares_scheme_patch()
     {
         await CreateEligibleScheme();
@@ -188,9 +215,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await AssertStatus(HttpStatusCode.Created, response);
     }
 
-    private async Task CreateEligibleScheme()
+    private async Task<string> CreateEligibleScheme(string label = "Full", decimal subsidyValue = 100m)
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        string schemeName = $"AI FAS {label} {suffix}";
         using HttpRequestMessage courseRequest = new(HttpMethod.Post, "/api/admin/v1/courses");
         courseRequest.Headers.Add("X-Test-Role", "HQ_ADMIN");
         courseRequest.Content = JsonContent.Create(new
@@ -215,7 +243,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         {
             schemeCode = $"AI-FAS-{suffix}",
             grantCode = $"AI-FAS-GRANT-{suffix}",
-            name = $"AI FAS {suffix}",
+            name = schemeName,
             description = "AI copilot integration scheme",
             startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
@@ -233,8 +261,8 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             {
                 new
                 {
-                    label = "Full",
-                    subsidyValue = 100m,
+                    label,
+                    subsidyValue,
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
@@ -249,6 +277,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         });
 
         await AssertStatus(HttpStatusCode.Created, response);
+        return schemeName;
     }
 
     private static JsonElement Field(JsonElement response, string name)
