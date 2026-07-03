@@ -11,6 +11,10 @@ public sealed class CreateStudentValidator : AbstractValidator<CreateStudentComm
             .GreaterThan(0)
             .When(x => x.OrganizationId.HasValue);
 
+        RuleFor(x => x.MockPassPersonId)
+            .MaximumLength(100)
+            .When(x => !string.IsNullOrWhiteSpace(x.MockPassPersonId));
+
         RuleFor(x => x.IdentityNumber)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
