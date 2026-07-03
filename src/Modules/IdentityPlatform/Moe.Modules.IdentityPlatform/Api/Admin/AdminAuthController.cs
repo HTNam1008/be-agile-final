@@ -3,7 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
+using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetAdminAuthFlow;
@@ -19,7 +22,11 @@ namespace Moe.Modules.IdentityPlatform.Api.Admin;
 [EnableCors("AdminCors")]
 public sealed class AdminAuthController(
     IQueryDispatcher queries,
-    ICommandDispatcher commands) : ControllerBase
+    ICommandDispatcher commands,
+    IAdminAccessControl adminAccess,
+    IAuditService audit,
+    ICurrentUser currentUser,
+    IUnitOfWork unitOfWork) : ControllerBase
 {
     [HttpGet("flow")]
     [AllowAnonymous]
@@ -75,7 +82,7 @@ public sealed class AdminAuthController(
 
     [HttpPost("logout")]
     [Authorize(Policy = AuthorizationPolicies.AdminPortal)]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         Response.Cookies.Delete(AuthenticationCookies.AdminSession, new CookieOptions
         {
@@ -85,6 +92,35 @@ public sealed class AdminAuthController(
             Path = "/"
         });
 
+        await RecordLogoutAuditAsync(cancellationToken);
         return ApiResponseFactory.Ok(new { signedOut = true }, HttpContext.TraceIdentifier);
+    }
+
+    private async Task RecordLogoutAuditAsync(CancellationToken cancellationToken)
+    {
+        if (!adminAccess.IsSchoolAdmin || adminAccess.IsHqAdmin || currentUser.UserAccountId is not long userAccountId)
+        {
+            return;
+        }
+
+        foreach (long organizationId in adminAccess.ScopedOrganizationIds)
+        {
+            await audit.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.AdminLogout,
+                    "UserAccount",
+                    userAccountId,
+                    organizationId,
+                    new SchoolAuditDetails(
+                        "Admin logout",
+                        RelatedIds: new Dictionary<string, long>
+                        {
+                            ["userAccountId"] = userAccountId
+                        },
+                        ReasonCode: "ADMIN_AUTH")),
+                cancellationToken);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
