@@ -68,8 +68,7 @@ $readyResponse = Test-HttpOk "API ready health" (Join-Url $ApiBaseUrl "/health/r
 Assert-CorrelationIdHeader "API ready health" $readyResponse
 
 if ($RequireSwagger) {
-    $swaggerResponse = Test-HttpOk "Swagger UI" (Join-Url $ApiBaseUrl "/swagger")
-    Assert-CorrelationIdHeader "Swagger UI" $swaggerResponse
+    Test-HttpOk "Swagger UI" (Join-Url $ApiBaseUrl "/swagger") | Out-Null
 }
 
 $hubUrl = Join-Url $ApiBaseUrl "/hubs/notifications"

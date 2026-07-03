@@ -207,7 +207,7 @@ az webapp config set `
     --resource-group $ResourceGroup `
     --always-on true `
     --web-sockets-enabled true `
-    --linux-fx-version $LinuxRuntime `
+    --startup-file "dotnet Moe.StudentFinance.Api.dll" `
     --only-show-errors | Out-Null
 Assert-AzSucceeded "configure App Service platform settings"
 
