@@ -734,9 +734,14 @@ public sealed class AiOrchestratorService(
         AddMeta("parentNationalities", s.ParentNationalities.Count > 0 ? s.ParentNationalities : null,
             s.ParentNationalities.Count > 0 ? "AI_CONFIRMED" : "UNMAPPED",
             s.ParentNationalities.Count > 0 ? $"Nationalit{(s.ParentNationalities.Count == 1 ? "y" : "ies")}: {string.Join(", ", s.ParentNationalities)}." : null);
-        FasPatchSchemes? schemes = recommendedSchemes is { Count: > 0 }
-            ? new FasPatchSchemes(recommendedSchemes.Select(x => x.SchemeId).Distinct().ToArray(),
-                recommendedSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
+        FasRecommendationMatch[] actionableSchemes = recommendedSchemes?
+            .Where(x => x.CanApply && !x.HasPendingApplication)
+            .GroupBy(x => x.SchemeId)
+            .Select(x => x.First())
+            .ToArray() ?? [];
+        FasPatchSchemes? schemes = actionableSchemes.Length > 0
+            ? new FasPatchSchemes(actionableSchemes.Select(x => x.SchemeId).ToArray(),
+                actionableSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
             : null;
         AddMeta("schemeIds", schemes?.RecommendedSchemeIds, schemes is null ? "UNMAPPED" : "AI_CONFIRMED",
             schemes is null ? null : "Recommended from open schemes for your school.");
@@ -1075,20 +1080,24 @@ public sealed class AiOrchestratorService(
         string? recommendationReason = TryGetString(item, "recommendationReason");
         string? recommendationConfidence = TryGetString(item, "recommendationConfidence");
         bool? isComparable = TryGetBoolean(item, "isComparable");
+        bool? canApply = TryGetBoolean(item, "canApply");
+        bool? hasPendingApplication = TryGetBoolean(item, "hasPendingApplication");
+        long? pendingApplicationId = TryGetInt64(item, "pendingApplicationId");
         return schemeId.HasValue && tierId.HasValue && schemeName is not null && tierLabel is not null && subsidyType is not null && subsidyValue.HasValue
             ? new FasRecommendationMatch(schemeId.Value, schemeName, tierId.Value, tierLabel, subsidyType, subsidyValue.Value,
-                recommendationRank ?? 0, recommendationReason, recommendationConfidence ?? "MEDIUM", isComparable ?? true)
+                recommendationRank ?? 0, recommendationReason, recommendationConfidence ?? "MEDIUM", isComparable ?? true,
+                canApply ?? true, hasPendingApplication ?? false, pendingApplicationId)
             : null;
     }
 
     private static string? TryGetString(JsonElement element, string property)
         => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     private static long? TryGetInt64(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt64(out long result) ? result : null;
+        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long result) ? result : null;
     private static int? TryGetInt32(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt32(out int result) ? result : null;
+        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int result) ? result : null;
     private static decimal? TryGetDecimal(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.TryGetDecimal(out decimal result) ? result : null;
+        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal result) ? result : null;
     private static bool? TryGetBoolean(JsonElement element, string property)
         => element.TryGetProperty(property, out JsonElement value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
     private static FasInterviewData? DeserializeState(string? value) => string.IsNullOrWhiteSpace(value) ? null : JsonSerializer.Deserialize<FasInterviewData>(value, JsonOptions);

@@ -1205,10 +1205,12 @@ public sealed class StudentFasApplicationService(
             .Count() <= 1;
 
         IOrderedEnumerable<EligibilitySchemeMatch> ordered = comparable
-            ? matches.OrderByDescending(BenefitRank)
+            ? matches.OrderByDescending(IsActionable)
+                .ThenByDescending(BenefitRank)
                 .ThenBy(x => x.ApplicationEndDate)
                 .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
-            : matches.OrderBy(x => x.ApplicationEndDate)
+            : matches.OrderByDescending(IsActionable)
+                .ThenBy(x => x.ApplicationEndDate)
                 .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.TierLabel, StringComparer.OrdinalIgnoreCase);
 
@@ -1233,6 +1235,8 @@ public sealed class StudentFasApplicationService(
             _ => 0m
         };
     }
+
+    private static bool IsActionable(EligibilitySchemeMatch match) => match.CanApply && !match.HasPendingApplication;
 
     private static string BuildRecommendationReason(EligibilitySchemeMatch match, int rank, bool comparable)
     {
