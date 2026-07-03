@@ -44,11 +44,14 @@ jobs:
 
       - name: Validate deploy configuration
         shell: pwsh
+        env:
+          AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+          AZURE_WEBAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         run: |
-          if ([string]::IsNullOrWhiteSpace("${{ vars.AZURE_WEBAPP_NAME }}")) {
+          if ([string]::IsNullOrWhiteSpace($env:AZURE_WEBAPP_NAME)) {
             throw "Repository variable AZURE_WEBAPP_NAME is required."
           }
-          if ([string]::IsNullOrWhiteSpace("${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}")) {
+          if ([string]::IsNullOrWhiteSpace($env:AZURE_WEBAPP_PUBLISH_PROFILE)) {
             throw "Repository secret AZURE_WEBAPP_PUBLISH_PROFILE is required."
           }
 
