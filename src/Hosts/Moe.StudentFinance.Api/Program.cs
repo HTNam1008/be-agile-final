@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -33,6 +34,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddLog4Net();
+
+if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+{
+    builder.Services.AddOpenTelemetry().UseAzureMonitor();
+}
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
 if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
