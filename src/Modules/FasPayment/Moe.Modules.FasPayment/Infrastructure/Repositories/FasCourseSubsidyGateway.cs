@@ -12,6 +12,7 @@ internal sealed class FasCourseSubsidyGateway(MoeDbContext dbContext) : IFasCour
         long personId,
         long courseId,
         DateOnly enrolledDate,
+        long? courseEnrollmentId,
         IReadOnlyCollection<long>? fasApplicationSchemeIds,
         CancellationToken cancellationToken)
     {
@@ -43,7 +44,7 @@ internal sealed class FasCourseSubsidyGateway(MoeDbContext dbContext) : IFasCour
                   && !dbContext.Set<FasVoucherRedemption>().Any(redemption =>
                       redemption.FasApplicationSchemeId == item.Id &&
                       redemption.StatusCode != "CANCELLED" &&
-                      redemption.CourseId != courseId)
+                      (courseEnrollmentId == null || redemption.CourseEnrollmentId != courseEnrollmentId.Value))
                   && (
                       !dbContext.Set<FasSchemeCourse>().Any(schemeCourse =>
                           schemeCourse.FasSchemeId == item.FasSchemeId)

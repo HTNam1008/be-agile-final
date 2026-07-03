@@ -306,6 +306,7 @@ public sealed class SelfJoinCourseHandlerEmailTests
             long personId,
             long courseId,
             DateOnly enrolledDate,
+            long? courseEnrollmentId,
             IReadOnlyCollection<long>? fasApplicationSchemeIds,
             CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyCollection<CourseFasSubsidy>>([]);
