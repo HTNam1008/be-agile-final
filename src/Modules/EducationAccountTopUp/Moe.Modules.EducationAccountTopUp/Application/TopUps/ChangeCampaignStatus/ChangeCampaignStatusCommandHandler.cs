@@ -78,7 +78,14 @@ internal sealed class ChangeCampaignStatusCommandHandler(
                 }
             }
 
-            SetNextRunAt(campaign, nowUtc);
+            if (IsDynamicRulesCampaign(campaign))
+            {
+                campaign.SetNextRunAt(null);
+            }
+            else
+            {
+                SetNextRunAt(campaign, nowUtc);
+            }
         }
         else if (newStatusCode == TopUpCampaignStatusCodes.Paused)
         {
@@ -145,7 +152,8 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
             await NotifyCampaignLaunchAsync(campaign, userAccountId, cancellationToken);
 
-            if (string.Equals(campaign.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase))
+            if (!IsDynamicRulesCampaign(campaign)
+                && string.Equals(campaign.ScheduleTypeCode, ScheduleTypeCode.Recurring.ToString(), StringComparison.OrdinalIgnoreCase))
             {
                 await NotifyRecurringAlertAsync(campaign, userAccountId, cancellationToken);
             }
@@ -255,7 +263,8 @@ internal sealed class ChangeCampaignStatusCommandHandler(
 
     private static bool IsImmediateInstantCampaign(TopUpCampaign campaign)
     {
-        return string.Equals(
+        return !IsDynamicRulesCampaign(campaign)
+            && string.Equals(
                 campaign.DeliveryTypeCode,
                 DeliveryType.Instant.ToString(),
                 StringComparison.OrdinalIgnoreCase)
@@ -264,4 +273,10 @@ internal sealed class ChangeCampaignStatusCommandHandler(
                 ScheduleTypeCode.Immediate.ToString(),
                 StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsDynamicRulesCampaign(TopUpCampaign campaign)
+        => string.Equals(
+            campaign.RecipientModeCode,
+            RecipientModeCode.DynamicRules.ToString(),
+            StringComparison.OrdinalIgnoreCase);
 }
