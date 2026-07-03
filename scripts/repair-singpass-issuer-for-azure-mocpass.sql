@@ -8,9 +8,9 @@
         https://mocpass.azurewebsites.net/singpass/v3/fapi
     - If the issuer does not match, Singpass callback cannot find the seeded
       ESERVICE login account and may fail with:
-        Singpass login could not be completed.
+        Singpass  login could not be completed.
 
-    Safe to run multiple times.
+    Safe  to run multiple times.
 */
 
 DECLARE @OldIssuer nvarchar(300) = N'http://localhost:5156/singpass/v3/fapi';

@@ -11,36 +11,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "ChannelCode",
-                schema: "communication",
-                table: "Notification",
-                type: "varchar(50)",
-                unicode: false,
-                maxLength: 50,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "ReferenceTypeCode",
-                schema: "communication",
-                table: "Notification",
-                type: "varchar(50)",
-                unicode: false,
-                maxLength: 50,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "TemplateCode",
-                schema: "communication",
-                table: "Notification",
-                type: "varchar(100)",
-                unicode: false,
-                maxLength: 100,
-                nullable: false,
-                defaultValue: "");
-
             migrationBuilder.CreateTable(
                 name: "NotificationRealtimeDelivery",
                 schema: "communication",
@@ -97,21 +67,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
             migrationBuilder.DropTable(
                 name: "NotificationRealtimeDelivery",
                 schema: "communication");
-
-            migrationBuilder.DropColumn(
-                name: "ChannelCode",
-                schema: "communication",
-                table: "Notification");
-
-            migrationBuilder.DropColumn(
-                name: "ReferenceTypeCode",
-                schema: "communication",
-                table: "Notification");
-
-            migrationBuilder.DropColumn(
-                name: "TemplateCode",
-                schema: "communication",
-                table: "Notification");
         }
     }
 }
