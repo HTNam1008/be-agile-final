@@ -64,9 +64,10 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
 
         Assert.Equal("TemplateRow", sheet.Cell(1, BulkImportStudentWorkbookColumns.Headers.Count + 1).GetString());
         Assert.Equal("SAMPLE_DO_NOT_IMPORT", sheet.Cell(2, BulkImportStudentWorkbookColumns.Headers.Count + 1).GetString());
-        Assert.Equal("S1234567D", sheet.Cell(2, 3).GetString());
-        Assert.Equal("BACHELOR", sheet.Cell(2, 10).GetString());
-        Assert.NotNull(sheet.Cell(10, 10).GetDataValidation());
+        Assert.Equal("sample-mockpass-person-id", sheet.Cell(2, 3).GetString());
+        Assert.Equal("S1234567D", sheet.Cell(2, 4).GetString());
+        Assert.Equal("BACHELOR", sheet.Cell(2, 11).GetString());
+        Assert.NotNull(sheet.Cell(10, 11).GetDataValidation());
     }
 
     [Fact]
@@ -84,9 +85,10 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     public async Task BulkImport_WithValidWorkbook_CreatesStudentsWithoutEducationAccountsOrImportAudit()
     {
         string suffix = UniqueSuffix();
+        const string mockPassPersonId = "89f4c2eb-e067-4b33-8fb2-7c8ddd4a7af2";
         StudentImportRow[] rows =
         [
-            ValidRow(suffix, "001"),
+            ValidRow(suffix, "001") with { MockPassPersonId = mockPassPersonId },
             ValidRow(suffix, "002") with { CitizenshipStatusCode = "" }
         ];
 
@@ -115,6 +117,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         long populatedCitizenshipPersonId = result.Results.Single(x => x.RowNumber == 2).PersonId!.Value;
         Person populatedCitizenshipPerson = await db.Set<Person>().SingleAsync(x => x.Id == populatedCitizenshipPersonId);
         Assert.Equal("CITIZEN", populatedCitizenshipPerson.CitizenshipStatusCode);
+        Assert.Equal(mockPassPersonId, populatedCitizenshipPerson.ExternalPersonReference);
     }
 
     [Fact]
@@ -457,19 +460,20 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     {
         sheet.Cell(rowNumber, 1).Value = row.SchoolName;
         sheet.Cell(rowNumber, 2).Value = row.OrganizationId;
-        sheet.Cell(rowNumber, 3).Value = row.IdentityNumber;
-        sheet.Cell(rowNumber, 4).Value = row.FullName;
-        sheet.Cell(rowNumber, 5).Value = row.DateOfBirth.ToDateTime(TimeOnly.MinValue);
-        sheet.Cell(rowNumber, 6).Value = row.NationalityCode;
-        sheet.Cell(rowNumber, 7).Value = row.CitizenshipStatusCode;
-        sheet.Cell(rowNumber, 8).Value = row.StudentNumber;
-        sheet.Cell(rowNumber, 9).Value = row.AcademicYear;
-        sheet.Cell(rowNumber, 10).Value = row.LevelCode;
-        sheet.Cell(rowNumber, 11).Value = row.ClassCode;
-        sheet.Cell(rowNumber, 12).Value = row.StartDate?.ToDateTime(TimeOnly.MinValue);
-        sheet.Cell(rowNumber, 13).Value = row.Email;
-        sheet.Cell(rowNumber, 14).Value = row.Mobile;
-        sheet.Cell(rowNumber, 15).Value = row.Address;
+        sheet.Cell(rowNumber, 3).Value = row.MockPassPersonId;
+        sheet.Cell(rowNumber, 4).Value = row.IdentityNumber;
+        sheet.Cell(rowNumber, 5).Value = row.FullName;
+        sheet.Cell(rowNumber, 6).Value = row.DateOfBirth.ToDateTime(TimeOnly.MinValue);
+        sheet.Cell(rowNumber, 7).Value = row.NationalityCode;
+        sheet.Cell(rowNumber, 8).Value = row.CitizenshipStatusCode;
+        sheet.Cell(rowNumber, 9).Value = row.StudentNumber;
+        sheet.Cell(rowNumber, 10).Value = row.AcademicYear;
+        sheet.Cell(rowNumber, 11).Value = row.LevelCode;
+        sheet.Cell(rowNumber, 12).Value = row.ClassCode;
+        sheet.Cell(rowNumber, 13).Value = row.StartDate?.ToDateTime(TimeOnly.MinValue);
+        sheet.Cell(rowNumber, 14).Value = row.Email;
+        sheet.Cell(rowNumber, 15).Value = row.Mobile;
+        sheet.Cell(rowNumber, 16).Value = row.Address;
     }
 
     private static byte[] SaveWorkbook(XLWorkbook workbook)
@@ -483,6 +487,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         => new(
             SchoolName: null,
             OrganizationId: null,
+            MockPassPersonId: null,
             IdentityNumber: ValidIdentityNumber(suffix, rowSuffix),
             FullName: $"UM015 Student {suffix} {rowSuffix}",
             DateOfBirth: new DateOnly(2008, 5, 12),
@@ -593,6 +598,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     private sealed record StudentImportRow(
         string? SchoolName,
         long? OrganizationId,
+        string? MockPassPersonId,
         string IdentityNumber,
         string FullName,
         DateOnly DateOfBirth,
