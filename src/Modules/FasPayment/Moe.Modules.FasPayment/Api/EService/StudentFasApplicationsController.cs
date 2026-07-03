@@ -18,7 +18,7 @@ public sealed class StudentFasApplicationsController(StudentFasApplicationServic
     [HttpGet("schemes")] public Task<object> Schemes([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? search = null, CancellationToken ct = default) => service.ListSchemes(page, pageSize, search, ct);
     [HttpGet("schemes/applicable")] public Task<object> ApplicableSchemes([FromQuery] long courseId, CancellationToken ct = default) => service.ApplicableActiveSchemesForCourse(courseId, ct);
     [HttpGet("schemes/{id:long}")] public Task<object> Scheme(long id, CancellationToken ct) => service.SchemeDetail(id, ct);
-    [HttpPost("eligibility/check")] public Task<object> Eligibility(EligibilityRequest request, CancellationToken ct) => service.CheckEligibility(request, ct);
+    [HttpPost("eligibility/check")] public Task<EligibilityResponse> Eligibility(EligibilityRequest request, CancellationToken ct) => service.CheckEligibility(request, ct);
     [HttpGet("applications/prefill")] public Task<object> Prefill(CancellationToken ct) => service.Prefill(ct);
     [HttpGet("applications/me")] public Task<object> Mine([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? search = null, [FromQuery] string? status = null, [FromQuery] string? sortBy = null, [FromQuery] string? sortDirection = null, CancellationToken ct = default) => service.MyApplications(page, pageSize, search, status, sortBy, sortDirection, ct);
     [HttpGet("applications/me/summary")] public Task<object> Summary(CancellationToken ct) => service.Summary(ct);

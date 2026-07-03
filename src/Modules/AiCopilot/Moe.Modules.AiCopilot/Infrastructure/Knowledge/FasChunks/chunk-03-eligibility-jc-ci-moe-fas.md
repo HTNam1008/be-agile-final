@@ -10,6 +10,7 @@ source_document: "MOS - FAS everything.md"
 effective_date: "2026-01-01"
 last_reviewed: "2026-06-25"
 confidence: high
+synonyms: [MOE FAS, JC FAS, CI FAS, junior college financial assistance, per capita income, gross household income]
 ---
 
 # MOE Financial Assistance Scheme (FAS) — Junior College (JC) / Centralised Institute (CI) Level
