@@ -1012,15 +1012,18 @@ public sealed class StudentFasApplicationService(
                     on active.FasApplicationSchemeId equals item.Id
                 join scheme in db.Set<FasScheme>().AsNoTracking()
                     on active.FasSchemeId equals scheme.Id
-                where active.StudentPersonId == person
-                      && active.StatusCode == "ACTIVE"
-                      && item.IsActive
-                      && scheme.StatusCode == "ACTIVE"
-                      && active.ActiveFrom <= today
-                      && active.ActiveTo >= today
-                      && !db.Set<FasVoucherRedemption>().Any(redemption =>
-                          redemption.FasApplicationSchemeId == item.Id &&
-                          redemption.StatusCode == "PENDING")
+              where active.StudentPersonId == person
+                    && active.StatusCode == "ACTIVE"
+                    && item.StatusCode == "APPROVED"
+                    && item.IsActive
+                    && scheme.StatusCode == "ACTIVE"
+                    && (item.ValidFrom ?? today) <= today
+                    && (item.ValidTo ?? today) >= today
+                    && active.ActiveFrom <= today
+                    && active.ActiveTo >= today
+                    && !db.Set<FasVoucherRedemption>().Any(redemption =>
+                        redemption.FasApplicationSchemeId == item.Id &&
+                        redemption.StatusCode != "CANCELLED")
                       && (!db.Set<FasSchemeCourse>().Any(schemeCourse =>
                               schemeCourse.FasSchemeId == scheme.Id) ||
                           db.Set<FasSchemeCourse>().Any(schemeCourse =>
@@ -1059,7 +1062,16 @@ public sealed class StudentFasApplicationService(
             .Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo })
             .FirstOrDefaultAsync(ct);
 
-        return new { canApply = true, blockingReason = (string?)null, activeScheme = active, resumableDraftId = draft };
+        bool hasActiveBenefit = active is not null && active.ActiveFrom <= Today() && active.ActiveTo >= Today();
+        return new
+        {
+            canApply = !hasActiveBenefit,
+            blockingReason = hasActiveBenefit
+                ? "You already have an approved active FAS benefit. You can apply again after it is redeemed or expires."
+                : (string?)null,
+            activeScheme = active,
+            resumableDraftId = draft
+        };
     }
 
     public async Task<object> ApplicationReview(long id, CancellationToken ct)
@@ -1438,7 +1450,7 @@ public sealed class StudentFasApplicationService(
 
     private async Task EnsureNoDuplicateApplications(long person, IReadOnlyCollection<long> schemeIds, long? currentApplicationId, CancellationToken ct)
     {
-        var pendingSchemes = await (
+        var blockingSchemes = await (
                 from item in db.Set<FasApplicationScheme>().AsNoTracking()
                 join application in db.Set<FasApplication>().AsNoTracking() on item.FasApplicationId equals application.Id
                 join scheme in db.Set<FasScheme>().AsNoTracking() on item.FasSchemeId equals scheme.Id
@@ -1446,16 +1458,16 @@ public sealed class StudentFasApplicationService(
                       && (!currentApplicationId.HasValue || application.Id != currentApplicationId.Value)
                       && application.StatusCode != FasApplicationStatuses.Withdrawn
                       && schemeIds.Contains(item.FasSchemeId)
-                      && item.StatusCode == "PENDING"
+                      && (item.StatusCode == "PENDING" || item.StatusCode == "APPROVED")
                 select new { item.FasSchemeId, scheme.Name })
             .Distinct()
             .ToListAsync(ct);
 
-        if (pendingSchemes.Count > 0)
+        if (blockingSchemes.Count > 0)
         {
-            var pendingSchemeLabels = pendingSchemes
+            var blockingSchemeLabels = blockingSchemes
                 .Select(x => $"{x.FasSchemeId}:{x.Name.Replace("|", " ").Replace(",", " ")}");
-            throw new InvalidOperationException($"FAS.PENDING_SCHEME_APPLICATION:{string.Join('|', pendingSchemeLabels)}");
+            throw new InvalidOperationException($"FAS.SCHEME_APPLICATION_EXISTS:{string.Join('|', blockingSchemeLabels)}");
         }
     }
 
@@ -1464,7 +1476,7 @@ public sealed class StudentFasApplicationService(
                 from item in db.Set<FasApplicationScheme>().AsNoTracking()
                 join application in db.Set<FasApplication>().AsNoTracking() on item.FasApplicationId equals application.Id
                 where application.StudentPersonId == person
-                      && item.StatusCode == "PENDING"
+                      && (item.StatusCode == "PENDING" || item.StatusCode == "APPROVED")
                 select new { item.FasSchemeId, ApplicationId = application.Id })
             .GroupBy(x => x.FasSchemeId)
             .Select(x => new { FasSchemeId = x.Key, ApplicationId = x.Min(item => item.ApplicationId) })

@@ -6,6 +6,7 @@ internal interface IFasCourseSubsidyGateway
         long personId,
         long courseId,
         DateOnly enrolledDate,
+        long? courseEnrollmentId,
         IReadOnlyCollection<long>? fasApplicationSchemeIds,
         CancellationToken cancellationToken);
 
