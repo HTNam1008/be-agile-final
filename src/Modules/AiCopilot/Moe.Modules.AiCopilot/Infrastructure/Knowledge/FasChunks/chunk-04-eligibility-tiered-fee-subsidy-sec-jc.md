@@ -10,6 +10,7 @@ source_document: "MOS - FAS everything.md"
 effective_date: "2026-01-01"
 last_reviewed: "2026-06-25"
 confidence: medium-verify-with-client
+synonyms: [tiered fee subsidy, ISB, independent schools bursary, income tier, subsidy percentage, JC subsidy]
 ---
 # Tiered Fee Subsidy at Secondary/JC Level (Scheme Name Pending Verification)
 

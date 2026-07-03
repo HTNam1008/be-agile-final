@@ -10,6 +10,7 @@ source_document: "MOS - Biz reqs.md (S/N 5: AI must handle cases it cannot answe
 effective_date: "n/a"
 last_reviewed: "2026-06-25"
 confidence: high
+synonyms: [out of scope, fallback, escalation, cannot answer, human review, admin center]
 ---
 
 # Scope Boundary & Fallback Policy

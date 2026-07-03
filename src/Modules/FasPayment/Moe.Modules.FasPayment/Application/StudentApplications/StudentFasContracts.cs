@@ -22,7 +22,9 @@ public sealed record EligibilitySchemeMatch(
     decimal SubsidyValue,
     DateOnly ApplicationEndDate,
     int RecommendationRank,
-    string RecommendationReason);
+    string RecommendationReason,
+    string RecommendationConfidence = "MEDIUM",
+    bool IsComparable = true);
 public sealed record EligibilitySchemeOption(long Id, string Name);
 public sealed record EligibilityCriteriaPlan(
     IReadOnlyCollection<EligibilitySchemeOption> ApplicableSchemes,

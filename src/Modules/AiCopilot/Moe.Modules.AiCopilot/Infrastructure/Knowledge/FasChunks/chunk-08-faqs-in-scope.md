@@ -9,6 +9,7 @@ source_document: "MOS - FAS everything.md"
 effective_date: "2025-12-02"
 last_reviewed: "2026-06-25"
 confidence: high
+synonyms: [FAS FAQ, appeal, application cut off, duration, transfer, fees, documents]
 ---
 
 # FAQs
@@ -35,4 +36,3 @@ A: If transferring to another Government or Government-aided institution during 
 A: Generally, if approved by the end of a given month (with accurate, complete information), FAS takes effect from the following month.
 
 ---
-

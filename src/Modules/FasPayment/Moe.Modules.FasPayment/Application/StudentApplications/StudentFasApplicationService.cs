@@ -1157,14 +1157,26 @@ public sealed class StudentFasApplicationService(
 
     private static EligibilitySchemeMatch[] RankEligibilityMatches(IReadOnlyCollection<EligibilitySchemeMatch> matches)
     {
-        return matches
-            .OrderByDescending(BenefitRank)
-            .ThenBy(x => x.ApplicationEndDate)
-            .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
+        bool comparable = matches
+            .Select(x => x.SubsidyType.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Count() <= 1;
+
+        IOrderedEnumerable<EligibilitySchemeMatch> ordered = comparable
+            ? matches.OrderByDescending(BenefitRank)
+                .ThenBy(x => x.ApplicationEndDate)
+                .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
+            : matches.OrderBy(x => x.ApplicationEndDate)
+                .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.TierLabel, StringComparer.OrdinalIgnoreCase);
+
+        return ordered
             .Select((match, index) => match with
             {
                 RecommendationRank = index + 1,
-                RecommendationReason = BuildRecommendationReason(match, index + 1)
+                RecommendationReason = BuildRecommendationReason(match, index + 1, comparable),
+                RecommendationConfidence = comparable ? "HIGH" : "REVIEW_REQUIRED",
+                IsComparable = comparable
             })
             .ToArray();
     }
@@ -1180,12 +1192,17 @@ public sealed class StudentFasApplicationService(
         };
     }
 
-    private static string BuildRecommendationReason(EligibilitySchemeMatch match, int rank)
+    private static string BuildRecommendationReason(EligibilitySchemeMatch match, int rank, bool comparable)
     {
         string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
             ? $"{match.SubsidyValue:N0}% subsidy"
             : match.SubsidyValue.ToString("C", CultureInfo.GetCultureInfo("en-SG"));
-        string prefix = rank == 1 ? "Best fit among currently eligible schemes" : $"Eligible option #{rank}";
+        if (!comparable)
+        {
+            return $"Eligible option #{rank}: matched the configured criteria and offers {benefit}. Fixed and percentage benefits are not directly comparable without a course fee amount.";
+        }
+
+        string prefix = rank == 1 ? "Best fit among comparable eligible schemes" : $"Eligible option #{rank}";
         return $"{prefix}: matched the configured criteria and offers {benefit}. Ties use application closing date and scheme name.";
     }
 
