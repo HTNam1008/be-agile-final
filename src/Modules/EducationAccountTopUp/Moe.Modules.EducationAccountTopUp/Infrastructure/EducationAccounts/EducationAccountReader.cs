@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
 using Moe.Modules.EducationAccountTopUp.Application.Interest;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
@@ -9,7 +10,7 @@ namespace Moe.Modules.EducationAccountTopUp.Infrastructure.EducationAccounts;
 
 internal sealed class EducationAccountReader(
     MoeDbContext dbContext,
-    Microsoft.Extensions.Options.IOptions<EducationAccountInterestOptions> interestOptions)
+    IOptions<EducationAccountInterestOptions> interestOptions)
     : IEducationAccountReader, IEducationAccountInterestHistoryReader
 {
     public async Task<MyEducationAccountDto?> GetMyEducationAccountAsync(long personId, CancellationToken cancellationToken = default)

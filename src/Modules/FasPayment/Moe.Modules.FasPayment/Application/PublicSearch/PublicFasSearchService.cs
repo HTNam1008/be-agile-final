@@ -94,7 +94,7 @@ public sealed class PublicFasSearchService(
             .OrderBy(item => item.DisplayOrder)
             .ToArrayAsync(cancellationToken);
 
-        var matches = new List<PublicFasSchemeMatch>();
+        var matches = new List<PublicFasSchemeMatchCandidate>();
         foreach (FasScheme scheme in schemes)
         {
             foreach (FasTier tier in tiers.Where(item => item.FasSchemeId == scheme.Id))
@@ -108,24 +108,33 @@ public sealed class PublicFasSearchService(
                     continue;
                 }
 
-                matches.Add(new PublicFasSchemeMatch(
-                    scheme.Id,
-                    scheme.Name,
-                    scheme.Description,
-                    scheme.StartDate,
-                    scheme.EndDate,
-                    new PublicFasBenefit(tier.Label, tier.SubsidyType, tier.SubsidyValue),
-                    tierMatch.RequiresLoginVerification));
-                break;
+                matches.Add(new PublicFasSchemeMatchCandidate(
+                    new PublicFasSchemeMatch(
+                        scheme.Id,
+                        scheme.Name,
+                        scheme.Description,
+                        scheme.StartDate,
+                        scheme.EndDate,
+                        new PublicFasBenefit(tier.Label, tier.SubsidyType, tier.SubsidyValue),
+                        tierMatch.RequiresLoginVerification),
+                    tier.DisplayOrder));
             }
         }
+
+        PublicFasSchemeMatch[] sortedMatches = matches
+            .OrderByDescending(item => item.Match.Benefit.SubsidyValue)
+            .ThenBy(item => item.TierDisplayOrder)
+            .ThenBy(item => item.Match.Name)
+            .ThenBy(item => item.Match.SchemeId)
+            .Select(item => item.Match)
+            .ToArray();
 
         return new PublicFasSearchResult(
             new PublicFasSchool(school.OrganizationUnitId, school.UnitName),
             request.MonthlyHouseholdIncome,
             request.HouseholdMemberCount,
             perCapitaIncome,
-            matches);
+            sortedMatches);
     }
 
     private static TierMatch EvaluateTier(
@@ -220,4 +229,5 @@ public sealed class PublicFasSearchService(
     }
 
     private readonly record struct TierMatch(bool IsPotentialMatch, bool RequiresLoginVerification);
+    private readonly record struct PublicFasSchemeMatchCandidate(PublicFasSchemeMatch Match, int TierDisplayOrder);
 }
