@@ -11,7 +11,13 @@ public sealed record EligibilityResponse(
     IReadOnlyCollection<string> ParentNationalities,
     string AccountType,
     decimal PerCapitaIncome,
-    IReadOnlyCollection<EligibilitySchemeMatch> MatchedSchemes);
+    IReadOnlyCollection<EligibilitySchemeMatch> MatchedSchemes,
+    EligibilityRecommendedScheme? RecommendedScheme,
+    EligibilityRecommendedTier? RecommendedTier,
+    string RecommendationStatus,
+    string? ManualReviewReason);
+public sealed record EligibilityRecommendedScheme(long SchemeId, string SchemeName, string? Description);
+public sealed record EligibilityRecommendedTier(long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
 public sealed record EligibilitySchemeMatch(
     long SchemeId,
     string SchemeName,
