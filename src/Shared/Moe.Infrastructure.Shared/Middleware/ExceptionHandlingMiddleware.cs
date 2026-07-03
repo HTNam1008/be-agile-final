@@ -26,7 +26,7 @@ public sealed class ExceptionHandlingMiddleware(
                 context,
                 StatusCodes.Status400BadRequest,
                 "VALIDATION_FAILED",
-                "Validation failed.",
+                ApiErrorMessages.ValidationFailed,
                 exception.Errors.Select(error => error.ErrorMessage).Distinct().ToArray());
         }
         catch (KeyNotFoundException exception)
@@ -36,7 +36,7 @@ public sealed class ExceptionHandlingMiddleware(
                 context,
                 StatusCodes.Status404NotFound,
                 "NOT_FOUND",
-                exception.Message);
+                ApiErrorMessages.NotFound);
         }
         catch (UnauthorizedAccessException exception)
         {
@@ -47,9 +47,7 @@ public sealed class ExceptionHandlingMiddleware(
                 context,
                 statusCode,
                 authenticationRequired ? "UNAUTHORIZED" : "FORBIDDEN",
-                string.IsNullOrWhiteSpace(exception.Message)
-                    ? (authenticationRequired ? "Authentication is required." : "Access is forbidden.")
-                    : exception.Message);
+                authenticationRequired ? ApiErrorMessages.Unauthorized : ApiErrorMessages.Forbidden);
         }
         catch (ApiException exception)
         {
@@ -58,7 +56,9 @@ public sealed class ExceptionHandlingMiddleware(
                 context,
                 exception.StatusCode,
                 exception.Code,
-                exception.Message);
+                ApiErrorMessages.ForStatusCode(
+                    exception.StatusCode,
+                    IsSafeClientMessage(exception.Message) ? exception.Message : null));
         }
         catch (Exception exception)
         {
@@ -79,7 +79,7 @@ public sealed class ExceptionHandlingMiddleware(
                 "UNEXPECTED_ERROR",
                 environment.IsDevelopment()
                     ? $"{exception.GetType().Name}: {exception.Message}"
-                    : "An unexpected error occurred.",
+                    : ApiErrorMessages.Unexpected,
                 environment.IsDevelopment()
                     ? [exception.GetType().FullName ?? exception.GetType().Name, exception.Message]
             : null);
@@ -126,4 +126,18 @@ public sealed class ExceptionHandlingMiddleware(
 
         await context.Response.WriteAsJsonAsync(response);
     }
+
+    private static bool IsSafeClientMessage(string message)
+        => !string.IsNullOrWhiteSpace(message)
+           && message is not "Bad Request"
+           && message is not "Unauthorized"
+           && message is not "Forbidden"
+           && message is not "Not Found"
+           && message is not "Internal Server Error"
+           && !message.All(character => char.IsUpper(character) || char.IsDigit(character) || character is '_' or '.' or ':' or '-')
+           && !message.Contains("Exception", StringComparison.OrdinalIgnoreCase)
+           && !message.Contains("Sql", StringComparison.OrdinalIgnoreCase)
+           && !message.Contains("Trace", StringComparison.OrdinalIgnoreCase)
+           && !message.Contains("Stack", StringComparison.OrdinalIgnoreCase)
+           && !message.Contains("AUTHENTICATION_REQUIRED", StringComparison.OrdinalIgnoreCase);
 }

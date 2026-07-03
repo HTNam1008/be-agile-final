@@ -119,7 +119,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options 
             .Distinct()
             .ToArray();
         return new Microsoft.AspNetCore.Mvc.ObjectResult(ApiResponse<object>.Fail(
-            "Validation failed.",
+            ApiErrorMessages.ValidationFailed,
             ["FAS.INVALID_REQUEST", .. errors],
             ApiResponseCodes.UnprocessableEntity,
             context.HttpContext.TraceIdentifier))
