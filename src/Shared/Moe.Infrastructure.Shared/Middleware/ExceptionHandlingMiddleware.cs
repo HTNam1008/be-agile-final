@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Exceptions;
+using Moe.Infrastructure.Shared.Security;
 
 namespace Moe.Infrastructure.Shared.Middleware;
 
@@ -20,6 +21,7 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (ValidationException exception)
         {
+            LogHandledFailure(context, exception, StatusCodes.Status400BadRequest, "VALIDATION_FAILED");
             await WriteAsync(
                 context,
                 StatusCodes.Status400BadRequest,
@@ -29,6 +31,7 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (KeyNotFoundException exception)
         {
+            LogHandledFailure(context, exception, StatusCodes.Status404NotFound, "NOT_FOUND");
             await WriteAsync(
                 context,
                 StatusCodes.Status404NotFound,
@@ -38,9 +41,11 @@ public sealed class ExceptionHandlingMiddleware(
         catch (UnauthorizedAccessException exception)
         {
             bool authenticationRequired = exception.Message.Contains("AUTHENTICATION_REQUIRED", StringComparison.OrdinalIgnoreCase);
+            int statusCode = authenticationRequired ? StatusCodes.Status401Unauthorized : StatusCodes.Status403Forbidden;
+            LogHandledFailure(context, exception, statusCode, authenticationRequired ? "UNAUTHORIZED" : "FORBIDDEN");
             await WriteAsync(
                 context,
-                authenticationRequired ? StatusCodes.Status401Unauthorized : StatusCodes.Status403Forbidden,
+                statusCode,
                 authenticationRequired ? "UNAUTHORIZED" : "FORBIDDEN",
                 string.IsNullOrWhiteSpace(exception.Message)
                     ? (authenticationRequired ? "Authentication is required." : "Access is forbidden.")
@@ -48,6 +53,7 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (ApiException exception)
         {
+            LogHandledFailure(context, exception, exception.StatusCode, exception.Code);
             await WriteAsync(
                 context,
                 exception.StatusCode,
@@ -56,7 +62,17 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Unhandled request failure. TraceId={TraceId}", context.TraceIdentifier);
+            logger.LogError(
+                exception,
+                "Unhandled request failure. TraceId={TraceId}; Method={Method}; Path={Path}; Route={Route}; UserAccountId={UserAccountId}; PersonId={PersonId}; Portal={Portal}; Roles={Roles}",
+                context.TraceIdentifier,
+                context.Request.Method,
+                context.Request.Path,
+                context.GetEndpoint()?.DisplayName ?? string.Empty,
+                context.User.FindFirst(ClaimNames.UserAccountId)?.Value ?? string.Empty,
+                context.User.FindFirst(ClaimNames.PersonId)?.Value ?? string.Empty,
+                context.User.FindFirst(ClaimNames.Portal)?.Value ?? string.Empty,
+                string.Join(",", context.User.FindAll(ClaimNames.Role).Select(claim => claim.Value).Distinct()));
             await WriteAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
@@ -66,8 +82,25 @@ public sealed class ExceptionHandlingMiddleware(
                     : "An unexpected error occurred.",
                 environment.IsDevelopment()
                     ? [exception.GetType().FullName ?? exception.GetType().Name, exception.Message]
-                    : null);
+            : null);
         }
+    }
+
+    private void LogHandledFailure(HttpContext context, Exception exception, int statusCode, string errorCode)
+    {
+        logger.LogWarning(
+            exception,
+            "Handled request failure {ErrorCode} => {StatusCode}. TraceId={TraceId}; Method={Method}; Path={Path}; Route={Route}; UserAccountId={UserAccountId}; PersonId={PersonId}; Portal={Portal}; Roles={Roles}",
+            errorCode,
+            statusCode,
+            context.TraceIdentifier,
+            context.Request.Method,
+            context.Request.Path,
+            context.GetEndpoint()?.DisplayName ?? string.Empty,
+            context.User.FindFirst(ClaimNames.UserAccountId)?.Value ?? string.Empty,
+            context.User.FindFirst(ClaimNames.PersonId)?.Value ?? string.Empty,
+            context.User.FindFirst(ClaimNames.Portal)?.Value ?? string.Empty,
+            string.Join(",", context.User.FindAll(ClaimNames.Role).Select(claim => claim.Value).Distinct()));
     }
 
     private static async Task WriteAsync(

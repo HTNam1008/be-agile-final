@@ -32,7 +32,21 @@ using NSwag.Generation.Processors.Security;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.SingleLine = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+});
+builder.Logging.Configure(options =>
+{
+    options.ActivityTrackingOptions =
+        ActivityTrackingOptions.TraceId
+        | ActivityTrackingOptions.SpanId
+        | ActivityTrackingOptions.ParentId
+        | ActivityTrackingOptions.Baggage
+        | ActivityTrackingOptions.Tags;
+});
 builder.Logging.AddLog4Net();
 
 if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
