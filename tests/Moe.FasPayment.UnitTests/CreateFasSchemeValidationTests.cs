@@ -57,19 +57,23 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
-    public void Start_date_equal_utc_business_day_passes()
+    public void Start_date_uses_singapore_business_day()
     {
         CreateFasSchemeRequestValidator validator = new(
             new TestClock(new DateTimeOffset(2026, 6, 30, 16, 30, 0, TimeSpan.Zero)));
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
 
-        var result = validator.Validate(source with
+        validator.Validate(source with
         {
             StartDate = new DateOnly(2026, 6, 30),
             EndDate = new DateOnly(2026, 8, 1)
-        });
+        }).IsValid.Should().BeFalse();
 
-        result.IsValid.Should().BeTrue();
+        validator.Validate(source with
+        {
+            StartDate = new DateOnly(2026, 7, 1),
+            EndDate = new DateOnly(2026, 8, 1)
+        }).IsValid.Should().BeTrue();
     }
 
     [Fact]
