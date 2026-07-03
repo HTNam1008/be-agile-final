@@ -118,6 +118,24 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Fas_knowledge_question_can_interrupt_interview_and_then_resume()
+    {
+        JsonElement first = await Chat("I want to apply for FAS", personId: 2101);
+        Guid cid = first.GetProperty("conversationId").GetGuid();
+        Assert.Equal("FAS_INTERVIEW", first.GetProperty("mode").GetString());
+
+        JsonElement pci = await Chat("How is PCI calculated?", personId: 2101, conversationId: cid);
+        Assert.Equal("GENERAL", pci.GetProperty("mode").GetString());
+        Assert.True(pci.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
+        Assert.False(pci.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+        Assert.Contains(pci.GetProperty("followUpQuestions").EnumerateArray(), x => x.GetString() == "Continue my FAS eligibility check.");
+
+        JsonElement resumed = await Chat("Continue my FAS eligibility check.", personId: 2101, conversationId: cid);
+        Assert.Equal("FAS_INTERVIEW", resumed.GetProperty("mode").GetString());
+        Assert.Equal("isWelfareHomeResident", resumed.GetProperty("interviewState").GetProperty("missingFields")[0].GetString());
+    }
+
+    [Fact]
     public async Task Outstanding_keyword_routes_to_payment()
     {
         JsonElement response = await Chat("What is my outstanding amount?", personId: 2101);

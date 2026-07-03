@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -181,7 +182,7 @@ public sealed class StudentFasApplicationService(
         };
     }
 
-    public async Task<object> CheckEligibility(EligibilityRequest request, CancellationToken ct)
+    public async Task<EligibilityResponse> CheckEligibility(EligibilityRequest request, CancellationToken ct)
     {
         if (request.MonthlyHouseholdIncome < 0 || request.OtherMonthlyIncome < 0 || request.HouseholdMemberCount <= 0)
             throw new ArgumentException("FAS.INVALID_INCOME");
@@ -189,8 +190,9 @@ public sealed class StudentFasApplicationService(
         var parentNationalities = request.ParentNationalities?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
         var accountType = await ResolveAccountType(p.PersonId, ct);
         var age = clock.UtcNow.Year - p.DateOfBirth.Year;
-        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id)).ToListAsync(ct);
-        var matches = new List<object>();
+        var today = Today();
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id)).ToListAsync(ct);
+        var matches = new List<EligibilitySchemeMatch>();
         foreach (var scheme in schemes)
         {
             var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == scheme.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
@@ -217,31 +219,32 @@ public sealed class StudentFasApplicationService(
                 bool matched = criteria.Count == 0 || GroupsMatch(groups, criteria, values);
                 if (matched)
                 {
-                    matches.Add(new
-                    {
-                        schemeId = scheme.Id,
-                        schemeName = scheme.Name,
+                    matches.Add(new EligibilitySchemeMatch(
+                        scheme.Id,
+                        scheme.Name,
                         scheme.Description,
-                        tierId = tier.Id,
-                        tierLabel = tier.Label,
+                        tier.Id,
+                        tier.Label,
                         tier.SubsidyType,
-                        tier.SubsidyValue
-                    }); break;
+                        tier.SubsidyValue,
+                        scheme.EndDate,
+                        0,
+                        string.Empty));
+                    break;
                 }
             }
         }
-        return new
-        {
-            currentSchool = new { id = p.SchoolOrganizationId, name = p.SchoolName },
+        EligibilitySchemeMatch[] rankedMatches = RankEligibilityMatches(matches);
+        return new EligibilityResponse(
+            new { id = p.SchoolOrganizationId, name = p.SchoolName },
             age,
-            nationality = p.NationalityCode,
-            monthlyHouseholdIncome = request.MonthlyHouseholdIncome,
+            p.NationalityCode,
+            request.MonthlyHouseholdIncome,
             request.HouseholdMemberCount,
             parentNationalities,
             accountType,
-            perCapitaIncome = decimal.Round(pci, 2),
-            matchedSchemes = matches
-        };
+            decimal.Round(pci, 2),
+            rankedMatches);
     }
 
     public async Task<object> CreateOrResumeDraft(CreateDraftRequest request, CancellationToken ct)
@@ -1150,6 +1153,40 @@ public sealed class StudentFasApplicationService(
                     schoolCourseIds.Contains(schemeCourse.CourseId)))
             .Select(scheme => scheme.Id)
             .ToListAsync(ct);
+    }
+
+    private static EligibilitySchemeMatch[] RankEligibilityMatches(IReadOnlyCollection<EligibilitySchemeMatch> matches)
+    {
+        return matches
+            .OrderByDescending(BenefitRank)
+            .ThenBy(x => x.ApplicationEndDate)
+            .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
+            .Select((match, index) => match with
+            {
+                RecommendationRank = index + 1,
+                RecommendationReason = BuildRecommendationReason(match, index + 1)
+            })
+            .ToArray();
+    }
+
+    private static decimal BenefitRank(EligibilitySchemeMatch match)
+    {
+        string subsidyType = match.SubsidyType.ToUpperInvariant();
+        return subsidyType switch
+        {
+            "PERCENTAGE" => match.SubsidyValue * 1000m,
+            "FIXED" => match.SubsidyValue,
+            _ => 0m
+        };
+    }
+
+    private static string BuildRecommendationReason(EligibilitySchemeMatch match, int rank)
+    {
+        string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
+            ? $"{match.SubsidyValue:N0}% subsidy"
+            : match.SubsidyValue.ToString("C", CultureInfo.GetCultureInfo("en-SG"));
+        string prefix = rank == 1 ? "Best fit among currently eligible schemes" : $"Eligible option #{rank}";
+        return $"{prefix}: matched the configured criteria and offers {benefit}. Ties use application closing date and scheme name.";
     }
 
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";
