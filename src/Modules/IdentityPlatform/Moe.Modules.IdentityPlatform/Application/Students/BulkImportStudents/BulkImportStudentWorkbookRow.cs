@@ -4,6 +4,7 @@ public sealed record BulkImportStudentWorkbookRow(
     int RowNumber,
     string? SchoolName,
     long? OrganizationId,
+    string? MockPassPersonId,
     string IdentityNumber,
     string FullName,
     DateOnly DateOfBirth,
