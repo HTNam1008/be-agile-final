@@ -106,7 +106,6 @@ public sealed class CreateStudentValidatorTests
     [Theory]
     [InlineData("A1234567D")]
     [InlineData("S123456D")]
-    [InlineData("S1234567A")]
     public void ApplicationValidator_RejectsInvalidNricAndFin(string identityNumber)
     {
         CreateStudentValidator validator = new();
@@ -125,7 +124,6 @@ public sealed class CreateStudentValidatorTests
     [Theory]
     [InlineData("A1234567D")]
     [InlineData("S123456D")]
-    [InlineData("S1234567A")]
     public void ApiValidator_RejectsInvalidNricAndFin(string identityNumber)
     {
         CreateStudentRequestValidator validator = new();
@@ -139,6 +137,36 @@ public sealed class CreateStudentValidatorTests
         result.Errors.Should().Contain(error =>
             error.PropertyName == nameof(CreateStudentRequest.IdentityNumber) &&
             error.ErrorMessage == IdentityNumberErrorMessage);
+    }
+
+    [Theory]
+    [InlineData("S1234567A")]
+    [InlineData("S7000138A")]
+    public void ApplicationValidator_AllowsMockpassIdentityNumbersWithoutChecksumValidation(string identityNumber)
+    {
+        CreateStudentValidator validator = new();
+
+        var result = validator.Validate(ValidCommand() with
+        {
+            IdentityNumber = identityNumber
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("S1234567A")]
+    [InlineData("S7000138A")]
+    public void ApiValidator_AllowsMockpassIdentityNumbersWithoutChecksumValidation(string identityNumber)
+    {
+        CreateStudentRequestValidator validator = new();
+
+        var result = validator.Validate(ValidRequest() with
+        {
+            IdentityNumber = identityNumber
+        });
+
+        result.IsValid.Should().BeTrue();
     }
 
     [Fact]

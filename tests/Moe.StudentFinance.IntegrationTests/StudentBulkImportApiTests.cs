@@ -249,7 +249,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     [InlineData("test-data-004-mockpass-import-demo.xlsx")]
     [InlineData("test-data-005-mockpass-import-demo.xlsx")]
     [InlineData("test-data-006-mockpass-import-demo.xlsx")]
-    public async Task BulkImport_MockpassDemoWorkbook_ReturnsExpectedTwentySuccesses(string fileName)
+    public async Task BulkImport_MockpassDemoWorkbook_ReturnsExpectedSeventeenSuccessAndThreeFailures(string fileName)
     {
         byte[] workbook = await File.ReadAllBytesAsync(Path.Combine(FindRepositoryRoot(), "scripts", "test-data", fileName));
 
@@ -261,11 +261,20 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         BulkImportResponse result = await ReadBulkImportResponseAsync(response);
         Assert.Equal(20, result.TotalRows);
         Assert.True(
-            result.SucceededCount == 20,
+            result.SucceededCount == 17,
             JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
-        Assert.Equal(0, result.FailedCount);
+        Assert.Equal(3, result.FailedCount);
         Assert.Equal(0, result.SkippedCount);
-        Assert.All(result.Results, x => Assert.Equal("Succeeded", x.Status));
+        Assert.Equal(3, result.Results.Count(x => x.Status == "Failed"));
+        Assert.Contains(result.Results, x => x.RowNumber == 19
+            && x.Status == "Failed"
+            && x.ErrorMessage?.Contains("valid Singapore NRIC/FIN", StringComparison.OrdinalIgnoreCase) == true);
+        Assert.Contains(result.Results, x => x.RowNumber == 20
+            && x.Status == "Failed"
+            && x.ErrorMessage?.Contains("'Full Name' must not be empty", StringComparison.OrdinalIgnoreCase) == true);
+        Assert.Contains(result.Results, x => x.RowNumber == 21
+            && x.Status == "Failed"
+            && x.ErrorMessage?.Contains("Start date cannot be earlier than date of birth", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     [Fact]
