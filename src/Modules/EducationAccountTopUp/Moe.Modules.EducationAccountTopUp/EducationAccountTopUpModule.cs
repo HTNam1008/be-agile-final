@@ -210,9 +210,10 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<IValidator<ChangeCampaignStatusCommand>, ChangeCampaignStatusCommandValidator>();
         services.AddScoped<IValidator<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandValidator>();
     }
-    public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 
     private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
         => configuration.GetValue("BackgroundJobs:Enabled", true)
            && configuration.GetValue($"BackgroundJobs:{key}", true);
+
+    public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
 }

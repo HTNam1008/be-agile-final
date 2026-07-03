@@ -35,6 +35,8 @@ public sealed class StudentFasApplicationService(
     INotificationWriter notificationWriter,
     ILogger<StudentFasApplicationService> logger)
 {
+    private static readonly FasBenefitRecommendationService RecommendationService = new();
+
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
          currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"));
@@ -206,69 +208,44 @@ public sealed class StudentFasApplicationService(
     {
         if (request.MonthlyHouseholdIncome < 0 || request.OtherMonthlyIncome < 0 || request.HouseholdMemberCount <= 0)
             throw new ArgumentException("FAS.INVALID_INCOME");
-        var p = await Profile(ct); var pci = (request.MonthlyHouseholdIncome + request.OtherMonthlyIncome) / request.HouseholdMemberCount;
-        var pendingApplications = await PendingSchemeApplications(p.PersonId, ct);
+        var p = await Profile(ct); var today = Today(); var pci = (request.MonthlyHouseholdIncome + request.OtherMonthlyIncome) / request.HouseholdMemberCount;
         var parentNationalities = request.ParentNationalities?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
         var accountType = await ResolveAccountType(p.PersonId, ct);
-        var age = clock.UtcNow.Year - p.DateOfBirth.Year;
-        var today = Today();
-        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id)).ToListAsync(ct);
-        var matches = new List<EligibilitySchemeMatch>();
-        foreach (var scheme in schemes)
-        {
-            var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == scheme.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-            foreach (var tier in tiers)
-            {
-                var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-                var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-                var values = new Dictionary<long, bool>();
-                foreach (FasTierCriteria c in criteria)
-                {
-                    bool ok = c.CriteriaType switch
-                    {
-                        "AGE" => age >= c.NumberFrom && age <= c.NumberTo,
-                        "GDP" or "GHI" => request.MonthlyHouseholdIncome >= c.NumberFrom && request.MonthlyHouseholdIncome <= c.NumberTo,
-                        "PCI" => pci >= c.NumberFrom && pci <= c.NumberTo,
-                        "NATIONALITY" => await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id &&
-                            (n.Nationality == p.NationalityCode || (p.NationalityCode == "SG" && n.Nationality == "Singapore Citizen")), ct),
-                        "PARENT_NATIONALITY" => parentNationalities.Length > 0 && await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id && parentNationalities.Contains(n.Nationality), ct),
-                        "ACCOUNT_TYPE" => await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id && n.Nationality == accountType, ct),
-                        _ => false
-                    };
-                    values[c.Id] = ok;
-                }
-                bool matched = criteria.Count == 0 || GroupsMatch(groups, criteria, values);
-                if (matched)
-                {
-                    matches.Add(new EligibilitySchemeMatch(
-                        scheme.Id,
-                        scheme.Name,
-                        scheme.Description,
-                        tier.Id,
-                        tier.Label,
-                        tier.SubsidyType,
-                        tier.SubsidyValue,
-                        scheme.EndDate,
-                        0,
-                        string.Empty,
-                        CanApply: scheme.StartDate <= today && scheme.EndDate >= today && !pendingApplications.ContainsKey(scheme.Id),
-                        HasPendingApplication: pendingApplications.ContainsKey(scheme.Id),
-                        PendingApplicationId: pendingApplications.ContainsKey(scheme.Id) ? pendingApplications[scheme.Id] : null));
-                    break;
-                }
-            }
-        }
-        EligibilitySchemeMatch[] rankedMatches = RankEligibilityMatches(matches);
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var schemes = await db.Set<FasScheme>()
+            .AsNoTracking()
+            .Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id))
+            .Select(x => new FasRecommendationScheme(x.Id, x.Name, x.Description))
+            .ToListAsync(ct);
+        FasRecommendationResult recommendation = await RecommendAsync(
+            schemes,
+            new FasRecommendationFacts(
+                CalculateAge(p.DateOfBirth, today),
+                request.MonthlyHouseholdIncome,
+                pci,
+                p.NationalityCode,
+                parentNationalities,
+                accountType),
+            ct);
+        bool comparable = recommendation.MatchedSchemes
+            .Select(x => x.SubsidyType.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Count() <= 1;
+        FasRecommendationMatch? recommended = recommendation.Recommended;
         return new EligibilityResponse(
             new { id = p.SchoolOrganizationId, name = p.SchoolName },
-            age,
+            CalculateAge(p.DateOfBirth, today),
             p.NationalityCode,
             request.MonthlyHouseholdIncome,
             request.HouseholdMemberCount,
             parentNationalities,
             accountType,
             decimal.Round(pci, 2),
-            rankedMatches);
+            recommendation.MatchedSchemes.Select((match, index) => ToEligibilityMatch(match, index + 1, comparable)).ToArray(),
+            recommended is null ? null : new EligibilityRecommendedScheme(recommended.SchemeId, recommended.SchemeName, recommended.Description),
+            recommended is null ? null : new EligibilityRecommendedTier(recommended.TierId, recommended.TierLabel, recommended.SubsidyType, recommended.SubsidyValue),
+            recommendation.RecommendationStatus,
+            recommendation.ManualReviewReason);
     }
 
     public async Task<object> CreateOrResumeDraft(CreateDraftRequest request, CancellationToken ct)
@@ -518,12 +495,14 @@ public sealed class StudentFasApplicationService(
         var items = pageRows.Select(row =>
         {
             string? approvedTier = ExtractApprovedTierLabel(row.selection.ApprovedComponentsJson);
-            string? recommendedTier = tiers
-                .Where(t => t.FasSchemeId == row.selection.FasSchemeId)
-                .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical, Today()))
-                .Select(t => t.Label)
-                .FirstOrDefault();
+            FasRecommendationResult recommendation = RecommendationService.Recommend(
+                [new FasRecommendationScheme(row.scheme.Id, row.scheme.Name, row.scheme.Description)],
+                tiers,
+                groups,
+                criteria,
+                categorical,
+                ToRecommendationFacts(row.application, Today()));
+            string? recommendedTier = recommendation.Recommended?.TierLabel;
 
             return new
             {
@@ -536,6 +515,8 @@ public sealed class StudentFasApplicationService(
                 schemeId = row.scheme.Id,
                 schemeName = row.scheme.Name,
                 schemeTier = approvedTier ?? recommendedTier,
+                recommendation.RecommendationStatus,
+                recommendation.ManualReviewReason,
                 submittedAt = row.application.SubmittedAtUtc,
                 status = ToAdminVisibleStatus(row.application.StatusCode, row.selection.StatusCode)
             };
@@ -576,28 +557,36 @@ public sealed class StudentFasApplicationService(
         var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         var criteriaIds = criteria.Select(x => x.Id).ToArray();
         var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
-        var schemes = items.Select(item => new
+        var schemes = items.Select(item =>
         {
-            item.Id,
-            item.FasSchemeId,
-            item.Name,
-            item.StatusCode,
-            item.ApprovedAmount,
-            item.ApprovedComponentsJson,
-            item.RejectionNotes,
-            item.ValidFrom,
-            item.ValidTo,
-            item.IsActive,
-            tiers = tiers
-                .Where(t => t.FasSchemeId == item.FasSchemeId)
-                .Select(t => new { tierId = t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder })
-                .ToArray(),
-            recommendedTierId = tiers
-                .Where(t => t.FasSchemeId == item.FasSchemeId)
-                .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical, Today()))
-                .Select(t => (long?)t.Id)
-                .FirstOrDefault()
+            FasRecommendationResult recommendation = RecommendationService.Recommend(
+                [new FasRecommendationScheme(item.FasSchemeId, item.Name, null)],
+                tiers,
+                groups,
+                criteria,
+                categorical,
+                ToRecommendationFacts(app, Today()));
+
+            return new
+            {
+                item.Id,
+                item.FasSchemeId,
+                item.Name,
+                item.StatusCode,
+                item.ApprovedAmount,
+                item.ApprovedComponentsJson,
+                item.RejectionNotes,
+                item.ValidFrom,
+                item.ValidTo,
+                item.IsActive,
+                tiers = tiers
+                    .Where(t => t.FasSchemeId == item.FasSchemeId)
+                    .Select(t => new { tierId = t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder })
+                    .ToArray(),
+                recommendedTierId = recommendation.Recommended?.TierId,
+                recommendation.RecommendationStatus,
+                recommendation.ManualReviewReason
+            };
         }).ToArray();
 
         var documents = await db.Set<FasDocument>()
@@ -1095,23 +1084,44 @@ public sealed class StudentFasApplicationService(
                                     i.IsActive,
                                     i.RedeemedAtUtc
                                 }).ToListAsync(ct);
-        var schemes = schemeRows.Select(x => new
+        long[] schemeIds = schemeRows.Select(x => x.FasSchemeId).Distinct().ToArray();
+        var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
+        var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+        var schemes = schemeRows.Select(x =>
         {
-            x.Id,
-            x.FasSchemeId,
-            x.Name,
-            StatusCode = StudentVisibleStatus(x.itemStatus, x.schemeStatus),
-            applicationSchemeStatus = x.itemStatus,
-            x.schemeStatus,
-            availabilityStatus = SchemeAvailabilityStatus(x.schemeStatus),
-            availabilityMessage = SchemeAvailabilityMessage(x.schemeStatus),
-            x.ApprovedAmount,
-            x.ApprovedComponentsJson,
-            x.RejectionNotes,
-            x.ValidFrom,
-            x.ValidTo,
-            x.IsActive,
-            x.RedeemedAtUtc
+            FasRecommendationResult recommendation = RecommendationService.Recommend(
+                [new FasRecommendationScheme(x.FasSchemeId, x.Name, null)],
+                tiers,
+                groups,
+                criteria,
+                categorical,
+                ToRecommendationFacts(app, Today()));
+
+            return new
+            {
+                x.Id,
+                x.FasSchemeId,
+                x.Name,
+                StatusCode = StudentVisibleStatus(x.itemStatus, x.schemeStatus),
+                applicationSchemeStatus = x.itemStatus,
+                x.schemeStatus,
+                availabilityStatus = SchemeAvailabilityStatus(x.schemeStatus),
+                availabilityMessage = SchemeAvailabilityMessage(x.schemeStatus),
+                x.ApprovedAmount,
+                x.ApprovedComponentsJson,
+                x.RejectionNotes,
+                x.ValidFrom,
+                x.ValidTo,
+                x.IsActive,
+                x.RedeemedAtUtc,
+                recommendedTierId = recommendation.Recommended?.TierId,
+                recommendation.RecommendationStatus,
+                recommendation.ManualReviewReason
+            };
         }).ToList();
         var documents = await db.Set<FasDocument>().AsNoTracking()
             .Where(x => x.FasApplicationId == id && x.UploadStatusCode != "REMOVED")
@@ -1148,6 +1158,63 @@ public sealed class StudentFasApplicationService(
             documents,
             declarations
         };
+    }
+
+    private async Task<FasRecommendationResult> RecommendAsync(
+        IReadOnlyCollection<FasRecommendationScheme> schemes,
+        FasRecommendationFacts facts,
+        CancellationToken ct)
+    {
+        long[] schemeIds = schemes.Select(x => x.Id).Distinct().ToArray();
+        var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
+        var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+
+        return RecommendationService.Recommend(schemes, tiers, groups, criteria, categorical, facts);
+    }
+
+    private static EligibilitySchemeMatch ToEligibilityMatch(FasRecommendationMatch match, int rank, bool comparable)
+    {
+        string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
+            ? $"{match.SubsidyValue:N0}% subsidy"
+            : match.SubsidyValue.ToString("C", CultureInfo.GetCultureInfo("en-SG"));
+        string reason = comparable
+            ? rank == 1
+                ? $"Best fit among comparable eligible schemes: matched the configured criteria and offers {benefit}."
+                : $"Eligible option #{rank}: matched the configured criteria and offers {benefit}."
+            : $"Eligible option #{rank}: matched the configured criteria and offers {benefit}. Fixed and percentage benefits are not directly comparable without a course fee amount.";
+
+        return new(
+            match.SchemeId,
+            match.SchemeName,
+            match.Description,
+            match.TierId,
+            match.TierLabel,
+            match.SubsidyType,
+            match.SubsidyValue,
+            DateOnly.MaxValue,
+            rank,
+            reason,
+            comparable ? "HIGH" : "REVIEW_REQUIRED",
+            comparable);
+    }
+
+    private static FasRecommendationFacts ToRecommendationFacts(FasApplication app, DateOnly today)
+        => new(
+            app.DateOfBirth.HasValue ? CalculateAge(app.DateOfBirth.Value, today) : null,
+            app.MonthlyHouseholdIncome,
+            app.PerCapitaIncome,
+            app.NationalityCode,
+            ParseParentNationalities(app.ParentNationalitiesJson),
+            app.AccountTypeCode);
+
+    private static int CalculateAge(DateOnly dateOfBirth, DateOnly today)
+    {
+        int age = today.Year - dateOfBirth.Year;
+        return dateOfBirth.AddYears(age) > today ? age - 1 : age;
     }
 
     private async Task<bool> DocumentsComplete(long id, CancellationToken ct)
@@ -1425,88 +1492,7 @@ public sealed class StudentFasApplicationService(
             .AnyAsync(x => x.PersonId == personId, ct);
         return hasEducationAccount ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
     }
-    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteriaGroup> allGroups, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues, DateOnly today)
-    {
-        var criteria = allCriteria
-            .Where(x => x.FasTierId == tierId)
-            .OrderBy(x => x.DisplayOrder)
-            .ToArray();
-        if (criteria.Length == 0) return true;
 
-        int? age = app.DateOfBirth.HasValue ? today.Year - app.DateOfBirth.Value.Year : null;
-        if (age.HasValue && app.DateOfBirth!.Value.AddYears(age.Value) > today) age--;
-
-        var parents = ParseParentNationalities(app.ParentNationalitiesJson);
-        bool Match(FasTierCriteria c)
-        {
-            var values = allValues.Where(x => x.FasTierCriteriaId == c.Id).Select(x => x.Nationality).ToArray();
-            return c.CriteriaType switch
-            {
-                "AGE" => age.HasValue && age.Value >= c.NumberFrom && age.Value <= c.NumberTo,
-                "GDP" or "GHI" => app.MonthlyHouseholdIncome.HasValue && app.MonthlyHouseholdIncome.Value >= c.NumberFrom && app.MonthlyHouseholdIncome.Value <= c.NumberTo,
-                "PCI" => app.PerCapitaIncome.HasValue && app.PerCapitaIncome.Value >= c.NumberFrom && app.PerCapitaIncome.Value <= c.NumberTo,
-                "NATIONALITY" => values.Contains(app.NationalityCode ?? string.Empty, StringComparer.OrdinalIgnoreCase) ||
-                                 app.NationalityCode == "SG" && values.Contains("Singapore Citizen", StringComparer.OrdinalIgnoreCase),
-                "PARENT_NATIONALITY" => parents.Any(p => values.Contains(p, StringComparer.OrdinalIgnoreCase)),
-                "ACCOUNT_TYPE" => values.Contains(app.AccountTypeCode, StringComparer.OrdinalIgnoreCase),
-                _ => false
-            };
-        }
-
-        var values = criteria.ToDictionary(criteriaItem => criteriaItem.Id, Match);
-        FasTierCriteriaGroup[] groups = allGroups
-            .Where(x => x.FasTierId == tierId)
-            .OrderBy(x => x.DisplayOrder)
-            .ToArray();
-
-        return GroupsMatch(groups, criteria, values);
-    }
-
-    private static bool GroupsMatch(
-        IReadOnlyCollection<FasTierCriteriaGroup> groups,
-        IReadOnlyCollection<FasTierCriteria> criteria,
-        IReadOnlyDictionary<long, bool> values)
-    {
-        if (groups.Count == 0)
-        {
-            return LegacyGroups(criteria).Any(group => group.All(criteriaItem => values.GetValueOrDefault(criteriaItem.Id)));
-        }
-
-        return groups
-            .OrderBy(group => group.DisplayOrder)
-            .Any(group =>
-            {
-                FasTierCriteria[] groupCriteria = criteria
-                    .Where(criteriaItem => criteriaItem.FasTierCriteriaGroupId == group.Id)
-                    .ToArray();
-                return groupCriteria.Length > 0 && groupCriteria.All(criteriaItem => values.GetValueOrDefault(criteriaItem.Id));
-            });
-    }
-
-    private static IReadOnlyList<IReadOnlyList<FasTierCriteria>> LegacyGroups(IReadOnlyCollection<FasTierCriteria> criteria)
-    {
-        var groups = new List<IReadOnlyList<FasTierCriteria>>();
-        var current = new List<FasTierCriteria>();
-
-        foreach (FasTierCriteria item in criteria.OrderBy(item => item.DisplayOrder))
-        {
-            current.Add(item);
-            if (item.ConnectorToNext != "OR")
-            {
-                continue;
-            }
-
-            groups.Add(current.ToArray());
-            current = new List<FasTierCriteria>();
-        }
-
-        if (current.Count > 0)
-        {
-            groups.Add(current.ToArray());
-        }
-
-        return groups;
-    }
     private static string[] ParseParentNationalities(string? json) => string.IsNullOrWhiteSpace(json) ? Array.Empty<string>() : JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
     private static string? ExtractApprovedTierLabel(string? approvedComponentsJson)
     {
