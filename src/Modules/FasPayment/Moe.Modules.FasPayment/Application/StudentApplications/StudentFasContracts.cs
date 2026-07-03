@@ -24,7 +24,10 @@ public sealed record EligibilitySchemeMatch(
     int RecommendationRank,
     string RecommendationReason,
     string RecommendationConfidence = "MEDIUM",
-    bool IsComparable = true);
+    bool IsComparable = true,
+    bool CanApply = true,
+    bool HasPendingApplication = false,
+    long? PendingApplicationId = null);
 public sealed record EligibilitySchemeOption(long Id, string Name);
 public sealed record EligibilityCriteriaPlan(
     IReadOnlyCollection<EligibilitySchemeOption> ApplicableSchemes,

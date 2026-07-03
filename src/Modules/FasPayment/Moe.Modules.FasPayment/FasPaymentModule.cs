@@ -19,6 +19,7 @@ using Moe.Modules.FasPayment.Application.Applications.Reject;
 using Moe.Modules.FasPayment.Application.Checkout;
 using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
 using Moe.Modules.FasPayment.Application.Notifications;
+using Moe.Modules.FasPayment.Application.PublicSearch;
 using Moe.Modules.FasPayment.Application.PaymentPlans;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Application.StudentApplications;
@@ -43,6 +44,7 @@ public sealed class FasPaymentModule : IModule
         services.AddSingleton<IModelConfigurationContributor, FasPaymentModelConfiguration>();
         services.AddScoped<IFasSchemeRepository, FasSchemeRepository>();
         services.AddScoped<IFasSchoolAuditResolver, FasSchoolAuditResolver>();
+        services.AddScoped<IPaymentSchoolAuditRecorder, PaymentSchoolAuditRecorder>();
         services.AddScoped<IFasCourseSubsidyGateway, FasCourseSubsidyGateway>();
         services.AddScoped<ICommandHandler<CreateFasSchemeCommand, CreateFasSchemeResponse>, CreateFasSchemeHandler>();
         services.AddScoped<ICommandHandler<SaveFasSchemeDraftCommand, CreateFasSchemeResponse>, SaveFasSchemeDraftHandler>();
@@ -57,6 +59,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IValidator<ListFasSchemesRequest>, ListFasSchemesRequestValidator>();
         services.AddScoped<IFasApplicationRepository, FasApplicationRepository>();
         services.AddScoped<StudentFasApplicationService>();
+        services.AddScoped<PublicFasSearchService>();
         services.AddScoped<FasEmailNotificationService>();
         services.AddScoped<FasInAppNotificationService>();
         services.AddScoped<PaymentNotificationEmailService>();

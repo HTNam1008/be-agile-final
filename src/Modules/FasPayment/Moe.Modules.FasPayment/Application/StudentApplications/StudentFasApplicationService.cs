@@ -39,12 +39,12 @@ public sealed class StudentFasApplicationService(
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
          currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"));
     private long Actor() => currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED");
-    private DateOnly Today() => DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+    private DateOnly Today() => clock.TodayInSingapore();
 
     private async Task<ProfileRow> Profile(CancellationToken ct)
     {
         var (personId, _) = Identity();
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = Today();
         var person = await db.Set<Person>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == personId, ct)
             ?? throw new KeyNotFoundException("FAS.PROFILE_REQUIRED");
         var enrollment = await db.Set<SchoolEnrollment>().AsNoTracking()
@@ -134,10 +134,11 @@ public sealed class StudentFasApplicationService(
         if (search?.Length > 255) throw new ArgumentException("FAS.SEARCH_TOO_LONG");
 
         var p = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var pendingApplications = await PendingSchemeApplications(p.PersonId, ct);
         IQueryable<FasScheme> query = db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id));
         if (search is not null) query = query.Where(x => x.Name.Contains(search) || (x.Description != null && x.Description.Contains(search)));
         long totalCount = await query.LongCountAsync(ct);
-        var schemes = await query
+        var schemeRows = await query
             .OrderBy(x => x.StartDate)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -147,15 +148,32 @@ public sealed class StudentFasApplicationService(
                 x.Name,
                 shortDescription = x.Description,
                 applicationStartDate = x.StartDate,
-                applicationEndDate = x.EndDate,
-                isOpenForApplication = x.StartDate <= today && x.EndDate >= today
+                applicationEndDate = x.EndDate
             }).ToListAsync(ct);
+        var schemes = schemeRows.Select(x =>
+        {
+            bool isOpen = x.applicationStartDate <= today && x.applicationEndDate >= today;
+            bool hasPendingApplication = pendingApplications.TryGetValue(x.id, out long pendingApplicationId);
+            return new
+            {
+                x.id,
+                x.Name,
+                x.shortDescription,
+                x.applicationStartDate,
+                x.applicationEndDate,
+                isOpenForApplication = isOpen && !hasPendingApplication,
+                canApply = isOpen && !hasPendingApplication,
+                hasPendingApplication,
+                pendingApplicationId = hasPendingApplication ? pendingApplicationId : (long?)null
+            };
+        }).ToList();
         return new { currentSchool = new { id = p.SchoolOrganizationId, name = p.SchoolName }, items = schemes, page, pageSize, totalCount };
     }
 
     public async Task<object> SchemeDetail(long id, CancellationToken ct)
     {
         var profile = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(profile.SchoolOrganizationId, ct);
+        var pendingApplications = await PendingSchemeApplications(profile.PersonId, ct);
         var scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.StatusCode == "ACTIVE", ct)
             ?? throw new KeyNotFoundException("FAS.SCHEME_NOT_FOUND");
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == id).OrderBy(x => x.DisplayOrder)
@@ -175,7 +193,9 @@ public sealed class StudentFasApplicationService(
             scheme.Description,
             applicationStartDate = scheme.StartDate,
             applicationEndDate = scheme.EndDate,
-            canApply = applicable.Contains(id) && scheme.StartDate <= today && scheme.EndDate >= today,
+            canApply = applicable.Contains(id) && scheme.StartDate <= today && scheme.EndDate >= today && !pendingApplications.ContainsKey(id),
+            hasPendingApplication = pendingApplications.ContainsKey(id),
+            pendingApplicationId = pendingApplications.ContainsKey(id) ? pendingApplications[id] : (long?)null,
             benefits = tiers,
             courses,
             appliesToAllCourses = courses.Count == 0
@@ -187,11 +207,12 @@ public sealed class StudentFasApplicationService(
         if (request.MonthlyHouseholdIncome < 0 || request.OtherMonthlyIncome < 0 || request.HouseholdMemberCount <= 0)
             throw new ArgumentException("FAS.INVALID_INCOME");
         var p = await Profile(ct); var pci = (request.MonthlyHouseholdIncome + request.OtherMonthlyIncome) / request.HouseholdMemberCount;
+        var pendingApplications = await PendingSchemeApplications(p.PersonId, ct);
         var parentNationalities = request.ParentNationalities?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
         var accountType = await ResolveAccountType(p.PersonId, ct);
         var age = clock.UtcNow.Year - p.DateOfBirth.Year;
         var today = Today();
-        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id)).ToListAsync(ct);
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id)).ToListAsync(ct);
         var matches = new List<EligibilitySchemeMatch>();
         foreach (var scheme in schemes)
         {
@@ -229,7 +250,10 @@ public sealed class StudentFasApplicationService(
                         tier.SubsidyValue,
                         scheme.EndDate,
                         0,
-                        string.Empty));
+                        string.Empty,
+                        CanApply: scheme.StartDate <= today && scheme.EndDate >= today && !pendingApplications.ContainsKey(scheme.Id),
+                        HasPendingApplication: pendingApplications.ContainsKey(scheme.Id),
+                        PendingApplicationId: pendingApplications.ContainsKey(scheme.Id) ? pendingApplications[scheme.Id] : null));
                     break;
                 }
             }
@@ -273,7 +297,7 @@ public sealed class StudentFasApplicationService(
             db.Add(FasStatusHistory.Create(app.Id, null, null, FasApplicationStatuses.Draft, "Application draft created", actorId, "STUDENT", now));
         }
 
-        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        var (added, _) = await ReplaceSchemesCore(app, ids, actorId, now, ct);
         await db.SaveChangesAsync(ct);
 
         foreach (var item in added)
@@ -307,7 +331,19 @@ public sealed class StudentFasApplicationService(
 
         await EnsureNoDuplicateApplications(personId, ids, app.Id, ct);
         DateTime now = clock.UtcNow.UtcDateTime;
-        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        var (added, cancelled) = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        foreach (var item in cancelled)
+        {
+            await RecordFasApplicationSchemeAuditAsync(
+                AuditActionCodes.FasSchemeSelectionCancelled,
+                app,
+                item,
+                "FAS scheme selection cancelled by student",
+                "DRAFT",
+                "CANCELLED",
+                ct);
+        }
+
         await db.SaveChangesAsync(ct);
 
         foreach (var item in added)
@@ -315,14 +351,20 @@ public sealed class StudentFasApplicationService(
             db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
         }
 
-        if (added.Count > 0) await db.SaveChangesAsync(ct);
+        if (added.Count > 0 || cancelled.Count > 0) await db.SaveChangesAsync(ct);
         return await ApplicationReview(app.Id, ct);
     }
 
-    private async Task<List<FasApplicationScheme>> ReplaceSchemesCore(FasApplication app, long[] ids, long actor, DateTime now, CancellationToken ct)
+    private async Task<(List<FasApplicationScheme> Added, List<FasApplicationScheme> Cancelled)> ReplaceSchemesCore(
+        FasApplication app,
+        long[] ids,
+        long actor,
+        DateTime now,
+        CancellationToken ct)
     {
         var old = await db.Set<FasApplicationScheme>().Where(x => x.FasApplicationId == app.Id && x.StatusCode == "DRAFT").ToListAsync(ct);
-        db.RemoveRange(old.Where(x => !ids.Contains(x.FasSchemeId)));
+        var cancelled = old.Where(x => !ids.Contains(x.FasSchemeId)).ToList();
+        db.RemoveRange(cancelled);
         var added = ids
             .Where(id => old.All(x => x.FasSchemeId != id))
             .Select(id => FasApplicationScheme.CreateDraft(app.Id, id, actor, now))
@@ -330,7 +372,7 @@ public sealed class StudentFasApplicationService(
 
         db.AddRange(added);
         app.ReplacePrimaryScheme(ids[0], actor, now);
-        return added;
+        return (added, cancelled);
     }
 
     public async Task<object> UpdateParticulars(long id, UpdateParticularsRequest r, CancellationToken ct)
@@ -479,7 +521,7 @@ public sealed class StudentFasApplicationService(
             string? recommendedTier = tiers
                 .Where(t => t.FasSchemeId == row.selection.FasSchemeId)
                 .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)))
+                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical, Today()))
                 .Select(t => t.Label)
                 .FirstOrDefault();
 
@@ -553,7 +595,7 @@ public sealed class StudentFasApplicationService(
             recommendedTierId = tiers
                 .Where(t => t.FasSchemeId == item.FasSchemeId)
                 .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)))
+                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical, Today()))
                 .Select(t => (long?)t.Id)
                 .FirstOrDefault()
         }).ToArray();
@@ -1349,6 +1391,18 @@ public sealed class StudentFasApplicationService(
             throw new InvalidOperationException($"FAS.PENDING_SCHEME_APPLICATION:{string.Join('|', pendingSchemeLabels)}");
         }
     }
+
+    private async Task<Dictionary<long, long>> PendingSchemeApplications(long person, CancellationToken ct)
+        => await (
+                from item in db.Set<FasApplicationScheme>().AsNoTracking()
+                join application in db.Set<FasApplication>().AsNoTracking() on item.FasApplicationId equals application.Id
+                where application.StudentPersonId == person
+                      && item.StatusCode == "PENDING"
+                select new { item.FasSchemeId, ApplicationId = application.Id })
+            .GroupBy(x => x.FasSchemeId)
+            .Select(x => new { FasSchemeId = x.Key, ApplicationId = x.Min(item => item.ApplicationId) })
+            .ToDictionaryAsync(x => x.FasSchemeId, x => x.ApplicationId, ct);
+
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
     private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Draft) throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
     private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted && a.StatusCode != FasApplicationStatuses.PendingReview) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }

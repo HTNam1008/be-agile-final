@@ -86,9 +86,12 @@ internal sealed class CreateStudentHandler(
         DateTime utcNow = clock.UtcNow.UtcDateTime;
         DateOnly startDate = command.StartDate ?? DateOnly.FromDateTime(utcNow);
         string normalizedIdentityNumber = command.IdentityNumber.Trim().ToUpperInvariant();
+        string externalPersonReference = string.IsNullOrWhiteSpace(command.MockPassPersonId)
+            ? $"MOE-STUDENT-{Guid.NewGuid():N}"
+            : command.MockPassPersonId.Trim();
 
         Person person = Person.CreateStudent(
-            $"MOE-STUDENT-{Guid.NewGuid():N}",
+            externalPersonReference,
             normalizedIdentityNumber,
             command.FullName,
             command.DateOfBirth,

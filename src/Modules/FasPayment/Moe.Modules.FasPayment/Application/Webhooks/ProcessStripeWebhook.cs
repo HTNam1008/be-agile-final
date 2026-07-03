@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Modules.CourseBilling.IGateway.Fas;
 using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
+using Moe.Modules.FasPayment.Application.Audit;
 using Moe.Modules.FasPayment.Application.Notifications;
 using Moe.Modules.FasPayment.Domain.Payments;
 using Moe.Modules.FasPayment.IGateway.Payments;
@@ -23,6 +25,7 @@ internal sealed class ProcessStripeWebhookHandler(
     IClock clock,
     IPaymentPersistenceTracker persistenceTracker,
     IStripeWebhookCoordinator coordinator,
+    IPaymentSchoolAuditRecorder paymentAudit,
     PaymentNotificationEmailService paymentNotifications,
     ILogger<ProcessStripeWebhookHandler> logger) : ICommandHandler<ProcessStripeWebhookCommand>
 {
@@ -169,6 +172,7 @@ internal sealed class ProcessStripeWebhookHandler(
         if (payment.PaymentStatusCode == PaymentStatusCodes.Successful) return;
         if (payment.PaymentStatusCode is PaymentStatusCodes.Cancelled or PaymentStatusCodes.Expired or PaymentStatusCodes.Failed)
             return;
+        string beforeStatus = payment.PaymentStatusCode;
         if (webhook.AmountMinor != decimal.ToInt64(payment.OnlinePaymentAmount * 100m))
             throw new InvalidOperationException("Stripe amount does not match the pending statement payment.");
 
@@ -218,6 +222,15 @@ internal sealed class ProcessStripeWebhookHandler(
             cancellationToken);
         payment.MarkSuccessful(webhook.CreatedAtUtc);
         checkout.RecordSuccessfulPayment(webhook.CreatedAtUtc);
+        await paymentAudit.RecordPaymentAsync(
+            AuditActionCodes.PaymentCompleted,
+            payment,
+            allocations.Select(x => x.BillId).ToArray(),
+            "Payment completed",
+            beforeStatus,
+            payment.PaymentStatusCode,
+            "STRIPE_WEBHOOK",
+            cancellationToken);
         await fasNotifications.SendPaymentSucceededAsync(payment.Id, cancellationToken);
         await CancelCompetingStatementPaymentsAsync(payment, webhook.CreatedAtUtc, cancellationToken);
         await paymentNotifications.SendPaymentSucceededAsync(payment, webhook.CreatedAtUtc, cancellationToken);
@@ -266,7 +279,19 @@ internal sealed class ProcessStripeWebhookHandler(
             competingParts.SingleOrDefault(part => part.PaymentMethodCode == PaymentMethodCodes.OnlinePayment)
                 ?.MarkCompleted(PaymentPartStatusCodes.Failed, completedAtUtc);
             competingCheckout?.CancelBeforePayment(completedAtUtc);
+            string beforeStatus = competingPayment.PaymentStatusCode;
             competingPayment.MarkCancelled(completedAtUtc);
+            IReadOnlyCollection<PaymentAllocation> allocations =
+                await payments.ListPaymentAllocationsAsync(competingPayment.Id, cancellationToken);
+            await paymentAudit.RecordPaymentAsync(
+                AuditActionCodes.PaymentCancelled,
+                competingPayment,
+                allocations.Select(x => x.BillId).ToArray(),
+                "Payment cancelled",
+                beforeStatus,
+                competingPayment.PaymentStatusCode,
+                "COMPETING_PAYMENT_CANCELLED",
+                cancellationToken);
         }
     }
 
@@ -279,6 +304,7 @@ internal sealed class ProcessStripeWebhookHandler(
             ?? throw new InvalidOperationException("Statement payment was not found.");
         if (payment.PaymentStatusCode != PaymentStatusCodes.PendingOnlinePayment)
             return;
+        string beforeStatus = payment.PaymentStatusCode;
         IReadOnlyCollection<PaymentPart> parts = await payments.ListPaymentPartsAsync(payment.Id, cancellationToken);
         PaymentPart? educationPart = parts.SingleOrDefault(x => x.PaymentMethodCode == PaymentMethodCodes.EducationAccount);
         if (educationPart?.AccountHoldId is long holdId)
@@ -290,6 +316,17 @@ internal sealed class ProcessStripeWebhookHandler(
         onlinePart.MarkCompleted(PaymentPartStatusCodes.Failed, failedAtUtc);
         payment.MarkFailed(failedAtUtc);
         checkout.RecordPaymentFailure(failedAtUtc);
+        IReadOnlyCollection<PaymentAllocation> allocations =
+            await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken);
+        await paymentAudit.RecordPaymentAsync(
+            AuditActionCodes.PaymentFailed,
+            payment,
+            allocations.Select(x => x.BillId).ToArray(),
+            "Payment failed",
+            beforeStatus,
+            payment.PaymentStatusCode,
+            "STRIPE_WEBHOOK",
+            cancellationToken);
         await fasNotifications.SendPaymentFailedAsync(payment.Id, cancellationToken);
         await paymentNotifications.SendStatementPaymentFailedAsync(
             payment,
@@ -334,8 +371,22 @@ internal sealed class ProcessStripeWebhookHandler(
         foreach (PaymentRefund refund in refunds.OrderBy(refund => refund.RequestedAtUtc))
         {
             if (remaining < refund.Amount) break;
+            string beforeStatus = refund.RefundStatusCode;
             refund.MarkSucceeded(webhook.CreatedAtUtc);
             remaining -= refund.Amount;
+            if (beforeStatus != refund.RefundStatusCode)
+            {
+                IReadOnlyCollection<PaymentAllocation> refundAllocations =
+                    await payments.ListPaymentAllocationsAsync(payment.Id, cancellationToken);
+                await paymentAudit.RecordRefundAsync(
+                    AuditActionCodes.RefundCompleted,
+                    payment,
+                    refund.Id,
+                    refundAllocations.Select(x => x.BillId).ToArray(),
+                    "Refund completed",
+                    "STRIPE_WEBHOOK",
+                    cancellationToken);
+            }
         }
         if (payment.PaymentStatusCode == PaymentStatusCodes.Refunded)
         {
@@ -418,6 +469,15 @@ internal sealed class ProcessStripeWebhookHandler(
         await fasSubsidies.RedeemPendingRedemptionsForBillsAsync(
             [checkout.BillId],
             webhook.CreatedAtUtc,
+            cancellationToken);
+        await paymentAudit.RecordPaymentAsync(
+            AuditActionCodes.PaymentCompleted,
+            payment,
+            [checkout.BillId],
+            "Payment completed",
+            null,
+            payment.PaymentStatusCode,
+            "STRIPE_WEBHOOK",
             cancellationToken);
         await paymentNotifications.SendPaymentSucceededAsync(payment, webhook.CreatedAtUtc, cancellationToken);
     }
