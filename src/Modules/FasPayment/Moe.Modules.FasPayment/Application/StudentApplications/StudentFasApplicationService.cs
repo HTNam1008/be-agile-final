@@ -1349,13 +1349,23 @@ public sealed class StudentFasApplicationService(
         string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
             ? $"{match.SubsidyValue:N0}% subsidy"
             : match.SubsidyValue.ToString("C", CultureInfo.GetCultureInfo("en-SG"));
-        if (!comparable)
+        if (match.HasPendingApplication)
         {
-            return $"Eligible option #{rank}: matched the configured criteria and offers {benefit}. Fixed and percentage benefits are not directly comparable without a course fee amount.";
+            return $"Matched and offers {benefit}, but you already have a pending application for this scheme, so it is shown after schemes you can apply for now.";
         }
 
-        string prefix = rank == 1 ? "Best fit among comparable eligible schemes" : $"Eligible option #{rank}";
-        return $"{prefix}: matched the configured criteria and offers {benefit}. Ties use application closing date and scheme name.";
+        if (!match.CanApply)
+        {
+            return $"Matched and offers {benefit}, but this scheme is not available for a new application right now, so it is shown after schemes you can apply for now.";
+        }
+
+        if (!comparable)
+        {
+            return $"Eligible option #{rank}: you can apply now and matched the configured criteria. It offers {benefit}. Fixed and percentage benefits are not directly comparable without a course fee amount.";
+        }
+
+        string prefix = rank == 1 ? "Best fit you can apply for now among comparable eligible schemes" : $"Eligible option #{rank}";
+        return $"{prefix}: you can apply now, matched the configured criteria, and it offers {benefit}. Ties use application closing date and scheme name.";
     }
 
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";

@@ -13,7 +13,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static readonly string[] KnownCardTypes = ["FINANCE_SUMMARY", "OUTSTANDING_BILLS", "PAYMENT_HISTORY", "FAS_RECOMMENDATION", "KNOWLEDGE_ANSWER"];
+    private static readonly string[] KnownCardTypes = ["FINANCE_SUMMARY", "OUTSTANDING_BILLS", "PAYMENT_HISTORY", "FAS_RECOMMENDATION", "FAS_TASK_STATE", "KNOWLEDGE_ANSWER"];
 
     private static readonly string[] KnownActionTypes = ["NAVIGATE", "CONTACT_ADMIN_CENTER", "APPLY_FAS_PATCH"];
 
