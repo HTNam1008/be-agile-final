@@ -339,7 +339,7 @@ internal sealed class PublishCourseCommandHandler(
     }
 
     private static string FormatSingaporeDateTime(DateTime utc)
-        => utc.AddHours(8).ToString("yyyy-MM-dd HH:mm");
+        => utc.AddHours(8).ToString("dd/MM/yyyy, HH:mm");
 }
 
 internal sealed class DisableCourseCommandHandler(

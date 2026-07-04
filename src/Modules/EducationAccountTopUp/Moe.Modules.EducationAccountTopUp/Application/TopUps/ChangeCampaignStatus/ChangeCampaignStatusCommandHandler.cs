@@ -283,5 +283,5 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             StringComparison.OrdinalIgnoreCase);
 
     private static string FormatSingaporeDateTime(DateTime utc)
-        => utc.AddHours(8).ToString("yyyy-MM-dd HH:mm");
+        => utc.AddHours(8).ToString("dd/MM/yyyy, HH:mm");
 }
