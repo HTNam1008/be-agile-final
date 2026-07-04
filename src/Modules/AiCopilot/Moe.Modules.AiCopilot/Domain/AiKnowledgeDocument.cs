@@ -22,8 +22,15 @@ public sealed class AiKnowledgeDocument
     public string? SynonymsJson { get; internal set; }
     public string? AllowedIntentsJson { get; internal set; }
     public string? FollowUpsJson { get; internal set; }
+    public string? EmbeddingJson { get; internal set; }
     public DateTime CreatedAtUtc { get; internal set; }
     public DateTime UpdatedAtUtc { get; internal set; }
+
+    public float[]? Embedding
+    {
+        get => EmbeddingJson is null ? null : JsonSerializer.Deserialize<float[]>(EmbeddingJson, JsonOptions);
+        internal set => EmbeddingJson = value is null ? null : JsonSerializer.Serialize(value, JsonOptions);
+    }
 
     public string[]? Synonyms
     {
