@@ -6,7 +6,7 @@ education_levels: [jc_ci, ite, polytechnic, university, arts_institution]
 age_range_hint: "16-30"
 topic_tags: [how_to_apply, application_process, education_account, e_service_portal, ai_autofill]
 source_document: "MOS - Biz reqs.md; MOS - FAS everything.md"
-effective_date: "n/a"
+effective_date: "2026-06-25"
 last_reviewed: "2026-06-25"
 confidence: high
 synonyms: [PSEA deduction, how do I apply, apply for financial assistance]

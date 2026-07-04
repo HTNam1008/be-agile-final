@@ -165,6 +165,30 @@ public sealed class AiOrchestratorService(
         FasInterviewData state;
         try { state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct); }
         catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
+        if (state.Status == "CONFIRMING")
+        {
+            FasExtractionResult confirmation = ExtractConfirmation(request.Message);
+            if (confirmation.Status == "CLARIFY")
+            {
+                AiInterviewState confirmInterview = ToInterviewState(state, ConfirmationPrompt(state));
+                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                return new(c.Id, 0, confirmation.Message!, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [], confirmInterview);
+            }
+
+            if (confirmation.Value is bool confirmed && !confirmed)
+            {
+                state.Status = "MANUAL_FALLBACK";
+                state.ValidationMessage = "Review the FAS form manually before running eligibility.";
+                AiInterviewState manualInterview = ToInterviewState(state, null);
+                Guid review = await CreateReview(c, c.PersonId, "FAS_CONFIRMATION_REJECTED", request.PageContext, request.Message, now, ct);
+                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                return new(c.Id, 0, "No problem. I will not calculate eligibility from these answers. Open the FAS form and edit the details manually before submitting.", "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })], manualInterview, review);
+            }
+
+            state.Status = "COLLECTING_CONFIRMED";
+            logger.LogInformation("FAS attestation: conversation {Id} confirmed all collected fields via CONFIRMING gate at {Time}. Snapshot: {Snapshot}",
+                c.Id, now.ToString("O"), JsonSerializer.Serialize(state, JsonOptions));
+        }
         if (!isNewInterview && state.Status == "COMPLETE")
         {
             FasRecommendationMatch[] completedSchemes = state.IsWelfareHomeResident == true ? WelfareHomeRecommendationMatches(state) : [];
@@ -174,7 +198,7 @@ public sealed class AiOrchestratorService(
                 : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
             List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas", completedInterview.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
             c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
-            return new(c.Id, 0, completedText, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
+            return new(c.Id, 0, completedText, "GENERAL", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
         }
 
         bool isGuidanceTurn = fieldKey is null && LooksLikeFasSchemeGuidanceRequest(request.Message);
@@ -205,10 +229,17 @@ public sealed class AiOrchestratorService(
         string? next = NextQuestion(state, fieldKey);
         if (next is not null)
             state.ClarificationField = nextField;
+        if (next is not null && state.Status == "COLLECTING_CONFIRMED")
+            state.Status = "COLLECTING";
         object? recommendation = null;
         FasRecommendationMatch[] recommendedSchemes = [];
         string text;
-        if (next is null && state.IsWelfareHomeResident == false)
+        if (next is null && !IsReadyForEligibilityComputation(state))
+        {
+            state.Status = "CONFIRMING";
+            text = ConfirmationPrompt(state);
+        }
+        else if (next is null && state.IsWelfareHomeResident == false)
         {
             try
             {
@@ -286,11 +317,35 @@ public sealed class AiOrchestratorService(
                 : [];
         if (fallbackReview.HasValue) actions.Add(new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = fallbackReview.Value }));
         if (state.Status == "COMPLETE") actions.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: interview.FormPatch));
-        return new(c.Id, 0, text, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), cards, actions, interview, fallbackReview);
+        string mode = state.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
+        return new(c.Id, 0, text, mode, FasInterviewGrounding(state.Status), cards, actions, interview, fallbackReview);
     }
 
     private async Task<AiChatResponse> HandleGeneral(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
+        if (LooksLikeCapabilityQuestion(request.Message))
+        {
+            const string capabilityText = "I can help with Education Account balance, outstanding bills, payment history, refunds, and FAS guidance. I can also walk you through a FAS eligibility check before you open the application form.";
+            AiAction[] capabilityActions =
+            [
+                new("NAVIGATE", "Open Bills & payments page", "/portal/bills"),
+                new("NAVIGATE", "Open FAS application", "/portal/fas")
+            ];
+            return new(c.Id, 0, capabilityText, "GENERAL", new(false, []), [], capabilityActions, null)
+            {
+                FollowUpQuestions = ["Show my Education Account balance.", "Check if I qualify for FAS.", "What documents do I need for FAS?"]
+            };
+        }
+
+        if (LooksLikeAdminCenterQuestion(request.Message))
+        {
+            const string adminText = "Admin Center can review questions the copilot cannot answer safely, such as unusual FAS circumstances, disputed bills, refund issues, or application details that need staff judgement.";
+            return new(c.Id, 0, adminText, "GENERAL", new(false, []), [], [new("CONTACT_ADMIN_CENTER", "Contact Admin Center")], null)
+            {
+                FollowUpQuestions = ["Check if I qualify for FAS.", "Show my outstanding course bills.", "What can you help me with?"]
+            };
+        }
+
         bool isFasKnowledgeRequest = IsSchemeKbRequest(request.Message) || IsFasKnowledgeInterrupt(request.Message);
         string retrievalDomain = isFasKnowledgeRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
         IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
@@ -343,17 +398,44 @@ public sealed class AiOrchestratorService(
 
     private static string BuildKnowledgeAnswer(string question, IReadOnlyList<KnowledgeResult> sources)
     {
+        if (LooksLikeFormulaQuestion(question))
+        {
+            return FormulaAnswer(question);
+        }
+
         KnowledgeResult primary = sources[0];
         KnowledgeAnswerCard card = BuildKnowledgeAnswerCard(question, sources);
         string topic = primary.Citation.Section;
         return $"I found reviewed guidance for {topic}. I kept the details in the card below so the answer is easier to scan.";
     }
 
+    private static string FormulaAnswer(string question)
+    {
+        if (LooksLikePciQuestion(question))
+            return "PCI means per-capita income. It is calculated as total monthly household income divided by the number of household members.";
+        if (Regex.IsMatch(question, @"\b(GHI|GROSS HOUSEHOLD INCOME)\b", RegexOptions.IgnoreCase))
+            return "GHI means gross household income. It includes all income earned by every household member from employment, business, investments, and regular allowances before deductions.";
+        if (Regex.IsMatch(question, @"\b(SUBSIDY|BURSARY)\b", RegexOptions.IgnoreCase))
+            return "Subsidy and bursary rates are based on per-capita income (PCI) brackets. Each scheme uses MOE-published tier thresholds that determine the subsidy percentage.";
+        return "I cannot find a specific formula for that. Please ask about PCI calculation, GHI definition, or bursary tier determination.";
+    }
+
     private static KnowledgeAnswerCard BuildKnowledgeAnswerCard(string question, IReadOnlyList<KnowledgeResult> sources)
     {
         KnowledgeResult primary = sources[0];
-        string[] facts = KnowledgeFacts(primary.Content).ToArray();
-        string summary = facts.FirstOrDefault() ?? CleanKnowledgeSnippet(primary.Content);
+        string[] facts; string summaryHint;
+        if (LooksLikeFormulaQuestion(question))
+        {
+            string answer = FormulaAnswer(question);
+            facts = answer.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => s + ".").ToArray();
+            summaryHint = facts.FirstOrDefault() ?? "";
+        }
+        else
+        {
+            facts = KnowledgeFacts(primary.Content).Select(StripBoldMarkers).ToArray();
+            summaryHint = facts.FirstOrDefault() ?? CleanKnowledgeSnippet(primary.Content);
+        }
+        string summary = summaryHint;
         string[] keyFacts = facts.Skip(1).DefaultIfEmpty(summary).Take(4).ToArray();
         string[] sourceIds = sources.Select(x => x.Citation.SourceId).Distinct(StringComparer.Ordinal).Take(4).ToArray();
         KnowledgeSourceSummary[] sourceSummaries = sources
@@ -409,6 +491,24 @@ public sealed class AiOrchestratorService(
     private static bool LooksLikeInstructionHeading(string line) =>
         Regex.IsMatch(line, @"^(answer|do not|source|notes?|scope|in scope|explicitly out of scope)\b", RegexOptions.IgnoreCase);
 
+    private static bool LooksLikeCapabilityQuestion(string message) =>
+        !IsFasQuestion(message) &&
+        Regex.IsMatch(message, @"\b(what can you help|what do you do|help me with|your capabilities|what can i ask)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeAdminCenterQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(how can admin center help|what can admin center do|admin center help)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeFormulaQuestion(string message) =>
+        LooksLikePciQuestion(message) ||
+        (Regex.IsMatch(message, @"\b(GHI|GROSS HOUSEHOLD INCOME)\b", RegexOptions.IgnoreCase) &&
+         Regex.IsMatch(message, @"\b(CALCULAT|FORMULA|HOW|WHAT|DEFINE|MEAN)\b", RegexOptions.IgnoreCase)) ||
+        (Regex.IsMatch(message, @"\b(SUBSIDY|BURSARY)\b", RegexOptions.IgnoreCase) &&
+         Regex.IsMatch(message, @"\b(RATE|CALCULAT|DETERMINE|HOW|FORMULA|TIER)\b", RegexOptions.IgnoreCase));
+
+    private static bool LooksLikePciQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(PCI|PER[-\s]?CAPITA|PER CAPITA INCOME)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(message, @"\b(CALCULAT|FORMULA|HOW|WHAT|MEAN)\b", RegexOptions.IgnoreCase);
+
     private static IEnumerable<string> KnowledgeFacts(string content)
     {
         foreach (string line in KnowledgeLines(content).Where(line => !LooksLikeInstructionHeading(line)))
@@ -421,6 +521,9 @@ public sealed class AiOrchestratorService(
             }
         }
     }
+
+    private static string StripBoldMarkers(string text) =>
+        Regex.Replace(text, @"\*{1,2}", "");
 
     private async Task<AiConversation> GetOrCreateConversation(Guid? id, long personId, DateTime now, CancellationToken ct)
     {
@@ -467,7 +570,9 @@ public sealed class AiOrchestratorService(
         bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
         bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
         if (msgHasPaymentKeyword) return AiTurnIntent.PaymentQuery;
-        if (IsSchemeKbRequest(msgOnly) || IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (current != "FAS_INTERVIEW" && IsSchemeKbRequest(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
         if (current == "FAS_INTERVIEW" && IsContinueInterviewRequest(msgOnly)) return AiTurnIntent.ContinueInterview;
         if (current == "FAS_INTERVIEW" && IsLikelyInterviewAnswer(msgOnly)) return AiTurnIntent.SubmitInterviewAnswer;
         if (IsFasInterviewRequest(value)) return AiTurnIntent.StartInterview;
@@ -487,7 +592,7 @@ public sealed class AiOrchestratorService(
     private static bool IsSchemeKbRequest(string value)
     {
         bool isInfoIntent = Regex.IsMatch(value,
-            @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION|DOCUMENT|DOCUMENTS)\b",
+            @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION|DOCUMENT|DOCUMENTS|WHICH)\b",
             RegexOptions.IgnoreCase);
         bool isProcessInfoIntent = Regex.IsMatch(value,
             @"\b(WALK ME THROUGH|STEPS?|PROCESS|HOW DO I APPLY|HOW TO APPLY)\b",
@@ -498,7 +603,8 @@ public sealed class AiOrchestratorService(
         bool mentionsFas = value.Contains("FAS", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("FINANCIAL ASSISTANCE", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("BURSARY", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase);
+            value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("SCHEME", StringComparison.OrdinalIgnoreCase);
         return mentionsFas && (isInfoIntent || isProcessInfoIntent) && (!startsLiveAssessment || isProcessInfoIntent);
     }
 
@@ -507,7 +613,7 @@ public sealed class AiOrchestratorService(
         bool asksQuestion = Regex.IsMatch(value, @"\b(WHAT|HOW|WHY|EXPLAIN|CALCULAT|MEAN|MEANS|COUNT|COUNTS|DOCUMENT|DOCUMENTS|DEADLINE|PROCESS|STEP|STEPS|REQUIREMENT|REQUIREMENTS)\b",
             RegexOptions.IgnoreCase) || value.Contains("?", StringComparison.Ordinal);
         bool mentionsSpecificFasKnowledge = Regex.IsMatch(value,
-            @"\b(PCI|PER CAPITA|GHI|GROSS HOUSEHOLD|HOUSEHOLD INCOME|INCOME CALCULATION|DOCUMENTS?|BURSARY|SUBSIDY|DEADLINE|PROCESS|STEPS?|REQUIREMENTS?)\b",
+            @"\b(PCI|PER CAPITA|GHI|GROSS HOUSEHOLD|HOUSEHOLD INCOME|INCOME CALCULATION|DOCUMENTS?|BURSARY|SUBSIDY|DEADLINE|PROCESS|STEPS?|REQUIREMENTS?|SCHEMES?)\b",
             RegexOptions.IgnoreCase);
         bool startsLiveAssessment = Regex.IsMatch(value,
             @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|APPLY|APPLICATION|HELP ME|GUIDE ME|DO FAS|DO FINANCIAL ASSISTANCE)\b",
@@ -673,9 +779,29 @@ public sealed class AiOrchestratorService(
             "otherMonthlyIncome" => "Do you have any other monthly household income in SGD? Reply 0 if there is none.",
             "employmentStatusCode" => "What is your employment status? Choose employed, self-employed, or unemployed.",
             "email" => "What email address should we use for this FAS application?",
-            "parentNationalities" => "What is your parent or guardian's nationality? For example: Singapore Citizen, Permanent Resident, or Foreigner.",
+            "parentNationalities" => "Choose your parent or guardian's nationality: Singapore Citizen, Permanent Resident, or Foreigner.",
             _ => null
         };
+    }
+
+    private static bool IsReadyForEligibilityComputation(FasInterviewData s) => s.Status == "COLLECTING_CONFIRMED";
+
+    private static string ConfirmationPrompt(FasInterviewData s)
+    {
+        List<string> facts = [];
+        string welfareDisplay = s.IsWelfareHomeResident.HasValue
+            ? (s.IsWelfareHomeResident.Value ? "Yes" : "No")
+            : "Not answered";
+        facts.Add($"Welfare home: {welfareDisplay}");
+        if (s.IsWelfareHomeResident == false)
+        {
+            facts.Add($"Monthly household income: {s.MonthlyHouseholdIncome?.ToString("C", CultureInfo.GetCultureInfo("en-SG")) ?? "Not provided"}");
+            facts.Add($"Household members: {s.HouseholdMemberCount?.ToString(CultureInfo.InvariantCulture) ?? "Not provided"}");
+            facts.Add($"Other monthly income: {s.OtherMonthlyIncome?.ToString("C", CultureInfo.GetCultureInfo("en-SG")) ?? "Not provided"}");
+        }
+        facts.Add($"Parent or guardian nationality: {(s.ParentNationalities.Count == 0 ? "Not provided" : string.Join(", ", s.ParentNationalities))}");
+
+        return $"Before I calculate FAS eligibility, please confirm these details are correct:\n\n{string.Join("\n", facts.Select(x => $"- {x}"))}\n\nReply yes to calculate eligibility, or no to stop and edit the form manually.";
     }
     private static AiInterviewState ToInterviewState(FasInterviewData s, string? next, IReadOnlyCollection<FasRecommendationMatch>? recommendedSchemes = null)
     {
@@ -846,6 +972,16 @@ public sealed class AiOrchestratorService(
         return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
     }
 
+    private static FasExtractionResult ExtractConfirmation(string message)
+    {
+        string value = message.Trim();
+        bool yes = Regex.IsMatch(value, @"^\s*(yes|y|correct|confirm|confirmed|looks right|that's right|that is right)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
+        bool no = Regex.IsMatch(value, @"^\s*(no|n|wrong|incorrect|edit|change|not correct|not right)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
+        if (yes && !no) return FasExtractionResult.Accepted(true);
+        if (no && !yes) return FasExtractionResult.Accepted(false);
+        return FasExtractionResult.Clarify("Please reply yes if these details are correct, or no if you want to stop and edit the form manually.");
+    }
+
     private static bool LooksLikeWelfareHomeCorrection(string message, bool? currentWelfareHome)
     {
         if (Regex.IsMatch(message, @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b", RegexOptions.IgnoreCase))
@@ -884,7 +1020,7 @@ public sealed class AiOrchestratorService(
         "monthlyHouseholdIncome" => "Use the total monthly income for everyone in your household, in SGD. Example: 3500.",
         "householdMemberCount" => "Count everyone in your household, including yourself. Reply with one whole number, for example 4.",
         "otherMonthlyIncome" => "Include recurring other monthly income in SGD. Reply 0 if there is no other income.",
-        "parentNationalities" => "Common options are Singapore Citizen, Permanent Resident, Foreigner, or the specific nationality/country on their records. Reply with the closest value.",
+        "parentNationalities" => "Choose one option: Singapore Citizen, Permanent Resident, or Foreigner.",
         _ => "Tell me the value shown on your records, or leave it for manual entry on the form."
     };
 
@@ -975,17 +1111,22 @@ public sealed class AiOrchestratorService(
     {
         string normalized = message.Trim();
         if (normalized.Length is < 2 or > 120 || ExtractNumbers(normalized).Any())
-            return FasExtractionResult.Clarify("Please provide the parent or guardian nationality as text, for example Singapore Citizen.");
+            return FasExtractionResult.Clarify(ParentNationalityClarification());
 
         string[] values = Regex.Split(normalized, @"\s*(?:,|/|\band\b|&)\s*", RegexOptions.IgnoreCase)
-            .Select(NormalizeNationality)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => TryNormalizeParentNationality(x))
+            .Where(x => x is not null)
+            .Select(x => x!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        return values.Length == 0
-            ? FasExtractionResult.Clarify("Please provide the parent or guardian nationality as text, for example Singapore Citizen.")
+        int requestedValues = Regex.Split(normalized, @"\s*(?:,|/|\band\b|&)\s*", RegexOptions.IgnoreCase).Count(x => !string.IsNullOrWhiteSpace(x));
+        return values.Length == 0 || values.Length != requestedValues
+            ? FasExtractionResult.Clarify(ParentNationalityClarification())
             : FasExtractionResult.Accepted(values);
     }
+
+    private static string ParentNationalityClarification() =>
+        "Choose one of these parent or guardian nationality options: Singapore Citizen, Permanent Resident, or Foreigner.";
 
     private static IEnumerable<decimal> ExtractNumbers(string message)
     {
@@ -999,15 +1140,20 @@ public sealed class AiOrchestratorService(
         }
     }
 
-    private static string NormalizeNationality(string value)
+    private static string? TryNormalizeParentNationality(string value)
     {
-        string trimmed = value.Trim().Trim('.');
-        return trimmed.ToUpperInvariant() switch
-        {
-            "SG" or "SINGAPORE" or "SINGAPOREAN" or "SINGAPORE CITIZEN" => "Singapore Citizen",
-            _ => CultureInfo.GetCultureInfo("en-SG").TextInfo.ToTitleCase(trimmed.ToLowerInvariant())
-        };
+        string trimmed = Regex.Replace(value.Trim().Trim('.'), @"\s+", " ");
+        string compact = Regex.Replace(trimmed, @"[\s._-]+", "", RegexOptions.CultureInvariant).ToUpperInvariant();
+        if (compact is "SG" or "SINGAPORE" or "SINGAPOREAN" or "SINGAPORECITIZEN" or "CITIZEN")
+            return "Singapore Citizen";
+        if (compact is "PR" or "PERMANENTRESIDENT" or "SINGAPOREPR")
+            return "Permanent Resident";
+        if (compact is "FOREIGNER" or "FOREIGN" or "INTERNATIONAL" or "INTERNATIONALSTUDENT" or "NONCITIZEN" or "NONRESIDENT")
+            return "Foreigner";
+        return null;
     }
+
+
 
     private static FasRecommendationCard BuildFasRecommendation(object rawRecommendation, AiInterviewState interview)
     {
@@ -1016,7 +1162,8 @@ public sealed class AiOrchestratorService(
         FasRecommendationMatch[] matches = ExtractRecommendationMatches(root);
         FasRecommendationMatch? recommended = matches.FirstOrDefault();
         bool isComparable = matches.Length == 0 || matches.All(x => x.IsComparable);
-        string confidence = recommended?.RecommendationConfidence ?? (isComparable ? "HIGH" : "REVIEW_REQUIRED");
+        bool allFieldsConfirmed = interview.Fields.All(f => f.Confirmed);
+        string confidence = allFieldsConfirmed && isComparable ? "HIGH" : "REVIEW_REQUIRED";
         return new FasRecommendationCard(
             pci,
             recommended?.SchemeName,
@@ -1172,6 +1319,7 @@ public sealed class AiOrchestratorService(
         {
             "PAYMENT" => PaymentFollowUps(),
             "FALLBACK" => FallbackFollowUps(),
+            "GENERAL" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
             "GENERAL" => IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
             "FAS_INTERVIEW" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
             _ => []
@@ -1190,6 +1338,7 @@ public sealed class AiOrchestratorService(
         message.Contains("financial assistance", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("bursary", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("subsidy", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("scheme", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("PCI", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("per capita", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("GHI", StringComparison.OrdinalIgnoreCase) ||
