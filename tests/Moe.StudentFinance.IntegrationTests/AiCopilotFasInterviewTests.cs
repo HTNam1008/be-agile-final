@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Moe.Application.Abstractions.Clock;
+using Moe.Modules.IdentityPlatform.Domain.People;
+using Moe.StudentFinance.Persistence;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
@@ -31,11 +35,14 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await CreateSchemeWithPciCap(500);
         Guid conversationId = await StartFasInterview();
         await SendFasMessage("No", conversationId);
-        await SendFasMessage("3000", conversationId);
-        await SendFasMessage("4", conversationId);
+        await SendFasMessage("999999", conversationId);
+        await SendFasMessage("1", conversationId);
         await SendFasMessage("0", conversationId);
 
-        JsonElement completed = await SendFasMessage("Foreigner", conversationId);
+        JsonElement confirmation = await SendFasMessage("Foreigner", conversationId);
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement completed = await SendFasMessage("yes", conversationId);
 
         Assert.Equal("MANUAL_FALLBACK", completed.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.Contains("could not find an eligible FAS scheme", completed.GetProperty("text").GetString());
@@ -47,15 +54,25 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     [Fact]
     public async Task Fas_interview_returns_typed_recommendation_and_form_patch_when_complete()
     {
-        await CreateEligibleScheme();
+        string schemeName = await CreateEligibleScheme();
+        await AssertEligibilityHasMatches(schemeName);
         Guid conversationId = await StartFasInterview();
         await SendFasMessage("No", conversationId);
         await SendFasMessage("3000", conversationId);
         await SendFasMessage("4", conversationId);
-        await SendFasMessage("0", conversationId);
+        JsonElement beforeNationality = await SendFasMessage("0", conversationId);
+        Assert.Equal(3000m, Field(beforeNationality, "monthlyHouseholdIncome").GetProperty("value").GetDecimal());
+        Assert.Equal(4, Field(beforeNationality, "householdMemberCount").GetProperty("value").GetInt32());
+        Assert.Equal(0m, Field(beforeNationality, "otherMonthlyIncome").GetProperty("value").GetDecimal());
 
-        JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+        JsonElement confirmation = await SendFasMessage("Singapore Citizen", conversationId);
 
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.DoesNotContain(confirmation.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
+
+        JsonElement completed = await SendFasMessage("yes", conversationId);
+
+        Assert.Equal("GENERAL", completed.GetProperty("mode").GetString());
         Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
         JsonElement card = completed.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
         JsonElement data = card.GetProperty("data");
@@ -88,7 +105,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
 
-        JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+        JsonElement confirmation = await SendFasMessage("Singaporean", conversationId);
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement completed = await SendFasMessage("yes", conversationId);
 
         JsonElement data = completed.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION").GetProperty("data");
         JsonElement[] matches = data.GetProperty("matchedSchemes").EnumerateArray().ToArray();
@@ -104,6 +124,47 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task Fas_interview_autofills_only_actionable_scheme_matches()
+    {
+        (string pendingScheme, long pendingId) = await CreateEligibleSchemeWithId(label: "Pending", subsidyValue: 100m);
+        (string actionableScheme, long actionableId) = await CreateEligibleSchemeWithId(label: "Actionable", subsidyValue: 60m);
+        try
+        {
+            await SubmitPendingApplication(pendingId);
+            Guid conversationId = await StartFasInterview();
+            await SendFasMessage("No", conversationId);
+            await SendFasMessage("3000", conversationId);
+            await SendFasMessage("4", conversationId);
+            await SendFasMessage("0", conversationId);
+
+            JsonElement confirmation = await SendFasMessage("Singaporean", conversationId);
+            Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+            JsonElement completed = await SendFasMessage("yes", conversationId);
+
+            JsonElement data = completed.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION").GetProperty("data");
+            JsonElement[] matches = data.GetProperty("matchedSchemes").EnumerateArray().ToArray();
+            JsonElement pendingMatch = matches.Single(x => x.GetProperty("schemeName").GetString() == pendingScheme);
+            JsonElement actionableMatch = matches.Single(x => x.GetProperty("schemeName").GetString() == actionableScheme);
+            Assert.True(pendingMatch.GetProperty("hasPendingApplication").GetBoolean());
+            Assert.False(pendingMatch.GetProperty("canApply").GetBoolean());
+            Assert.True(actionableMatch.GetProperty("canApply").GetBoolean());
+            Assert.True(Array.FindIndex(matches, x => x.GetProperty("schemeName").GetString() == actionableScheme) <
+                        Array.FindIndex(matches, x => x.GetProperty("schemeName").GetString() == pendingScheme));
+
+            long[] patchIds = completed.GetProperty("interviewState").GetProperty("formPatch").GetProperty("schemes").GetProperty("recommendedSchemeIds")
+                .EnumerateArray().Select(x => x.GetInt64()).ToArray();
+            Assert.Contains(actionableId, patchIds);
+            Assert.DoesNotContain(pendingId, patchIds);
+        }
+        finally
+        {
+            await DisableScheme(pendingId);
+            await DisableScheme(actionableId);
+        }
+    }
+
+    [Fact]
     public async Task Fas_interview_marks_mixed_subsidy_matches_as_review_required()
     {
         (string _, long percentageId) = await CreateEligibleSchemeWithId(label: "Percentage", subsidyValue: 90m, subsidyType: "PERCENTAGE");
@@ -116,7 +177,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             await SendFasMessage("4", conversationId);
             await SendFasMessage("0", conversationId);
 
-            JsonElement completed = await SendFasMessage("Singaporean", conversationId);
+            JsonElement confirmation = await SendFasMessage("Singaporean", conversationId);
+            Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+            JsonElement completed = await SendFasMessage("yes", conversationId);
 
             JsonElement data = completed.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION").GetProperty("data");
             JsonElement[] matches = data.GetProperty("matchedSchemes").EnumerateArray().ToArray();
@@ -146,7 +210,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Guid conversationId = await StartFasInterview();
         await SendFasMessage("Yes", conversationId);
 
-        JsonElement completed = await SendFasMessage("Singapore Citizen", conversationId);
+        JsonElement confirmation = await SendFasMessage("Singapore Citizen", conversationId);
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement completed = await SendFasMessage("yes", conversationId);
 
         Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.Contains("welfare-home status", completed.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
@@ -187,6 +254,26 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         return await ReadData(response);
     }
 
+    private async Task AssertEligibilityHasMatches(string expectedSchemeName)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/fas/eligibility/check");
+        request.Headers.Add("X-Test-PersonId", "2101");
+        request.Content = JsonContent.Create(new
+        {
+            monthlyHouseholdIncome = 3000m,
+            householdMemberCount = 4,
+            otherMonthlyIncome = 0m,
+            parentNationalities = new[] { "Singapore Citizen" }
+        });
+
+        using HttpResponseMessage response = await _client.SendAsync(request);
+        await AssertStatus(HttpStatusCode.OK, response);
+        JsonElement data = await ReadData(response);
+        JsonElement[] matches = data.GetProperty("matchedSchemes").EnumerateArray().ToArray();
+        if (!matches.Any(match => match.GetProperty("schemeName").GetString() == expectedSchemeName))
+            Assert.Fail($"Expected eligibility match for {expectedSchemeName}. Response: {data}");
+    }
+
     private async Task CreateSchemeWithPciCap(decimal maxPci)
     {
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
@@ -220,13 +307,24 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = new[] { courseId },
             subsidyType = "PERCENTAGE",
+            criteriaGroups = new object[]
+            {
+                new
+                {
+                    displayOrder = 1,
+                    criteria = new object[]
+                    {
+                        new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
+                        new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+                        new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 3 }
+                    }
+                }
+            },
             criteriaTemplate = new object[]
             {
                 new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
                 new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
-                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 4 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 5 }
+                new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 3 }
             },
             tiers = new object[]
             {
@@ -237,11 +335,9 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 1, numberFrom = 16m, numberTo = 30m, nationalities = (string[]?)null },
                         new { displayOrder = 2, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
-                        new { displayOrder = 3, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null },
-                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
-                        new { displayOrder = 5, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                        new { displayOrder = 3, numberFrom = 0m, numberTo = maxPci, nationalities = (string[]?)null }
                     }
                 }
             }
@@ -287,13 +383,24 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
             courseIds = new[] { courseId },
             subsidyType,
+            criteriaGroups = new object[]
+            {
+                new
+                {
+                    displayOrder = 1,
+                    criteria = new object[]
+                    {
+                        new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
+                        new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+                        new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 3 }
+                    }
+                }
+            },
             criteriaTemplate = new object[]
             {
                 new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
                 new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
-                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 4 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 5 }
+                new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 3 }
             },
             tiers = new object[]
             {
@@ -304,11 +411,9 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
                     displayOrder = 1,
                     criteriaValues = new object[]
                     {
-                        new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                        new { displayOrder = 1, numberFrom = 16m, numberTo = 30m, nationalities = (string[]?)null },
                         new { displayOrder = 2, numberFrom = 0m, numberTo = 10000m, nationalities = (string[]?)null },
-                        new { displayOrder = 3, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
-                        new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
-                        new { displayOrder = 5, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                        new { displayOrder = 3, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null }
                     }
                 }
             }
@@ -328,9 +433,63 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             Assert.Fail($"Scheme cleanup failed: {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
     }
 
+    private async Task SubmitPendingApplication(long schemeId)
+    {
+        await EnsureStudentProfileCanSubmitApplication();
+
+        using HttpRequestMessage draftRequest = new(HttpMethod.Post, "/api/eservice/v1/fas/applications/draft");
+        draftRequest.Headers.Add("X-Test-PersonId", "2101");
+        draftRequest.Content = JsonContent.Create(new { schemeIds = new[] { schemeId } });
+        using HttpResponseMessage draftResponse = await _client.SendAsync(draftRequest);
+        await AssertStatus(HttpStatusCode.OK, draftResponse);
+        long applicationId = (await ReadData(draftResponse)).GetProperty("id").GetInt64();
+        await MarkApplicationSchemePending(applicationId, schemeId);
+    }
+
+    private async Task EnsureStudentProfileCanSubmitApplication()
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Person person = await db.Set<Person>().FindAsync(2101L)
+            ?? throw new InvalidOperationException("Integration student 2101 was not seeded.");
+        SetPrivateProperty(person, nameof(Person.IdentityNumberMasked), "S7000001A");
+        SetPrivateProperty(person, nameof(Person.OfficialMobile), "+6591000001");
+        SetPrivateProperty(person, nameof(Person.PreferredMobile), "+6591000001");
+        SetPrivateProperty(person, nameof(Person.OfficialAddress), "1 Integration Avenue, Singapore 100001");
+        SetPrivateProperty(person, nameof(Person.PreferredAddress), "1 Integration Avenue, Singapore 100001");
+        SetPrivateProperty(person, nameof(Person.OfficialEmail), "student.one@example.test");
+        SetPrivateProperty(person, nameof(Person.PreferredEmail), "student.one@example.test");
+        await db.SaveChangesAsync();
+    }
+
+    private async Task MarkApplicationSchemePending(long applicationId, long schemeId)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        Type schemeSelectionType = typeof(Moe.Modules.FasPayment.Application.StudentApplications.StudentFasApplicationService)
+            .Assembly.GetType("Moe.Modules.FasPayment.Domain.Fas.FasApplicationScheme", throwOnError: true)!;
+        object selection = await SetFor(db, schemeSelectionType)
+            .Cast<object>()
+            .SingleAsync(x =>
+                EF.Property<long>(x, "FasApplicationId") == applicationId &&
+                EF.Property<long>(x, "FasSchemeId") == schemeId);
+        SetPrivateProperty(selection, "StatusCode", "PENDING");
+        await db.SaveChangesAsync();
+    }
+
     private static JsonElement Field(JsonElement response, string name)
         => response.GetProperty("interviewState").GetProperty("fields").EnumerateArray()
             .Single(x => x.GetProperty("name").GetString() == name);
+
+    private static void SetPrivateProperty<T>(object entity, string propertyName, T value)
+        => entity.GetType().GetProperty(propertyName)!.SetValue(entity, value);
+
+    private static IQueryable SetFor(DbContext db, Type entityType)
+        => (IQueryable)typeof(DbContext)
+            .GetMethods()
+            .Single(method => method.Name == nameof(DbContext.Set) && method.IsGenericMethodDefinition && method.GetParameters().Length == 0)
+            .MakeGenericMethod(entityType)
+            .Invoke(db, null)!;
 
     private static async Task<JsonElement> ReadData(HttpResponseMessage response)
     {

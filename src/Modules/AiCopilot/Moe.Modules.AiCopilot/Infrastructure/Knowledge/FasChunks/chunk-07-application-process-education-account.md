@@ -4,12 +4,12 @@ title: FAS Application Process & Education Account Flow (e-Service Portal)
 applies_to_chatbot_kb: true
 education_levels: [jc_ci, ite, polytechnic, university, arts_institution]
 age_range_hint: "16-30"
-topic_tags: [how_to_apply, application_process, education_account, e_service_portal, ai_autofill]
+topic_tags: [how_to_apply, application_process, education_account, e_service_portal, ai_autofill, supporting_documents, income_documents]
 source_document: "MOS - Biz reqs.md; MOS - FAS everything.md"
-effective_date: "n/a"
+effective_date: "2026-06-25"
 last_reviewed: "2026-06-25"
 confidence: high
-synonyms: [PSEA deduction, how do I apply, apply for financial assistance]
+synonyms: [PSEA deduction, how do I apply, apply for financial assistance, income documents, documents prove income, supporting documents, payslip, CPF income, IRAS income]
 ---
 
 # How to Apply for FAS / Manage Education Account Deductions
@@ -24,6 +24,11 @@ Per platform design:
 1. The Account Holder can ask the in-portal AI assistant questions about e-Service Portal functionality. The assistant will ask follow-up questions to clarify context before answering.
 2. If the AI assistant cannot answer a question, it should say so and offer to escalate (see chunk-02 fallback policy) rather than guess.
 3. The AI assistant can **automatically pre-fill the FAS application form** using the Account Holder's existing profile data plus information gathered from the assistant conversation, reducing manual data entry.
+
+## Supporting documents
+- Income proof may include CPF-declared employment income, latest IRAS income tax assessment details, payslips, or other institution-requested documents for household members.
+- Rental, dividend, investment, or other regular income should be declared using the latest available assessment or supporting statement where applicable.
+- The portal can help prepare the application, but the applicant must review the completed form and attach documents requested by the institution before submission.
 
 ## Education Account and fee deduction
 - Once approved for FAS, eligible fee subsidies and bursary amounts are applied against the student's course fees, payable from their **Education Account**.
@@ -40,4 +45,3 @@ FAS is granted until **December of the given year**. Students must re-apply for 
 The Account Holder can approach the student's institution to be considered for **institution-based financial assistance**, assessed case-by-case. This platform does not adjudicate institution-based assistance directly.
 
 ---
-

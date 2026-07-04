@@ -31,6 +31,7 @@ Junior College (JC)/Centralised Institute (CI) level
 ## JC-level benefits at the top eligibility tier
 - 100% subsidy of school, miscellaneous, and examination* fees
 - $1,600 annual bursary (inclusive of public transport subsidy)
+
 ### 4. Higher education Community bursary HECB and Higher education bursary
 **Government Bursary for Full-Time Students (with effect from AY2026)**
 
@@ -49,10 +50,6 @@ Junior College (JC)/Centralised Institute (CI) level
 | Higher Education Bursary (HEB) | GHI $5,501–$9,000, or PCI $1,376–$2,250                                                    | $350                                                           | $800                                                | $1,800                                                    |
 | Higher Education Bursary (HEB) | GHI $9,001–$12,000, or PCI $2,251–$3,000                                                   | $350                                                           | $380                                                | $750                                                      |
 
-You can paste this Markdown directly into GitHub, VS Code, Notion (Markdown mode), or any documentation site.
 ## How to apply
 - Apply online, or download the application form / collect a copy at the institution; submit directly to the institution.
 - Additional school-based financial assistance can be requested separately, evaluated case-by-case.
-
----
-*See README and source log for data-quality caveats — verify scheme name and the top-tier subsidy percentage before this chunk is used to answer users with specific figures.*
