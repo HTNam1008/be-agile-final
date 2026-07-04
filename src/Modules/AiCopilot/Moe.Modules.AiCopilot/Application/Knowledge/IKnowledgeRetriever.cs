@@ -9,5 +9,5 @@ public sealed record KnowledgeResult(KnowledgeCitation Citation, string Content,
 
 public interface IKnowledgeRetriever
 {
-    IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4);
+    Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default);
 }

@@ -90,7 +90,7 @@ public sealed class KnowledgeAnswerHandler(
             AiTurnRouter.IsFasKnowledgeInterrupt(request.Message) ||
             AiTurnRouter.LooksLikeNaturalFasAidQuestion(request.Message);
         string retrievalDomain = isFasKnowledgeRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
-        IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
+        IReadOnlyList<KnowledgeResult> sources = await knowledge.RetrieveAsync(request.Message, retrievalDomain, ct: ct);
         if (sources.Count == 0)
         {
             Guid review = await fallback.CreateReviewAsync(conversation, conversation.PersonId, "MISSING_POLICY", request.PageContext, request.Message, DateTime.UtcNow, ct);
