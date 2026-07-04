@@ -57,6 +57,8 @@ public sealed record AiChatResponse(Guid ConversationId, long MessageId, string 
     AiInterviewState? InterviewState, Guid? ReviewRecordId = null)
 {
     public IReadOnlyCollection<string> FollowUpQuestions { get; init; } = [];
+    public string? TurnIntent { get; init; }
+    public string? ConversationPhase { get; init; }
 }
 public sealed record AiConversationResponse(Guid ConversationId, string Mode, string Status,
     IReadOnlyCollection<AiConversationMessageResponse> Messages, AiInterviewState? InterviewState);

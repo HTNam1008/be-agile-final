@@ -198,6 +198,38 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Feel_like_doing_fas_starts_interview()
+    {
+        JsonElement response = await Chat("I feel like doing fas", personId: 2101);
+
+        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.Equal("START_FAS", response.GetProperty("turnIntent").GetString());
+        Assert.True(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Likely_fas_typo_clarifies_instead_of_generic_fallback()
+    {
+        JsonElement response = await Chat("i feel like doing fss", personId: 2101);
+
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.Equal("CLARIFY_FAS_TYPO", response.GetProperty("turnIntent").GetString());
+        Assert.Contains("Did you mean FAS", response.GetProperty("text").GetString());
+        Assert.DoesNotContain("cannot answer this reliably", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Education_account_usage_routes_to_payment_tools()
+    {
+        JsonElement response = await Chat("What can I use my Education Account for?", personId: 2101);
+
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("cards").EnumerateArray(),
+            x => x.GetProperty("type").GetString() == "FINANCE_SUMMARY");
+        Assert.DoesNotContain("cannot answer this reliably", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Fas_on_payment_page_does_not_get_contaminated()
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
