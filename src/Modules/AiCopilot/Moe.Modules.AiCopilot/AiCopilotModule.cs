@@ -40,6 +40,15 @@ public sealed class AiCopilotModule : IModule
         services.AddScoped<PaymentQueryHandler>();
         services.AddScoped<KnowledgeAnswerHandler>();
         services.AddScoped<FasInterviewHandler>();
+        string knowledgeStore = configuration.GetValue("AiCopilot:KnowledgeStore", "Embedded");
+        if (knowledgeStore == "Database")
+        {
+            services.AddScoped<IKnowledgeDocumentStore, DatabaseKnowledgeDocumentStore>();
+        }
+        else
+        {
+            services.AddSingleton<IKnowledgeDocumentStore, EmbeddedKnowledgeDocumentStore>();
+        }
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();

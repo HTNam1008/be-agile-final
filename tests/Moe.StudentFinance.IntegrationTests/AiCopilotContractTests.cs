@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
 using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 using Moe.StudentFinance.Persistence;
@@ -102,7 +103,8 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     public async Task Knowledge_retriever_maps_natural_school_fee_help_to_fas()
     {
         var services = new ServiceCollection().BuildServiceProvider();
-        var retriever = new LocalKnowledgeRetriever(services);
+        var store = new EmbeddedKnowledgeDocumentStore();
+        var retriever = new LocalKnowledgeRetriever(services, store);
 
         IReadOnlyList<Moe.Modules.AiCopilot.Application.Knowledge.KnowledgeResult> results =
             await retriever.RetrieveAsync("My family does not earn much. Can I get help with school fees?", "GENERAL");
@@ -133,7 +135,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     [Fact]
     public void Knowledge_pack_validator_rejects_duplicate_chunk_ids()
     {
-        var doc = new LocalKnowledgeRetriever.KnowledgeDocument(
+        var doc = new KnowledgeDocument(
             "FAS-DUPLICATE",
             "Duplicate",
             "Duplicate",
@@ -150,7 +152,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
             ["Continue my FAS eligibility check."]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            LocalKnowledgeRetriever.ValidateKnowledgePacks([doc, doc]));
+            EmbeddedKnowledgeDocumentStore.ValidateKnowledgePacks([doc, doc]));
         Assert.Contains("Duplicate knowledge chunk_id", error.Message);
     }
 
