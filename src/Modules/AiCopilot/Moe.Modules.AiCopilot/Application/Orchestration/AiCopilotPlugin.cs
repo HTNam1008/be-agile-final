@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Moe.Modules.AiCopilot.Application.Finance;
 using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.FasPayment.Application.StudentApplications;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
@@ -63,6 +64,50 @@ public sealed class AiCopilotPlugin
             followUps = r.FollowUps,
             allowedIntents = r.AllowedIntents
         }), JsonOptions);
+    }
+
+    [KernelFunction]
+    [Description("Check FAS eligibility based on income, household size, and nationality facts. Call this when the student has provided all required FAS facts and wants to see eligibility results.")]
+    [return: Description("JSON object with perCapitaIncome, matchedSchemes, recommendedScheme, recommendationStatus")]
+    public async Task<string> CheckFasEligibilityAsync(
+        [Description("Monthly household income in SGD")] decimal monthlyHouseholdIncome,
+        [Description("Number of household members")] int householdMemberCount,
+        [Description("Other monthly income in SGD, defaults to 0")] decimal otherMonthlyIncome,
+        [Description("Comma-separated parent nationalities, e.g. 'Singaporean,Malaysian'")] string? parentNationalities,
+        CancellationToken ct)
+    {
+        StudentFasApplicationService fas = _services.GetRequiredService<StudentFasApplicationService>();
+        EligibilityResponse response = await fas.CheckEligibility(new EligibilityRequest(
+            monthlyHouseholdIncome,
+            householdMemberCount,
+            otherMonthlyIncome,
+            parentNationalities?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+        ), ct);
+        return JsonSerializer.Serialize(new
+        {
+            response.PerCapitaIncome,
+            response.RecommendationStatus,
+            response.ManualReviewReason,
+            matchedSchemes = response.MatchedSchemes.Select(s => new
+            {
+                s.SchemeName, s.TierLabel, s.SubsidyType, s.SubsidyValue,
+                s.RecommendationRank, s.RecommendationReason, s.RecommendationConfidence,
+                applicationEndDate = s.ApplicationEndDate.ToString("O"), s.IsComparable, s.CanApply
+            }),
+            recommendedScheme = response.RecommendedScheme is not null ? new
+            {
+                response.RecommendedScheme.SchemeId,
+                response.RecommendedScheme.SchemeName,
+                response.RecommendedScheme.Description
+            } : null,
+            recommendedTier = response.RecommendedTier is not null ? new
+            {
+                response.RecommendedTier.TierId,
+                response.RecommendedTier.TierLabel,
+                response.RecommendedTier.SubsidyType,
+                response.RecommendedTier.SubsidyValue
+            } : null
+        }, JsonOptions);
     }
 
     [KernelFunction]
