@@ -10,7 +10,7 @@ internal sealed class AiConversation
     public string ModeCode { get; private set; } = "GENERAL";
     public string StatusCode { get; private set; } = "ACTIVE";
     public string? PageContextJson { get; private set; }
-    public string? FasInterviewJson { get; private set; }
+    public AiFasSession? FasSession { get; internal set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
@@ -24,11 +24,10 @@ internal sealed class AiConversation
         ExpiresAtUtc = now.AddDays(30)
     };
 
-    public void Touch(string mode, string? pageContextJson, string? fasInterviewJson, DateTime now)
+    public void Touch(string mode, string? pageContextJson, DateTime now)
     {
         ModeCode = mode;
         PageContextJson = pageContextJson;
-        FasInterviewJson = fasInterviewJson;
         UpdatedAtUtc = now;
         ExpiresAtUtc = now.AddDays(30);
     }
