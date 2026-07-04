@@ -497,6 +497,12 @@ public sealed class FasInterviewHandler(
         string? field = ResolveTargetField(s, preferredField);
         if (field is null) return FasExtractionResult.Accepted();
 
+        // Step 4: try single LLM call extracting ALL slots at once (only if it ACCEPTs)
+        FasExtractionResult? allResult = await TryLlmExtractAllAsync(s, message, field, ct);
+        if (allResult?.Status == "ACCEPTED")
+            return allResult;
+
+        // Fallback: per-field LLM extraction (numeric) or regex (other)
         FasExtractionResult? llmResult = await TryLlmExtractFieldAsync(message, field, ct);
         if (llmResult is not null)
         {
@@ -512,6 +518,220 @@ public sealed class FasInterviewHandler(
         }
 
         return ApplyFasAnswer(s, message, preferredField);
+    }
+
+    /// <summary>Extract ALL FAS fields from the user's message in one structured LLM call.</summary>
+    private async Task<FasExtractionResult?> TryLlmExtractAllAsync(FasInterviewData s, string message, string expectedField, CancellationToken ct)
+    {
+        // Skip single-call extraction for question-type messages (policy questions, help requests)
+        if (LooksLikeFieldHelpRequest(message))
+            return null;
+
+        Kernel kernel;
+        try { kernel = services.GetRequiredService<Kernel>(); } catch { return null; }
+        try
+        {
+            IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
+            string fieldsNeeded = string.Join(", ", NextAllMissingFields(s));
+            string fieldContext = HelpForField(expectedField);
+
+            var history = new ChatHistory($$"""
+You are helping a student fill out a Singapore FAS application.
+The student is answering: "{{fieldContext}}"
+
+Their answer may cover one or more needed fields: {{fieldsNeeded}}
+
+Return ONLY valid JSON. Set fields to null if the answer does not mention them.
+{
+  "monthlyHouseholdIncome": number | null,
+  "householdMemberCount": integer | null,
+  "isWelfareHomeResident": boolean | null,
+  "parentNationalities": string[] | null,
+  "employmentStatusCode": "EMPLOYED" | "SELF_EMPLOYED" | "UNEMPLOYED" | null,
+  "otherMonthlyIncome": number | null,
+  "email": string | null,
+  "ambiguous": boolean,
+  "ambiguityReason": string | null
+}
+
+Rules:
+- "k"/"K" -> multiply by 1000
+- range -> lower bound, ambiguous=true
+- multiple incomes -> compute total
+- "none"/"nil"/"zero" for otherMonthlyIncome -> 0
+- "about"/"around" -> extract, NOT ambiguous
+- "yes"/"yeah"/"y"/"correct" for isWelfareHomeResident -> true
+- "no"/"n"/"nah" for isWelfareHomeResident -> false
+- parentNationalities: standard demonyms (Singaporean, Malaysian, Chinese, Indian, etc.)
+- employmentStatusCode: "working"->EMPLOYED, "no job"->UNEMPLOYED, "freelance"->SELF_EMPLOYED
+""");
+            history.AddUserMessage(message);
+            ChatMessageContent result = await chat.GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+            string content = result.Content?.Trim() ?? "";
+            if (!content.StartsWith('{')) return null;
+
+            using JsonDocument doc = JsonDocument.Parse(content);
+            JsonElement root = doc.RootElement;
+            return ValidateAndApplyExtraction(s, root, expectedField);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>C# validator: enforce bounds on LLM-extracted values, apply accepted, return CLARIFY for invalid.</summary>
+    private static FasExtractionResult ValidateAndApplyExtraction(FasInterviewData s, JsonElement root, string target)
+    {
+        bool ambiguous = root.TryGetProperty("ambiguous", out JsonElement ambEl) && ambEl.ValueKind == JsonValueKind.True;
+        string? ambiguityReason = ambiguous && root.TryGetProperty("ambiguityReason", out JsonElement reasonEl)
+            ? reasonEl.GetString() : null;
+
+        // If the model says it's ambiguous, don't auto-accept anything — require clarification
+        if (ambiguous)
+            return FasExtractionResult.Clarify(ambiguityReason ?? "Could you clarify your answer for the FAS application?");
+
+        bool anyAccepted = false;
+
+        // isWelfareHomeResident
+        if (TryGetJsonBool(root, "isWelfareHomeResident") is bool welfare)
+        {
+            // Changing an already-set field requires confirmation
+            if (s.IsWelfareHomeResident.HasValue && s.IsWelfareHomeResident.Value != welfare)
+            {
+                return FasExtractionResult.Clarify(welfare
+                    ? "You previously said you are NOT a welfare home resident. Do you want to change that to YES, you live in an approved welfare home?"
+                    : "You previously said you ARE a welfare home resident. Do you want to change that to NO, you don't live in a welfare home?");
+            }
+            if (!s.IsWelfareHomeResident.HasValue || s.IsWelfareHomeResident.Value != welfare)
+            {
+                ApplyAcceptedValue(s, "isWelfareHomeResident", welfare);
+                anyAccepted = true;
+            }
+        }
+
+        // email
+        if (TryGetJsonString(root, "email") is string email && email.Contains('@'))
+        {
+            s.Email = email; anyAccepted = true;
+        }
+
+        // employmentStatusCode
+        if (TryGetJsonString(root, "employmentStatusCode") is string emp && emp is "EMPLOYED" or "SELF_EMPLOYED" or "UNEMPLOYED")
+        {
+            s.EmploymentStatusCode = emp; anyAccepted = true;
+        }
+
+        // monthlyHouseholdIncome
+        if (TryGetJsonDecimal(root, "monthlyHouseholdIncome") is decimal income)
+        {
+            if (income < 0 || income > 100_000)
+                return ambiguous
+                    ? FasExtractionResult.Clarify($"I think the household income is around ${income:N0}, but that seems high. Could you confirm the exact monthly household income in SGD?")
+                    : FasExtractionResult.Clarify($"${income:N0} seems high for monthly household income. Could you check and provide the correct amount?");
+            if (!s.MonthlyHouseholdIncome.HasValue || s.MonthlyHouseholdIncome != income)
+            {
+                ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(income, 2));
+                anyAccepted = true;
+            }
+        }
+
+        // householdMemberCount
+        if (TryGetJsonInt(root, "householdMemberCount") is int count)
+        {
+            if (count < 1 || count > 30)
+                return FasExtractionResult.Clarify($"A household of {count} people seems unusual. Could you confirm the number of household members?");
+            if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount != count)
+            {
+                ApplyAcceptedValue(s, "householdMemberCount", count);
+                anyAccepted = true;
+            }
+        }
+
+        // otherMonthlyIncome
+        if (TryGetJsonDecimal(root, "otherMonthlyIncome") is decimal otherInc)
+        {
+            if (otherInc < 0 || otherInc > 100_000)
+                return FasExtractionResult.Clarify($"The other monthly income of ${otherInc:N0} seems high. Could you confirm?");
+            if (!s.OtherMonthlyIncome.HasValue || s.OtherMonthlyIncome != otherInc)
+            {
+                ApplyAcceptedValue(s, "otherMonthlyIncome", decimal.Round(otherInc, 2));
+                anyAccepted = true;
+            }
+        }
+
+        // parentNationalities
+        if (root.TryGetProperty("parentNationalities", out JsonElement natEl) && natEl.ValueKind == JsonValueKind.Array)
+        {
+            var nats = new List<string>();
+            foreach (JsonElement item in natEl.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    string raw = item.GetString()!;
+                    string? norm = TryNormalizeParentNationality(raw);
+                    if (norm is not null) nats.Add(norm);
+                }
+            }
+            if (nats.Count > 0)
+            {
+                s.ParentNationalities = nats.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                anyAccepted = true;
+            }
+        }
+
+        if (!anyAccepted && ambiguous)
+            return FasExtractionResult.Clarify(root.TryGetProperty("ambiguityReason", out JsonElement reason2El)
+                ? reason2El.GetString() ?? "Could you clarify your answer for the FAS application?"
+                : "Could you clarify your answer for the FAS application?");
+
+        if (anyAccepted)
+        {
+            s.ClarificationField = null;
+            s.ValidationMessage = null;
+            s.PendingParentNationalitySuggestion = null;
+            s.ClarificationAttempts.Clear();
+            return FasExtractionResult.Accepted();
+        }
+
+        return FasExtractionResult.Clarify("Let me check — could you tell me more so I can fill in the next field for the FAS application?");
+    }
+
+    private static IEnumerable<string> NextAllMissingFields(FasInterviewData s)
+    {
+        if (!s.IsWelfareHomeResident.HasValue) yield return "isWelfareHomeResident";
+        if (s.IsWelfareHomeResident != true)
+        {
+            if (!s.MonthlyHouseholdIncome.HasValue) yield return "monthlyHouseholdIncome";
+            if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0) yield return "householdMemberCount";
+            if (!s.OtherMonthlyIncome.HasValue) yield return "otherMonthlyIncome";
+        }
+        if (s.ParentNationalities.Count == 0) yield return "parentNationalities";
+    }
+
+    private static bool? TryGetJsonBool(JsonElement root, string key)
+    {
+        if (root.TryGetProperty(key, out JsonElement el) && el.ValueKind == JsonValueKind.True) return true;
+        if (root.TryGetProperty(key, out el) && el.ValueKind == JsonValueKind.False) return false;
+        return null;
+    }
+
+    private static string? TryGetJsonString(JsonElement root, string key)
+    {
+        if (root.TryGetProperty(key, out JsonElement el) && el.ValueKind == JsonValueKind.String)
+            return el.GetString();
+        return null;
+    }
+
+    private static decimal? TryGetJsonDecimal(JsonElement root, string key)
+    {
+        if (root.TryGetProperty(key, out JsonElement el) && el.ValueKind == JsonValueKind.Number && el.TryGetDecimal(out decimal v))
+            return v;
+        return null;
+    }
+
+    private static int? TryGetJsonInt(JsonElement root, string key)
+    {
+        if (root.TryGetProperty(key, out JsonElement el) && el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v))
+            return v;
+        return null;
     }
 
     private async Task<FasExtractionResult?> TryLlmExtractFieldAsync(string message, string field, CancellationToken ct)
