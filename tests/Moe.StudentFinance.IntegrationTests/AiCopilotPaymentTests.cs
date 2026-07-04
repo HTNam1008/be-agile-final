@@ -206,6 +206,18 @@ public sealed class AiCopilotPaymentTests(CustomWebApplicationFactory factory) :
         Assert.Contains(citations, x => x.GetProperty("sourceId").GetString() == "PAY-CHUNK-09-PAYMENT-FAQS");
     }
 
+    [Fact]
+    public async Task How_to_pay_with_no_outstanding_bills_answers_without_fallback()
+    {
+        JsonElement response = await Chat("How do I pay this bill?", personId: 2101);
+
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        string text = response.GetProperty("text").GetString()!;
+        Assert.Contains("do not have an outstanding bill", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("When a bill is due", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("cannot answer this reliably", text, StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task<JsonElement> Chat(string message, int personId, Guid? conversationId = null)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");

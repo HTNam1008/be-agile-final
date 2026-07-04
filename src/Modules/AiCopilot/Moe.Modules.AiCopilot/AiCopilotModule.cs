@@ -28,6 +28,7 @@ public sealed class AiCopilotModule : IModule
             return Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(deploymentName, endpoint, apiKey).Build();
         });
         services.AddScoped<AiOrchestratorService>();
+        services.AddScoped<AiTurnPlannerService>();
         services.AddScoped<AiFinanceReader>();
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();

@@ -1,0 +1,145 @@
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Moe.Modules.AiCopilot.Api;
+using Moe.Modules.AiCopilot.Domain;
+
+namespace Moe.Modules.AiCopilot.Application.Orchestration;
+
+public sealed class AiTurnPlannerService(
+    IConfiguration configuration,
+    IServiceProvider services,
+    ILogger<AiTurnPlannerService> logger)
+{
+    internal async Task<AiTurnPlan> PlanAsync(AiChatRequest request, AiConversation conversation, CancellationToken ct)
+    {
+        if (!configuration.GetValue("AiCopilot:PlannerV2Enabled", true))
+            return HeuristicPlan(request.Message, conversation);
+
+        if (configuration.GetValue("AiCopilot:PlannerV2UseModel", false))
+        {
+            AiTurnPlan? modelPlan = await TryModelPlan(request, conversation, ct);
+            if (modelPlan is not null)
+                return modelPlan;
+        }
+
+        return HeuristicPlan(request.Message, conversation);
+    }
+
+    private async Task<AiTurnPlan?> TryModelPlan(AiChatRequest request, AiConversation conversation, CancellationToken ct)
+    {
+        try
+        {
+            Kernel kernel = services.GetRequiredService<Kernel>();
+            var history = new ChatHistory(
+                "You classify one MOE Student Finance copilot turn. Return compact JSON only with keys: intent, phase, confidence, answerGoal. " +
+                "Allowed intents: START_FAS, CONTINUE_FAS, ANSWER_KNOWLEDGE, PAYMENT_QUERY, CLARIFY_FAS_TYPO, FALLBACK. " +
+                "Do not calculate money, eligibility, or validate fields.");
+            history.AddUserMessage($"currentMode={conversation.ModeCode}; hasFasState={!string.IsNullOrWhiteSpace(conversation.FasInterviewJson)}; message={request.Message}");
+            ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>()
+                .GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+            string json = answer.Content?.Trim() ?? "";
+            Match intent = Regex.Match(json, "\"intent\"\\s*:\\s*\"(?<value>[A-Z_]+)\"", RegexOptions.IgnoreCase);
+            Match phase = Regex.Match(json, "\"phase\"\\s*:\\s*\"(?<value>[a-z_]+)\"", RegexOptions.IgnoreCase);
+            Match goal = Regex.Match(json, "\"answerGoal\"\\s*:\\s*\"(?<value>[^\"]+)\"", RegexOptions.IgnoreCase);
+            Match confidence = Regex.Match(json, "\"confidence\"\\s*:\\s*(?<value>0?\\.\\d+|1(?:\\.0+)?)", RegexOptions.IgnoreCase);
+            if (!intent.Success || !TryParseIntent(intent.Groups["value"].Value, out AiPlannerIntent intentValue))
+                return null;
+            decimal confidenceValue = confidence.Success && decimal.TryParse(confidence.Groups["value"].Value, out decimal parsed) ? parsed : 0.6m;
+            if (confidenceValue < 0.55m)
+                return null;
+            return new AiTurnPlan(intentValue, phase.Success ? phase.Groups["value"].Value : "idle", goal.Success ? goal.Groups["value"].Value : null, confidenceValue, "MODEL");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "AI planner v2 model classification failed; falling back to deterministic planner.");
+            return null;
+        }
+    }
+
+    private static AiTurnPlan HeuristicPlan(string message, AiConversation conversation)
+    {
+        string value = message.Trim();
+        string upper = value.ToUpperInvariant();
+        bool hasFasState = !string.IsNullOrWhiteSpace(conversation.FasInterviewJson);
+
+        if (LooksLikeFasTypo(value))
+            return new(AiPlannerIntent.ClarifyFasTypo, Phase(conversation), "clarify whether the user meant FAS", 0.9m, "HEURISTIC");
+        if (LooksLikePaymentQuery(upper))
+            return new(AiPlannerIntent.PaymentQuery, Phase(conversation), "answer with authorized finance tools", 0.95m, "HEURISTIC");
+        if (LooksLikeStartFas(value))
+            return new(hasFasState ? AiPlannerIntent.ContinueFas : AiPlannerIntent.StartFas, Phase(conversation), "start or resume FAS assistance", 0.9m, "HEURISTIC");
+        if (LooksLikeFasKnowledge(value, hasFasState) && !LooksLikeLiveSchemeEligibility(value))
+            return new(AiPlannerIntent.AnswerKnowledge, Phase(conversation), "answer FAS knowledge question", 0.9m, "HEURISTIC");
+        if (hasFasState && LooksLikeShortAnswer(value))
+            return new(AiPlannerIntent.ContinueFas, Phase(conversation), "continue FAS fact collection", 0.8m, "HEURISTIC");
+
+        return new(AiPlannerIntent.Fallback, Phase(conversation), null, 0.5m, "HEURISTIC");
+    }
+
+    private static string Phase(AiConversation conversation)
+    {
+        string? state = conversation.FasInterviewJson;
+        if (string.IsNullOrWhiteSpace(state)) return "idle";
+        if (state.Contains("\"status\":\"COMPLETE\"", StringComparison.OrdinalIgnoreCase)) return "eligible";
+        if (state.Contains("\"status\":\"CONFIRMING\"", StringComparison.OrdinalIgnoreCase)) return "confirming";
+        if (state.Contains("\"status\":\"MANUAL_FALLBACK\"", StringComparison.OrdinalIgnoreCase)) return "manual_review";
+        return "collecting";
+    }
+
+    private static bool LooksLikeFasTypo(string value) =>
+        Regex.IsMatch(value, @"\b(fss|fass|fs)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(do|doing|apply|help|feel|start|check)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikePaymentQuery(string upper) =>
+        upper.Contains("PAY") || upper.Contains("BILL") || upper.Contains("BALANCE") ||
+        upper.Contains("OUTSTANDING") || upper.Contains("REFUND") || upper.Contains("WITHDRAW") ||
+        (upper.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(upper, @"\b(USE|USED|FOR|COVER|PAY)\b"));
+
+    private static bool LooksLikeStartFas(string value) =>
+        Regex.IsMatch(value, @"\b(fas|financial assistance)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(feel|do|doing|help|start|apply|check|qualif|eligib|which|want|need|guide|question)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeLiveSchemeEligibility(string value) =>
+        Regex.IsMatch(value, @"\b(which|what)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(schemes?|fas|financial assistance|bursary|subsidy)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(can i apply|apply for|eligible|qualify|available to me|for me)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeFasKnowledge(string value, bool hasFasState) =>
+        Regex.IsMatch(value, @"\b(fas|financial assistance|pci|per capita|ghi|household income|documents?|scheme|schemes|approval|submit|submitting|application)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(what|how|why|explain|calculate|calculated|mean|means|need|prove|happens|after|before)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeShortAnswer(string value) =>
+        Regex.IsMatch(value, @"^\s*(yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$", RegexOptions.IgnoreCase);
+
+    private static bool TryParseIntent(string value, out AiPlannerIntent intent)
+    {
+        string normalized = value.Trim().Replace("_", "", StringComparison.OrdinalIgnoreCase);
+        foreach (AiPlannerIntent candidate in Enum.GetValues<AiPlannerIntent>())
+        {
+            if (string.Equals(candidate.ToString(), normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                intent = candidate;
+                return true;
+            }
+        }
+
+        intent = AiPlannerIntent.Fallback;
+        return false;
+    }
+}
+
+public enum AiPlannerIntent
+{
+    StartFas,
+    ContinueFas,
+    AnswerKnowledge,
+    PaymentQuery,
+    ClarifyFasTypo,
+    Fallback
+}
+
+public sealed record AiTurnPlan(AiPlannerIntent Intent, string Phase, string? AnswerGoal, decimal Confidence, string Source);

@@ -69,9 +69,10 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             double domainBoost = doc.Domain == normalizedDomain ? 1.25 : 0;
             double synonymBoost = (doc.Synonyms ?? []).Any(s => query.Contains(s, StringComparison.OrdinalIgnoreCase)) ? 1.0 : 0;
             double schemeBoost = SchemeSpecificBoost(doc, terms);
+            double documentBoost = DocumentSpecificBoost(doc, terms);
             double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0);
 
-            return (Doc: doc, Score: lexical + phrase + domainBoost + synonymBoost + schemeBoost + rankWeight);
+            return (Doc: doc, Score: lexical + phrase + domainBoost + synonymBoost + schemeBoost + documentBoost + rankWeight);
         })
         .Where(x => x.Score > 0.25)
         .OrderByDescending(x => x.Score)
@@ -117,6 +118,16 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         return queryTerms
             .Where(term => schemeKeywords.Contains(term, StringComparer.OrdinalIgnoreCase) && schemeTerms.Contains(term))
             .Sum(_ => 1.75);
+    }
+
+    private static double DocumentSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
+    {
+        if (!queryTerms.Overlaps(new[] { "document", "documents", "proof", "income", "submitting", "submit" }))
+            return 0;
+        string text = $"{doc.Title} {doc.Section} {doc.Content} {string.Join(' ', doc.Synonyms ?? [])}";
+        if (!Regex.IsMatch(text, @"\b(supporting documents|income proof|payslips?|cpf|iras|attach documents)\b", RegexOptions.IgnoreCase))
+            return 0;
+        return 3.5;
     }
 
     private static List<(KnowledgeDocument Doc, double Score)> DeduplicateConflicting(List<(KnowledgeDocument Doc, double Score)> scored)
