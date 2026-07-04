@@ -3,6 +3,7 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.SearchAccounts;
 public sealed record TopUpAccountSearchItem(
     long EducationAccountId,
     long PersonId,
+    string AccountNumber,
     string MaskedAccountNumber,
     string StudentNumber,
     string DisplayName,
