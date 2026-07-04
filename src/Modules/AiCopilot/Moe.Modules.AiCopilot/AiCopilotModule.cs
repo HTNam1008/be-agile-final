@@ -20,7 +20,7 @@ public sealed class AiCopilotModule : IModule
 
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton(_ =>
+        services.AddSingleton(provider =>
         {
             string endpoint = configuration["AzureOpenAI:Endpoint"] ?? throw new InvalidOperationException("AzureOpenAI:Endpoint is required for AI requests.");
             string apiKey = configuration["AzureOpenAI:ApiKey"] ?? throw new InvalidOperationException("AzureOpenAI:ApiKey is required for AI requests.");
@@ -30,6 +30,13 @@ public sealed class AiCopilotModule : IModule
             if (embeddingDeployment is not null)
             {
                 builder.AddAzureOpenAITextEmbeddingGeneration(embeddingDeployment, endpoint, apiKey);
+            }
+            bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", false);
+            if (agenticEnabled)
+            {
+                Kernel kernel = builder.Build();
+                kernel.ImportPluginFromObject(provider.GetRequiredService<AiCopilotPlugin>(), "AiCopilot");
+                return kernel;
             }
             return builder.Build();
         });
@@ -51,6 +58,12 @@ public sealed class AiCopilotModule : IModule
         }
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
+        services.AddScoped<AiCopilotPlugin>();
+        bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", false);
+        if (agenticEnabled)
+        {
+            services.AddScoped<AiAgenticTurnService>();
+        }
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
         if (IsBackgroundJobEnabled(configuration, "AiCopilot:Retention"))
