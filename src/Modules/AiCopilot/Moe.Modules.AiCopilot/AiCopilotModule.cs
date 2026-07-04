@@ -64,6 +64,7 @@ public sealed class AiCopilotModule : IModule
         {
             services.AddScoped<AiAgenticTurnService>();
         }
+        services.AddScoped<AiStreamingService>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
         if (IsBackgroundJobEnabled(configuration, "AiCopilot:Retention"))
