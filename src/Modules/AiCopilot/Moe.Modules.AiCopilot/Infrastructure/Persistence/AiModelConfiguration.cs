@@ -53,7 +53,7 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
             b.ToTable("Message", "ai"); b.HasKey(x => x.Id); b.Property(x => x.Id).UseIdentityColumn();
             b.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
             b.Property(x => x.RoleCode).HasMaxLength(20).IsUnicode(false);
-            b.Property(x => x.ContentRedacted).HasMaxLength(4000);
+            b.Property(x => x.Content).HasMaxLength(4000).HasColumnName("ContentRedacted");
             b.Property(x => x.CitationsJson).HasMaxLength(4000);
             b.Property(x => x.ToolSummaryJson).HasMaxLength(2000);
             b.Property(x => x.ResponseJson).HasMaxLength(8000);

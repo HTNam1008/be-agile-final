@@ -39,7 +39,7 @@ internal sealed class AiMessage
     public long Id { get; private set; }
     public Guid ConversationId { get; private set; }
     public string RoleCode { get; private set; } = string.Empty;
-    public string ContentRedacted { get; private set; } = string.Empty;
+    public string Content { get; private set; } = string.Empty;
     public string? CitationsJson { get; private set; }
     public string? ToolSummaryJson { get; private set; }
     public string? ResponseJson { get; private set; }
@@ -51,7 +51,7 @@ internal sealed class AiMessage
         {
             ConversationId = conversationId,
             RoleCode = role,
-            ContentRedacted = content,
+            Content = content,
             CitationsJson = citationsJson,
             ToolSummaryJson = toolSummaryJson,
             ResponseJson = responseJson,
