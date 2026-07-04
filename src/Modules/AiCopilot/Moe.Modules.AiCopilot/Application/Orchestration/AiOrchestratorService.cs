@@ -19,7 +19,8 @@ public sealed class AiOrchestratorService(
     PaymentQueryHandler paymentHandler,
     KnowledgeAnswerHandler knowledgeHandler,
     FasInterviewHandler fasHandler,
-    ILogger<AiOrchestratorService> logger)
+    ILogger<AiOrchestratorService> logger,
+    AiAgenticTurnService? agenticService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -42,6 +43,34 @@ public sealed class AiOrchestratorService(
         {
             AiTurnPlan turnPlan = await turnPlanner.PlanAsync(sanitizedRequest, conversation, ct);
 
+            // Agentic path: when enabled, let the model drive tool selection
+            if (agenticService is not null && turnPlan.Source == "MODEL")
+            {
+                try
+                {
+                    AiHandlerResult agenticResult = await agenticService.ExecuteTurnAsync(conversation, sanitizedRequest, ct);
+                    if (agenticResult is not null)
+                    {
+                        AiChatResponse agenticResponse = ToChatResponse(conversation.Id, 0, agenticResult);
+                        agenticResponse = FasInterviewHandler.AttachDormantFasState(agenticResponse, conversation.FasSession);
+                        agenticResponse = AiResponseBuilder.AttachV2Metadata(agenticResponse, turnPlan);
+                        agenticResponse = AiResponseBuilder.AttachFollowUps(agenticResponse, sanitizedRequest);
+                        conversation.Touch(agenticResponse.Mode, pageJson, now);
+                        var agenticMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(agenticResponse.Text), now,
+                            JsonSerializer.Serialize(agenticResponse.Grounding.Citations, JsonOptions),
+                            JsonSerializer.Serialize(agenticResponse.Cards.Select(x => x.Type), JsonOptions),
+                            (int)stopwatch.ElapsedMilliseconds, redactor.Redact(AiResponseBuilder.SerializeResponse(agenticResponse)));
+                        db.Add(agenticMessage); await db.SaveChangesAsync(ct);
+                        logger.LogInformation("AI conversation {ConversationId} agentic path mode {Mode} in {ElapsedMs} ms", conversation.Id, agenticResponse.Mode, stopwatch.ElapsedMilliseconds);
+                        return agenticResponse with { MessageId = agenticMessage.Id };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Agentic path failed for conversation {ConversationId}, falling back to deterministic", conversation.Id);
+                }
+            }
+
             // Handle FAS typo clarification inline (simple, no handler needed)
             if (turnPlan.Intent == AiPlannerIntent.ClarifyFasTypo)
             {
@@ -61,7 +90,7 @@ public sealed class AiOrchestratorService(
                 };
                 conversation.Touch("GENERAL", pageJson, now);
                 var clarificationMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(clarification.Text), now,
-                    latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: AiResponseBuilder.SerializeResponse(clarification));
+                    latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(clarification)));
                 db.Add(clarificationMessage); await db.SaveChangesAsync(ct);
                 return clarification with { MessageId = clarificationMessage.Id };
             }
@@ -86,7 +115,7 @@ public sealed class AiOrchestratorService(
             var assistant = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(response.Text), now,
                 JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
                 JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
-                (int)stopwatch.ElapsedMilliseconds, AiResponseBuilder.SerializeResponse(response));
+                (int)stopwatch.ElapsedMilliseconds, redactor.Redact(AiResponseBuilder.SerializeResponse(response)));
             db.Add(assistant); await db.SaveChangesAsync(ct);
             logger.LogInformation("AI conversation {ConversationId} mode {Mode} completed in {ElapsedMs} ms", conversation.Id, response.Mode, stopwatch.ElapsedMilliseconds);
             return response with { MessageId = assistant.Id };
@@ -108,7 +137,7 @@ public sealed class AiOrchestratorService(
                 _ => fallbackHandler.FallbackResponse(reviewId)
             };
             AiChatResponse fbResponse = FasInterviewHandler.AttachDormantFasState(ToChatResponse(conversation.Id, 0, fbResult), conversation.FasSession);
-            var fbMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(fbResponse.Text), now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: AiResponseBuilder.SerializeResponse(fbResponse));
+            var fbMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(fbResponse.Text), now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(fbResponse)));
             db.Add(fbMessage); await db.SaveChangesAsync(ct);
             return fbResponse with { MessageId = fbMessage.Id };
         }
