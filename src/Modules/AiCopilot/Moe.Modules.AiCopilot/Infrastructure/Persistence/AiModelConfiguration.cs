@@ -102,9 +102,11 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
             b.Property(x => x.SynonymsJson).HasMaxLength(2000).HasColumnName("Synonyms");
             b.Property(x => x.AllowedIntentsJson).HasMaxLength(1000).HasColumnName("AllowedIntents");
             b.Property(x => x.FollowUpsJson).HasMaxLength(1000).HasColumnName("FollowUps");
+            b.Property(x => x.EmbeddingJson).HasColumnName("Embedding").HasColumnType("nvarchar(max)");
             b.Ignore(x => x.Synonyms);
             b.Ignore(x => x.AllowedIntents);
             b.Ignore(x => x.FollowUps);
+            b.Ignore(x => x.Embedding);
         }
     }
 }

@@ -65,6 +65,20 @@ public sealed class EmbeddedKnowledgeDocumentStore : IKnowledgeDocumentStore
     public Task DeleteAsync(string id, CancellationToken ct)
         => throw new NotSupportedException("EmbeddedKnowledgeDocumentStore is read-only. Use DatabaseKnowledgeDocumentStore for mutations.");
 
+    public Task<IReadOnlyList<KnowledgeDocument>> SearchAsync(string query, int limit = 5, string? domain = null, CancellationToken ct = default)
+    {
+        string[] queryTerms = query.ToUpperInvariant().Split([' ', '\t', '\n', '\r', ',', '.', '!', '?'], StringSplitOptions.RemoveEmptyEntries);
+        IEnumerable<KnowledgeDocument> filtered = domain is null ? _allDocs : _allDocs.Where(d => d.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase));
+        var scored = filtered.Select(d =>
+        {
+            string docText = $"{d.Title} {d.Section} {d.Content}".ToUpperInvariant();
+            int matchCount = queryTerms.Count(qt => docText.Contains(qt));
+            double score = (double)matchCount / Math.Max(queryTerms.Length, 1);
+            return (doc: d, score);
+        }).Where(x => x.score > 0).OrderByDescending(x => x.score).Take(limit).Select(x => x.doc).ToList();
+        return Task.FromResult<IReadOnlyList<KnowledgeDocument>>(scored);
+    }
+
     // ── Embedded resource loader ──
 
     private static KnowledgeDocument[] LoadFasChunksFromAssembly()
