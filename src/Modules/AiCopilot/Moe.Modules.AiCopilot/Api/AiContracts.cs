@@ -29,7 +29,8 @@ public sealed record FasRecommendationCard(
     bool IsComparable = true,
     string? RankingSummary = null);
 public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue,
-    int RecommendationRank = 0, string? RecommendationReason = null, string RecommendationConfidence = "MEDIUM", bool IsComparable = true);
+    int RecommendationRank = 0, string? RecommendationReason = null, string RecommendationConfidence = "MEDIUM", bool IsComparable = true,
+    bool CanApply = true, bool HasPendingApplication = false, long? PendingApplicationId = null);
 public sealed record KnowledgeAnswerCard(
     string Title,
     string Summary,
@@ -56,6 +57,8 @@ public sealed record AiChatResponse(Guid ConversationId, long MessageId, string 
     AiInterviewState? InterviewState, Guid? ReviewRecordId = null)
 {
     public IReadOnlyCollection<string> FollowUpQuestions { get; init; } = [];
+    public string? TurnIntent { get; init; }
+    public string? ConversationPhase { get; init; }
 }
 public sealed record AiConversationResponse(Guid ConversationId, string Mode, string Status,
     IReadOnlyCollection<AiConversationMessageResponse> Messages, AiInterviewState? InterviewState);

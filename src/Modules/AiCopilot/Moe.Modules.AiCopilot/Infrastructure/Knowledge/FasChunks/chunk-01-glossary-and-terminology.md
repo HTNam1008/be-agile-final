@@ -6,7 +6,7 @@ education_levels: [jc_ci, ite, polytechnic, university, arts_institution]
 age_range_hint: "16-30"
 topic_tags: [glossary, definitions, terminology, education_account, ghi, pci]
 source_document: "MOS - Biz reqs.md"
-effective_date: "n/a"
+effective_date: "2026-06-25"
 last_reviewed: "2026-06-25"
 confidence: high
 synonyms: [PSEA, definitions, what does GHI mean, what is an Education Account]
