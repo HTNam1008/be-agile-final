@@ -21,7 +21,19 @@ public sealed class AiChatController(
     ICurrentUser currentUser) : ControllerBase
 {
     [HttpPost("chat")]
-    public Task<AiChatResponse> Chat([FromBody] AiChatRequest request, CancellationToken ct) => router.ChatAsync(request, ct);
+    public async Task<IActionResult> Chat([FromBody] AiChatRequest request, CancellationToken ct)
+    {
+        try
+        {
+            AiChatResponse response = await router.ChatAsync(request, ct);
+            return Ok(response);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            HttpContext.Response.Headers.RetryAfter = "1";
+            return Conflict(new { error = "AI.CONCURRENCY_CONFLICT", message = "This FAS session was modified by another request. Please retry.", retryAfter = "1" });
+        }
+    }
 
     [HttpGet("conversations/{id:guid}")]
     public Task<AiConversationResponse> Conversation(Guid id, CancellationToken ct) => router.GetConversationAsync(id, ct);

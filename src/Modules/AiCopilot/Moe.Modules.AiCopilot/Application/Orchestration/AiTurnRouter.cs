@@ -53,7 +53,9 @@ public sealed class AiTurnRouter(
             AiTurnPlan plan = await turnPlanner.PlanAsync(sanitized, conversation, ct);
 
             // Agentic path — model selects tools via FunctionChoiceBehavior.Auto()
-            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true))
+            // Skip for active FAS sessions — deterministic handler owns the structured flow
+            bool hasActiveFasSession = conversation.FasSession?.StatusCode is not null;
+            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true) && !hasActiveFasSession)
             {
                 try
                 {
@@ -94,6 +96,10 @@ public sealed class AiTurnRouter(
             };
 
             return await SaveAndReturn(conversation.Id, pageJson, now, 0, handlerResult, conversation, sanitized, plan, stopwatch, ct);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            throw; // propagate to controller for HTTP 409
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -164,7 +170,9 @@ public sealed class AiTurnRouter(
             JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
             (int)stopwatch.ElapsedMilliseconds,
             redactor.Redact(AiResponseBuilder.SerializeResponse(response)));
-        db.Add(assistant); await db.SaveChangesAsync(ct);
+        db.Add(assistant);
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyConflictException("FAS session modified by concurrent request", ex); }
         logger.LogInformation("AI conversation {ConversationId} mode {Mode} completed in {ElapsedMs} ms",
             conversationId, response.Mode, stopwatch.ElapsedMilliseconds);
         return response with { MessageId = assistant.Id };
@@ -180,7 +188,9 @@ public sealed class AiTurnRouter(
             JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
             (int)stopwatch.ElapsedMilliseconds,
             redactor.Redact(AiResponseBuilder.SerializeResponse(response)));
-        db.Add(assistant); await db.SaveChangesAsync(ct);
+        db.Add(assistant);
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyConflictException("FAS session modified by concurrent request", ex); }
         logger.LogInformation("AI conversation {ConversationId} mode {Mode} completed in {ElapsedMs} ms",
             conversationId, response.Mode, stopwatch.ElapsedMilliseconds);
         return response with { MessageId = assistant.Id };
