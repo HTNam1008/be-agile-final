@@ -90,6 +90,7 @@ internal sealed class SearchTopUpAccountsHandler(
         return new TopUpAccountSearchItem(
             account.EducationAccountId,
             student.PersonId,
+            account.AccountNumber,
             TopUpDisplayMasker.MaskAccountNumber(account.AccountNumber),
             student.StudentNumber,
             student.DisplayName,

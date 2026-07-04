@@ -16,6 +16,7 @@ public sealed record AllTransactionsItem(
     long EducationAccountId,
     string CampaignCode,
     string CampaignName,
+    string AccountNumber,
     string MaskedAccountNumber,
     string? MaskedStudentNumber,
     string StudentDisplayName,

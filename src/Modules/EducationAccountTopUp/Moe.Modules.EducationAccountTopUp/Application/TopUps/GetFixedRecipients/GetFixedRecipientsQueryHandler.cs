@@ -94,6 +94,7 @@ internal sealed class GetFixedRecipientsQueryHandler(
             dtos.Add(new FixedRecipientDto(
                 recipient.EducationAccountId,
                 student.DisplayName,
+                account.AccountNumber,
                 TopUpDisplayMasker.MaskAccountNumber(account.AccountNumber),
                 student.StudentNumber,
                 age,

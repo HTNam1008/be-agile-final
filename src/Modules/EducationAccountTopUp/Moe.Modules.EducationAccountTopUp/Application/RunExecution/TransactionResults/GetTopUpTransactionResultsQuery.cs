@@ -19,6 +19,7 @@ public sealed record GetTopUpTransactionResultsQuery(
 public sealed record TopUpTransactionResultItem(
     long TransactionId,
     long EducationAccountId,
+    string AccountNumber,
     string MaskedAccountNumber,
     string? MaskedStudentNumber,
     string StudentDisplayName,
