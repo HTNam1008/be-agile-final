@@ -35,6 +35,7 @@ internal static class CourseErrors
     public static readonly Error InvalidMaterialType = new("COURSE.INVALID_MATERIAL_TYPE", "Material type code is not supported.");
     public static readonly Error InvalidFile = new("COURSE.INVALID_FILE", "A non-empty material file is required.");
     public static readonly Error MaterialFileTooLarge = new("COURSE.MATERIAL_FILE_TOO_LARGE", "Material file must be 20 MB or smaller.");
+    public static readonly Error UnsupportedMaterialFileType = new("COURSE.MATERIAL_FILE_TYPE_UNSUPPORTED", "Course materials must be PDF, DOCX, PPTX, PNG, JPG, or JPEG files.");
     public static readonly Error MaterialPreviewUnavailable = new("COURSE.MATERIAL_PREVIEW_UNAVAILABLE", "Course material preview is not available for this file.");
     public static readonly Error EnrollmentNotFound = new("COURSE.ENROLLMENT_NOT_FOUND", "Course enrollment was not found.");
 }
