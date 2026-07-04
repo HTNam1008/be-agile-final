@@ -43,7 +43,7 @@ public sealed class AiTurnPlannerService(
                 "If the user stops or pauses FAS and asks a finance/course question in the same message, choose PAYMENT_QUERY or COURSE_QUERY so the assistant can answer after stopping the task. " +
                 "Short slot answers like yes, no, 3000, 4, 0, Singaporean, PR, Foreigner continue FAS only when a FAS task is active.");
             history.AddUserMessage(
-                $"currentMode={conversation.ModeCode}; fasPhase={Phase(conversation)}; hasFasState={!string.IsNullOrWhiteSpace(conversation.FasInterviewJson)}; " +
+                $"currentMode={conversation.ModeCode}; fasPhase={Phase(conversation)}; hasFasState={conversation.FasSession is not null}; " +
                 $"route={request.PageContext?.Path}; domain={request.PageContext?.Domain}; message={request.Message}");
             ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>()
                 .GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
@@ -70,7 +70,7 @@ public sealed class AiTurnPlannerService(
     {
         string value = message.Trim();
         string upper = value.ToUpperInvariant();
-        bool hasFasState = !string.IsNullOrWhiteSpace(conversation.FasInterviewJson);
+        bool hasFasState = conversation.FasSession is not null;
 
         if (LooksLikeFasTypo(value))
             return new(AiPlannerIntent.ClarifyFasTypo, Phase(conversation), "clarify whether the user meant FAS", 0.9m, "HEURISTIC");
@@ -100,27 +100,19 @@ public sealed class AiTurnPlannerService(
 
     private static string Phase(AiConversation conversation)
     {
-        string? state = conversation.FasInterviewJson;
-        if (string.IsNullOrWhiteSpace(state)) return "idle";
-        try
+        string? statusCode = conversation.FasSession?.StatusCode;
+        if (string.IsNullOrWhiteSpace(statusCode)) return "idle";
+        return statusCode.ToUpperInvariant() switch
         {
-            using JsonDocument document = JsonDocument.Parse(state);
-            if (!document.RootElement.TryGetProperty("status", out JsonElement statusElement))
-                return "collecting";
-            return statusElement.GetString()?.ToUpperInvariant() switch
-            {
-                "COMPLETE" => "eligible",
-                "CONFIRMING" => "confirming",
-                "PAUSED" => "paused",
-                "CANCELLED" => "cancelled",
-                "MANUAL_FALLBACK" => "manual_review",
-                _ => "collecting"
-            };
-        }
-        catch (JsonException)
-        {
-            return "collecting";
-        }
+            "IDLE" => "idle",
+            "COMPLETE" => "eligible",
+            "CONFIRMING" => "confirming",
+            "PAUSED" => "paused",
+            "CANCELLED" => "cancelled",
+            "MANUAL_FALLBACK" => "manual_review",
+            "COLLECTING_CONFIRMED" => "confirming",
+            _ => "collecting"
+        };
     }
 
     private static bool LooksLikeFasTypo(string value) =>

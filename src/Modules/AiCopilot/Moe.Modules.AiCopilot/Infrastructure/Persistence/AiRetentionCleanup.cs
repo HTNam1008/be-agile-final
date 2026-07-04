@@ -22,10 +22,12 @@ public static class AiRetentionCleanup
         List<AiReviewRecord> reviews = await db.Set<AiReviewRecord>().Where(x => expiredIds.Contains(x.ConversationId)).ToListAsync(ct);
         List<AdminCenterCase> adminCases = await db.Set<AdminCenterCase>().Where(x => reviews.Select(r => r.Id).Contains(x.ReviewRecordId)).ToListAsync(ct);
         List<AiMessage> messages = await db.Set<AiMessage>().Where(x => expiredIds.Contains(x.ConversationId)).ToListAsync(ct);
+        List<AiFasSession> sessions = await db.Set<AiFasSession>().Where(x => expiredIds.Contains(x.ConversationId)).ToListAsync(ct);
 
         db.Set<AdminCenterCase>().RemoveRange(adminCases);
         db.Set<AiReviewRecord>().RemoveRange(reviews);
         db.Set<AiMessage>().RemoveRange(messages);
+        db.Set<AiFasSession>().RemoveRange(sessions);
         db.Set<AiConversation>().RemoveRange(expired);
 
         await db.SaveChangesAsync(ct);

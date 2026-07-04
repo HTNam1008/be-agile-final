@@ -10,6 +10,7 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
     public void Configure(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new ConversationConfiguration());
+        modelBuilder.ApplyConfiguration(new FasSessionConfiguration());
         modelBuilder.ApplyConfiguration(new MessageConfiguration());
         modelBuilder.ApplyConfiguration(new ReviewConfiguration());
         modelBuilder.ApplyConfiguration(new CaseConfiguration());
@@ -25,7 +26,23 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
             b.Property(x => x.ModeCode).HasMaxLength(30).IsUnicode(false);
             b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false);
             b.Property(x => x.PageContextJson).HasMaxLength(4000);
-            b.Property(x => x.FasInterviewJson).HasMaxLength(8000);
+        }
+    }
+
+    private sealed class FasSessionConfiguration : IEntityTypeConfiguration<AiFasSession>
+    {
+        public void Configure(EntityTypeBuilder<AiFasSession> b)
+        {
+            b.ToTable("FasSession", "ai");
+            b.HasKey(x => x.ConversationId);
+            b.HasOne(x => x.Conversation).WithOne(x => x.FasSession)
+                .HasForeignKey<AiFasSession>(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.Property(x => x.StatusCode).HasMaxLength(30).IsUnicode(false);
+            b.Property(x => x.NextQuestion).HasMaxLength(2000);
+            b.Property(x => x.CollectedFactsJson).HasMaxLength(8000);
+            b.Property(x => x.FormPatchJson).HasMaxLength(8000);
+            b.Property(x => x.RowVersion).IsRowVersion();
         }
     }
     private sealed class MessageConfiguration : IEntityTypeConfiguration<AiMessage>

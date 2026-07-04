@@ -24,6 +24,20 @@ public sealed class AiOrchestratorService(
     AiTurnPlannerService turnPlanner, ILogger<AiOrchestratorService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private static FasInterviewData? LoadFasState(AiConversation c) =>
+        c.FasSession?.CollectedFactsJson is { Length: > 0 } json
+            ? JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions)
+            : null;
+
+    private static void SaveFasState(AiConversation c, FasInterviewData state, DateTime now)
+    {
+        c.FasSession ??= AiFasSession.Create(c.Id, now);
+        c.FasSession.StatusCode = state.Status;
+        c.FasSession.CollectedFactsJson = JsonSerializer.Serialize(state, JsonOptions);
+        c.FasSession.UpdatedAtUtc = now;
+    }
+
     private static readonly string[] AllowedDomains = ["FAS", "PAYMENT", "GENERAL"];
     private static readonly string[] AllowedRoutePrefixes =
     [
@@ -70,7 +84,7 @@ public sealed class AiOrchestratorService(
                     TurnIntent = "CLARIFY_FAS_TYPO",
                     ConversationPhase = turnPlan.Phase
                 };
-                conversation.Touch("GENERAL", pageJson, conversation.FasInterviewJson, now);
+                conversation.Touch("GENERAL", pageJson, now);
                 var clarificationMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(clarification.Text), now,
                     latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(clarification));
                 db.Add(clarificationMessage); await db.SaveChangesAsync(ct);
@@ -79,9 +93,7 @@ public sealed class AiOrchestratorService(
 
             turnPlan = NormalizePlannerIntentForCompositeTurn(turnPlan, sanitizedRequest.Message);
             string mode = ModeFromPlan(turnPlan) ?? DetermineMode(sanitizedRequest.Message, conversation.ModeCode, sanitizedRequest.PageContext?.Domain);
-            string? interruptedFasStateJson = ApplyFasTaskInterruptBeforeNonFasTurn(conversation.FasInterviewJson, sanitizedRequest.Message, mode);
-            if (!string.Equals(interruptedFasStateJson, conversation.FasInterviewJson, StringComparison.Ordinal))
-                conversation.Touch(conversation.ModeCode, pageJson, interruptedFasStateJson, now);
+            ApplyFasTaskInterruptBeforeNonFasTurn(conversation, sanitizedRequest.Message, mode);
             AiChatResponse response = TryHandlePlannerConversationControl(conversation, sanitizedRequest, turnPlan, now)
                 ?? mode switch
             {
@@ -89,10 +101,10 @@ public sealed class AiOrchestratorService(
                 "FAS_INTERVIEW" => await HandleFas(conversation, sanitizedRequest, now, ct),
                 _ => await HandleGeneral(conversation, sanitizedRequest, now, ct)
             };
-            response = AttachDormantFasState(response, conversation.FasInterviewJson);
+            response = AttachDormantFasState(response, conversation.FasSession);
             response = AttachFollowUps(response, sanitizedRequest);
             response = AttachV2Metadata(response, turnPlan);
-            conversation.Touch(response.Mode, pageJson, conversation.FasInterviewJson, now);
+            conversation.Touch(response.Mode, pageJson, now);
             var assistant = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(response.Text), now,
                 JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
                 JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
@@ -135,7 +147,7 @@ public sealed class AiOrchestratorService(
             return null;
 
         string? pageJson = request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions);
-        FasInterviewData? state = DeserializeState(conversation.FasInterviewJson);
+        FasInterviewData? state = LoadFasState(conversation);
         if (state is null)
         {
             return plan.Intent == AiPlannerIntent.OutOfScopeSmallTalk
@@ -150,7 +162,7 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "CANCELLED";
             state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            conversation.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+            conversation.Touch("GENERAL", pageJson, now); SaveFasState(conversation, state, now);
             return new(conversation.Id, 0, "Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], ToInterviewState(state, null))
             {
                 FollowUpQuestions = ["Show my outstanding course bills.", "Restart FAS check.", "What can you help me with?"]
@@ -159,7 +171,7 @@ public sealed class AiOrchestratorService(
 
         state.Status = "PAUSED";
         state.ValidationMessage = "FAS check paused before eligibility calculation.";
-        conversation.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+        conversation.Touch("GENERAL", pageJson, now); SaveFasState(conversation, state, now);
         string text = plan.Intent == AiPlannerIntent.OutOfScopeSmallTalk
             ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance."
             : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.";
@@ -180,7 +192,7 @@ public sealed class AiOrchestratorService(
             .ToArrayAsync(ct);
         AiConversationMessageResponse[] messages = messageRows.Select(x => new AiConversationMessageResponse(x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc,
             x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions))).ToArray();
-        return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages, DeserializeInterview(conversation.FasInterviewJson));
+        return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages, DeserializeInterview(conversation.FasSession?.CollectedFactsJson));
     }
 
     public async Task<object> CreateCaseAsync(CreateAdminCenterCaseRequest request, CancellationToken ct)
@@ -252,7 +264,7 @@ public sealed class AiOrchestratorService(
 
     private async Task<AiChatResponse> HandleFas(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
-        bool isNewInterview = c.FasInterviewJson is null;
+        bool isNewInterview = c.FasSession is null;
         string? fieldKey = request.PageContext?.Entity is JsonElement entity &&
             entity.ValueKind == JsonValueKind.Object &&
             entity.TryGetProperty("fieldKey", out JsonElement fk) &&
@@ -261,7 +273,7 @@ public sealed class AiOrchestratorService(
             ? fkStr
             : null;
         FasInterviewData state;
-        try { state = DeserializeState(c.FasInterviewJson) ?? await InitializeFasState(ct); }
+        try { state = LoadFasState(c) ?? await InitializeFasState(ct); }
         catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
         if (IsTerminalFasState(state.Status))
         {
@@ -288,7 +300,7 @@ public sealed class AiOrchestratorService(
                 state.Status = "CANCELLED";
                 state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
                 AiInterviewState cancelledInterview = ToInterviewState(state, null);
-                c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
                 return new(c.Id, 0, "Got it. I stopped this FAS check and will not calculate eligibility from those answers. You can restart the FAS check later or open the form manually.", "GENERAL", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], cancelledInterview)
                 {
                     FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."]
@@ -303,7 +315,7 @@ public sealed class AiOrchestratorService(
                 string pausedText = LooksLikeScopeTest(request.Message)
                     ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance."
                     : "No problem. I paused this FAS check. Ask me about FAS, your Education Account, bills, payments, refunds, or say \"resume FAS check\" when you want to continue.";
-                c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
                 return new(c.Id, 0, pausedText, "GENERAL", FasInterviewGrounding(state.Status), [], [], pausedInterview)
                 {
                     FollowUpQuestions = ["Resume FAS check.", "What is PCI?", "Show my Education Account balance."]
@@ -314,7 +326,7 @@ public sealed class AiOrchestratorService(
             {
                 state.Status = "PAUSED";
                 state.ValidationMessage = "FAS check paused while answering a side question.";
-                c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
                 AiChatResponse knowledgeResponse = await HandleGeneral(c, request, now, ct);
                 return knowledgeResponse with
                 {
@@ -327,7 +339,7 @@ public sealed class AiOrchestratorService(
             {
                 state.Status = "CONFIRMING";
                 AiInterviewState correctedInterview = ToInterviewState(state, ConfirmationPrompt(state));
-                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
                 return new(c.Id, 0, $"I updated the FAS details.\n\n{ConfirmationPrompt(state)}", "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [], correctedInterview);
             }
 
@@ -335,7 +347,7 @@ public sealed class AiOrchestratorService(
             if (confirmation.Status == "CLARIFY")
             {
                 AiInterviewState confirmInterview = ToInterviewState(state, ConfirmationPrompt(state));
-                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
                 return new(c.Id, 0, confirmation.Message!, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [], confirmInterview);
             }
 
@@ -345,7 +357,7 @@ public sealed class AiOrchestratorService(
                 state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
                 AiInterviewState manualInterview = ToInterviewState(state, null);
                 Guid review = await CreateReview(c, c.PersonId, "FAS_CONFIRMATION_REJECTED", request.PageContext, request.Message, now, ct);
-                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
                 return new(c.Id, 0, "No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "GENERAL", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], manualInterview, review)
                 {
                     FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."]
@@ -369,7 +381,7 @@ public sealed class AiOrchestratorService(
                 ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
                 : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
             List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas", completedInterview.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
-            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
             return new(c.Id, 0, completedText, "GENERAL", FasInterviewGrounding(state.Status), [], completedActions, completedInterview);
         }
 
@@ -378,7 +390,7 @@ public sealed class AiOrchestratorService(
             state.Status = "CANCELLED";
             state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
             AiInterviewState cancelledInterview = ToInterviewState(state, null);
-            c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
             return new(c.Id, 0, "Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], cancelledInterview)
             {
                 FollowUpQuestions = ["Show my outstanding course bills.", "Restart FAS check.", "What can you help me with?"]
@@ -393,7 +405,7 @@ public sealed class AiOrchestratorService(
             string pausedText = LooksLikeScopeTest(request.Message)
                 ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance."
                 : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.";
-            c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
             return new(c.Id, 0, pausedText, "GENERAL", FasInterviewGrounding(state.Status), [], [], pausedInterview)
             {
                 FollowUpQuestions = ["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"]
@@ -404,7 +416,7 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "PAUSED";
             state.ValidationMessage = "FAS check paused while answering a side question.";
-            c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
             AiChatResponse sideResponse = LooksLikePaymentQuery(request.Message.ToUpperInvariant())
                 ? await HandlePayment(c, request, now, ct)
                 : await HandleGeneral(c, request, now, ct);
@@ -425,7 +437,7 @@ public sealed class AiOrchestratorService(
             state.Status = "MANUAL_FALLBACK";
             AiInterviewState manualInterview = ToInterviewState(state, null);
             Guid review = await CreateReview(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
-            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
             return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [],
                 [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })],
                 manualInterview, review);
@@ -435,7 +447,7 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "CLARIFYING";
             AiInterviewState clarificationInterview = ToInterviewState(state, extraction.Message);
-            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
             return new(c.Id, 0, extraction.Message!, "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [], clarificationInterview);
         }
 
@@ -523,7 +535,7 @@ public sealed class AiOrchestratorService(
         }
 
         AiInterviewState interview = ToInterviewState(state, next, recommendedSchemes);
-        c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+        c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), now); SaveFasState(c, state, now);
         List<AiCard> cards = recommendation is null ? [] : [new("FAS_RECOMMENDATION", recommendation)];
         Guid? fallbackReview = null;
         if (state.Status == "MANUAL_FALLBACK")
@@ -634,7 +646,7 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "CANCELLED";
             state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            c.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
             return new(c.Id, 0, "This FAS check is already stopped. I will not calculate eligibility from those answers unless you restart the check.", "GENERAL", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], ToInterviewState(state, null))
             {
                 FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."]
@@ -649,7 +661,7 @@ public sealed class AiOrchestratorService(
                 state.ValidationMessage = "FAS check paused before eligibility calculation.";
             }
 
-            c.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
             return new(c.Id, 0, "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance.", "GENERAL", FasInterviewGrounding(state.Status), [], [], ToInterviewState(state, null))
             {
                 FollowUpQuestions = isCancelled
@@ -660,7 +672,7 @@ public sealed class AiOrchestratorService(
 
         if (IsFasKnowledgeInterrupt(request.Message.ToUpperInvariant()) || LooksLikeCapabilityQuestion(request.Message) || LooksLikeAdminCenterQuestion(request.Message))
         {
-            c.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
             AiChatResponse response = await HandleGeneral(c, request, now, ct);
             return response with
             {
@@ -673,7 +685,7 @@ public sealed class AiOrchestratorService(
 
         if (LooksLikePaymentQuery(request.Message.ToUpperInvariant()))
         {
-            c.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
             AiChatResponse response = await HandlePayment(c, request, now, ct);
             return response with { InterviewState = ToInterviewState(state, null) };
         }
@@ -683,7 +695,7 @@ public sealed class AiOrchestratorService(
             string text = isCancelled
                 ? "That previous FAS check was stopped, so I will not treat this as confirmation. Say \"restart FAS check\" if you want to run a new eligibility check."
                 : "The FAS check is paused. Say \"resume FAS check\" when you want to return to the confirmation step.";
-            c.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
             return new(c.Id, 0, text, "GENERAL", FasInterviewGrounding(state.Status), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], ToInterviewState(state, null))
             {
                 FollowUpQuestions = isCancelled
@@ -692,7 +704,7 @@ public sealed class AiOrchestratorService(
             };
         }
 
-        c.Touch("GENERAL", pageJson, JsonSerializer.Serialize(state, JsonOptions), now);
+        c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
         return new(c.Id, 0, isCancelled
             ? "This FAS check is stopped. Ask a student-finance question, open the FAS form, or say \"restart FAS check\" to begin again."
             : "This FAS check is paused. Ask a student-finance question, or say \"resume FAS check\" to continue.",
@@ -704,36 +716,35 @@ public sealed class AiOrchestratorService(
         };
     }
 
-    private static string? ApplyFasTaskInterruptBeforeNonFasTurn(string? fasInterviewJson, string message, string mode)
+    private static void ApplyFasTaskInterruptBeforeNonFasTurn(AiConversation conversation, string message, string mode)
     {
-        if (mode == "FAS_INTERVIEW" || string.IsNullOrWhiteSpace(fasInterviewJson))
-            return fasInterviewJson;
+        if (mode == "FAS_INTERVIEW" || conversation.FasSession is null)
+            return;
 
-        FasInterviewData? state = DeserializeState(fasInterviewJson);
+        FasInterviewData? state = LoadFasState(conversation);
         if (state is null || state.Status is "COMPLETE" or "CANCELLED")
-            return fasInterviewJson;
+            return;
 
         if (LooksLikeCancelFas(message))
         {
             state.Status = "CANCELLED";
             state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            return JsonSerializer.Serialize(state, JsonOptions);
+            SaveFasState(conversation, state, DateTime.UtcNow);
+            return;
         }
 
         if (LooksLikeSwitchTopic(message) || LooksLikeScopeTest(message) || mode == "PAYMENT")
         {
             state.Status = "PAUSED";
             state.ValidationMessage = "FAS check paused before eligibility calculation.";
-            return JsonSerializer.Serialize(state, JsonOptions);
+            SaveFasState(conversation, state, DateTime.UtcNow);
         }
-
-        return fasInterviewJson;
     }
 
     private static string[] ContextualKnowledgeFollowUps(AiConversation conversation, string message, IReadOnlyCollection<string> followUps)
     {
         const string resumeInterview = "Continue my FAS eligibility check.";
-        bool hasInterruptedInterview = conversation.ModeCode == "FAS_INTERVIEW" && !string.IsNullOrWhiteSpace(conversation.FasInterviewJson);
+        bool hasInterruptedInterview = conversation.ModeCode == "FAS_INTERVIEW" && conversation.FasSession is not null;
         string currentQuestion = NormalizeFollowUp(message);
         IEnumerable<string> planned = followUps.Where(x =>
             !string.Equals(x, resumeInterview, StringComparison.OrdinalIgnoreCase) &&
@@ -943,12 +954,14 @@ public sealed class AiOrchestratorService(
         };
     }
 
-    private static AiChatResponse AttachDormantFasState(AiChatResponse response, string? fasInterviewJson)
+    private static AiChatResponse AttachDormantFasState(AiChatResponse response, AiFasSession? session)
     {
         if (response.InterviewState is not null)
             return response;
 
-        FasInterviewData? state = DeserializeState(fasInterviewJson);
+        FasInterviewData? state = session?.CollectedFactsJson is { Length: > 0 } json
+            ? JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions)
+            : null;
         return state is not null && IsTerminalFasState(state.Status)
             ? response with { InterviewState = ToInterviewState(state, null) }
             : response;
@@ -1016,7 +1029,7 @@ public sealed class AiOrchestratorService(
     {
         if (id.HasValue)
         {
-            AiConversation? existing = await db.Set<AiConversation>().SingleOrDefaultAsync(x => x.Id == id.Value, ct);
+            AiConversation? existing = await db.Set<AiConversation>().Include(x => x.FasSession).SingleOrDefaultAsync(x => x.Id == id.Value, ct);
             if (existing is not null && existing.PersonId != personId) throw new UnauthorizedAccessException("AI.CONVERSATION_FORBIDDEN");
             if (existing is not null) return existing;
         }
