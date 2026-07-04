@@ -236,7 +236,9 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         long userAccountId,
         CancellationToken cancellationToken)
     {
-        string nextRunAt = campaign.NextRunAtUtc?.ToString("yyyy-MM-dd HH:mm") ?? "TBD";
+        string nextRunAt = campaign.NextRunAtUtc.HasValue
+            ? FormatSingaporeDateTime(campaign.NextRunAtUtc.Value)
+            : "TBD";
 
         logger.LogInformation(
             "Creating RECURRING_ALERT notification for campaign {TopUpCampaignId} and user account {UserAccountId}. NextRunAt={NextRunAt}, FrequencyCode={FrequencyCode}",
@@ -279,4 +281,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             campaign.RecipientModeCode,
             RecipientModeCode.DynamicRules.ToString(),
             StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatSingaporeDateTime(DateTime utc)
+        => utc.AddHours(8).ToString("yyyy-MM-dd HH:mm");
 }
