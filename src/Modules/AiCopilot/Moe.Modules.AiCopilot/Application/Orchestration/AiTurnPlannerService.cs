@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -101,12 +102,25 @@ public sealed class AiTurnPlannerService(
     {
         string? state = conversation.FasInterviewJson;
         if (string.IsNullOrWhiteSpace(state)) return "idle";
-        if (state.Contains("\"status\":\"COMPLETE\"", StringComparison.OrdinalIgnoreCase)) return "eligible";
-        if (state.Contains("\"status\":\"CONFIRMING\"", StringComparison.OrdinalIgnoreCase)) return "confirming";
-        if (state.Contains("\"status\":\"PAUSED\"", StringComparison.OrdinalIgnoreCase)) return "paused";
-        if (state.Contains("\"status\":\"CANCELLED\"", StringComparison.OrdinalIgnoreCase)) return "cancelled";
-        if (state.Contains("\"status\":\"MANUAL_FALLBACK\"", StringComparison.OrdinalIgnoreCase)) return "manual_review";
-        return "collecting";
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(state);
+            if (!document.RootElement.TryGetProperty("status", out JsonElement statusElement))
+                return "collecting";
+            return statusElement.GetString()?.ToUpperInvariant() switch
+            {
+                "COMPLETE" => "eligible",
+                "CONFIRMING" => "confirming",
+                "PAUSED" => "paused",
+                "CANCELLED" => "cancelled",
+                "MANUAL_FALLBACK" => "manual_review",
+                _ => "collecting"
+            };
+        }
+        catch (JsonException)
+        {
+            return "collecting";
+        }
     }
 
     private static bool LooksLikeFasTypo(string value) =>

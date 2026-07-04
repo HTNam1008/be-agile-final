@@ -200,6 +200,28 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     }
 
     [Fact]
+    public async Task Message_content_is_redacted_before_persistence()
+    {
+        const string message = "My NRIC is S1234567A, email is learner@example.com, phone 91234567, bill BILL-20260626-A1B2C3D4E5F6A7B8. What is my balance?";
+        JsonElement response = await Chat(message, personId: 2101);
+        Guid conversationId = response.GetProperty("conversationId").GetGuid();
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
+        AiMessage stored = db.Set<AiMessage>()
+            .Single(x => x.ConversationId == conversationId && x.RoleCode == "USER");
+
+        Assert.DoesNotContain("S1234567A", stored.ContentRedacted);
+        Assert.DoesNotContain("learner@example.com", stored.ContentRedacted);
+        Assert.DoesNotContain("91234567", stored.ContentRedacted);
+        Assert.DoesNotContain("BILL-20260626-A1B2C3D4E5F6A7B8", stored.ContentRedacted);
+        Assert.Contains("[IDENTITY]", stored.ContentRedacted);
+        Assert.Contains("[EMAIL]", stored.ContentRedacted);
+        Assert.Contains("[PHONE]", stored.ContentRedacted);
+        Assert.Contains("[PAYMENT_REF]", stored.ContentRedacted);
+    }
+
+    [Fact]
     public async Task Unknown_domain_normalized_to_general()
     {
         JsonElement response = await ChatWithContext("What is my balance?", 2101, new
