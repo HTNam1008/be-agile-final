@@ -19,7 +19,7 @@ public sealed class AiTurnPlannerService(
         if (!configuration.GetValue("AiCopilot:PlannerV2Enabled", true))
             return HeuristicPlan(request.Message, conversation);
 
-        if (configuration.GetValue("AiCopilot:PlannerV2UseModel", false))
+        if (configuration.GetValue("AiCopilot:PlannerV2UseModel", true))
         {
             AiTurnPlan? modelPlan = await TryModelPlan(request, conversation, ct);
             if (modelPlan is not null)
@@ -36,9 +36,14 @@ public sealed class AiTurnPlannerService(
             Kernel kernel = services.GetRequiredService<Kernel>();
             var history = new ChatHistory(
                 "You classify one MOE Student Finance copilot turn. Return compact JSON only with keys: intent, phase, confidence, answerGoal. " +
-                "Allowed intents: START_FAS, CONTINUE_FAS, ANSWER_KNOWLEDGE, PAYMENT_QUERY, CLARIFY_FAS_TYPO, FALLBACK. " +
-                "Do not calculate money, eligibility, or validate fields.");
-            history.AddUserMessage($"currentMode={conversation.ModeCode}; hasFasState={!string.IsNullOrWhiteSpace(conversation.FasInterviewJson)}; message={request.Message}");
+                "Allowed intents: START_FAS, CONTINUE_FAS, ANSWER_KNOWLEDGE, PAYMENT_QUERY, COURSE_QUERY, CANCEL_FAS, PAUSE_FAS, SWITCH_TOPIC, OUT_OF_SCOPE_SMALL_TALK, CLARIFY_FAS_TYPO, FALLBACK. " +
+                "The assistant is bounded to student finance, Education Account, bills, payments, refunds, courses, and FAS. " +
+                "Classify human intent and conversation control only. Do not calculate money, eligibility, validate fields, or invent facts. " +
+                "If the user stops or pauses FAS and asks a finance/course question in the same message, choose PAYMENT_QUERY or COURSE_QUERY so the assistant can answer after stopping the task. " +
+                "Short slot answers like yes, no, 3000, 4, 0, Singaporean, PR, Foreigner continue FAS only when a FAS task is active.");
+            history.AddUserMessage(
+                $"currentMode={conversation.ModeCode}; fasPhase={Phase(conversation)}; hasFasState={!string.IsNullOrWhiteSpace(conversation.FasInterviewJson)}; " +
+                $"route={request.PageContext?.Path}; domain={request.PageContext?.Domain}; message={request.Message}");
             ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>()
                 .GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
             string json = answer.Content?.Trim() ?? "";
@@ -68,8 +73,20 @@ public sealed class AiTurnPlannerService(
 
         if (LooksLikeFasTypo(value))
             return new(AiPlannerIntent.ClarifyFasTypo, Phase(conversation), "clarify whether the user meant FAS", 0.9m, "HEURISTIC");
+        if (LooksLikeOutOfScopeSmallTalk(value))
+            return new(AiPlannerIntent.OutOfScopeSmallTalk, Phase(conversation), "decline out-of-scope small talk and offer student-finance help", 0.95m, "HEURISTIC");
+        if (hasFasState && LooksLikeCancelFas(value) && LooksLikePaymentQuery(upper))
+            return new(AiPlannerIntent.PaymentQuery, Phase(conversation), "stop the active FAS task and answer the finance question", 0.95m, "HEURISTIC");
+        if (hasFasState && LooksLikeCancelFas(value) && LooksLikeCourseQuery(value))
+            return new(AiPlannerIntent.CourseQuery, Phase(conversation), "stop the active FAS task and answer the course question", 0.9m, "HEURISTIC");
+        if (hasFasState && LooksLikeCancelFas(value))
+            return new(AiPlannerIntent.CancelFas, Phase(conversation), "stop the active FAS task", 0.95m, "HEURISTIC");
+        if (hasFasState && LooksLikePauseFas(value))
+            return new(AiPlannerIntent.PauseFas, Phase(conversation), "pause the active FAS task and let the user ask another question", 0.9m, "HEURISTIC");
         if (LooksLikePaymentQuery(upper))
             return new(AiPlannerIntent.PaymentQuery, Phase(conversation), "answer with authorized finance tools", 0.95m, "HEURISTIC");
+        if (LooksLikeCourseQuery(value))
+            return new(AiPlannerIntent.CourseQuery, Phase(conversation), "answer course-related student finance guidance", 0.85m, "HEURISTIC");
         if (LooksLikeStartFas(value))
             return new(hasFasState ? AiPlannerIntent.ContinueFas : AiPlannerIntent.StartFas, Phase(conversation), "start or resume FAS assistance", 0.9m, "HEURISTIC");
         if (LooksLikeFasKnowledge(value, hasFasState) && !LooksLikeLiveSchemeEligibility(value))
@@ -86,6 +103,8 @@ public sealed class AiTurnPlannerService(
         if (string.IsNullOrWhiteSpace(state)) return "idle";
         if (state.Contains("\"status\":\"COMPLETE\"", StringComparison.OrdinalIgnoreCase)) return "eligible";
         if (state.Contains("\"status\":\"CONFIRMING\"", StringComparison.OrdinalIgnoreCase)) return "confirming";
+        if (state.Contains("\"status\":\"PAUSED\"", StringComparison.OrdinalIgnoreCase)) return "paused";
+        if (state.Contains("\"status\":\"CANCELLED\"", StringComparison.OrdinalIgnoreCase)) return "cancelled";
         if (state.Contains("\"status\":\"MANUAL_FALLBACK\"", StringComparison.OrdinalIgnoreCase)) return "manual_review";
         return "collecting";
     }
@@ -98,6 +117,20 @@ public sealed class AiTurnPlannerService(
         upper.Contains("PAY") || upper.Contains("BILL") || upper.Contains("BALANCE") ||
         upper.Contains("OUTSTANDING") || upper.Contains("REFUND") || upper.Contains("WITHDRAW") ||
         (upper.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(upper, @"\b(USE|USED|FOR|COVER|PAY)\b"));
+
+    private static bool LooksLikeCourseQuery(string value) =>
+        Regex.IsMatch(value, @"^\s*(courses?|course\?)\s*$", RegexOptions.IgnoreCase) ||
+        Regex.IsMatch(value, @"\b(course|courses|enrolment|enrollment|class|classes)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeCancelFas(string value) =>
+        Regex.IsMatch(value, @"\b(stop|cancel|quit|end|drop|don't want|dont want|do not want|no longer|not doing|forget)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(fas|financial assistance|eligibility|check|application|this|anymore|now)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikePauseFas(string value) =>
+        Regex.IsMatch(value, @"\b(ask something else|something else|different question|change topic|another question)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeOutOfScopeSmallTalk(string value) =>
+        Regex.IsMatch(value, @"\b(tell me (a )?joke|make me laugh|sing|poem|roleplay|story|weather|recipe|movie)\b", RegexOptions.IgnoreCase);
 
     private static bool LooksLikeStartFas(string value) =>
         Regex.IsMatch(value, @"\b(fas|financial assistance)\b", RegexOptions.IgnoreCase) &&
@@ -138,6 +171,11 @@ public enum AiPlannerIntent
     ContinueFas,
     AnswerKnowledge,
     PaymentQuery,
+    CourseQuery,
+    CancelFas,
+    PauseFas,
+    SwitchTopic,
+    OutOfScopeSmallTalk,
     ClarifyFasTypo,
     Fallback
 }
