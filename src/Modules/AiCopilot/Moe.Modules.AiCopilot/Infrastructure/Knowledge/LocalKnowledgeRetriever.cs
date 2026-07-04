@@ -133,7 +133,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         .ToList();
 
         HashSet<string> includedIds = [.. scored.Select(x => x.Doc.Id)];
-        foreach (var doc in _documents.Where(d => d.AlwaysInclude && d.Domain == normalizedDomain && !includedIds.Contains(d.Id)))
+        foreach (var doc in _documents!.Where(d => d.AlwaysInclude && d.Domain == normalizedDomain && !includedIds.Contains(d.Id)))
         {
             scored.Add((doc, StatusRank.GetValueOrDefault(doc.Status, 0)));
         }

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <NoWarn>SKEXP0001;SKEXP0010</NoWarn>
+    <NoWarn>SKEXP0001;SKEXP0010;NU1904</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
