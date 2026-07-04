@@ -130,10 +130,10 @@ public sealed class AiTurnRouter(
             ?? throw new KeyNotFoundException("AI.CONVERSATION_NOT_FOUND");
         var messageRows = await db.Set<AiMessage>().AsNoTracking().Where(x => x.ConversationId == id)
             .OrderBy(x => x.CreatedAtUtc)
-            .Select(x => new { x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc, x.ResponseJson })
+            .Select(x => new { x.Id, x.RoleCode, x.Content, x.CreatedAtUtc, x.ResponseJson })
             .ToArrayAsync(ct);
         var messages = messageRows.Select(x => new AiConversationMessageResponse(
-            x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc,
+            x.Id, x.RoleCode, x.Content, x.CreatedAtUtc,
             x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions))).ToArray();
         return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages,
             DeserializeInterviewState(conversation.FasSession?.CollectedFactsJson));

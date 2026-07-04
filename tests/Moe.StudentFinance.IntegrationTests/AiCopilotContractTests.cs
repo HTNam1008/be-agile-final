@@ -245,14 +245,14 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         AiMessage stored = db.Set<AiMessage>()
             .Single(x => x.ConversationId == conversationId && x.RoleCode == "USER");
 
-        Assert.DoesNotContain("S1234567A", stored.ContentRedacted);
-        Assert.DoesNotContain("learner@example.com", stored.ContentRedacted);
-        Assert.DoesNotContain("91234567", stored.ContentRedacted);
-        Assert.DoesNotContain("BILL-20260626-A1B2C3D4E5F6A7B8", stored.ContentRedacted);
-        Assert.Contains("[IDENTITY]", stored.ContentRedacted);
-        Assert.Contains("[EMAIL]", stored.ContentRedacted);
-        Assert.Contains("[PHONE]", stored.ContentRedacted);
-        Assert.Contains("[PAYMENT_REF]", stored.ContentRedacted);
+        Assert.DoesNotContain("S1234567A", stored.Content);
+        Assert.DoesNotContain("learner@example.com", stored.Content);
+        Assert.DoesNotContain("91234567", stored.Content);
+        Assert.DoesNotContain("BILL-20260626-A1B2C3D4E5F6A7B8", stored.Content);
+        Assert.Contains("[IDENTITY]", stored.Content);
+        Assert.Contains("[EMAIL]", stored.Content);
+        Assert.Contains("[PHONE]", stored.Content);
+        Assert.Contains("[PAYMENT_REF]", stored.Content);
     }
 
     [Fact]
