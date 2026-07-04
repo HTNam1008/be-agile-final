@@ -110,7 +110,7 @@ public sealed class AiOrchestratorService(
             {
                 FollowUpQuestions = FallbackFollowUps()
             };
-            var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", text, now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(fallbackResponse));
+            var fallback = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(text), now, latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(fallbackResponse));
             db.Add(fallback); await db.SaveChangesAsync(ct);
             return new AiChatResponse(conversation.Id, fallback.Id, text, "FALLBACK", new(false, []), [],
                 FallbackActions(reviewId), null, reviewId)
