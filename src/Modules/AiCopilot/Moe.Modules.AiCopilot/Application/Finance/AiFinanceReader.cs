@@ -6,6 +6,7 @@ using Moe.Modules.CourseBilling.Contracts.BillingStatements;
 using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Contracts.Payments;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.AiCopilot.Application.Finance;
 
@@ -32,7 +33,8 @@ public sealed class AiFinanceReader(
     IEducationAccountPaymentGateway accounts,
     IQueryDispatcher queries,
     ICurrentUser currentUser,
-    IClock clock)
+    IClock clock,
+    ILogger<AiFinanceReader> logger)
 {
     public async Task<AiFinanceSnapshot> GetSnapshotAsync(CancellationToken ct)
     {
@@ -40,12 +42,28 @@ public sealed class AiFinanceReader(
         EducationAccountPaymentBalance? balance = await accounts.GetAvailableBalanceAsync(personId, ct);
 
         DateOnly currentBillingPeriod = clock.TodayInSingapore();
-        var statementResult = await queries.Send(
-            new GetBillingStatementQuery(currentBillingPeriod.Year, currentBillingPeriod.Month), ct);
-        BillingStatementResponse? statement = statementResult.IsSuccess ? statementResult.Value : null;
+        BillingStatementResponse? statement = null;
+        try
+        {
+            var statementResult = await queries.Send(
+                new GetBillingStatementQuery(currentBillingPeriod.Year, currentBillingPeriod.Month), ct);
+            statement = statementResult.IsSuccess ? statementResult.Value : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "AI finance snapshot could not load the current billing statement.");
+        }
 
-        var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(1, 5), ct);
-        IReadOnlyCollection<UserPaymentHistoryResponse> history = historyResult.IsSuccess ? historyResult.Value.Items : [];
+        IReadOnlyCollection<UserPaymentHistoryResponse> history = [];
+        try
+        {
+            var historyResult = await queries.Send(new ListUserPaymentHistoryQuery(1, 5), ct);
+            history = historyResult.IsSuccess ? historyResult.Value.Items : [];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "AI finance snapshot could not load recent payment history.");
+        }
 
         AiOutstandingBill[] outstanding = statement?.Items
             .Where(x => x.OutstandingAmount > 0m)

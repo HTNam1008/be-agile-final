@@ -366,7 +366,7 @@ public sealed class AiOrchestratorService(
             string deterministicText = BuildKnowledgeAnswer(request.Message, sources);
             return new(c.Id, 0, deterministicText, "GENERAL", Grounding(sources), [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources), null)
             {
-                FollowUpQuestions = knowledgeCard.FollowUpQuestions
+                FollowUpQuestions = ContextualKnowledgeFollowUps(c, request.Message, knowledgeCard.FollowUpQuestions)
             };
         }
         var history = new ChatHistory(
@@ -386,9 +386,32 @@ public sealed class AiOrchestratorService(
         }
         return new(c.Id, 0, text, "GENERAL", Grounding(sources), [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources), null)
         {
-            FollowUpQuestions = knowledgeCard.FollowUpQuestions
+            FollowUpQuestions = ContextualKnowledgeFollowUps(c, request.Message, knowledgeCard.FollowUpQuestions)
         };
     }
+
+    private static string[] ContextualKnowledgeFollowUps(AiConversation conversation, string message, IReadOnlyCollection<string> followUps)
+    {
+        const string resumeInterview = "Continue my FAS eligibility check.";
+        bool hasInterruptedInterview = conversation.ModeCode == "FAS_INTERVIEW" && !string.IsNullOrWhiteSpace(conversation.FasInterviewJson);
+        string currentQuestion = NormalizeFollowUp(message);
+        IEnumerable<string> planned = followUps.Where(x =>
+            !string.Equals(x, resumeInterview, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(NormalizeFollowUp(x), currentQuestion, StringComparison.OrdinalIgnoreCase));
+        if (hasInterruptedInterview)
+        {
+            planned = new[] { resumeInterview }.Concat(planned);
+        }
+
+        return planned
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+    }
+
+    private static string NormalizeFollowUp(string value) =>
+        Regex.Replace(value.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant);
 
     private static IReadOnlyCollection<AiAction> KnowledgeActions(IReadOnlyList<KnowledgeResult> sources)
     {
@@ -432,7 +455,7 @@ public sealed class AiOrchestratorService(
         }
         else
         {
-            facts = KnowledgeFacts(primary.Content).Select(StripBoldMarkers).ToArray();
+            facts = SelectKnowledgeFacts(question, primary.Content).Select(StripBoldMarkers).ToArray();
             summaryHint = facts.FirstOrDefault() ?? CleanKnowledgeSnippet(primary.Content);
         }
         string summary = summaryHint;
@@ -501,13 +524,13 @@ public sealed class AiOrchestratorService(
     private static bool LooksLikeFormulaQuestion(string message) =>
         LooksLikePciQuestion(message) ||
         (Regex.IsMatch(message, @"\b(GHI|GROSS HOUSEHOLD INCOME)\b", RegexOptions.IgnoreCase) &&
-         Regex.IsMatch(message, @"\b(CALCULAT|FORMULA|HOW|WHAT|DEFINE|MEAN)\b", RegexOptions.IgnoreCase)) ||
+         Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|DEFINE|MEAN)\b", RegexOptions.IgnoreCase)) ||
         (Regex.IsMatch(message, @"\b(SUBSIDY|BURSARY)\b", RegexOptions.IgnoreCase) &&
-         Regex.IsMatch(message, @"\b(RATE|CALCULAT|DETERMINE|HOW|FORMULA|TIER)\b", RegexOptions.IgnoreCase));
+         Regex.IsMatch(message, @"\b(RATE|CALCULAT\w*|DETERMINE|HOW|FORMULA|TIER)\b", RegexOptions.IgnoreCase));
 
     private static bool LooksLikePciQuestion(string message) =>
         Regex.IsMatch(message, @"\b(PCI|PER[-\s]?CAPITA|PER CAPITA INCOME)\b", RegexOptions.IgnoreCase) &&
-        Regex.IsMatch(message, @"\b(CALCULAT|FORMULA|HOW|WHAT|MEAN)\b", RegexOptions.IgnoreCase);
+        Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|MEAN)\b", RegexOptions.IgnoreCase);
 
     private static IEnumerable<string> KnowledgeFacts(string content)
     {
@@ -520,6 +543,22 @@ public sealed class AiOrchestratorService(
                     yield return value;
             }
         }
+    }
+
+    private static IEnumerable<string> SelectKnowledgeFacts(string question, string content)
+    {
+        string lower = question.ToLowerInvariant();
+        string[] facts = KnowledgeFacts(content).ToArray();
+        if (lower.Contains("document") || lower.Contains("proof") || lower.Contains("payslip") || lower.Contains("cpf") || lower.Contains("iras"))
+        {
+            string[] documentFacts = facts
+                .Where(f => Regex.IsMatch(f, @"\b(document|income proof|cpf|iras|payslip|assessment|supporting|attach|declare|rental|dividend|investment)\b", RegexOptions.IgnoreCase))
+                .ToArray();
+            if (documentFacts.Length > 0)
+                return documentFacts;
+        }
+
+        return facts;
     }
 
     private static string StripBoldMarkers(string text) =>
@@ -571,6 +610,7 @@ public sealed class AiOrchestratorService(
         bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
         if (msgHasPaymentKeyword) return AiTurnIntent.PaymentQuery;
         if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (IsLiveSchemeEligibilityRequest(msgOnly)) return AiTurnIntent.StartInterview;
         if (current != "FAS_INTERVIEW" && IsSchemeKbRequest(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
         if (current == "FAS_INTERVIEW" && IsContinueInterviewRequest(msgOnly)) return AiTurnIntent.ContinueInterview;
@@ -606,6 +646,14 @@ public sealed class AiOrchestratorService(
             value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("SCHEME", StringComparison.OrdinalIgnoreCase);
         return mentionsFas && (isInfoIntent || isProcessInfoIntent) && (!startsLiveAssessment || isProcessInfoIntent);
+    }
+
+    private static bool IsLiveSchemeEligibilityRequest(string value)
+    {
+        bool asksWhichSchemes = Regex.IsMatch(value, @"\b(WHICH|WHAT)\b", RegexOptions.IgnoreCase) &&
+            Regex.IsMatch(value, @"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b", RegexOptions.IgnoreCase);
+        bool asksApplyOrEligibility = Regex.IsMatch(value, @"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b", RegexOptions.IgnoreCase);
+        return asksWhichSchemes && asksApplyOrEligibility;
     }
 
     private static bool IsFasKnowledgeInterrupt(string value)
@@ -1298,7 +1346,11 @@ public sealed class AiOrchestratorService(
 
     private static AiChatResponse AttachFollowUps(AiChatResponse response, AiChatRequest request)
     {
-        if (response.FollowUpQuestions.Count > 0) return response;
+        if (response.FollowUpQuestions.Count > 0)
+        {
+            string[] filtered = FilterCurrentQuestion(response.FollowUpQuestions, request.Message);
+            return filtered.Length == response.FollowUpQuestions.Count ? response : response with { FollowUpQuestions = filtered };
+        }
 
         string[] followUps = PlanFollowUps(response.Mode, request.Message, response.InterviewState, []);
 
@@ -1326,8 +1378,15 @@ public sealed class AiOrchestratorService(
         };
         planned.AddRange(workflow);
 
-        return planned
+        return FilterCurrentQuestion(planned, message);
+    }
+
+    private static string[] FilterCurrentQuestion(IEnumerable<string> followUps, string message)
+    {
+        string currentQuestion = NormalizeFollowUp(message);
+        return followUps
             .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Where(x => !string.Equals(NormalizeFollowUp(x), currentQuestion, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(3)
             .ToArray();
@@ -1351,9 +1410,9 @@ public sealed class AiOrchestratorService(
         {
             return
             [
-                "Continue my FAS eligibility check.",
                 "What counts as household income?",
-                "What documents prove household income?"
+                "What documents prove household income?",
+                "Which FAS schemes can I apply for?"
             ];
         }
 
@@ -1361,9 +1420,9 @@ public sealed class AiOrchestratorService(
         {
             return
             [
-                "Continue my FAS eligibility check.",
                 "Walk me through the FAS application process.",
-                "Which FAS schemes can I apply for?"
+                "Which FAS schemes can I apply for?",
+                "How is PCI calculated?"
             ];
         }
 
