@@ -99,6 +99,37 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     }
 
     [Fact]
+    public void Knowledge_retriever_maps_natural_school_fee_help_to_fas()
+    {
+        var retriever = new LocalKnowledgeRetriever();
+
+        IReadOnlyList<Moe.Modules.AiCopilot.Application.Knowledge.KnowledgeResult> results =
+            retriever.Retrieve("My family does not earn much. Can I get help with school fees?", "GENERAL");
+
+        Assert.NotEmpty(results);
+        Assert.Contains(results.Take(3), result => result.Citation.SourceId.StartsWith("FAS-", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Natural_school_fee_help_question_returns_fas_guidance_not_fallback()
+    {
+        JsonElement response = await ChatWithContext("My family does not earn much. Can I get help with school fees?", 2101, new
+        {
+            domain = "GENERAL",
+            surface = "PORTAL",
+            path = "/portal/dashboard"
+        });
+
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.DoesNotContain("cannot answer this reliably", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(response.GetProperty("cards").EnumerateArray(),
+            card => card.GetProperty("type").GetString() == "KNOWLEDGE_ANSWER");
+        Assert.Contains(response.GetProperty("actions").EnumerateArray(),
+            action => action.GetProperty("type").GetString() == "NAVIGATE" &&
+                      action.GetProperty("route").GetString() == "/portal/fas");
+    }
+
+    [Fact]
     public void Knowledge_pack_validator_rejects_duplicate_chunk_ids()
     {
         var doc = new LocalKnowledgeRetriever.KnowledgeDocument(

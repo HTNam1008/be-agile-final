@@ -52,7 +52,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     public IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4)
     {
-        HashSet<string> terms = Tokenize(query);
+        HashSet<string> terms = ExpandQueryTerms(query);
         string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
 
         var scored = _documents.Select(doc =>
@@ -104,6 +104,30 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private static HashSet<string> Tokenize(string value) => Regex.Matches(value.ToLowerInvariant(), "[a-z0-9]+")
         .Select(match => match.Value).Where(term => term.Length > 2).ToHashSet(StringComparer.Ordinal);
+
+    private static HashSet<string> ExpandQueryTerms(string query)
+    {
+        HashSet<string> terms = Tokenize(query);
+        string normalized = query.ToLowerInvariant();
+        AddConceptTerms(terms, normalized,
+            @"\b(can'?t|cannot|unable|struggl\w*|hard|difficult|not enough|low income|doesn'?t earn much|dont earn much|do not earn much|less income|poor)\b",
+            ["financial", "assistance", "fas", "aid", "income", "subsidy", "bursary"]);
+        AddConceptTerms(terms, normalized,
+            @"\b(school fees?|course fees?|education costs?|school costs?|fees?|pay for school|pay school)\b",
+            ["fees", "school", "course", "subsidy", "bursary", "financial", "assistance", "fas"]);
+        AddConceptTerms(terms, normalized,
+            @"\b(help|support|relief|assistance|aid)\b",
+            ["financial", "assistance", "fas", "aid"]);
+        return terms;
+    }
+
+    private static void AddConceptTerms(HashSet<string> terms, string normalizedQuery, string pattern, string[] concepts)
+    {
+        if (!Regex.IsMatch(normalizedQuery, pattern, RegexOptions.IgnoreCase))
+            return;
+        foreach (string concept in concepts)
+            terms.Add(concept);
+    }
 
     private static double SchemeSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
     {
