@@ -7,9 +7,14 @@ namespace Moe.Modules.CourseBilling.Application.AdminCourses.Materials;
 internal static class CourseMaterialFileHelper
 {
     public const long MaxFileSizeBytes = 20 * 1024 * 1024;
+    private static readonly HashSet<string> AllowedExtensions =
+        [".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg"];
 
     public static bool ExceedsMaxFileSize(IFormFile file)
         => file.Length > MaxFileSizeBytes;
+
+    public static bool IsSupported(IFormFile file)
+        => AllowedExtensions.Contains(Path.GetExtension(file.FileName).ToLowerInvariant());
 
     public static async Task<StoredCourseMaterialFile> StoreFileAsync(
         ICourseMaterialStorageService storage,

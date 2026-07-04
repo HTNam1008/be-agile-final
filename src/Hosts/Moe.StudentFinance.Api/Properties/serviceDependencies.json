@@ -19,6 +19,10 @@
     "mssql5": {
       "type": "mssql",
       "connectionId": "ConnectionStrings:DatabaseConnection4"
+    },
+    "mssql6": {
+      "type": "mssql",
+      "connectionId": "ConnectionStrings:DatabaseConnection5"
     }
   }
 }
