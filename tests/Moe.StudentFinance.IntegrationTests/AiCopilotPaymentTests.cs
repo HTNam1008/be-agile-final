@@ -73,6 +73,15 @@ public sealed class AiCopilotPaymentTests(CustomWebApplicationFactory factory) :
     }
 
     [Fact]
+    public async Task Payment_follow_ups_do_not_repeat_current_question()
+    {
+        JsonElement response = await Chat("Show my recent payment history and refunds.", personId: 2101);
+
+        Assert.DoesNotContain(response.GetProperty("followUpQuestions").EnumerateArray(),
+            x => x.GetString() == "Show my recent payment history and refunds.");
+    }
+
+    [Fact]
     public async Task Refund_keyword_routes_to_payment_history()
     {
         JsonElement response = await Chat("Have I received any refunds?", personId: 2101);

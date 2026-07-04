@@ -247,13 +247,13 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         }
         if (title.Contains("Application", StringComparison.OrdinalIgnoreCase))
         {
-            return ["Continue my FAS eligibility check.", "What documents prove income?", "Which schemes can I apply for?"];
+            return ["What documents prove income?", "Which schemes can I apply for?", "How is PCI calculated?"];
         }
         if (title.Contains("Bursary", StringComparison.OrdinalIgnoreCase) || title.Contains("Subsidy", StringComparison.OrdinalIgnoreCase))
         {
-            return ["Which schemes can I apply for?", "Continue my FAS eligibility check.", "What documents prove income?"];
+            return ["Which schemes can I apply for?", "What documents prove income?", "How is PCI calculated?"];
         }
-        return ["How is PCI calculated?", "Continue my FAS eligibility check.", "Which schemes can I apply for?"];
+        return ["How is PCI calculated?", "Which schemes can I apply for?", "What documents prove income?"];
     }
 
     private static (string frontmatter, string body) SplitFrontmatter(string raw)
