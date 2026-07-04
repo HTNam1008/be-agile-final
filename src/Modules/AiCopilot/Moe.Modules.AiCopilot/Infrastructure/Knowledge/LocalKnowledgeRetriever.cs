@@ -84,6 +84,8 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             scored.Add((doc, StatusRank.GetValueOrDefault(doc.Status, 0)));
         }
 
+        scored = DeduplicateConflicting(scored);
+
         return scored
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
@@ -115,6 +117,36 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         return queryTerms
             .Where(term => schemeKeywords.Contains(term, StringComparer.OrdinalIgnoreCase) && schemeTerms.Contains(term))
             .Sum(_ => 1.75);
+    }
+
+    private static List<(KnowledgeDocument Doc, double Score)> DeduplicateConflicting(List<(KnowledgeDocument Doc, double Score)> scored)
+    {
+        var deduped = new List<(KnowledgeDocument Doc, double Score)>();
+        foreach (var item in scored)
+        {
+            var existing = deduped.FirstOrDefault(d =>
+                d.Doc.Domain == item.Doc.Domain &&
+                d.Doc.EffectiveDate != item.Doc.EffectiveDate &&
+                ConflictingContent(d.Doc, item.Doc));
+            if (existing.Doc is null)
+            {
+                deduped.Add(item);
+            }
+            else if (item.Doc.EffectiveDate > existing.Doc.EffectiveDate)
+            {
+                deduped.Remove(existing);
+                deduped.Add(item);
+            }
+        }
+        return deduped;
+    }
+
+    private static bool ConflictingContent(KnowledgeDocument a, KnowledgeDocument b)
+    {
+        string[] overlapKeywords = ["bursary", "hecb", "heb", "subsidy"];
+        string aText = (a.Title + " " + a.Section + " " + string.Join(" ", a.Synonyms ?? [])).ToLowerInvariant();
+        string bText = (b.Title + " " + b.Section + " " + string.Join(" ", b.Synonyms ?? [])).ToLowerInvariant();
+        return overlapKeywords.Any(k => aText.Contains(k) && bText.Contains(k));
     }
 
     // ── Embedded resource loader ──
@@ -215,13 +247,13 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         }
         if (title.Contains("Application", StringComparison.OrdinalIgnoreCase))
         {
-            return ["Continue my FAS eligibility check.", "What documents prove income?", "Which schemes can I apply for?"];
+            return ["What documents prove income?", "Which schemes can I apply for?", "How is PCI calculated?"];
         }
         if (title.Contains("Bursary", StringComparison.OrdinalIgnoreCase) || title.Contains("Subsidy", StringComparison.OrdinalIgnoreCase))
         {
-            return ["Which schemes can I apply for?", "Continue my FAS eligibility check.", "What documents prove income?"];
+            return ["Which schemes can I apply for?", "What documents prove income?", "How is PCI calculated?"];
         }
-        return ["How is PCI calculated?", "Continue my FAS eligibility check.", "Which schemes can I apply for?"];
+        return ["How is PCI calculated?", "Which schemes can I apply for?", "What documents prove income?"];
     }
 
     private static (string frontmatter, string body) SplitFrontmatter(string raw)

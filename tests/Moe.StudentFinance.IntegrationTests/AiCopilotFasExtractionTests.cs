@@ -245,6 +245,9 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Assert.Contains("nationality", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
 
         response = await SendFas("Singaporean", cid);
+        Assert.Equal("CONFIRMING", GetInterviewStatus(response));
+
+        response = await SendFas("yes", cid);
         Assert.Equal("COMPLETE", GetInterviewStatus(response));
         JsonElement fields = response.GetProperty("interviewState").GetProperty("fields");
         // Income fields should be unconfirmed when welfare home is true

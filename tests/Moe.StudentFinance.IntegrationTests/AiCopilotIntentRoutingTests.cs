@@ -65,11 +65,31 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Income_document_question_prioritizes_supporting_document_guidance()
+    {
+        JsonElement response = await Chat("What documents prove income?", personId: 2101);
+
+        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
+        Assert.Equal("FAS-APPLICATION-001", firstCitation.GetProperty("sourceId").GetString());
+        string cardJson = response.GetProperty("cards").EnumerateArray().Single().GetRawText();
+        Assert.Contains("Income proof", cardJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Fas_definition_question_does_not_start_interview()
     {
         JsonElement response = await Chat("What is FAS?", personId: 2101);
         Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
         Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Live_scheme_eligibility_question_starts_interview()
+    {
+        JsonElement response = await Chat("Which schemes can I apply for?", personId: 2101);
+
+        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.True(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]
@@ -133,6 +153,19 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
         JsonElement resumed = await Chat("Continue my FAS eligibility check.", personId: 2101, conversationId: cid);
         Assert.Equal("FAS_INTERVIEW", resumed.GetProperty("mode").GetString());
         Assert.Equal("isWelfareHomeResident", resumed.GetProperty("interviewState").GetProperty("missingFields")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Fas_knowledge_question_without_interview_does_not_suggest_resume()
+    {
+        JsonElement response = await Chat("How is PCI calculated?", personId: 2101);
+
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.StartsWith("PCI means per-capita income", response.GetProperty("text").GetString());
+        Assert.DoesNotContain(response.GetProperty("followUpQuestions").EnumerateArray(),
+            x => x.GetString() == "Continue my FAS eligibility check.");
+        Assert.DoesNotContain(response.GetProperty("followUpQuestions").EnumerateArray(),
+            x => x.GetString() == "How is PCI calculated?");
     }
 
     [Fact]

@@ -10,6 +10,7 @@ using Moe.Modules.EducationAccountTopUp.IGateway.Accounts;
 using Moe.Modules.FasPayment.Application.StatementPayments;
 using Moe.Modules.FasPayment.Contracts.Payments;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Moe.AiCopilot.UnitTests.Application.Finance;
@@ -27,7 +28,8 @@ public sealed class AiFinanceSingaporeBusinessDayRedTests
             new FakeEducationAccountPaymentGateway(),
             queries,
             new FakeCurrentUser(),
-            new TestClock(SgtEarlyMorning));
+            new TestClock(SgtEarlyMorning),
+            NullLogger<AiFinanceReader>.Instance);
 
         await reader.GetSnapshotAsync(CancellationToken.None);
 
