@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Moe.Modules.AiCopilot.Domain;
+using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 using Moe.StudentFinance.Persistence;
 using Xunit;
 
@@ -89,10 +90,36 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         Assert.False(string.IsNullOrWhiteSpace(data.GetProperty("summary").GetString()));
         Assert.NotEmpty(data.GetProperty("keyFacts").EnumerateArray());
         Assert.NotEmpty(data.GetProperty("nextSteps").EnumerateArray());
+        Assert.NotEmpty(data.GetProperty("sourceSummaries").EnumerateArray());
+        Assert.False(string.IsNullOrWhiteSpace(data.GetProperty("knowledgeVersion").GetString()));
         Assert.NotEmpty(response.GetProperty("followUpQuestions").EnumerateArray());
         Assert.Contains(response.GetProperty("actions").EnumerateArray(), action =>
             action.GetProperty("type").GetString() == "NAVIGATE" &&
             action.GetProperty("route").GetString() == "/portal/fas");
+    }
+
+    [Fact]
+    public void Knowledge_pack_validator_rejects_duplicate_chunk_ids()
+    {
+        var doc = new LocalKnowledgeRetriever.KnowledgeDocument(
+            "FAS-DUPLICATE",
+            "Duplicate",
+            "Duplicate",
+            "FAS",
+            "OFFICIAL",
+            "1.0",
+            new DateOnly(2026, 1, 1),
+            "Content",
+            "/portal/fas",
+            ["duplicate"],
+            false,
+            "Student Finance Product",
+            ["AnswerKnowledgeQuestion"],
+            ["Continue my FAS eligibility check."]);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            LocalKnowledgeRetriever.ValidateKnowledgePacks([doc, doc]));
+        Assert.Contains("Duplicate knowledge chunk_id", error.Message);
     }
 
     [Fact]

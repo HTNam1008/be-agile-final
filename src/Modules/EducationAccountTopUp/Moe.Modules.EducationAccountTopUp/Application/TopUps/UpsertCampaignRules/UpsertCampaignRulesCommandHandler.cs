@@ -1,4 +1,5 @@
 using Moe.Application.Abstractions.Audit;
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
@@ -11,9 +12,12 @@ namespace Moe.Modules.EducationAccountTopUp.Application.TopUps.UpsertCampaignRul
 
 internal sealed class UpsertCampaignRulesCommandHandler(
     ITopUpCampaignRepository campaigns,
+    ITopUpCampaignRuleGroupRepository ruleGroups,
     IUnitOfWork unitOfWork,
+    ITransactionalExecutor transactions,
     IAdminAccessControl adminAccess,
-    IAuditService audit) : ICommandHandler<UpsertCampaignRulesCommand>
+    IAuditService audit,
+    IClock clock) : ICommandHandler<UpsertCampaignRulesCommand>
 {
     public async Task<Result> Handle(UpsertCampaignRulesCommand command, CancellationToken cancellationToken)
     {
@@ -35,22 +39,40 @@ internal sealed class UpsertCampaignRulesCommandHandler(
             return Result.Failure(TopUpErrors.InvalidCampaignStatus);
         }
 
-        var existingRules = await campaigns.GetRulesAsync(campaign.Id, cancellationToken);
+        return await transactions.ExecuteAsync(
+            ct => ReplaceRulesAsync(command, campaign, ct),
+            cancellationToken);
+    }
 
-        await campaigns.RemoveRulesAsync(existingRules, cancellationToken);
+    private async Task<Result> ReplaceRulesAsync(
+        UpsertCampaignRulesCommand command,
+        TopUpCampaign campaign,
+        CancellationToken cancellationToken)
+    {
+        await ruleGroups.DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
 
-        foreach (var ruleDto in command.Rules)
+        int totalCriteria = 0;
+        DateTime utcNow = clock.UtcNow.UtcDateTime;
+
+        for (int groupIndex = 0; groupIndex < command.Groups.Count; groupIndex++)
         {
-            var rule = TopUpCampaignRule.Create(
-                topUpCampaignId: campaign.Id,
-                criterionCode: ruleDto.CriterionCode.ToUpperInvariant(),
-                operatorCode: ruleDto.OperatorCode.ToUpperInvariant(),
-                numericValueFrom: ruleDto.NumericValueFrom,
-                numericValueTo: ruleDto.NumericValueTo,
-                textValue: ruleDto.TextValue
-            );
+            UpsertRuleGroupDto groupDto = command.Groups[groupIndex];
+            var group = TopUpRuleGroup.Create(campaign.Id, groupIndex + 1, utcNow);
 
-            await campaigns.AddRuleAsync(rule, cancellationToken);
+            for (int ruleIndex = 0; ruleIndex < groupDto.Criteria.Count; ruleIndex++)
+            {
+                UpsertCampaignRuleDto ruleDto = groupDto.Criteria[ruleIndex];
+                group.AddRule(
+                    displayOrder: ruleIndex + 1,
+                    criterionCode: ruleDto.CriterionCode.ToUpperInvariant(),
+                    operatorCode: ruleDto.OperatorCode.ToUpperInvariant(),
+                    numericValueFrom: ruleDto.NumericValueFrom,
+                    numericValueTo: ruleDto.NumericValueTo,
+                    textValue: ruleDto.TextValue);
+                totalCriteria++;
+            }
+
+            await ruleGroups.AddRuleGroupAsync(group, cancellationToken);
         }
 
         await audit.RecordSchoolActionAsync(
@@ -63,7 +85,7 @@ internal sealed class UpsertCampaignRulesCommandHandler(
                     "Top-up rule edits",
                     EntityDisplayName: campaign.CampaignName,
                     RelatedIds: new Dictionary<string, long> { ["campaignId"] = campaign.Id },
-                    Count: command.Rules.Count)),
+                    Count: command.Groups.Count + totalCriteria)),
             cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

@@ -4,6 +4,7 @@ public static class BulkImportStudentWorkbookColumns
 {
     public const string SchoolName = nameof(SchoolName);
     public const string OrganizationId = nameof(OrganizationId);
+    public const string MockPassPersonId = nameof(MockPassPersonId);
     public const string IdentityNumber = nameof(IdentityNumber);
     public const string FullName = nameof(FullName);
     public const string DateOfBirth = nameof(DateOfBirth);
@@ -24,6 +25,7 @@ public static class BulkImportStudentWorkbookColumns
     [
         SchoolName,
         OrganizationId,
+        MockPassPersonId,
         IdentityNumber,
         FullName,
         DateOfBirth,
@@ -43,6 +45,7 @@ public static class BulkImportStudentWorkbookColumns
     {
         SchoolName,
         OrganizationId,
+        MockPassPersonId,
         CitizenshipStatusCode,
         ClassCode,
         StartDate,

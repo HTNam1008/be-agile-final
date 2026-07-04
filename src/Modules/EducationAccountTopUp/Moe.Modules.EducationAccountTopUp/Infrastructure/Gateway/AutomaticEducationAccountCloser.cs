@@ -147,21 +147,14 @@ internal sealed class AutomaticEducationAccountCloser(
         }
 
         string closingReason = "Automatic closure when the account holder reached age 30";
-        Result<long> create = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.AccClosed,
                 "Account Closed",
                 $"Reason: {closingReason}."),
+            logger,
+            "Automatic education account closed",
             cancellationToken);
-
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create ACC_CLOSED notification for user account {UserAccountId} in education account {EducationAccountId}: {ErrorCode}",
-                userAccountId.Value,
-                account.Id,
-                create.Error.Code);
-        }
     }
 }

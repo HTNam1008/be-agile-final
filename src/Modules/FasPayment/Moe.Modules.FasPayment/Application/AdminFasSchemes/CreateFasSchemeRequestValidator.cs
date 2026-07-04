@@ -22,7 +22,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         RuleFor(x => x.StartDate).NotEqual(default(DateOnly)).GreaterThanOrEqualTo(_ => Today()).WithMessage("Start date cannot be before today.");
         RuleFor(x => x.EndDate).NotEqual(default(DateOnly));
         RuleFor(x => x.EndDate).GreaterThan(x => x.StartDate).WithMessage("End date must be after start date.");
-        RuleFor(x => x.CourseIds).NotNull();
+        RuleFor(x => x.CourseIds).NotNull().NotEmpty().WithMessage("Select at least one eligible course.");
         RuleFor(x => x.CourseIds).Must(x => x is not null && x.Count <= 500).WithMessage("A scheme can target at most 500 courses.");
         RuleFor(x => x.CourseIds).Must(x => x is not null && x.All(id => id > 0) && x.Distinct().Count() == x.Count).WithMessage("Course IDs must be positive and unique.");
         RuleFor(x => x.SubsidyType).Must(x => x is "FIXED" or "PERCENTAGE");

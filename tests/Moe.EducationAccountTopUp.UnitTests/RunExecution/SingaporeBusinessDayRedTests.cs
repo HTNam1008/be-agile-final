@@ -62,9 +62,8 @@ public sealed class SingaporeBusinessDayRedTests
         public Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaign>>([]);
         public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
         public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(0);
-        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRule>>([]);
-        public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
         public Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(new Dictionary<long, decimal>());
         public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, long userId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -76,7 +75,7 @@ public sealed class SingaporeBusinessDayRedTests
     {
         public Task<CampaignListItem?> GetByIdAsync(long id, CancellationToken cancellationToken = default) => Task.FromResult<CampaignListItem?>(null);
         public Task<CampaignListResult> GetCampaignsAsync(IReadOnlyCollection<long>? accessibleOrgIds, int pageNumber = 1, int pageSize = 50, string? search = null, string? status = null, DateOnly? dateFrom = null, DateOnly? dateTo = null, string? sortBy = null, string? sortDirection = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CampaignRuleProjection>>([]);
+        public Task<IReadOnlyList<CampaignRuleGroupProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CampaignRuleGroupProjection>>([]);
         public Task<IReadOnlyList<ActiveRecipientProjection>> GetActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ActiveRecipientProjection>>([]);
         public Task<(int TotalCount, IReadOnlyList<PreviewFixedRecipient> Items)> GetFixedRecipientsForPreviewAsync(long campaignId, int skip, int take, CancellationToken cancellationToken = default) => Task.FromResult<(int, IReadOnlyList<PreviewFixedRecipient>)>((0, []));
         public Task<CampaignPreviewSummary?> GetPreviewSummaryAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<CampaignPreviewSummary?>(null);
@@ -84,8 +83,8 @@ public sealed class SingaporeBusinessDayRedTests
 
     private sealed class EmptyRuleFilter : IDynamicRuleFilter
     {
-        public Task<int> CountMatchingAccountsAsync(IReadOnlyList<CampaignRuleProjection> rules, DateTime nowUtc, CancellationToken ct) => Task.FromResult(0);
-        public Task<IReadOnlyList<long>> FilterAccountIdsAsync(IReadOnlyList<CampaignRuleProjection> rules, int skip, int take, DateTime nowUtc, CancellationToken ct) => Task.FromResult<IReadOnlyList<long>>([]);
+        public Task<int> CountMatchingAccountsAsync(IReadOnlyList<CampaignRuleGroupProjection> groups, DateTime nowUtc, CancellationToken ct) => Task.FromResult(0);
+        public Task<IReadOnlyList<long>> FilterAccountIdsAsync(IReadOnlyList<CampaignRuleGroupProjection> groups, int skip, int take, DateTime nowUtc, CancellationToken ct) => Task.FromResult<IReadOnlyList<long>>([]);
     }
 
     private sealed class EmptyContractRepository : IDynamicTopUpContractRepository

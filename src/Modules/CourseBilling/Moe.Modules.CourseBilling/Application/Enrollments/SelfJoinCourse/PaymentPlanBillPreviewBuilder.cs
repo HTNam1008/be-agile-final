@@ -103,16 +103,18 @@ internal sealed class PaymentPlanBillPreviewBuilder(
         }
 
         DateTime now = clock.UtcNow.UtcDateTime;
+        DateOnly today = clock.TodayInSingapore();
         bool installment = plan.PlanTypeCode == "INSTALLMENT";
         DateOnly dueDate = installment
             ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(now)
-            : DateOnly.FromDateTime(now);
+            : today;
 
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(
                 personId,
                 courseId,
-                DateOnly.FromDateTime(now),
+                today,
+                courseEnrollmentId > 0 ? courseEnrollmentId : null,
                 fasApplicationSchemeIds,
                 ct);
         int requestedFasCount = fasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;

@@ -6,6 +6,7 @@ using Asp.Versioning;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
@@ -63,7 +64,8 @@ if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
     builder.Services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
 }
 builder.Services.AddMoePersistence(builder.Configuration);
-builder.Services.AddSignalR();
+ConfigureSignalR(builder.Services, builder.Configuration);
+
 
 IModule[] modules =
 [
@@ -85,6 +87,13 @@ builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter("PaymentCheckout", limiter =>
     {
         limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+    options.AddFixedWindowLimiter("PublicFasSearch", limiter =>
+    {
+        limiter.PermitLimit = 30;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
         limiter.AutoReplenishment = true;
@@ -421,10 +430,38 @@ internal sealed record DevelopmentClockResponse(DateTimeOffset UtcNow, DateOnly 
 
 public partial class Program
 {
-    internal static bool IsDevelopmentClockEnabled(IHostEnvironment environment, IConfiguration configuration)
-        => !environment.IsProduction()
-           && configuration.GetValue("DevTools:Clock:Enabled", false);
+    internal static bool IsDevelopmentClockEnabled(IHostEnvironment _, IConfiguration configuration)
+        => configuration.GetValue("DevTools:Clock:Enabled", false);
 
     internal static DevelopmentClockResponse CreateDevelopmentClockResponse(DevelopmentManualClock clock)
         => new(clock.UtcNow, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime), clock.IsOverridden);
+
+    internal static void ConfigureSignalR(IServiceCollection services, IConfiguration configuration)
+    {
+        string provider = configuration["SignalR:Provider"]?.Trim() ?? "Local";
+        ISignalRServerBuilder signalR = services.AddSignalR();
+
+        if (string.Equals(provider, "Local", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!string.Equals(provider, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported SignalR provider '{provider}'. Use 'Local' or 'Azure'.");
+        }
+
+        string? connectionString =
+            configuration["SignalR:AzureConnectionString"]
+            ?? configuration["Azure:SignalR:ConnectionString"];
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "SignalR Azure provider requires SignalR:AzureConnectionString or Azure:SignalR:ConnectionString.");
+        }
+
+        signalR.AddAzureSignalR(connectionString);
+    }
 }

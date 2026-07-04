@@ -2,6 +2,38 @@ namespace Moe.Modules.FasPayment.Application.StudentApplications;
 
 public sealed record EligibilityRequest(decimal MonthlyHouseholdIncome, int HouseholdMemberCount, decimal OtherMonthlyIncome = 0,
     IReadOnlyCollection<string>? ParentNationalities = null);
+public sealed record EligibilityResponse(
+    object CurrentSchool,
+    int Age,
+    string Nationality,
+    decimal MonthlyHouseholdIncome,
+    int HouseholdMemberCount,
+    IReadOnlyCollection<string> ParentNationalities,
+    string AccountType,
+    decimal PerCapitaIncome,
+    IReadOnlyCollection<EligibilitySchemeMatch> MatchedSchemes,
+    EligibilityRecommendedScheme? RecommendedScheme,
+    EligibilityRecommendedTier? RecommendedTier,
+    string RecommendationStatus,
+    string? ManualReviewReason);
+public sealed record EligibilityRecommendedScheme(long SchemeId, string SchemeName, string? Description);
+public sealed record EligibilityRecommendedTier(long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+public sealed record EligibilitySchemeMatch(
+    long SchemeId,
+    string SchemeName,
+    string? Description,
+    long TierId,
+    string TierLabel,
+    string SubsidyType,
+    decimal SubsidyValue,
+    DateOnly ApplicationEndDate,
+    int RecommendationRank,
+    string RecommendationReason,
+    string RecommendationConfidence = "MEDIUM",
+    bool IsComparable = true,
+    bool CanApply = true,
+    bool HasPendingApplication = false,
+    long? PendingApplicationId = null);
 public sealed record EligibilitySchemeOption(long Id, string Name);
 public sealed record EligibilityCriteriaPlan(
     IReadOnlyCollection<EligibilitySchemeOption> ApplicableSchemes,

@@ -57,26 +57,32 @@ public sealed class CreateFasSchemeValidationTests
     }
 
     [Fact]
-    public void Start_date_before_singapore_business_day_fails()
+    public void Start_date_uses_singapore_business_day()
     {
         CreateFasSchemeRequestValidator validator = new(
             new TestClock(new DateTimeOffset(2026, 6, 30, 16, 30, 0, TimeSpan.Zero)));
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
 
-        var result = validator.Validate(source with
+        validator.Validate(source with
         {
             StartDate = new DateOnly(2026, 6, 30),
             EndDate = new DateOnly(2026, 8, 1)
-        });
+        }).IsValid.Should().BeFalse();
 
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(x => x.ErrorMessage == "Start date cannot be before today.");
+        validator.Validate(source with
+        {
+            StartDate = new DateOnly(2026, 7, 1),
+            EndDate = new DateOnly(2026, 8, 1)
+        }).IsValid.Should().BeTrue();
     }
 
     [Fact]
-    public void Duplicate_or_nonpositive_courses_fail_while_global_scheme_is_allowed()
+    public void Missing_duplicate_or_nonpositive_courses_fail()
     {
-        _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] }).IsValid.Should().BeTrue();
+        FluentValidation.Results.ValidationResult missingCourses = _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [] });
+        missingCourses.IsValid.Should().BeFalse();
+        missingCourses.Errors.Should().Contain(error => error.ErrorMessage == "Select at least one eligible course.");
+
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [1, 1] }).IsValid.Should().BeFalse();
         _validator.Validate(FasSchemeTestData.ValidRequest() with { CourseIds = [0] }).IsValid.Should().BeFalse();
     }

@@ -95,7 +95,8 @@ public sealed class SingaporeBusinessDayRedTests
             new FakeStudentDirectory(),
             new FakeStudentNotificationRecipientResolver(),
             new FakeNotificationWriter(),
-            new TestClock(SgtEarlyMorning));
+            new TestClock(SgtEarlyMorning),
+            NullLogger<SelfJoinCourseHandler>.Instance);
 
         await handler.Handle(new SelfJoinCourseCommand(100, 200, [77]), CancellationToken.None);
 
@@ -155,7 +156,7 @@ public sealed class SingaporeBusinessDayRedTests
     private sealed class RecordingFasGateway : IFasCourseSubsidyGateway
     {
         public DateOnly? ObservedEnrolledDate { get; private set; }
-        public Task<IReadOnlyCollection<CourseFasSubsidy>> ListEligibleSubsidiesAsync(long personId, long courseId, DateOnly enrolledDate, IReadOnlyCollection<long>? fasApplicationSchemeIds, CancellationToken cancellationToken)
+        public Task<IReadOnlyCollection<CourseFasSubsidy>> ListEligibleSubsidiesAsync(long personId, long courseId, DateOnly enrolledDate, long? courseEnrollmentId, IReadOnlyCollection<long>? fasApplicationSchemeIds, CancellationToken cancellationToken)
         {
             ObservedEnrolledDate = enrolledDate;
             return Task.FromResult<IReadOnlyCollection<CourseFasSubsidy>>([new(77, "FIXED", 10m)]);
@@ -249,6 +250,7 @@ public sealed class SingaporeBusinessDayRedTests
     {
         public Task<PayableCourseBill?> FindPayableBillAsync(long billId, long personId, CancellationToken cancellationToken) => Task.FromResult<PayableCourseBill?>(null);
         public Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken) => Task.FromResult<long?>(10);
+        public Task<IReadOnlyCollection<BillSchoolOrganization>> FindBillOrganizationIdsAsync(IReadOnlyCollection<long> billIds, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyCollection<BillSchoolOrganization>>([]);
         public Task ApplySuccessfulPaymentAsync(long billId, decimal amount, bool paidInFull, DateTime paidAtUtc, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task SendInstallmentEnrollmentConfirmationAsync(long courseEnrollmentId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ApplyPaymentFailureAsync(long billId, string failureReason, CancellationToken cancellationToken) => Task.CompletedTask;

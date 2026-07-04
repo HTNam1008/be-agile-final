@@ -18,7 +18,7 @@ public interface ITopUpCampaignReader
         string? sortDirection = null,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<CampaignRuleProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CampaignRuleGroupProjection>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ActiveRecipientProjection>> GetActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default);
 

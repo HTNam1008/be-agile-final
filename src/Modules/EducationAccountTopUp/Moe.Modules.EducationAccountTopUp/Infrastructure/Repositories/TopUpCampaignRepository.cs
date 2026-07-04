@@ -7,7 +7,7 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 
-internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCampaignRepository
+internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCampaignRepository, ITopUpCampaignRuleGroupRepository
 {
     public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
@@ -38,7 +38,10 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
     public async Task<IReadOnlyList<TopUpCampaign>> GetDueCampaignsAsync(DateTime utcNow, CancellationToken cancellationToken = default)
     {
         return await dbContext.Set<TopUpCampaign>()
-            .Where(c => c.CampaignStatusCode == TopUpCampaignStatusCodes.Active && c.NextRunAtUtc != null && c.NextRunAtUtc <= utcNow)
+            .Where(c => c.CampaignStatusCode == TopUpCampaignStatusCodes.Active
+                && c.RecipientModeCode != RecipientModeCode.DynamicRules.ToString()
+                && c.NextRunAtUtc != null
+                && c.NextRunAtUtc <= utcNow)
             .ToListAsync(cancellationToken);
     }
 
@@ -61,7 +64,7 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
     public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
     {
         return dbContext.Set<TopUpCampaignRule>()
-            .CountAsync(x => x.TopUpCampaignId == campaignId && x.IsActive, cancellationToken);
+            .CountAsync(x => x.TopUpCampaignId == campaignId, cancellationToken);
     }
 
     public Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default)
@@ -70,22 +73,34 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
             .CountAsync(x => x.TopUpCampaignId == campaignId && x.IsActive, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default)
+    public async Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Set<TopUpCampaignRule>()
+        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true)
+        {
+            await dbContext.Set<TopUpCampaignRule>()
+                .Where(x => x.TopUpCampaignId == campaignId)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await dbContext.Set<TopUpRuleGroup>()
+                .Where(x => x.TopUpCampaignId == campaignId)
+                .ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        var rules = await dbContext.Set<TopUpCampaignRule>()
             .Where(x => x.TopUpCampaignId == campaignId)
             .ToListAsync(cancellationToken);
-    }
+        var groups = await dbContext.Set<TopUpRuleGroup>()
+            .Where(x => x.TopUpCampaignId == campaignId)
+            .ToListAsync(cancellationToken);
 
-    public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default)
-    {
         dbContext.Set<TopUpCampaignRule>().RemoveRange(rules);
-        return Task.CompletedTask;
+        dbContext.Set<TopUpRuleGroup>().RemoveRange(groups);
     }
 
-    public async Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default)
+    public async Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default)
     {
-        await dbContext.Set<TopUpCampaignRule>().AddAsync(rule, cancellationToken);
+        await dbContext.Set<TopUpRuleGroup>().AddAsync(group, cancellationToken);
     }
 
     public async Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default)
