@@ -19,7 +19,8 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private readonly ITextEmbeddingGenerationService? _embeddings;
     private KnowledgeDocument[]? _documents;
     private ReadOnlyMemory<float>[]? _documentEmbeddings;
-    private bool _initAttempted;
+    private DateTime _lastLoadUtc = DateTime.MinValue;
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
     public LocalKnowledgeRetriever(IServiceProvider services, IKnowledgeDocumentStore store)
     {
@@ -38,9 +39,10 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private async Task EnsureDocumentsLoadedAsync(CancellationToken ct)
     {
-        if (_initAttempted) return;
-        _initAttempted = true;
+        if (_documents is not null && DateTime.UtcNow - _lastLoadUtc < CacheDuration) return;
         _documents = (await _store.GetAllAsync(ct)).ToArray();
+        _documentEmbeddings = null;
+        _lastLoadUtc = DateTime.UtcNow;
     }
 
     public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
