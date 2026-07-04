@@ -1,5 +1,8 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Embeddings;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 
 namespace Moe.Modules.AiCopilot.Infrastructure.Knowledge;
@@ -42,15 +45,94 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private static readonly KnowledgeDocument[] FasChunks = LoadFasChunksFromAssembly();
 
     private readonly KnowledgeDocument[] _documents;
+    private readonly ITextEmbeddingGenerationService? _embeddings;
+    private ReadOnlyMemory<float>[]? _documentEmbeddings;
+    private bool _embedInitAttempted;
 
-    public LocalKnowledgeRetriever()
+    public LocalKnowledgeRetriever(IServiceProvider services)
     {
         HashSet<string> packIds = [.. FasChunks.Select(x => x.Id)];
         _documents = [.. StaticDocs.Where(x => !packIds.Contains(x.Id)), .. FasChunks];
         ValidateKnowledgePacks(_documents);
+
+        ITextEmbeddingGenerationService? embeddings = null;
+        try
+        {
+            Kernel kernel = services.GetRequiredService<Kernel>();
+            embeddings = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+        }
+        catch
+        {
+        }
+        _embeddings = embeddings;
     }
 
-    public IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4)
+    public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
+    {
+        ReadOnlyMemory<float>[]? docEmbeddings = await GetDocumentEmbeddingsAsync(ct);
+        if (docEmbeddings is not null && _embeddings is not null)
+        {
+            return await SemanticRetrieveAsync(query, domain, docEmbeddings, limit, ct);
+        }
+
+        return LegacyRetrieve(query, domain, limit);
+    }
+
+    private async Task<ReadOnlyMemory<float>[]?> GetDocumentEmbeddingsAsync(CancellationToken ct)
+    {
+        if (_documentEmbeddings is not null) return _documentEmbeddings;
+        if (_embedInitAttempted || _embeddings is null) return null;
+
+        _embedInitAttempted = true;
+        try
+        {
+            string[] texts = _documents.Select(d => $"{d.Title}\n{d.Section}\n{d.Content}\n{string.Join(" ", d.Synonyms ?? [])}").ToArray();
+            IList<ReadOnlyMemory<float>> embeddings = await _embeddings.GenerateEmbeddingsAsync(texts, cancellationToken: ct);
+            _documentEmbeddings = embeddings.ToArray();
+            return _documentEmbeddings;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<IReadOnlyList<KnowledgeResult>> SemanticRetrieveAsync(string query, string? domain, ReadOnlyMemory<float>[] docEmbeddings, int limit, CancellationToken ct)
+    {
+        ReadOnlyMemory<float> queryEmbedding = await _embeddings!.GenerateEmbeddingAsync(query, cancellationToken: ct);
+        string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
+
+        var scored = _documents
+            .Select((doc, i) => (Doc: doc, Score: (double)CosineSimilarity(queryEmbedding.Span, docEmbeddings[i].Span)))
+            .Where(x => x.Score > 0.72)
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
+            .ToList();
+
+        HashSet<string> includedIds = [.. scored.Select(x => x.Doc.Id)];
+        foreach (var doc in _documents.Where(d => d.AlwaysInclude && d.Domain == normalizedDomain && !includedIds.Contains(d.Id)))
+        {
+            scored.Add((doc, 0.0));
+        }
+
+        scored = DeduplicateConflicting(scored);
+
+        return scored
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
+            .Take(Math.Clamp(limit, 1, 8))
+            .Select(x => new KnowledgeResult(
+                new KnowledgeCitation(x.Doc.Id, x.Doc.Title, x.Doc.Section, x.Doc.Status,
+                    x.Doc.Version, x.Doc.EffectiveDate, x.Doc.Url),
+                x.Doc.Content,
+                x.Score,
+                x.Doc.FollowUps ?? DefaultFollowUps(x.Doc.Domain, x.Doc.Title),
+                x.Doc.AllowedIntents ?? DefaultAllowedIntents(x.Doc.Domain),
+                x.Doc.ReviewOwner))
+            .ToArray();
+    }
+
+    private IReadOnlyList<KnowledgeResult> LegacyRetrieve(string query, string? domain, int limit)
     {
         HashSet<string> terms = ExpandQueryTerms(query);
         string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
@@ -100,6 +182,18 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
                 x.Doc.AllowedIntents ?? DefaultAllowedIntents(x.Doc.Domain),
                 x.Doc.ReviewOwner))
             .ToArray();
+    }
+
+    private static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        float dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
     }
 
     private static HashSet<string> Tokenize(string value) => Regex.Matches(value.ToLowerInvariant(), "[a-z0-9]+")

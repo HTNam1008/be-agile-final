@@ -16,7 +16,7 @@ public sealed class PaymentQueryHandler(
     public async Task<AiHandlerResult> HandlePaymentAsync(AiChatRequest request, CancellationToken ct)
     {
         AiFinanceSnapshot snapshot = await finance.GetSnapshotAsync(ct);
-        IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, "PAYMENT");
+        IReadOnlyList<KnowledgeResult> sources = await knowledge.RetrieveAsync(request.Message, "PAYMENT", ct: ct);
         string intent = request.Message.ToUpperInvariant();
         var sg = CultureInfo.GetCultureInfo("en-SG");
         string ccy(decimal v) => v.ToString("C", sg);

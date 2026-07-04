@@ -99,12 +99,13 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     }
 
     [Fact]
-    public void Knowledge_retriever_maps_natural_school_fee_help_to_fas()
+    public async Task Knowledge_retriever_maps_natural_school_fee_help_to_fas()
     {
-        var retriever = new LocalKnowledgeRetriever();
+        var services = new ServiceCollection().BuildServiceProvider();
+        var retriever = new LocalKnowledgeRetriever(services);
 
         IReadOnlyList<Moe.Modules.AiCopilot.Application.Knowledge.KnowledgeResult> results =
-            retriever.Retrieve("My family does not earn much. Can I get help with school fees?", "GENERAL");
+            await retriever.RetrieveAsync("My family does not earn much. Can I get help with school fees?", "GENERAL");
 
         Assert.NotEmpty(results);
         Assert.Contains(results.Take(3), result => result.Citation.SourceId.StartsWith("FAS-", StringComparison.OrdinalIgnoreCase));

@@ -24,8 +24,14 @@ public sealed class AiCopilotModule : IModule
         {
             string endpoint = configuration["AzureOpenAI:Endpoint"] ?? throw new InvalidOperationException("AzureOpenAI:Endpoint is required for AI requests.");
             string apiKey = configuration["AzureOpenAI:ApiKey"] ?? throw new InvalidOperationException("AzureOpenAI:ApiKey is required for AI requests.");
-            string deploymentName = configuration["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName is required for AI requests.");
-            return Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(deploymentName, endpoint, apiKey).Build();
+            string chatDeployment = configuration["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName is required for AI requests.");
+            string? embeddingDeployment = configuration["AzureOpenAI:EmbeddingDeploymentName"];
+            IKernelBuilder builder = Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(chatDeployment, endpoint, apiKey);
+            if (embeddingDeployment is not null)
+            {
+                builder.AddAzureOpenAITextEmbeddingGeneration(embeddingDeployment, endpoint, apiKey);
+            }
+            return builder.Build();
         });
         services.AddScoped<AiOrchestratorService>();
         services.AddScoped<AiTurnPlannerService>();
