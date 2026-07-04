@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Embeddings;
@@ -54,7 +53,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             return await SemanticRetrieveAsync(query, domain, docEmbeddings, limit, ct);
         }
 
-        return LegacyRetrieve(query, domain, limit);
+        return FallbackRetrieve(query, domain, limit);
     }
 
     private async Task<ReadOnlyMemory<float>[]?> GetDocumentEmbeddingsAsync(CancellationToken ct)
@@ -103,40 +102,35 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             .ToArray();
     }
 
-    private IReadOnlyList<KnowledgeResult> LegacyRetrieve(string query, string? domain, int limit)
+    private IReadOnlyList<KnowledgeResult> FallbackRetrieve(string query, string? domain, int limit)
     {
-        HashSet<string> terms = ExpandQueryTerms(query);
         string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
+        string[] queryTerms = query.ToUpperInvariant().Split([' ', '\t', '\n', '\r', ',', '.', '!', '?', '-', '/', '\\'], StringSplitOptions.RemoveEmptyEntries);
 
         var scored = _documents!.Select(doc =>
         {
-            HashSet<string> documentTerms = Tokenize($"{doc.Title} {doc.Section} {doc.Content}");
-            foreach (string synonym in doc.Synonyms ?? [])
-            {
-                foreach (string term in Tokenize(synonym))
-                    documentTerms.Add(term);
-            }
-
-            double lexical = terms.Count == 0 ? 0 : terms.Count(documentTerms.Contains) / (double)terms.Count;
-            double phrase = doc.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ? 1.5 : 0;
-            double domainBoost = doc.Domain == normalizedDomain ? 1.25 : 0;
-            double synonymBoost = (doc.Synonyms ?? []).Any(s => query.Contains(s, StringComparison.OrdinalIgnoreCase)) ? 1.0 : 0;
-            double schemeBoost = SchemeSpecificBoost(doc, terms);
-            double documentBoost = DocumentSpecificBoost(doc, terms);
-            double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0);
-
-            return (Doc: doc, Score: lexical + phrase + domainBoost + synonymBoost + schemeBoost + documentBoost + rankWeight);
+            string title = doc.Title.ToUpperInvariant();
+            string docText = $"{doc.Section} {doc.Content}".ToUpperInvariant();
+            string synonyms = string.Join(' ', doc.Synonyms ?? []).ToUpperInvariant();
+            int titleMatches = queryTerms.Count(qt => title.Contains(qt));
+            int bodyMatches = queryTerms.Count(qt => docText.Contains(qt));
+            int synonymMatches = queryTerms.Count(qt => synonyms.Contains(qt));
+            double titleScore = queryTerms.Length == 0 ? 0 : (double)titleMatches / queryTerms.Length;
+            double bodyScore = queryTerms.Length == 0 ? 0 : (double)bodyMatches / queryTerms.Length;
+            double synonymScore = queryTerms.Length == 0 ? 0 : (double)synonymMatches / queryTerms.Length;
+            double matchScore = titleScore * 2.0 + bodyScore * 0.5 + synonymScore * 0.2;
+            double domainBoost = doc.Domain == normalizedDomain ? 0.3 : 0;
+            double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0) * 0.1;
+            return (Doc: doc, Score: matchScore + domainBoost + rankWeight);
         })
-        .Where(x => x.Score > 0.25)
+        .Where(x => x.Score > 0.15)
         .OrderByDescending(x => x.Score)
         .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
         .ToList();
 
         HashSet<string> includedIds = [.. scored.Select(x => x.Doc.Id)];
         foreach (var doc in _documents!.Where(d => d.AlwaysInclude && d.Domain == normalizedDomain && !includedIds.Contains(d.Id)))
-        {
-            scored.Add((doc, StatusRank.GetValueOrDefault(doc.Status, 0)));
-        }
+            scored.Add((doc, 0.0));
 
         scored = DeduplicateConflicting(scored);
 
@@ -166,58 +160,6 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             normB += b[i] * b[i];
         }
         return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
-    }
-
-    private static HashSet<string> Tokenize(string value) => Regex.Matches(value.ToLowerInvariant(), "[a-z0-9]+")
-        .Select(match => match.Value).Where(term => term.Length > 2).ToHashSet(StringComparer.Ordinal);
-
-    private static HashSet<string> ExpandQueryTerms(string query)
-    {
-        HashSet<string> terms = Tokenize(query);
-        string normalized = query.ToLowerInvariant();
-        AddConceptTerms(terms, normalized,
-            @"\b(can'?t|cannot|unable|struggl\w*|hard|difficult|not enough|low income|doesn'?t earn much|dont earn much|do not earn much|less income|poor)\b",
-            ["financial", "assistance", "fas", "aid", "income", "subsidy", "bursary"]);
-        AddConceptTerms(terms, normalized,
-            @"\b(school fees?|course fees?|education costs?|school costs?|fees?|pay for school|pay school)\b",
-            ["fees", "school", "course", "subsidy", "bursary", "financial", "assistance", "fas"]);
-        AddConceptTerms(terms, normalized,
-            @"\b(help|support|relief|assistance|aid)\b",
-            ["financial", "assistance", "fas", "aid"]);
-        return terms;
-    }
-
-    private static void AddConceptTerms(HashSet<string> terms, string normalizedQuery, string pattern, string[] concepts)
-    {
-        if (!Regex.IsMatch(normalizedQuery, pattern, RegexOptions.IgnoreCase))
-            return;
-        foreach (string concept in concepts)
-            terms.Add(concept);
-    }
-
-    private static double SchemeSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
-    {
-        string schemeText = $"{doc.Id} {doc.Title} {doc.Section} {string.Join(' ', doc.Synonyms ?? [])}";
-        HashSet<string> schemeTerms = Tokenize(schemeText);
-        string[] schemeKeywords =
-        [
-            "bursary", "hecb", "heb", "tiered", "subsidy", "isb", "jc", "ci",
-            "apply", "application", "process", "steps", "portal", "autofill", "documents"
-        ];
-
-        return queryTerms
-            .Where(term => schemeKeywords.Contains(term, StringComparer.OrdinalIgnoreCase) && schemeTerms.Contains(term))
-            .Sum(_ => 1.75);
-    }
-
-    private static double DocumentSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
-    {
-        if (!queryTerms.Overlaps(new[] { "document", "documents", "proof", "income", "submitting", "submit" }))
-            return 0;
-        string text = $"{doc.Title} {doc.Section} {doc.Content} {string.Join(' ', doc.Synonyms ?? [])}";
-        if (!Regex.IsMatch(text, @"\b(supporting documents|income proof|payslips?|cpf|iras|attach documents)\b", RegexOptions.IgnoreCase))
-            return 0;
-        return 3.5;
     }
 
     private static List<(KnowledgeDocument Doc, double Score)> DeduplicateConflicting(List<(KnowledgeDocument Doc, double Score)> scored)

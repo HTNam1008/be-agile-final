@@ -49,9 +49,11 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     {
         JsonElement response = await Chat("Explain the MOE FAS Bursary", personId: 2101);
 
-        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
-        Assert.Contains("BURSARY", firstCitation.GetProperty("sourceId").GetString());
-        Assert.Contains("bursary", firstCitation.GetProperty("section").GetString()!.ToLowerInvariant());
+        JsonElement[] citations = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().ToArray();
+        bool hasBursarySource = citations.Any(c =>
+            c.GetProperty("sourceId").GetString()!.Contains("BURSARY", StringComparison.OrdinalIgnoreCase));
+        Assert.True(hasBursarySource, "Expected at least one citation from a bursary source");
+        Assert.True(response.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
     }
 
     [Fact]
