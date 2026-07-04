@@ -10,20 +10,20 @@ namespace Moe.Modules.EducationAccountTopUp.IGateway.TopUps;
 public interface IDynamicRuleFilter
 {
     /// <summary>
-    /// Returns a paged list of education account IDs that match all active rules.
+    /// Returns a paged list of education account IDs that match any rule group.
     /// </summary>
     Task<IReadOnlyList<long>> FilterAccountIdsAsync(
-        IReadOnlyList<CampaignRuleProjection> rules,
+        IReadOnlyList<CampaignRuleGroupProjection> groups,
         int skip,
         int take,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns the total count of education accounts that match all active rules.
+    /// Returns the total count of education accounts that match any rule group.
     /// </summary>
     Task<int> CountMatchingAccountsAsync(
-        IReadOnlyList<CampaignRuleProjection> rules,
+        IReadOnlyList<CampaignRuleGroupProjection> groups,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 }

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Moe.Modules.AiCopilot.Application.Knowledge;
@@ -10,13 +9,13 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private static readonly KnowledgeDocument[] StaticDocs =
     [
         new("PAY-ACCOUNT-001", "Student Finance AI Scope", "Education account and outstanding charges", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "The assistant presents current Education Account balance, total outstanding charges, and net available amount. Outstanding charges are highlighted before new enrolments or withdrawals.", "/portal/account", [], false),
+            "The assistant presents current Education Account balance, total outstanding charges, and net available amount. Outstanding charges are highlighted before new enrolments or withdrawals.", "/portal/account", ["education account", "balance", "available amount", "outstanding charges"], false),
         new("PAY-METHOD-001", "Student Finance AI Scope", "Payment methods", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "Course fees and bills may use Education Account funds, online payment, or split payment when supported. Insufficient Education Account funds require another payment source for the remainder.", "/portal/bills", [], false),
+            "Course fees and bills may use Education Account funds, online payment, or split payment when supported. Insufficient Education Account funds require another payment source for the remainder.", "/portal/bills", ["payment method", "pay bill", "course fees", "split payment"], false),
         new("PAY-REFUND-001", "Student Finance AI Scope", "Refund guidance", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "Refund explanations must use the enrollment's snapshotted refund policy and actual refund status. The assistant must not invent eligibility, amounts, timelines, or documentation.", "/portal/courses", [], false),
+            "Refund explanations must use the enrollment's snapshotted refund policy and actual refund status. The assistant must not invent eligibility, amounts, timelines, or documentation.", "/portal/courses", ["refund", "withdrawal refund", "refund status", "refund policy"], false),
         new("PROTO-WITHDRAW-001", "Prototype Finance Guidance", "Education Account withdrawal", "PAYMENT", "PROTOTYPE", "1.0", new DateOnly(2026, 6, 24),
-            "Withdrawal policy is not represented by a live transactional tool in this prototype. Direct users to the Education Account page and Admin Center for authoritative eligibility, limits, and timelines.", "/portal/account", [], false),
+            "Withdrawal policy is not represented by a live transactional tool in this prototype. Direct users to the Education Account page and Admin Center for authoritative eligibility, limits, and timelines.", "/portal/account", ["withdraw", "withdrawal", "limits", "admin center"], false),
         new("FAS-GLOSSARY-001", "Financial Assistance Schemes", "FAS overview and terminology", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 6, 25),
             "Financial Assistance Schemes help eligible students with school fees, bursaries, and education-related costs. Eligibility commonly uses monthly gross household income (GHI), per-capita income (PCI), student level, school, and parent or guardian nationality. The FAS page remains the source of truth for live application status and available schemes.", "/portal/fas", ["financial assistance", "fas", "scheme", "aid"], false),
         new("FAS-JC-CI-001", "MOE FAS", "JC/CI eligibility and benefits", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 1, 1),
@@ -27,8 +26,6 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             "Government bursaries for full-time ITE, polytechnic, arts institution, and autonomous university students use income tiers such as GHI and PCI. Examples include Higher Education Community Bursary and Higher Education Bursary. Amounts vary by course type and tier; students should confirm live eligibility and selected schemes in the FAS application.", "/portal/fas", ["bursary", "hecb", "heb", "government bursary", "university bursary", "polytechnic bursary"], false),
     ];
 
-    private static readonly KnowledgeDocument[] FasChunks = LoadFasChunksFromAssembly();
-
     private static readonly Dictionary<string, double> StatusRank = new(StringComparer.OrdinalIgnoreCase)
     {
         ["OFFICIAL"] = 3.0,
@@ -37,11 +34,20 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         ["PROTOTYPE"] = 0.0
     };
 
+    private static readonly HashSet<string> AllowedIntents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AnswerKnowledgeQuestion", "ContinueInterview", "StartInterview", "SubmitInterviewAnswer", "PaymentQuery", "Fallback"
+    };
+
+    private static readonly KnowledgeDocument[] FasChunks = LoadFasChunksFromAssembly();
+
     private readonly KnowledgeDocument[] _documents;
 
     public LocalKnowledgeRetriever()
     {
-        _documents = [.. StaticDocs, .. FasChunks];
+        HashSet<string> packIds = [.. FasChunks.Select(x => x.Id)];
+        _documents = [.. StaticDocs.Where(x => !packIds.Contains(x.Id)), .. FasChunks];
+        ValidateKnowledgePacks(_documents);
     }
 
     public IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4)
@@ -52,7 +58,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         var scored = _documents.Select(doc =>
         {
             HashSet<string> documentTerms = Tokenize($"{doc.Title} {doc.Section} {doc.Content}");
-            foreach (string synonym in doc.Synonyms)
+            foreach (string synonym in doc.Synonyms ?? [])
             {
                 foreach (string term in Tokenize(synonym))
                     documentTerms.Add(term);
@@ -61,7 +67,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             double lexical = terms.Count == 0 ? 0 : terms.Count(documentTerms.Contains) / (double)terms.Count;
             double phrase = doc.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ? 1.5 : 0;
             double domainBoost = doc.Domain == normalizedDomain ? 1.25 : 0;
-            double synonymBoost = doc.Synonyms.Any(s => query.Contains(s, StringComparison.OrdinalIgnoreCase)) ? 1.0 : 0;
+            double synonymBoost = (doc.Synonyms ?? []).Any(s => query.Contains(s, StringComparison.OrdinalIgnoreCase)) ? 1.0 : 0;
             double schemeBoost = SchemeSpecificBoost(doc, terms);
             double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0);
 
@@ -84,7 +90,12 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
             .Take(Math.Clamp(limit, 1, 8))
             .Select(x => new KnowledgeResult(
                 new KnowledgeCitation(x.Doc.Id, x.Doc.Title, x.Doc.Section, x.Doc.Status,
-                    x.Doc.Version, x.Doc.EffectiveDate, x.Doc.Url), x.Doc.Content, x.Score))
+                    x.Doc.Version, x.Doc.EffectiveDate, x.Doc.Url),
+                x.Doc.Content,
+                x.Score,
+                x.Doc.FollowUps ?? DefaultFollowUps(x.Doc.Domain, x.Doc.Title),
+                x.Doc.AllowedIntents ?? DefaultAllowedIntents(x.Doc.Domain),
+                x.Doc.ReviewOwner))
             .ToArray();
     }
 
@@ -93,7 +104,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 
     private static double SchemeSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
     {
-        string schemeText = $"{doc.Id} {doc.Title} {doc.Section} {string.Join(' ', doc.Synonyms)}";
+        string schemeText = $"{doc.Id} {doc.Title} {doc.Section} {string.Join(' ', doc.Synonyms ?? [])}";
         HashSet<string> schemeTerms = Tokenize(schemeText);
         string[] schemeKeywords =
         [
@@ -119,47 +130,98 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         var chunks = new List<KnowledgeDocument>();
         foreach (string resourceName in resourceNames)
         {
-            try
+            using Stream stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Missing embedded resource: {resourceName}");
+            using var reader = new StreamReader(stream);
+            string raw = reader.ReadToEnd();
+            var (frontmatter, body) = SplitFrontmatter(raw);
+            var meta = ParseFrontmatter(frontmatter);
+
+            string domain = meta.GetValueOrDefault("domain", "FAS").ToUpperInvariant();
+            string chunkId = MapChunkId(Required(meta, "chunk_id", resourceName), domain);
+            string title = Required(meta, "title", resourceName);
+            string status = ResolveSourceStatus(meta);
+            string effectiveDateStr = meta.GetValueOrDefault("effective_date", meta.GetValueOrDefault("last_reviewed", ""));
+            if (!DateOnly.TryParse(effectiveDateStr, out DateOnly effectiveDate))
             {
-                using Stream stream = assembly.GetManifestResourceStream(resourceName)
-                    ?? throw new InvalidOperationException($"Missing embedded resource: {resourceName}");
-                using var reader = new StreamReader(stream);
-                string raw = reader.ReadToEnd();
-                var (frontmatter, body) = SplitFrontmatter(raw);
-                var meta = ParseFrontmatter(frontmatter);
-
-                string domain = meta.GetValueOrDefault("domain", "FAS").ToUpperInvariant();
-                string chunkId = MapChunkId(meta.GetValueOrDefault("chunk_id", ""), domain);
-                string title = meta.GetValueOrDefault("title", resourceName);
-                string confidence = meta.GetValueOrDefault("confidence", "medium");
-                string status = confidence switch
-                {
-                    "high" => "OFFICIAL",
-                    "medium" => "GUIDE",
-                    _ => "FAQ"
-                };
-                string effectiveDateStr = meta.GetValueOrDefault("effective_date", meta.GetValueOrDefault("last_reviewed", ""));
-                DateOnly effectiveDate = DateOnly.TryParse(effectiveDateStr, out var d) ? d : DateOnly.FromDateTime(DateTime.UtcNow);
-                bool alwaysInclude = string.Equals(meta.GetValueOrDefault("always_include", "false"), "true", StringComparison.OrdinalIgnoreCase);
-
-                string[] synonyms = [];
-                if (meta.TryGetValue("synonyms", out string? synStr))
-                {
-                    synonyms = ParseYamlList(synStr);
-                }
-
-                string content = body.Trim();
-                string url = meta.GetValueOrDefault("url", domain == "PAYMENT" ? "/portal/bills" : "/portal/fas");
-
-                chunks.Add(new KnowledgeDocument(chunkId, title, title, domain, status, "1.0", effectiveDate,
-                    content, url, synonyms, alwaysInclude));
+                effectiveDate = DateOnly.Parse(Required(meta, "last_reviewed", resourceName));
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[KnowledgeLoader] Skipping malformed resource {resourceName}: {ex.Message}");
-            }
+            bool alwaysInclude = string.Equals(meta.GetValueOrDefault("always_include", "false"), "true", StringComparison.OrdinalIgnoreCase);
+            string[] synonyms = meta.TryGetValue("synonyms", out string? synStr) ? ParseYamlList(synStr) : [];
+            string[] allowedIntents = meta.TryGetValue("allowed_intents", out string? intents) ? ParseYamlList(intents) : DefaultAllowedIntents(domain);
+            string[] followUps = meta.TryGetValue("follow_ups", out string? followUpText) ? ParseYamlList(followUpText) : DefaultFollowUps(domain, title);
+            string content = body.Trim();
+            string url = meta.GetValueOrDefault("url", domain == "PAYMENT" ? "/portal/bills" : "/portal/fas");
+
+            chunks.Add(new KnowledgeDocument(chunkId, title, title, domain, status, "1.0", effectiveDate,
+                content, url, synonyms, alwaysInclude, meta.GetValueOrDefault("review_owner", "Student Finance Product"), allowedIntents, followUps));
         }
-        return chunks.ToArray();
+        KnowledgeDocument[] docs = chunks.ToArray();
+        ValidateKnowledgePacks(docs);
+        return docs;
+    }
+
+    public static void ValidateKnowledgePacks(IEnumerable<KnowledgeDocument> docs)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KnowledgeDocument doc in docs)
+        {
+            if (string.IsNullOrWhiteSpace(doc.Id)) throw new InvalidOperationException("Knowledge chunk is missing chunk_id.");
+            if (!seen.Add(doc.Id)) throw new InvalidOperationException($"Duplicate knowledge chunk_id: {doc.Id}.");
+            if (string.IsNullOrWhiteSpace(doc.Domain)) throw new InvalidOperationException($"{doc.Id} is missing domain.");
+            if (string.IsNullOrWhiteSpace(doc.Title)) throw new InvalidOperationException($"{doc.Id} is missing title.");
+            if (!StatusRank.ContainsKey(doc.Status)) throw new InvalidOperationException($"{doc.Id} has invalid source_status {doc.Status}.");
+            if (doc.EffectiveDate > today.AddYears(2)) throw new InvalidOperationException($"{doc.Id} has an unrealistic effective_date.");
+            if (string.IsNullOrWhiteSpace(doc.ReviewOwner)) throw new InvalidOperationException($"{doc.Id} is missing review_owner.");
+            if (doc.Synonyms is not null && doc.Synonyms.Length == 0) throw new InvalidOperationException($"{doc.Id} has empty synonyms.");
+            if (doc.AllowedIntents is not null && doc.AllowedIntents.Length == 0) throw new InvalidOperationException($"{doc.Id} has empty allowed_intents.");
+            if (doc.FollowUps is not null && doc.FollowUps.Length == 0) throw new InvalidOperationException($"{doc.Id} has empty follow_ups.");
+            string? invalidIntent = (doc.AllowedIntents ?? DefaultAllowedIntents(doc.Domain)).FirstOrDefault(intent => !AllowedIntents.Contains(intent));
+            if (invalidIntent is not null) throw new InvalidOperationException($"{doc.Id} has invalid allowed_intent {invalidIntent}.");
+        }
+    }
+
+    private static string Required(Dictionary<string, string> meta, string key, string resourceName) =>
+        meta.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : throw new InvalidOperationException($"{resourceName} is missing required metadata '{key}'.");
+
+    private static string ResolveSourceStatus(Dictionary<string, string> meta)
+    {
+        if (meta.TryGetValue("source_status", out string? status))
+        {
+            return status.ToUpperInvariant();
+        }
+        string confidence = meta.GetValueOrDefault("confidence", "medium");
+        return confidence switch
+        {
+            "high" => "OFFICIAL",
+            "medium" or "medium-verify-with-client" => "GUIDE",
+            _ => "FAQ"
+        };
+    }
+
+    private static string[] DefaultAllowedIntents(string domain) =>
+        domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase)
+            ? ["AnswerKnowledgeQuestion", "PaymentQuery"]
+            : ["AnswerKnowledgeQuestion", "StartInterview", "ContinueInterview"];
+
+    private static string[] DefaultFollowUps(string domain, string title)
+    {
+        if (domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["Show my outstanding bills.", "How can I pay a bill?", "Explain refunds."];
+        }
+        if (title.Contains("Application", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["Continue my FAS eligibility check.", "What documents prove income?", "Which schemes can I apply for?"];
+        }
+        if (title.Contains("Bursary", StringComparison.OrdinalIgnoreCase) || title.Contains("Subsidy", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["Which schemes can I apply for?", "Continue my FAS eligibility check.", "What documents prove income?"];
+        }
+        return ["How is PCI calculated?", "Continue my FAS eligibility check.", "Which schemes can I apply for?"];
     }
 
     private static (string frontmatter, string body) SplitFrontmatter(string raw)
@@ -236,5 +298,6 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     public sealed record KnowledgeDocument(
         string Id, string Title, string Section, string Domain, string Status,
         string Version, DateOnly EffectiveDate, string Content, string? Url,
-        string[] Synonyms, bool AlwaysInclude);
+        string[]? Synonyms, bool AlwaysInclude, string ReviewOwner = "Student Finance Product",
+        string[]? AllowedIntents = null, string[]? FollowUps = null);
 }

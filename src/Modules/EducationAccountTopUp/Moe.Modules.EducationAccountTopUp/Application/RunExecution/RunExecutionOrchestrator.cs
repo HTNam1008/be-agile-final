@@ -432,27 +432,20 @@ public sealed class RunExecutionOrchestrator(
             recipient.EducationAccountId,
             topUpRunId);
 
-        Result<long> create = await notificationWriter.CreateAsync(
+        bool created = await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.TopUpReceived,
                 $"Top-up Credited: {accountNumber}",
                 $"Amount {amount} has been credited to account {accountNumber}."),
+            logger,
+            "Top-up run recipient credited",
             cancellationToken);
 
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create top-up notification for user account {UserAccountId} in run {TopUpRunId}: {ErrorCode}",
-                userAccountId.Value,
-                topUpRunId,
-                create.Error.Code);
-        }
-        else
+        if (created)
         {
             logger.LogInformation(
-                "TOP_UP_RECEIVED notification created successfully with NotificationId {NotificationId} for user account {UserAccountId} in run {TopUpRunId}",
-                create.Value,
+                "TOP_UP_RECEIVED notification created successfully for user account {UserAccountId} in run {TopUpRunId}",
                 userAccountId.Value,
                 topUpRunId);
         }
@@ -510,27 +503,20 @@ public sealed class RunExecutionOrchestrator(
 
         foreach (long userAccountId in schoolAdminUserAccountIds)
         {
-            Result<long> create = await notificationWriter.CreateAsync(
+            bool created = await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.RunCompleted,
                     $"Top-up Run {run.Id} Completed",
                     $"Run {run.Id} completed with {totalSucceeded} successful student(s), {totalFailed} failed, {totalSkipped} skipped, and total amount {totalAmount:0.00}."),
+                logger,
+                "Top-up run completed school admin notification",
                 cancellationToken);
 
-            if (create.IsFailure)
-            {
-                logger.LogWarning(
-                    "Failed to create RUN_COMPLETED notification for school admin {UserAccountId} in run {TopUpRunId}: {ErrorCode}",
-                    userAccountId,
-                    run.Id,
-                    create.Error.Code);
-            }
-            else
+            if (created)
             {
                 logger.LogInformation(
-                    "RUN_COMPLETED notification created successfully with NotificationId {NotificationId} for school admin {UserAccountId} in run {TopUpRunId}",
-                    create.Value,
+                    "RUN_COMPLETED notification created successfully for school admin {UserAccountId} in run {TopUpRunId}",
                     userAccountId,
                     run.Id);
             }

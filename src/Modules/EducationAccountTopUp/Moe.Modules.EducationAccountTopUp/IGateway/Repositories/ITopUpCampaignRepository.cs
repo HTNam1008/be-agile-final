@@ -23,14 +23,16 @@ public interface ITopUpCampaignRepository
 
     Task<int> CountActiveRecipientsAsync(long campaignId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(long campaignId, CancellationToken cancellationToken = default);
-    Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default);
-    Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default);
     Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
     Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, long userId, DateTime nowUtc, CancellationToken cancellationToken = default);
     Task AddRecipientAsync(TopUpCampaignRecipient recipient, CancellationToken cancellationToken = default);
 
     Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default);
+}
+
+internal interface ITopUpCampaignRuleGroupRepository
+{
+    Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default);
+    Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default);
 }

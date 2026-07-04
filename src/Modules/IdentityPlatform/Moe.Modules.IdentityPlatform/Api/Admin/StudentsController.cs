@@ -165,7 +165,8 @@ public sealed class StudentsController(
             request.Email,
             request.ContactNumber,
             request.Address,
-            request.IsAccountHolder);
+            IsAccountHolder: request.IsAccountHolder,
+            MockPassPersonId: request.MockPassPersonId);
 
         var result = await commands.Send(command, cancellationToken);
 
@@ -291,26 +292,27 @@ public sealed class StudentsController(
     {
         sheet.Cell(2, 1).Value = "Sample Polytechnic";
         sheet.Cell(2, 2).Value = 10;
-        sheet.Cell(2, 3).Value = "S1234567D";
-        sheet.Cell(2, 4).Value = "Sample Student";
-        sheet.Cell(2, 5).Value = new DateTime(2008, 5, 12);
-        sheet.Cell(2, 6).Value = "SG";
-        sheet.Cell(2, 7).Value = "CITIZEN";
-        sheet.Cell(2, 8).Value = "SAMPLE-2026-001";
-        sheet.Cell(2, 9).Value = "2026";
-        sheet.Cell(2, 10).Value = SchoolLevelCodes.Bachelor;
-        sheet.Cell(2, 11).Value = "UG1";
-        sheet.Cell(2, 12).Value = new DateTime(2026, 1, 2);
-        sheet.Cell(2, 13).Value = "sample.student@example.com";
-        sheet.Cell(2, 14).Value = "+6591234567";
-        sheet.Cell(2, 15).Value = "1 Sample Road";
+        sheet.Cell(2, 3).Value = "sample-mockpass-person-id";
+        sheet.Cell(2, 4).Value = "S1234567D";
+        sheet.Cell(2, 5).Value = "Sample Student";
+        sheet.Cell(2, 6).Value = new DateTime(2008, 5, 12);
+        sheet.Cell(2, 7).Value = "SG";
+        sheet.Cell(2, 8).Value = "CITIZEN";
+        sheet.Cell(2, 9).Value = "SAMPLE-2026-001";
+        sheet.Cell(2, 10).Value = "2026";
+        sheet.Cell(2, 11).Value = SchoolLevelCodes.Bachelor;
+        sheet.Cell(2, 12).Value = "UG1";
+        sheet.Cell(2, 13).Value = new DateTime(2026, 1, 2);
+        sheet.Cell(2, 14).Value = "sample.student@example.com";
+        sheet.Cell(2, 15).Value = "+6591234567";
+        sheet.Cell(2, 16).Value = "1 Sample Road";
         IXLCell markerCell = sheet.Cell(2, BulkImportStudentWorkbookColumns.Headers.Count + 1);
         markerCell.Value = BulkImportStudentWorkbookColumns.SampleRowMarker;
         markerCell.Style.Font.FontColor = XLColor.Gray;
         markerCell.Style.Font.Italic = true;
         markerCell.Style.Fill.BackgroundColor = XLColor.LightGray;
-        sheet.Cell(2, 5).Style.DateFormat.Format = "yyyy-mm-dd";
-        sheet.Cell(2, 12).Style.DateFormat.Format = "yyyy-mm-dd";
+        sheet.Cell(2, 6).Style.DateFormat.Format = "yyyy-mm-dd";
+        sheet.Cell(2, 13).Style.DateFormat.Format = "yyyy-mm-dd";
     }
 
     private static void AddBulkImportLevelValidation(IXLWorksheet sheet)
@@ -330,6 +332,7 @@ public sealed class StudentsController(
         {
             BulkImportStudentWorkbookColumns.SchoolName => "School name. Optional when OrganizationId is supplied or school can be resolved.",
             BulkImportStudentWorkbookColumns.OrganizationId => "Numeric school organization id. Optional when SchoolName is supplied or school can be resolved.",
+            BulkImportStudentWorkbookColumns.MockPassPersonId => "MockPass/Singpass subject id. Optional; use the UUID from mock-identities.json for demo login data.",
             BulkImportStudentWorkbookColumns.IdentityNumber => "Valid Singapore NRIC/FIN, including checksum. Example: S1234567D.",
             BulkImportStudentWorkbookColumns.FullName => "Student full name, maximum 200 characters.",
             BulkImportStudentWorkbookColumns.DateOfBirth => "Use a real Excel date or yyyy-mm-dd. Student age must be 6 to 40 years.",

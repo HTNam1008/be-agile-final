@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -34,16 +35,18 @@ public sealed class StudentFasApplicationService(
     INotificationWriter notificationWriter,
     ILogger<StudentFasApplicationService> logger)
 {
+    private static readonly FasBenefitRecommendationService RecommendationService = new();
+
     private (long PersonId, long ActorId) Identity() =>
         (currentUser.PersonId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"),
          currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED"));
     private long Actor() => currentUser.UserAccountId ?? throw new UnauthorizedAccessException("FAS.AUTHENTICATION_REQUIRED");
-    private DateOnly Today() => DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+    private DateOnly Today() => clock.TodayInSingapore();
 
     private async Task<ProfileRow> Profile(CancellationToken ct)
     {
         var (personId, _) = Identity();
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = Today();
         var person = await db.Set<Person>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == personId, ct)
             ?? throw new KeyNotFoundException("FAS.PROFILE_REQUIRED");
         var enrollment = await db.Set<SchoolEnrollment>().AsNoTracking()
@@ -133,10 +136,11 @@ public sealed class StudentFasApplicationService(
         if (search?.Length > 255) throw new ArgumentException("FAS.SEARCH_TOO_LONG");
 
         var p = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var pendingApplications = await PendingSchemeApplications(p.PersonId, ct);
         IQueryable<FasScheme> query = db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id));
         if (search is not null) query = query.Where(x => x.Name.Contains(search) || (x.Description != null && x.Description.Contains(search)));
         long totalCount = await query.LongCountAsync(ct);
-        var schemes = await query
+        var schemeRows = await query
             .OrderBy(x => x.StartDate)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -146,15 +150,32 @@ public sealed class StudentFasApplicationService(
                 x.Name,
                 shortDescription = x.Description,
                 applicationStartDate = x.StartDate,
-                applicationEndDate = x.EndDate,
-                isOpenForApplication = x.StartDate <= today && x.EndDate >= today
+                applicationEndDate = x.EndDate
             }).ToListAsync(ct);
+        var schemes = schemeRows.Select(x =>
+        {
+            bool isOpen = x.applicationStartDate <= today && x.applicationEndDate >= today;
+            bool hasPendingApplication = pendingApplications.TryGetValue(x.id, out long pendingApplicationId);
+            return new
+            {
+                x.id,
+                x.Name,
+                x.shortDescription,
+                x.applicationStartDate,
+                x.applicationEndDate,
+                isOpenForApplication = isOpen && !hasPendingApplication,
+                canApply = isOpen && !hasPendingApplication,
+                hasPendingApplication,
+                pendingApplicationId = hasPendingApplication ? pendingApplicationId : (long?)null
+            };
+        }).ToList();
         return new { currentSchool = new { id = p.SchoolOrganizationId, name = p.SchoolName }, items = schemes, page, pageSize, totalCount };
     }
 
     public async Task<object> SchemeDetail(long id, CancellationToken ct)
     {
         var profile = await Profile(ct); var today = Today(); var applicable = await ApplicableSchemeIds(profile.SchoolOrganizationId, ct);
+        var pendingApplications = await PendingSchemeApplications(profile.PersonId, ct);
         var scheme = await db.Set<FasScheme>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.StatusCode == "ACTIVE", ct)
             ?? throw new KeyNotFoundException("FAS.SCHEME_NOT_FOUND");
         var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == id).OrderBy(x => x.DisplayOrder)
@@ -174,74 +195,57 @@ public sealed class StudentFasApplicationService(
             scheme.Description,
             applicationStartDate = scheme.StartDate,
             applicationEndDate = scheme.EndDate,
-            canApply = applicable.Contains(id) && scheme.StartDate <= today && scheme.EndDate >= today,
+            canApply = applicable.Contains(id) && scheme.StartDate <= today && scheme.EndDate >= today && !pendingApplications.ContainsKey(id),
+            hasPendingApplication = pendingApplications.ContainsKey(id),
+            pendingApplicationId = pendingApplications.ContainsKey(id) ? pendingApplications[id] : (long?)null,
             benefits = tiers,
             courses,
             appliesToAllCourses = courses.Count == 0
         };
     }
 
-    public async Task<object> CheckEligibility(EligibilityRequest request, CancellationToken ct)
+    public async Task<EligibilityResponse> CheckEligibility(EligibilityRequest request, CancellationToken ct)
     {
         if (request.MonthlyHouseholdIncome < 0 || request.OtherMonthlyIncome < 0 || request.HouseholdMemberCount <= 0)
             throw new ArgumentException("FAS.INVALID_INCOME");
-        var p = await Profile(ct); var pci = (request.MonthlyHouseholdIncome + request.OtherMonthlyIncome) / request.HouseholdMemberCount;
+        var p = await Profile(ct); var today = Today(); var pci = (request.MonthlyHouseholdIncome + request.OtherMonthlyIncome) / request.HouseholdMemberCount;
         var parentNationalities = request.ParentNationalities?.Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
         var accountType = await ResolveAccountType(p.PersonId, ct);
-        var age = clock.UtcNow.Year - p.DateOfBirth.Year;
-        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct); var schemes = await db.Set<FasScheme>().AsNoTracking().Where(x => x.StatusCode == "ACTIVE" && applicable.Contains(x.Id)).ToListAsync(ct);
-        var matches = new List<object>();
-        foreach (var scheme in schemes)
-        {
-            var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => x.FasSchemeId == scheme.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-            foreach (var tier in tiers)
-            {
-                var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-                var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => x.FasTierId == tier.Id).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
-                var values = new Dictionary<long, bool>();
-                foreach (FasTierCriteria c in criteria)
-                {
-                    bool ok = c.CriteriaType switch
-                    {
-                        "AGE" => age >= c.NumberFrom && age <= c.NumberTo,
-                        "GDP" or "GHI" => request.MonthlyHouseholdIncome >= c.NumberFrom && request.MonthlyHouseholdIncome <= c.NumberTo,
-                        "PCI" => pci >= c.NumberFrom && pci <= c.NumberTo,
-                        "NATIONALITY" => await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id &&
-                            (n.Nationality == p.NationalityCode || (p.NationalityCode == "SG" && n.Nationality == "Singapore Citizen")), ct),
-                        "PARENT_NATIONALITY" => parentNationalities.Length > 0 && await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id && parentNationalities.Contains(n.Nationality), ct),
-                        "ACCOUNT_TYPE" => await db.Set<FasTierCriteriaNationality>().AsNoTracking().AnyAsync(n => n.FasTierCriteriaId == c.Id && n.Nationality == accountType, ct),
-                        _ => false
-                    };
-                    values[c.Id] = ok;
-                }
-                bool matched = criteria.Count == 0 || GroupsMatch(groups, criteria, values);
-                if (matched)
-                {
-                    matches.Add(new
-                    {
-                        schemeId = scheme.Id,
-                        schemeName = scheme.Name,
-                        scheme.Description,
-                        tierId = tier.Id,
-                        tierLabel = tier.Label,
-                        tier.SubsidyType,
-                        tier.SubsidyValue
-                    }); break;
-                }
-            }
-        }
-        return new
-        {
-            currentSchool = new { id = p.SchoolOrganizationId, name = p.SchoolName },
-            age,
-            nationality = p.NationalityCode,
-            monthlyHouseholdIncome = request.MonthlyHouseholdIncome,
+        var applicable = await ApplicableSchemeIds(p.SchoolOrganizationId, ct);
+        var schemes = await db.Set<FasScheme>()
+            .AsNoTracking()
+            .Where(x => x.StatusCode == "ACTIVE" && x.StartDate <= today && x.EndDate >= today && applicable.Contains(x.Id))
+            .Select(x => new FasRecommendationScheme(x.Id, x.Name, x.Description))
+            .ToListAsync(ct);
+        FasRecommendationResult recommendation = await RecommendAsync(
+            schemes,
+            new FasRecommendationFacts(
+                CalculateAge(p.DateOfBirth, today),
+                request.MonthlyHouseholdIncome,
+                pci,
+                p.NationalityCode,
+                parentNationalities,
+                accountType),
+            ct);
+        bool comparable = recommendation.MatchedSchemes
+            .Select(x => x.SubsidyType.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Count() <= 1;
+        FasRecommendationMatch? recommended = recommendation.Recommended;
+        return new EligibilityResponse(
+            new { id = p.SchoolOrganizationId, name = p.SchoolName },
+            CalculateAge(p.DateOfBirth, today),
+            p.NationalityCode,
+            request.MonthlyHouseholdIncome,
             request.HouseholdMemberCount,
             parentNationalities,
             accountType,
-            perCapitaIncome = decimal.Round(pci, 2),
-            matchedSchemes = matches
-        };
+            decimal.Round(pci, 2),
+            recommendation.MatchedSchemes.Select((match, index) => ToEligibilityMatch(match, index + 1, comparable)).ToArray(),
+            recommended is null ? null : new EligibilityRecommendedScheme(recommended.SchemeId, recommended.SchemeName, recommended.Description),
+            recommended is null ? null : new EligibilityRecommendedTier(recommended.TierId, recommended.TierLabel, recommended.SubsidyType, recommended.SubsidyValue),
+            recommendation.RecommendationStatus,
+            recommendation.ManualReviewReason);
     }
 
     public async Task<object> CreateOrResumeDraft(CreateDraftRequest request, CancellationToken ct)
@@ -270,7 +274,7 @@ public sealed class StudentFasApplicationService(
             db.Add(FasStatusHistory.Create(app.Id, null, null, FasApplicationStatuses.Draft, "Application draft created", actorId, "STUDENT", now));
         }
 
-        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        var (added, _) = await ReplaceSchemesCore(app, ids, actorId, now, ct);
         await db.SaveChangesAsync(ct);
 
         foreach (var item in added)
@@ -304,7 +308,19 @@ public sealed class StudentFasApplicationService(
 
         await EnsureNoDuplicateApplications(personId, ids, app.Id, ct);
         DateTime now = clock.UtcNow.UtcDateTime;
-        var added = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        var (added, cancelled) = await ReplaceSchemesCore(app, ids, actorId, now, ct);
+        foreach (var item in cancelled)
+        {
+            await RecordFasApplicationSchemeAuditAsync(
+                AuditActionCodes.FasSchemeSelectionCancelled,
+                app,
+                item,
+                "FAS scheme selection cancelled by student",
+                "DRAFT",
+                "CANCELLED",
+                ct);
+        }
+
         await db.SaveChangesAsync(ct);
 
         foreach (var item in added)
@@ -312,14 +328,20 @@ public sealed class StudentFasApplicationService(
             db.Add(FasStatusHistory.Create(app.Id, item.Id, null, "DRAFT", "Scheme selected", actorId, "STUDENT", now));
         }
 
-        if (added.Count > 0) await db.SaveChangesAsync(ct);
+        if (added.Count > 0 || cancelled.Count > 0) await db.SaveChangesAsync(ct);
         return await ApplicationReview(app.Id, ct);
     }
 
-    private async Task<List<FasApplicationScheme>> ReplaceSchemesCore(FasApplication app, long[] ids, long actor, DateTime now, CancellationToken ct)
+    private async Task<(List<FasApplicationScheme> Added, List<FasApplicationScheme> Cancelled)> ReplaceSchemesCore(
+        FasApplication app,
+        long[] ids,
+        long actor,
+        DateTime now,
+        CancellationToken ct)
     {
         var old = await db.Set<FasApplicationScheme>().Where(x => x.FasApplicationId == app.Id && x.StatusCode == "DRAFT").ToListAsync(ct);
-        db.RemoveRange(old.Where(x => !ids.Contains(x.FasSchemeId)));
+        var cancelled = old.Where(x => !ids.Contains(x.FasSchemeId)).ToList();
+        db.RemoveRange(cancelled);
         var added = ids
             .Where(id => old.All(x => x.FasSchemeId != id))
             .Select(id => FasApplicationScheme.CreateDraft(app.Id, id, actor, now))
@@ -327,7 +349,7 @@ public sealed class StudentFasApplicationService(
 
         db.AddRange(added);
         app.ReplacePrimaryScheme(ids[0], actor, now);
-        return added;
+        return (added, cancelled);
     }
 
     public async Task<object> UpdateParticulars(long id, UpdateParticularsRequest r, CancellationToken ct)
@@ -473,12 +495,14 @@ public sealed class StudentFasApplicationService(
         var items = pageRows.Select(row =>
         {
             string? approvedTier = ExtractApprovedTierLabel(row.selection.ApprovedComponentsJson);
-            string? recommendedTier = tiers
-                .Where(t => t.FasSchemeId == row.selection.FasSchemeId)
-                .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, row.application, groups, criteria, categorical, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)))
-                .Select(t => t.Label)
-                .FirstOrDefault();
+            FasRecommendationResult recommendation = RecommendationService.Recommend(
+                [new FasRecommendationScheme(row.scheme.Id, row.scheme.Name, row.scheme.Description)],
+                tiers,
+                groups,
+                criteria,
+                categorical,
+                ToRecommendationFacts(row.application, Today()));
+            string? recommendedTier = recommendation.Recommended?.TierLabel;
 
             return new
             {
@@ -491,6 +515,8 @@ public sealed class StudentFasApplicationService(
                 schemeId = row.scheme.Id,
                 schemeName = row.scheme.Name,
                 schemeTier = approvedTier ?? recommendedTier,
+                recommendation.RecommendationStatus,
+                recommendation.ManualReviewReason,
                 submittedAt = row.application.SubmittedAtUtc,
                 status = ToAdminVisibleStatus(row.application.StatusCode, row.selection.StatusCode)
             };
@@ -531,28 +557,36 @@ public sealed class StudentFasApplicationService(
         var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
         var criteriaIds = criteria.Select(x => x.Id).ToArray();
         var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
-        var schemes = items.Select(item => new
+        var schemes = items.Select(item =>
         {
-            item.Id,
-            item.FasSchemeId,
-            item.Name,
-            item.StatusCode,
-            item.ApprovedAmount,
-            item.ApprovedComponentsJson,
-            item.RejectionNotes,
-            item.ValidFrom,
-            item.ValidTo,
-            item.IsActive,
-            tiers = tiers
-                .Where(t => t.FasSchemeId == item.FasSchemeId)
-                .Select(t => new { tierId = t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder })
-                .ToArray(),
-            recommendedTierId = tiers
-                .Where(t => t.FasSchemeId == item.FasSchemeId)
-                .OrderBy(t => t.DisplayOrder)
-                .Where(t => TierMatches(t.Id, app, groups, criteria, categorical, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime)))
-                .Select(t => (long?)t.Id)
-                .FirstOrDefault()
+            FasRecommendationResult recommendation = RecommendationService.Recommend(
+                [new FasRecommendationScheme(item.FasSchemeId, item.Name, null)],
+                tiers,
+                groups,
+                criteria,
+                categorical,
+                ToRecommendationFacts(app, Today()));
+
+            return new
+            {
+                item.Id,
+                item.FasSchemeId,
+                item.Name,
+                item.StatusCode,
+                item.ApprovedAmount,
+                item.ApprovedComponentsJson,
+                item.RejectionNotes,
+                item.ValidFrom,
+                item.ValidTo,
+                item.IsActive,
+                tiers = tiers
+                    .Where(t => t.FasSchemeId == item.FasSchemeId)
+                    .Select(t => new { tierId = t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder })
+                    .ToArray(),
+                recommendedTierId = recommendation.Recommended?.TierId,
+                recommendation.RecommendationStatus,
+                recommendation.ManualReviewReason
+            };
         }).ToArray();
 
         var documents = await db.Set<FasDocument>()
@@ -978,15 +1012,18 @@ public sealed class StudentFasApplicationService(
                     on active.FasApplicationSchemeId equals item.Id
                 join scheme in db.Set<FasScheme>().AsNoTracking()
                     on active.FasSchemeId equals scheme.Id
-                where active.StudentPersonId == person
-                      && active.StatusCode == "ACTIVE"
-                      && item.IsActive
-                      && scheme.StatusCode == "ACTIVE"
-                      && active.ActiveFrom <= today
-                      && active.ActiveTo >= today
-                      && !db.Set<FasVoucherRedemption>().Any(redemption =>
-                          redemption.FasApplicationSchemeId == item.Id &&
-                          redemption.StatusCode == "PENDING")
+              where active.StudentPersonId == person
+                    && active.StatusCode == "ACTIVE"
+                    && item.StatusCode == "APPROVED"
+                    && item.IsActive
+                    && scheme.StatusCode == "ACTIVE"
+                    && (item.ValidFrom ?? today) <= today
+                    && (item.ValidTo ?? today) >= today
+                    && active.ActiveFrom <= today
+                    && active.ActiveTo >= today
+                    && !db.Set<FasVoucherRedemption>().Any(redemption =>
+                        redemption.FasApplicationSchemeId == item.Id &&
+                        redemption.StatusCode != "CANCELLED")
                       && (!db.Set<FasSchemeCourse>().Any(schemeCourse =>
                               schemeCourse.FasSchemeId == scheme.Id) ||
                           db.Set<FasSchemeCourse>().Any(schemeCourse =>
@@ -1025,7 +1062,16 @@ public sealed class StudentFasApplicationService(
             .Select(x => new { x.FasApplicationSchemeId, x.FasSchemeId, x.ActiveFrom, x.ActiveTo })
             .FirstOrDefaultAsync(ct);
 
-        return new { canApply = true, blockingReason = (string?)null, activeScheme = active, resumableDraftId = draft };
+        bool hasActiveBenefit = active is not null && active.ActiveFrom <= Today() && active.ActiveTo >= Today();
+        return new
+        {
+            canApply = !hasActiveBenefit,
+            blockingReason = hasActiveBenefit
+                ? "You already have an approved active FAS benefit. You can apply again after it is redeemed or expires."
+                : (string?)null,
+            activeScheme = active,
+            resumableDraftId = draft
+        };
     }
 
     public async Task<object> ApplicationReview(long id, CancellationToken ct)
@@ -1050,23 +1096,44 @@ public sealed class StudentFasApplicationService(
                                     i.IsActive,
                                     i.RedeemedAtUtc
                                 }).ToListAsync(ct);
-        var schemes = schemeRows.Select(x => new
+        long[] schemeIds = schemeRows.Select(x => x.FasSchemeId).Distinct().ToArray();
+        var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
+        var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+        var schemes = schemeRows.Select(x =>
         {
-            x.Id,
-            x.FasSchemeId,
-            x.Name,
-            StatusCode = StudentVisibleStatus(x.itemStatus, x.schemeStatus),
-            applicationSchemeStatus = x.itemStatus,
-            x.schemeStatus,
-            availabilityStatus = SchemeAvailabilityStatus(x.schemeStatus),
-            availabilityMessage = SchemeAvailabilityMessage(x.schemeStatus),
-            x.ApprovedAmount,
-            x.ApprovedComponentsJson,
-            x.RejectionNotes,
-            x.ValidFrom,
-            x.ValidTo,
-            x.IsActive,
-            x.RedeemedAtUtc
+            FasRecommendationResult recommendation = RecommendationService.Recommend(
+                [new FasRecommendationScheme(x.FasSchemeId, x.Name, null)],
+                tiers,
+                groups,
+                criteria,
+                categorical,
+                ToRecommendationFacts(app, Today()));
+
+            return new
+            {
+                x.Id,
+                x.FasSchemeId,
+                x.Name,
+                StatusCode = StudentVisibleStatus(x.itemStatus, x.schemeStatus),
+                applicationSchemeStatus = x.itemStatus,
+                x.schemeStatus,
+                availabilityStatus = SchemeAvailabilityStatus(x.schemeStatus),
+                availabilityMessage = SchemeAvailabilityMessage(x.schemeStatus),
+                x.ApprovedAmount,
+                x.ApprovedComponentsJson,
+                x.RejectionNotes,
+                x.ValidFrom,
+                x.ValidTo,
+                x.IsActive,
+                x.RedeemedAtUtc,
+                recommendedTierId = recommendation.Recommended?.TierId,
+                recommendation.RecommendationStatus,
+                recommendation.ManualReviewReason
+            };
         }).ToList();
         var documents = await db.Set<FasDocument>().AsNoTracking()
             .Where(x => x.FasApplicationId == id && x.UploadStatusCode != "REMOVED")
@@ -1103,6 +1170,63 @@ public sealed class StudentFasApplicationService(
             documents,
             declarations
         };
+    }
+
+    private async Task<FasRecommendationResult> RecommendAsync(
+        IReadOnlyCollection<FasRecommendationScheme> schemes,
+        FasRecommendationFacts facts,
+        CancellationToken ct)
+    {
+        long[] schemeIds = schemes.Select(x => x.Id).Distinct().ToArray();
+        var tiers = await db.Set<FasTier>().AsNoTracking().Where(x => schemeIds.Contains(x.FasSchemeId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] tierIds = tiers.Select(x => x.Id).ToArray();
+        var groups = await db.Set<FasTierCriteriaGroup>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        var criteria = await db.Set<FasTierCriteria>().AsNoTracking().Where(x => tierIds.Contains(x.FasTierId)).OrderBy(x => x.DisplayOrder).ToListAsync(ct);
+        long[] criteriaIds = criteria.Select(x => x.Id).ToArray();
+        var categorical = await db.Set<FasTierCriteriaNationality>().AsNoTracking().Where(x => criteriaIds.Contains(x.FasTierCriteriaId)).ToListAsync(ct);
+
+        return RecommendationService.Recommend(schemes, tiers, groups, criteria, categorical, facts);
+    }
+
+    private static EligibilitySchemeMatch ToEligibilityMatch(FasRecommendationMatch match, int rank, bool comparable)
+    {
+        string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
+            ? $"{match.SubsidyValue:N0}% subsidy"
+            : match.SubsidyValue.ToString("C", CultureInfo.GetCultureInfo("en-SG"));
+        string reason = comparable
+            ? rank == 1
+                ? $"Best fit among comparable eligible schemes: matched the configured criteria and offers {benefit}."
+                : $"Eligible option #{rank}: matched the configured criteria and offers {benefit}."
+            : $"Eligible option #{rank}: matched the configured criteria and offers {benefit}. Fixed and percentage benefits are not directly comparable without a course fee amount.";
+
+        return new(
+            match.SchemeId,
+            match.SchemeName,
+            match.Description,
+            match.TierId,
+            match.TierLabel,
+            match.SubsidyType,
+            match.SubsidyValue,
+            DateOnly.MaxValue,
+            rank,
+            reason,
+            comparable ? "HIGH" : "REVIEW_REQUIRED",
+            comparable);
+    }
+
+    private static FasRecommendationFacts ToRecommendationFacts(FasApplication app, DateOnly today)
+        => new(
+            app.DateOfBirth.HasValue ? CalculateAge(app.DateOfBirth.Value, today) : null,
+            app.MonthlyHouseholdIncome,
+            app.PerCapitaIncome,
+            app.NationalityCode,
+            ParseParentNationalities(app.ParentNationalitiesJson),
+            app.AccountTypeCode);
+
+    private static int CalculateAge(DateOnly dateOfBirth, DateOnly today)
+    {
+        int age = today.Year - dateOfBirth.Year;
+        return dateOfBirth.AddYears(age) > today ? age - 1 : age;
     }
 
     private async Task<bool> DocumentsComplete(long id, CancellationToken ct)
@@ -1150,6 +1274,57 @@ public sealed class StudentFasApplicationService(
                     schoolCourseIds.Contains(schemeCourse.CourseId)))
             .Select(scheme => scheme.Id)
             .ToListAsync(ct);
+    }
+
+    private static EligibilitySchemeMatch[] RankEligibilityMatches(IReadOnlyCollection<EligibilitySchemeMatch> matches)
+    {
+        bool comparable = matches
+            .Select(x => x.SubsidyType.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Count() <= 1;
+
+        IOrderedEnumerable<EligibilitySchemeMatch> ordered = comparable
+            ? matches.OrderByDescending(BenefitRank)
+                .ThenBy(x => x.ApplicationEndDate)
+                .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
+            : matches.OrderBy(x => x.ApplicationEndDate)
+                .ThenBy(x => x.SchemeName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.TierLabel, StringComparer.OrdinalIgnoreCase);
+
+        return ordered
+            .Select((match, index) => match with
+            {
+                RecommendationRank = index + 1,
+                RecommendationReason = BuildRecommendationReason(match, index + 1, comparable),
+                RecommendationConfidence = comparable ? "HIGH" : "REVIEW_REQUIRED",
+                IsComparable = comparable
+            })
+            .ToArray();
+    }
+
+    private static decimal BenefitRank(EligibilitySchemeMatch match)
+    {
+        string subsidyType = match.SubsidyType.ToUpperInvariant();
+        return subsidyType switch
+        {
+            "PERCENTAGE" => match.SubsidyValue * 1000m,
+            "FIXED" => match.SubsidyValue,
+            _ => 0m
+        };
+    }
+
+    private static string BuildRecommendationReason(EligibilitySchemeMatch match, int rank, bool comparable)
+    {
+        string benefit = match.SubsidyType.Equals("PERCENTAGE", StringComparison.OrdinalIgnoreCase)
+            ? $"{match.SubsidyValue:N0}% subsidy"
+            : match.SubsidyValue.ToString("C", CultureInfo.GetCultureInfo("en-SG"));
+        if (!comparable)
+        {
+            return $"Eligible option #{rank}: matched the configured criteria and offers {benefit}. Fixed and percentage benefits are not directly comparable without a course fee amount.";
+        }
+
+        string prefix = rank == 1 ? "Best fit among comparable eligible schemes" : $"Eligible option #{rank}";
+        return $"{prefix}: matched the configured criteria and offers {benefit}. Ties use application closing date and scheme name.";
     }
 
     private static bool SchemeIsAvailable(string schemeStatus) => schemeStatus is "ACTIVE";
@@ -1275,7 +1450,7 @@ public sealed class StudentFasApplicationService(
 
     private async Task EnsureNoDuplicateApplications(long person, IReadOnlyCollection<long> schemeIds, long? currentApplicationId, CancellationToken ct)
     {
-        var pendingSchemes = await (
+        var blockingSchemes = await (
                 from item in db.Set<FasApplicationScheme>().AsNoTracking()
                 join application in db.Set<FasApplication>().AsNoTracking() on item.FasApplicationId equals application.Id
                 join scheme in db.Set<FasScheme>().AsNoTracking() on item.FasSchemeId equals scheme.Id
@@ -1283,18 +1458,30 @@ public sealed class StudentFasApplicationService(
                       && (!currentApplicationId.HasValue || application.Id != currentApplicationId.Value)
                       && application.StatusCode != FasApplicationStatuses.Withdrawn
                       && schemeIds.Contains(item.FasSchemeId)
-                      && item.StatusCode == "PENDING"
+                      && (item.StatusCode == "PENDING" || item.StatusCode == "APPROVED")
                 select new { item.FasSchemeId, scheme.Name })
             .Distinct()
             .ToListAsync(ct);
 
-        if (pendingSchemes.Count > 0)
+        if (blockingSchemes.Count > 0)
         {
-            var pendingSchemeLabels = pendingSchemes
+            var blockingSchemeLabels = blockingSchemes
                 .Select(x => $"{x.FasSchemeId}:{x.Name.Replace("|", " ").Replace(",", " ")}");
-            throw new InvalidOperationException($"FAS.PENDING_SCHEME_APPLICATION:{string.Join('|', pendingSchemeLabels)}");
+            throw new InvalidOperationException($"FAS.SCHEME_APPLICATION_EXISTS:{string.Join('|', blockingSchemeLabels)}");
         }
     }
+
+    private async Task<Dictionary<long, long>> PendingSchemeApplications(long person, CancellationToken ct)
+        => await (
+                from item in db.Set<FasApplicationScheme>().AsNoTracking()
+                join application in db.Set<FasApplication>().AsNoTracking() on item.FasApplicationId equals application.Id
+                where application.StudentPersonId == person
+                      && (item.StatusCode == "PENDING" || item.StatusCode == "APPROVED")
+                select new { item.FasSchemeId, ApplicationId = application.Id })
+            .GroupBy(x => x.FasSchemeId)
+            .Select(x => new { FasSchemeId = x.Key, ApplicationId = x.Min(item => item.ApplicationId) })
+            .ToDictionaryAsync(x => x.FasSchemeId, x => x.ApplicationId, ct);
+
     private async Task<FasApplication> Owned(long id, long person, CancellationToken ct) => await db.Set<FasApplication>().SingleOrDefaultAsync(x => x.Id == id && x.StudentPersonId == person, ct) ?? throw new KeyNotFoundException("FAS.APPLICATION_NOT_FOUND");
     private async Task<FasApplication> OwnedDraft(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Draft) throw new InvalidOperationException("FAS.APPLICATION_LOCKED"); return a; }
     private async Task<FasApplication> OwnedSubmitted(long id, long person, CancellationToken ct) { var a = await Owned(id, person, ct); if (a.StatusCode != FasApplicationStatuses.Submitted && a.StatusCode != FasApplicationStatuses.PendingReview) throw new InvalidOperationException("FAS.WITHDRAW_PENDING_ONLY"); return a; }
@@ -1317,88 +1504,7 @@ public sealed class StudentFasApplicationService(
             .AnyAsync(x => x.PersonId == personId, ct);
         return hasEducationAccount ? "EDUCATION_ACCOUNT" : "PERSONAL_ACCOUNT";
     }
-    private static bool TierMatches(long tierId, FasApplication app, IReadOnlyCollection<FasTierCriteriaGroup> allGroups, IReadOnlyCollection<FasTierCriteria> allCriteria, IReadOnlyCollection<FasTierCriteriaNationality> allValues, DateOnly today)
-    {
-        var criteria = allCriteria
-            .Where(x => x.FasTierId == tierId)
-            .OrderBy(x => x.DisplayOrder)
-            .ToArray();
-        if (criteria.Length == 0) return true;
 
-        int? age = app.DateOfBirth.HasValue ? today.Year - app.DateOfBirth.Value.Year : null;
-        if (age.HasValue && app.DateOfBirth!.Value.AddYears(age.Value) > today) age--;
-
-        var parents = ParseParentNationalities(app.ParentNationalitiesJson);
-        bool Match(FasTierCriteria c)
-        {
-            var values = allValues.Where(x => x.FasTierCriteriaId == c.Id).Select(x => x.Nationality).ToArray();
-            return c.CriteriaType switch
-            {
-                "AGE" => age.HasValue && age.Value >= c.NumberFrom && age.Value <= c.NumberTo,
-                "GDP" or "GHI" => app.MonthlyHouseholdIncome.HasValue && app.MonthlyHouseholdIncome.Value >= c.NumberFrom && app.MonthlyHouseholdIncome.Value <= c.NumberTo,
-                "PCI" => app.PerCapitaIncome.HasValue && app.PerCapitaIncome.Value >= c.NumberFrom && app.PerCapitaIncome.Value <= c.NumberTo,
-                "NATIONALITY" => values.Contains(app.NationalityCode ?? string.Empty, StringComparer.OrdinalIgnoreCase) ||
-                                 app.NationalityCode == "SG" && values.Contains("Singapore Citizen", StringComparer.OrdinalIgnoreCase),
-                "PARENT_NATIONALITY" => parents.Any(p => values.Contains(p, StringComparer.OrdinalIgnoreCase)),
-                "ACCOUNT_TYPE" => values.Contains(app.AccountTypeCode, StringComparer.OrdinalIgnoreCase),
-                _ => false
-            };
-        }
-
-        var values = criteria.ToDictionary(criteriaItem => criteriaItem.Id, Match);
-        FasTierCriteriaGroup[] groups = allGroups
-            .Where(x => x.FasTierId == tierId)
-            .OrderBy(x => x.DisplayOrder)
-            .ToArray();
-
-        return GroupsMatch(groups, criteria, values);
-    }
-
-    private static bool GroupsMatch(
-        IReadOnlyCollection<FasTierCriteriaGroup> groups,
-        IReadOnlyCollection<FasTierCriteria> criteria,
-        IReadOnlyDictionary<long, bool> values)
-    {
-        if (groups.Count == 0)
-        {
-            return LegacyGroups(criteria).Any(group => group.All(criteriaItem => values.GetValueOrDefault(criteriaItem.Id)));
-        }
-
-        return groups
-            .OrderBy(group => group.DisplayOrder)
-            .Any(group =>
-            {
-                FasTierCriteria[] groupCriteria = criteria
-                    .Where(criteriaItem => criteriaItem.FasTierCriteriaGroupId == group.Id)
-                    .ToArray();
-                return groupCriteria.Length > 0 && groupCriteria.All(criteriaItem => values.GetValueOrDefault(criteriaItem.Id));
-            });
-    }
-
-    private static IReadOnlyList<IReadOnlyList<FasTierCriteria>> LegacyGroups(IReadOnlyCollection<FasTierCriteria> criteria)
-    {
-        var groups = new List<IReadOnlyList<FasTierCriteria>>();
-        var current = new List<FasTierCriteria>();
-
-        foreach (FasTierCriteria item in criteria.OrderBy(item => item.DisplayOrder))
-        {
-            current.Add(item);
-            if (item.ConnectorToNext != "OR")
-            {
-                continue;
-            }
-
-            groups.Add(current.ToArray());
-            current = new List<FasTierCriteria>();
-        }
-
-        if (current.Count > 0)
-        {
-            groups.Add(current.ToArray());
-        }
-
-        return groups;
-    }
     private static string[] ParseParentNationalities(string? json) => string.IsNullOrWhiteSpace(json) ? Array.Empty<string>() : JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
     private static string? ExtractApprovedTierLabel(string? approvedComponentsJson)
     {
@@ -1429,22 +1535,15 @@ public sealed class StudentFasApplicationService(
 
         foreach (long userAccountId in userAccountIds.Distinct())
         {
-            Result<long> result = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId,
                     NotificationTypeCode.FasSubmitted,
                     $"FAS Application Submitted: {app.ApplicationNo}",
                     $"New FAS application {app.ApplicationNo} for {app.SchoolName} was submitted."),
+                logger,
+                "FAS application submitted school admin notification",
                 ct);
-
-            if (result.IsFailure)
-            {
-                logger.LogWarning(
-                    "FAS submit notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                    applicationId,
-                    userAccountId,
-                    result.Error.Code);
-            }
         }
     }
 
@@ -1459,22 +1558,15 @@ public sealed class StudentFasApplicationService(
         long? userAccountId = await studentNotificationRecipients.FindUserAccountIdByPersonIdAsync(app.AccountHolderPersonId, ct);
         if (userAccountId is null) return;
 
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.FasEligible,
                 $"FAS Application Approved: {app.ApplicationNo}",
                 $"Your FAS application {app.ApplicationNo} for {schemeName} was approved. You qualify for {tierName}."),
+            logger,
+            "FAS application approved student notification",
             ct);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS approve notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                applicationId,
-                userAccountId,
-                result.Error.Code);
-        }
     }
 
     private async Task NotifyStudentForRejectedSchemeAsync(long applicationId, string rejectionNotes, CancellationToken ct)
@@ -1489,22 +1581,15 @@ public sealed class StudentFasApplicationService(
         if (userAccountId is null) return;
 
         string reason = string.IsNullOrWhiteSpace(rejectionNotes) ? "No rejection reason was provided." : rejectionNotes.Trim();
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.FasRejected,
                 $"FAS Application Rejected: {app.ApplicationNo}",
                 $"Your FAS application {app.ApplicationNo} for {schemeName} was rejected. Reason: {reason}."),
+            logger,
+            "FAS application rejected student notification",
             ct);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS reject notification failed. ApplicationId={ApplicationId} UserAccountId={UserAccountId} Error={ErrorCode}",
-                applicationId,
-                userAccountId,
-                result.Error.Code);
-        }
     }
     private sealed record CourseRow(long Id, string CourseCode, string CourseName);
     private sealed record ChecklistItem(string ChecklistItemCode, string Label, bool IsMandatory, object? Document, bool IsComplete);

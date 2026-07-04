@@ -2229,8 +2229,8 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
 
                     b.Property<decimal?>("NumericValueFrom")
                         .HasPrecision(19, 2)
@@ -2253,11 +2253,47 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<long>("TopUpCampaignId")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("TopUpRuleGroupId")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TopUpCampaignId");
 
+                    b.HasIndex("TopUpRuleGroupId", "DisplayOrder");
+
                     b.ToTable("TopUpCampaignRule", "topup");
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRuleGroup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("TopUpRuleGroupId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<long>("TopUpCampaignId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopUpCampaignId", "DisplayOrder")
+                        .IsUnique();
+
+                    b.ToTable("TopUpRuleGroup", "topup");
                 });
 
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRun", b =>
@@ -5693,6 +5729,10 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.HasIndex("PersonId");
 
+                    b.HasIndex("PersonId", "PortalAccessCode")
+                        .IsUnique()
+                        .HasFilter("[PersonId] IS NOT NULL");
+
                     b.HasIndex("IdentityProviderCode", "ExternalIssuer", "ExternalSubjectId")
                         .IsUnique();
 
@@ -6776,57 +6816,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                             UpdatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UserTypeCode = "ESERVICE"
                         });
-                });
-
-            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.Notification", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("NotificationId");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<DateTime?>("ReadAtUtc")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("ReadAt");
-
-                    b.Property<long>("RecipientUserAccountId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("NotificationStatusCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<string>("NotificationTypeCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RecipientUserAccountId", "CreatedAtUtc");
-
-                    b.HasIndex("RecipientUserAccountId", "ReadAtUtc");
-
-                    b.ToTable("Notification", "communication");
                 });
 
             modelBuilder.Entity("Moe.Modules.IdentityPlatform.Domain.People.Person", b =>
@@ -10706,6 +10695,143 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.ToTable("LoginMfaCredential", "iam");
                 });
 
+            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.Notification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("NotificationId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("ChannelCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("ChannelCode");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("NotificationStatusCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("NotificationTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ReadAt");
+
+                    b.Property<long>("RecipientUserAccountId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("RecipientUserAccountId");
+
+                    b.Property<string>("ReferenceTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("ReferenceTypeCode");
+
+                    b.Property<string>("TemplateCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("TemplateCode");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserAccountId", "CreatedAtUtc");
+
+                    b.HasIndex("RecipientUserAccountId", "ReadAtUtc");
+
+                    b.ToTable("Notification", "communication");
+                });
+
+            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.NotificationRealtimeDelivery", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("NotificationRealtimeDeliveryId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeliveredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("NotificationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("NotificationId");
+
+                    b.Property<long>("RecipientUserAccountId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("RecipientUserAccountId");
+
+                    b.Property<string>("StatusCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NotificationId")
+                        .HasDatabaseName("IX_NotificationRealtimeDelivery_NotificationId");
+
+                    b.HasIndex("RecipientUserAccountId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_NotificationRealtimeDelivery_Recipient_CreatedAt");
+
+                    b.HasIndex("StatusCode", "NextAttemptAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("IX_NotificationRealtimeDelivery_Queue");
+
+                    b.ToTable("NotificationRealtimeDelivery", "communication");
+                });
+
             modelBuilder.Entity("Moe.Modules.FasPayment.Domain.Payments.BillPaymentCheckoutSession", b =>
                 {
                     b.HasBaseType("Moe.Modules.FasPayment.Domain.Payments.PaymentCheckoutSession");
@@ -10740,6 +10866,24 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRun", null)
                         .WithMany("Items")
                         .HasForeignKey("EducationAccountLifecycleRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaignRule", b =>
+                {
+                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRuleGroup", null)
+                        .WithMany("Rules")
+                        .HasForeignKey("TopUpRuleGroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRuleGroup", b =>
+                {
+                    b.HasOne("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpCampaign", null)
+                        .WithMany()
+                        .HasForeignKey("TopUpCampaignId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -10890,9 +11034,25 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Moe.Modules.Notifications.Domain.Notifications.NotificationRealtimeDelivery", b =>
+                {
+                    b.HasOne("Moe.Modules.Notifications.Domain.Notifications.Notification", "Notification")
+                        .WithMany()
+                        .HasForeignKey("NotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Notification");
+                });
+
             modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.Lifecycle.EducationAccountLifecycleRun", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Moe.Modules.EducationAccountTopUp.Domain.TopUps.TopUpRuleGroup", b =>
+                {
+                    b.Navigation("Rules");
                 });
 #pragma warning restore 612, 618
         }

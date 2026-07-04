@@ -291,8 +291,8 @@ public sealed class AiOrchestratorService(
 
     private async Task<AiChatResponse> HandleGeneral(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
-        bool isSchemeKbRequest = IsSchemeKbRequest(request.Message);
-        string retrievalDomain = isSchemeKbRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
+        bool isFasKnowledgeRequest = IsSchemeKbRequest(request.Message) || IsFasKnowledgeInterrupt(request.Message);
+        string retrievalDomain = isFasKnowledgeRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
         IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
         if (sources.Count == 0)
         {
@@ -306,7 +306,7 @@ public sealed class AiOrchestratorService(
 
         KnowledgeAnswerCard knowledgeCard = BuildKnowledgeAnswerCard(request.Message, sources);
         string sourceText = string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"));
-        if (isSchemeKbRequest && sources.Count > 0)
+        if (isFasKnowledgeRequest && sources.Count > 0)
         {
             string deterministicText = BuildKnowledgeAnswer(request.Message, sources);
             return new(c.Id, 0, deterministicText, "GENERAL", Grounding(sources), [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources), null)
@@ -356,12 +356,27 @@ public sealed class AiOrchestratorService(
         string summary = facts.FirstOrDefault() ?? CleanKnowledgeSnippet(primary.Content);
         string[] keyFacts = facts.Skip(1).DefaultIfEmpty(summary).Take(4).ToArray();
         string[] sourceIds = sources.Select(x => x.Citation.SourceId).Distinct(StringComparer.Ordinal).Take(4).ToArray();
+        KnowledgeSourceSummary[] sourceSummaries = sources
+            .GroupBy(x => x.Citation.SourceId, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                KnowledgeResult result = group.First();
+                return new KnowledgeSourceSummary(
+                    result.Citation.SourceId,
+                    result.Citation.Title,
+                    result.Citation.SourceStatus,
+                    result.Citation.EffectiveDate,
+                    result.ReviewOwner,
+                    result.AllowedIntents);
+            })
+            .Take(4)
+            .ToArray();
         string sourceQuality = sources.Any(x => x.Citation.SourceStatus == "OFFICIAL")
             ? "Official MOE guidance"
             : sources.Any(x => x.Citation.SourceStatus == "GUIDE")
                 ? "Reviewed guidance"
                 : "Prototype or FAQ guidance";
-        string[] followUps = FasKnowledgeFollowUps(question);
+        string[] followUps = PlanFollowUps("GENERAL", question, null, sources);
 
         return new KnowledgeAnswerCard(
             primary.Citation.Section,
@@ -370,7 +385,9 @@ public sealed class AiOrchestratorService(
             ["Use Open FAS application below to review live schemes and draft status.", "Ask \"Check if I qualify for FAS\" and I can collect the answers before you open the form."],
             sourceIds,
             sourceQuality,
-            followUps);
+            followUps,
+            sourceSummaries,
+            string.Join(", ", sources.Select(x => x.Citation.Version).Distinct(StringComparer.Ordinal).Take(3)));
     }
 
     private static string CleanKnowledgeSnippet(string content)
@@ -422,19 +439,50 @@ public sealed class AiOrchestratorService(
         db.Add(record); await db.SaveChangesAsync(ct); return record.Id;
     }
 
+    private enum AiTurnIntent
+    {
+        AnswerKnowledgeQuestion,
+        ContinueInterview,
+        StartInterview,
+        SubmitInterviewAnswer,
+        PaymentQuery,
+        Fallback
+    }
+
     private static string DetermineMode(string message, string current, string? domain)
+    {
+        return ClassifyIntent(message, current, domain) switch
+        {
+            AiTurnIntent.PaymentQuery => "PAYMENT",
+            AiTurnIntent.AnswerKnowledgeQuestion => "GENERAL",
+            AiTurnIntent.ContinueInterview or AiTurnIntent.StartInterview or AiTurnIntent.SubmitInterviewAnswer => "FAS_INTERVIEW",
+            _ => "GENERAL"
+        };
+    }
+
+    private static AiTurnIntent ClassifyIntent(string message, string current, string? domain)
     {
         string value = $"{domain} {message}".ToUpperInvariant();
         string msgOnly = message.ToUpperInvariant();
         bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
         bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
-        if (IsSchemeKbRequest(msgOnly)) return "GENERAL";
-        if (msgHasPaymentKeyword) return "PAYMENT";
-        if (IsFasInterviewRequest(value)) return "FAS_INTERVIEW";
-        if (current == "FAS_INTERVIEW") return "FAS_INTERVIEW";
-        if (isPaymentDomain) return "PAYMENT";
-        return "GENERAL";
+        if (msgHasPaymentKeyword) return AiTurnIntent.PaymentQuery;
+        if (IsSchemeKbRequest(msgOnly) || IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (current == "FAS_INTERVIEW" && IsContinueInterviewRequest(msgOnly)) return AiTurnIntent.ContinueInterview;
+        if (current == "FAS_INTERVIEW" && IsLikelyInterviewAnswer(msgOnly)) return AiTurnIntent.SubmitInterviewAnswer;
+        if (IsFasInterviewRequest(value)) return AiTurnIntent.StartInterview;
+        if (current == "FAS_INTERVIEW") return AiTurnIntent.SubmitInterviewAnswer;
+        if (isPaymentDomain) return AiTurnIntent.PaymentQuery;
+        return AiTurnIntent.Fallback;
     }
+
+    private static bool IsContinueInterviewRequest(string value) =>
+        Regex.IsMatch(value, @"\b(CONTINUE|RESUME|GO BACK|KEEP GOING|FINISH)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(FAS|FINANCIAL ASSISTANCE|ELIGIBILITY|CHECK|APPLICATION|INTERVIEW)\b", RegexOptions.IgnoreCase);
+
+    private static bool IsLikelyInterviewAnswer(string value) =>
+        Regex.IsMatch(value, @"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$",
+            RegexOptions.IgnoreCase);
 
     private static bool IsSchemeKbRequest(string value)
     {
@@ -452,6 +500,22 @@ public sealed class AiOrchestratorService(
             value.Contains("BURSARY", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase);
         return mentionsFas && (isInfoIntent || isProcessInfoIntent) && (!startsLiveAssessment || isProcessInfoIntent);
+    }
+
+    private static bool IsFasKnowledgeInterrupt(string value)
+    {
+        bool asksQuestion = Regex.IsMatch(value, @"\b(WHAT|HOW|WHY|EXPLAIN|CALCULAT|MEAN|MEANS|COUNT|COUNTS|DOCUMENT|DOCUMENTS|DEADLINE|PROCESS|STEP|STEPS|REQUIREMENT|REQUIREMENTS)\b",
+            RegexOptions.IgnoreCase) || value.Contains("?", StringComparison.Ordinal);
+        bool mentionsSpecificFasKnowledge = Regex.IsMatch(value,
+            @"\b(PCI|PER CAPITA|GHI|GROSS HOUSEHOLD|HOUSEHOLD INCOME|INCOME CALCULATION|DOCUMENTS?|BURSARY|SUBSIDY|DEADLINE|PROCESS|STEPS?|REQUIREMENTS?)\b",
+            RegexOptions.IgnoreCase);
+        bool startsLiveAssessment = Regex.IsMatch(value,
+            @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|APPLY|APPLICATION|HELP ME|GUIDE ME|DO FAS|DO FINANCIAL ASSISTANCE)\b",
+            RegexOptions.IgnoreCase);
+        bool submitsLikelyFieldValue = Regex.IsMatch(value, @"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$",
+            RegexOptions.IgnoreCase);
+
+        return asksQuestion && mentionsSpecificFasKnowledge && !startsLiveAssessment && !submitsLikelyFieldValue;
     }
 
     private static bool IsFasInterviewRequest(string value)
@@ -594,7 +658,8 @@ public sealed class AiOrchestratorService(
         => state.ApplicableSchemes
             .GroupBy(x => x.Id)
             .Select(x => x.First())
-            .Select(x => new FasRecommendationMatch(x.Id, x.Name, 0, "Welfare-home route", "ASSISTANCE", 0m))
+            .Select((x, index) => new FasRecommendationMatch(x.Id, x.Name, 0, "Welfare-home route", "ASSISTANCE", 0m,
+                index + 1, "Open scheme for your school. Welfare-home applicants skip income-based ranking and must review the scheme selection in the form.", "REVIEW_REQUIRED", false))
             .ToArray();
 
     private static string? NextQuestion(FasInterviewData s, string? preferred = null)
@@ -945,6 +1010,8 @@ public sealed class AiOrchestratorService(
         decimal? pci = TryGetDecimal(root, "perCapitaIncome");
         FasRecommendationMatch[] matches = ExtractRecommendationMatches(root);
         FasRecommendationMatch? recommended = matches.FirstOrDefault();
+        bool isComparable = matches.Length == 0 || matches.All(x => x.IsComparable);
+        string confidence = recommended?.RecommendationConfidence ?? (isComparable ? "HIGH" : "REVIEW_REQUIRED");
         return new FasRecommendationCard(
             pci,
             recommended?.SchemeName,
@@ -954,7 +1021,12 @@ public sealed class AiOrchestratorService(
             matches,
             interview.Fields.Where(x => x.Confirmed).ToArray(),
             interview.MissingFields,
-            "Prototype recommendation. Eligibility is calculated by application code and final approval remains subject to MOE review.");
+            "Prototype recommendation. Eligibility is calculated by application code and final approval remains subject to MOE review.",
+            confidence,
+            isComparable,
+            isComparable
+                ? "Ranked by comparable benefit strength, then application closing date and scheme name."
+                : "Eligible schemes use benefit types that are not directly comparable without a course fee amount.");
     }
 
     private static bool CanPrepareOpenSchemeForReview(FasInterviewData state) =>
@@ -962,7 +1034,8 @@ public sealed class AiOrchestratorService(
 
     private static FasRecommendationMatch[] ReviewRequiredSchemeMatches(FasInterviewData state) =>
         state.ApplicableSchemes
-            .Select(scheme => new FasRecommendationMatch(scheme.Id, scheme.Name, 0, "Review required", "Scheme selection", 0m))
+            .Select((scheme, index) => new FasRecommendationMatch(scheme.Id, scheme.Name, 0, "Review required", "Scheme selection", 0m,
+                index + 1, "Open scheme for your school. Criteria are not fully configured for automatic ranking, so staff/form review is required.", "REVIEW_REQUIRED", false))
             .ToArray();
 
     private static FasRecommendationCard BuildReviewRequiredRecommendation(AiInterviewState interview, IReadOnlyCollection<FasRecommendationMatch> matches)
@@ -977,7 +1050,10 @@ public sealed class AiOrchestratorService(
             matches,
             interview.Fields.Where(x => x.Confirmed).ToArray(),
             interview.MissingFields,
-            "Review required. The scheme is open for your school, but the demo criteria do not include a configured tier calculation.");
+            "Review required. The scheme is open for your school, but the demo criteria do not include a configured tier calculation.",
+            "REVIEW_REQUIRED",
+            false,
+            "Open schemes without configured tier criteria are shown for review, not ranked as a best fit.");
     }
 
     private static FasRecommendationMatch[] ExtractRecommendationMatches(JsonElement root)
@@ -995,8 +1071,13 @@ public sealed class AiOrchestratorService(
         string? tierLabel = TryGetString(item, "tierLabel");
         string? subsidyType = TryGetString(item, "subsidyType");
         decimal? subsidyValue = TryGetDecimal(item, "subsidyValue");
+        int? recommendationRank = TryGetInt32(item, "recommendationRank");
+        string? recommendationReason = TryGetString(item, "recommendationReason");
+        string? recommendationConfidence = TryGetString(item, "recommendationConfidence");
+        bool? isComparable = TryGetBoolean(item, "isComparable");
         return schemeId.HasValue && tierId.HasValue && schemeName is not null && tierLabel is not null && subsidyType is not null && subsidyValue.HasValue
-            ? new FasRecommendationMatch(schemeId.Value, schemeName, tierId.Value, tierLabel, subsidyType, subsidyValue.Value)
+            ? new FasRecommendationMatch(schemeId.Value, schemeName, tierId.Value, tierLabel, subsidyType, subsidyValue.Value,
+                recommendationRank ?? 0, recommendationReason, recommendationConfidence ?? "MEDIUM", isComparable ?? true)
             : null;
     }
 
@@ -1004,8 +1085,12 @@ public sealed class AiOrchestratorService(
         => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     private static long? TryGetInt64(JsonElement element, string property)
         => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt64(out long result) ? result : null;
+    private static int? TryGetInt32(JsonElement element, string property)
+        => element.TryGetProperty(property, out JsonElement value) && value.TryGetInt32(out int result) ? result : null;
     private static decimal? TryGetDecimal(JsonElement element, string property)
         => element.TryGetProperty(property, out JsonElement value) && value.TryGetDecimal(out decimal result) ? result : null;
+    private static bool? TryGetBoolean(JsonElement element, string property)
+        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
     private static FasInterviewData? DeserializeState(string? value) => string.IsNullOrWhiteSpace(value) ? null : JsonSerializer.Deserialize<FasInterviewData>(value, JsonOptions);
     private static AiInterviewState? DeserializeInterview(string? value) => DeserializeState(value) is { } state ? ToInterviewState(state, NextQuestion(state)) : null;
     private static AiGrounding Grounding(IReadOnlyList<KnowledgeResult> sources) => new(sources.Count > 0, sources.Select(x => x.Citation).ToArray());
@@ -1059,34 +1144,68 @@ public sealed class AiOrchestratorService(
     {
         if (response.FollowUpQuestions.Count > 0) return response;
 
-        string[] followUps = response.Mode switch
+        string[] followUps = PlanFollowUps(response.Mode, request.Message, response.InterviewState, []);
+
+        return followUps.Length == 0 ? response : response with { FollowUpQuestions = followUps };
+    }
+
+    private static string[] PlanFollowUps(string mode, string message, AiInterviewState? interviewState, IReadOnlyList<KnowledgeResult> sources)
+    {
+        var planned = new List<string>();
+        if (interviewState?.Status is "COLLECTING" or "CLARIFYING")
+        {
+            planned.Add("Continue my FAS eligibility check.");
+        }
+
+        planned.AddRange(sources.SelectMany(x => x.FollowUps));
+
+        string[] workflow = mode switch
         {
             "PAYMENT" => PaymentFollowUps(),
             "FALLBACK" => FallbackFollowUps(),
-            "GENERAL" => IsFasQuestion(request.Message) ? FasKnowledgeFollowUps(request.Message) : GeneralFinanceFollowUps(),
-            "FAS_INTERVIEW" when response.InterviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
+            "GENERAL" => IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
+            "FAS_INTERVIEW" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
             _ => []
         };
+        planned.AddRange(workflow);
 
-        return followUps.Length == 0 ? response : response with { FollowUpQuestions = followUps };
+        return planned
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
     }
 
     private static bool IsFasQuestion(string message) =>
         message.Contains("FAS", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("financial assistance", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("bursary", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("subsidy", StringComparison.OrdinalIgnoreCase);
+        message.Contains("subsidy", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("PCI", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("per capita", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("GHI", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("household income", StringComparison.OrdinalIgnoreCase);
 
     private static string[] FasKnowledgeFollowUps(string question)
     {
         string lower = question.ToLowerInvariant();
+        if (lower.Contains("pci") || lower.Contains("per capita") || lower.Contains("ghi") || lower.Contains("household income"))
+        {
+            return
+            [
+                "Continue my FAS eligibility check.",
+                "What counts as household income?",
+                "What documents prove household income?"
+            ];
+        }
+
         if (lower.Contains("document"))
         {
             return
             [
+                "Continue my FAS eligibility check.",
                 "Walk me through the FAS application process.",
-                "Which FAS schemes can I apply for?",
-                "How long does FAS approval take?"
+                "Which FAS schemes can I apply for?"
             ];
         }
 

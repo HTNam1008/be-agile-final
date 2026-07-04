@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.FasPayment.Application.EnrollmentCancellations;
@@ -33,7 +34,8 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
             new FakeSchoolAdminNotificationRecipientResolver(),
             new FakeNotificationWriter(),
             new TestClock(SgtEarlyMorning),
-            CreateEmailService());
+            CreateEmailService(),
+            NullLogger<CancelEnrollmentHandler>.Instance);
 
         Result<EnrollmentCancellationResponse> result = await handler.Handle(
             new CancelEnrollmentCommand(500, new CancelEnrollmentRequest("sgt-red")),
@@ -186,7 +188,7 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
     private sealed class FixedBrandingProvider : IEmailBrandingProvider
     {
         public string AppName => "Ministry of Education - Singapore";
-        public string PaymentDashboardUrl => "http://localhost:5173/portal/payments";
+        public string PaymentDashboardUrl => "https://portal.example.test/portal/payments";
         public string FasPortalUrl => "http://localhost:5173/portal/fas";
         public string AccountPortalUrl => "http://localhost:5173/portal/account";
         public string CourseDetailUrl(long courseId) => $"http://localhost:5173/portal/courses/{courseId}";

@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Clock;
 using Moe.SharedKernel.Domain;
 
 namespace Moe.Modules.FasPayment.Domain.Fas;
@@ -89,15 +90,13 @@ internal sealed class FasScheme : Entity<long>
 
     private static void ValidateDates(DateOnly startDate, DateOnly endDate, DateTime utcNow)
     {
-        DateOnly today = UtcDate(utcNow);
+        DateOnly today = SingaporeBusinessDay.FromUtc(utcNow);
         if (startDate < today) throw new ArgumentException("Start date cannot be before today.", nameof(startDate));
         if (endDate <= startDate) throw new ArgumentException("End date must be after start date.", nameof(endDate));
     }
 
     private static DateOnly UtcDate(DateTime utcNow)
-        => DateOnly.FromDateTime(utcNow.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(utcNow, DateTimeKind.Utc)
-            : utcNow.ToUniversalTime());
+        => SingaporeBusinessDay.FromUtc(utcNow);
 
     public void Retire(long actorId, DateTime utcNow)
     {

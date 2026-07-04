@@ -4,7 +4,9 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
@@ -62,7 +64,8 @@ if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
     builder.Services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
 }
 builder.Services.AddMoePersistence(builder.Configuration);
-builder.Services.AddSignalR();
+ConfigureSignalR(builder.Services, builder.Configuration);
+
 
 IModule[] modules =
 [
@@ -84,6 +87,13 @@ builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter("PaymentCheckout", limiter =>
     {
         limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+    options.AddFixedWindowLimiter("PublicFasSearch", limiter =>
+    {
+        limiter.PermitLimit = 30;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
         limiter.AutoReplenishment = true;
@@ -119,7 +129,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options 
             .Distinct()
             .ToArray();
         return new Microsoft.AspNetCore.Mvc.ObjectResult(ApiResponse<object>.Fail(
-            "Validation failed.",
+            ApiErrorMessages.ValidationFailed,
             ["FAS.INVALID_REQUEST", .. errors],
             ApiResponseCodes.UnprocessableEntity,
             context.HttpContext.TraceIdentifier))
@@ -280,11 +290,11 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 
 if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
 {
-    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(CreateDevelopmentClockResponse(clock)))
+    app.MapGet("/dev/clock", ([FromServices] DevelopmentManualClock clock) => Results.Ok(CreateDevelopmentClockResponse(clock)))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    app.MapPut("/dev/clock", ([FromBody] SetDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         clock.Set(request.UtcNow);
         return Results.Ok(CreateDevelopmentClockResponse(clock));
@@ -292,7 +302,7 @@ if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPost("/dev/clock/advance", (AdvanceDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    app.MapPost("/dev/clock/advance", ([FromBody] AdvanceDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         TimeSpan delta = request.ToTimeSpan();
         if (delta == TimeSpan.Zero)
@@ -310,7 +320,7 @@ if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapDelete("/dev/clock", (DevelopmentManualClock clock) =>
+    app.MapDelete("/dev/clock", ([FromServices] DevelopmentManualClock clock) =>
     {
         clock.Reset();
         return Results.Ok(CreateDevelopmentClockResponse(clock));
@@ -420,10 +430,38 @@ internal sealed record DevelopmentClockResponse(DateTimeOffset UtcNow, DateOnly 
 
 public partial class Program
 {
-    internal static bool IsDevelopmentClockEnabled(IHostEnvironment environment, IConfiguration configuration)
-        => !environment.IsProduction()
-           && configuration.GetValue("DevTools:Clock:Enabled", false);
+    internal static bool IsDevelopmentClockEnabled(IHostEnvironment _, IConfiguration configuration)
+        => configuration.GetValue("DevTools:Clock:Enabled", false);
 
     internal static DevelopmentClockResponse CreateDevelopmentClockResponse(DevelopmentManualClock clock)
         => new(clock.UtcNow, DateOnly.FromDateTime(clock.UtcNow.UtcDateTime), clock.IsOverridden);
+
+    internal static void ConfigureSignalR(IServiceCollection services, IConfiguration configuration)
+    {
+        string provider = configuration["SignalR:Provider"]?.Trim() ?? "Local";
+        ISignalRServerBuilder signalR = services.AddSignalR();
+
+        if (string.Equals(provider, "Local", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!string.Equals(provider, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported SignalR provider '{provider}'. Use 'Local' or 'Azure'.");
+        }
+
+        string? connectionString =
+            configuration["SignalR:AzureConnectionString"]
+            ?? configuration["Azure:SignalR:ConnectionString"];
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "SignalR Azure provider requires SignalR:AzureConnectionString or Azure:SignalR:ConnectionString.");
+        }
+
+        signalR.AddAzureSignalR(connectionString);
+    }
 }

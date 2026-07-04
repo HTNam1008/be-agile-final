@@ -296,14 +296,6 @@ public sealed class RequestManualRunCommandHandlerTests
                 .ToList());
         }
 
-        public Task<IReadOnlyList<TopUpCampaignRule>> GetRulesAsync(
-            long campaignId,
-            CancellationToken cancellationToken = default)
-        {
-            IReadOnlyList<TopUpCampaignRule> rules = [];
-            return Task.FromResult(rules);
-        }
-
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetActiveRecipientsAsync(
             long campaignId,
             CancellationToken cancellationToken = default)
@@ -312,8 +304,8 @@ public sealed class RequestManualRunCommandHandlerTests
             return Task.FromResult(recipients);
         }
 
-        public Task RemoveRulesAsync(IEnumerable<TopUpCampaignRule> rules, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task AddRuleAsync(TopUpCampaignRule rule, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<TopUpCampaignRecipient>> GetRecipientsAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TopUpCampaignRecipient>>([]);
         public Task<Dictionary<long, decimal>> GetAmountOverridesByCampaignAsync(long campaignId, CancellationToken cancellationToken = default) => Task.FromResult(new Dictionary<long, decimal>());
         public Task RemoveRecipientsAsync(IEnumerable<TopUpCampaignRecipient> recipients, long userId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;

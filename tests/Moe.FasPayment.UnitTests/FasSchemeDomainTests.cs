@@ -22,11 +22,11 @@ public sealed class FasSchemeDomainTests
     }
 
     [Fact]
-    public void CreateDraft_rejects_start_date_before_singapore_business_day()
+    public void CreateDraft_uses_singapore_business_day_for_start_date()
     {
-        DateTime sgtEarlyMorning = new(2026, 6, 30, 16, 30, 0, DateTimeKind.Utc);
+        DateTime utcNow = new(2026, 6, 30, 16, 30, 0, DateTimeKind.Utc);
 
-        Action act = () => FasScheme.CreateDraft(
+        Action utcDayStart = () => FasScheme.CreateDraft(
             "S-SGT",
             "G-SGT",
             "Singapore day scheme",
@@ -34,10 +34,20 @@ public sealed class FasSchemeDomainTests
             new DateOnly(2026, 6, 30),
             new DateOnly(2026, 8, 1),
             1,
-            sgtEarlyMorning);
+            utcNow);
+        utcDayStart.Should().Throw<ArgumentException>().WithMessage("*Start date cannot be before today.*");
 
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*Start date cannot be before today.*");
+        FasScheme scheme = FasScheme.CreateDraft(
+            "S-SGT",
+            "G-SGT",
+            "Singapore day scheme",
+            null,
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 8, 1),
+            1,
+            utcNow);
+
+        scheme.StartDate.Should().Be(new DateOnly(2026, 7, 1));
     }
 
     [Fact]

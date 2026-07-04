@@ -2,8 +2,6 @@ namespace Moe.Modules.IdentityPlatform.Application.Students.CreateStudent;
 
 internal static class SingaporeIdentityNumberValidator
 {
-    private static readonly int[] Weights = [2, 7, 6, 5, 4, 3, 2];
-
     public static bool IsValid(string? identityNumber)
     {
         if (string.IsNullOrWhiteSpace(identityNumber))
@@ -23,34 +21,16 @@ internal static class SingaporeIdentityNumberValidator
             return false;
         }
 
-        int sum = prefix is 'T' or 'G' ? 4 : prefix is 'M' ? 3 : 0;
-        for (int index = 0; index < Weights.Length; index++)
+        for (int index = 1; index <= 7; index++)
         {
-            char digit = normalized[index + 1];
+            char digit = normalized[index];
             if (!char.IsAsciiDigit(digit))
             {
                 return false;
             }
-
-            sum += (digit - '0') * Weights[index];
         }
 
         char suffix = normalized[8];
-        if (!char.IsAsciiLetterUpper(suffix))
-        {
-            return false;
-        }
-
-        string checksumTable = prefix switch
-        {
-            'S' or 'T' => "JZIHGFEDCBA",
-            'F' or 'G' => "XWUTRQPNMLK",
-            // M-series FIN uses offset 3 and an inverted checksum index, matching the
-            // public singapore-nric package's M example M1235467X.
-            'M' => "XWUTRQPNJLK",
-            _ => throw new InvalidOperationException("Unsupported NRIC/FIN prefix.")
-        };
-
-        return suffix == checksumTable[sum % 11];
+        return char.IsAsciiLetterUpper(suffix);
     }
 }

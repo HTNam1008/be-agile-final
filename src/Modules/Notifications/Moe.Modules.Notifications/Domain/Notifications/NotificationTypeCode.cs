@@ -34,6 +34,7 @@ public static class NotificationTypeCode
 
     public const string AccOpened = "ACC_OPENED";
     public const string AccClosed = "ACC_CLOSED";
+    public const string AccInterestCredited = "ACC_INTEREST_CREDITED";
     public const string ExceptionApproved = "EXCEPTION_APPROVED";
     public const string SettlementPref = "SETTLEMENT_PREF";
     public const string SettlementCompleted = "SETTLEMENT_COMPLETED";

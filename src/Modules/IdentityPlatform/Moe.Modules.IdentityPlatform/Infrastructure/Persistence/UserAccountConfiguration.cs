@@ -16,6 +16,9 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
             .IsUnique()
             .HasFilter("[ExternalObjectId] IS NOT NULL");
         builder.HasIndex(x => x.PersonId);
+        builder.HasIndex(x => new { x.PersonId, x.PortalAccessCode })
+            .IsUnique()
+            .HasFilter("[PersonId] IS NOT NULL");
         builder.HasIndex(x => x.AdminOrganizationId);
         builder.HasIndex(x => x.LoginEmailNormalized);
         builder.Property(x => x.AdminOrganizationId).HasColumnName("AdminOrganizationId");
