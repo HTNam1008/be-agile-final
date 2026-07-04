@@ -90,7 +90,7 @@ public sealed class AiTurnPlannerService(
             return new(AiPlannerIntent.CourseQuery, Phase(conversation), "answer course-related student finance guidance", 0.85m, "HEURISTIC");
         if (LooksLikeStartFas(value))
             return new(hasFasState ? AiPlannerIntent.ContinueFas : AiPlannerIntent.StartFas, Phase(conversation), "start or resume FAS assistance", 0.9m, "HEURISTIC");
-        if (LooksLikeFasKnowledge(value, hasFasState) && !LooksLikeLiveSchemeEligibility(value))
+        if ((LooksLikeFasKnowledge(value, hasFasState) || LooksLikeNaturalFasAidQuestion(value)) && !LooksLikeLiveSchemeEligibility(value))
             return new(AiPlannerIntent.AnswerKnowledge, Phase(conversation), "answer FAS knowledge question", 0.9m, "HEURISTIC");
         if (hasFasState && LooksLikeShortAnswer(value))
             return new(AiPlannerIntent.ContinueFas, Phase(conversation), "continue FAS fact collection", 0.8m, "HEURISTIC");
@@ -158,6 +158,10 @@ public sealed class AiTurnPlannerService(
     private static bool LooksLikeFasKnowledge(string value, bool hasFasState) =>
         Regex.IsMatch(value, @"\b(fas|financial assistance|pci|per capita|ghi|household income|documents?|scheme|schemes|approval|submit|submitting|application)\b", RegexOptions.IgnoreCase) &&
         Regex.IsMatch(value, @"\b(what|how|why|explain|calculate|calculated|mean|means|need|prove|happens|after|before)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeNaturalFasAidQuestion(string value) =>
+        Regex.IsMatch(value, @"\b(help|support|aid|assistance|subsidy|bursary)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(school fees?|course fees?|education costs?|school costs?|fees?|family|household|income|earn|afford)\b", RegexOptions.IgnoreCase);
 
     private static bool LooksLikeShortAnswer(string value) =>
         Regex.IsMatch(value, @"^\s*(yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$", RegexOptions.IgnoreCase);

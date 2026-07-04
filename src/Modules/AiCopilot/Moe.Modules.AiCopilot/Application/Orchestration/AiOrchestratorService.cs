@@ -581,7 +581,7 @@ public sealed class AiOrchestratorService(
             };
         }
 
-        bool isFasKnowledgeRequest = IsSchemeKbRequest(request.Message) || IsFasKnowledgeInterrupt(request.Message);
+        bool isFasKnowledgeRequest = IsSchemeKbRequest(request.Message) || IsFasKnowledgeInterrupt(request.Message) || LooksLikeNaturalFasAidQuestion(request.Message);
         string retrievalDomain = isFasKnowledgeRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
         IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
         if (sources.Count == 0)
@@ -1059,7 +1059,7 @@ public sealed class AiOrchestratorService(
         if (msgHasPaymentKeyword) return AiTurnIntent.PaymentQuery;
         if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message)) return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsLiveSchemeEligibilityRequest(msgOnly)) return AiTurnIntent.StartInterview;
-        if (current != "FAS_INTERVIEW" && IsSchemeKbRequest(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (current != "FAS_INTERVIEW" && (IsSchemeKbRequest(msgOnly) || LooksLikeNaturalFasAidQuestion(msgOnly))) return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
         if (current == "FAS_INTERVIEW" && IsContinueInterviewRequest(msgOnly)) return AiTurnIntent.ContinueInterview;
         if (current == "FAS_INTERVIEW" && IsLikelyInterviewAnswer(msgOnly)) return AiTurnIntent.SubmitInterviewAnswer;
@@ -1153,6 +1153,10 @@ public sealed class AiOrchestratorService(
 
         return asksQuestion && mentionsSpecificFasKnowledge && !startsLiveAssessment && !submitsLikelyFieldValue;
     }
+
+    private static bool LooksLikeNaturalFasAidQuestion(string value) =>
+        Regex.IsMatch(value, @"\b(help|support|aid|assistance|subsidy|bursary)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(value, @"\b(school fees?|course fees?|education costs?|school costs?|fees?|family|household|income|earn|afford)\b", RegexOptions.IgnoreCase);
 
     private static bool IsFasInterviewRequest(string value)
     {
@@ -2050,7 +2054,8 @@ public sealed class AiOrchestratorService(
         message.Contains("PCI", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("per capita", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("GHI", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("household income", StringComparison.OrdinalIgnoreCase);
+        message.Contains("household income", StringComparison.OrdinalIgnoreCase) ||
+        LooksLikeNaturalFasAidQuestion(message);
 
     private static string[] FasKnowledgeFollowUps(string question)
     {
