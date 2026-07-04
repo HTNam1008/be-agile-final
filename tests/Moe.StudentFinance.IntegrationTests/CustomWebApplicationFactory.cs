@@ -13,6 +13,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moe.Application.Abstractions.Clock;
+using Moe.Infrastructure.Shared.Clock;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Storage;
@@ -77,6 +79,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICourseMaterialPreviewCache, IntegrationTestCourseMaterialPreviewCache>();
             services.RemoveAll<IFasDocumentStorage>();
             services.AddSingleton<IFasDocumentStorage, IntegrationTestFasDocumentStorage>();
+            services.RemoveAll<IClock>();
+            services.RemoveAll<DevelopmentManualClock>();
+            services.AddSingleton<DevelopmentManualClock>();
+            services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
             services.Configure<EducationAccountLifecycleOptions>(options => options.Enabled = false);
 
             // Mock Authentication
