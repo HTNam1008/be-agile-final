@@ -61,7 +61,7 @@ internal sealed class PreviewCampaignQueryHandler(
         else
         {
             // 3b. Dynamic rules — load rule projections via reader, filter via IDynamicRuleFilter
-            IReadOnlyList<CampaignRuleProjection> rules =
+            IReadOnlyList<CampaignRuleGroupProjection> rules =
                 await campaignReader.GetRulesAsync(campaign.Id, cancellationToken);
 
             if (rules.Count == 0)

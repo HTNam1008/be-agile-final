@@ -13,7 +13,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Configuration;
@@ -279,6 +281,8 @@ public sealed class AdminEntraClaimMappingTests
         builder.Services.AddSharedInfrastructure(builder.Configuration);
         builder.Services.AddSingleton<IQueryDispatcher, TestQueryDispatcher>();
         builder.Services.AddSingleton<ICommandDispatcher, TestCommandDispatcher>();
+        builder.Services.AddSingleton<IAuditService, TestAuditService>();
+        builder.Services.AddSingleton<IUnitOfWork, TestUnitOfWork>();
         builder.Services.AddControllers().AddApplicationPart(typeof(AdminAuthController).Assembly);
         builder.Services.AddApiVersioning(options =>
         {
@@ -354,5 +358,27 @@ public sealed class AdminEntraClaimMappingTests
 
             throw new NotSupportedException($"Unexpected command type {command.GetType().Name}.");
         }
+    }
+
+    private sealed class TestAuditService : IAuditService
+    {
+        public Task RecordAsync(
+            string actionCode,
+            string entityTypeCode,
+            string entityId,
+            string? detailsJson = null,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class TestUnitOfWork : IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
     }
 }

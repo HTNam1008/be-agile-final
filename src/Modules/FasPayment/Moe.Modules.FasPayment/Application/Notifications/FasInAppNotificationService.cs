@@ -165,17 +165,10 @@ public sealed class FasInAppNotificationService(
         string body,
         CancellationToken cancellationToken)
     {
-        Result<long> result = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(userAccountId, notificationTypeCode, title, body),
+            logger,
+            "FAS application notification",
             cancellationToken);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "FAS notification create failed. Type={Type} UserAccountId={UserAccountId} Error={ErrorCode}",
-                notificationTypeCode,
-                userAccountId,
-                result.Error.Code);
-        }
     }
 }

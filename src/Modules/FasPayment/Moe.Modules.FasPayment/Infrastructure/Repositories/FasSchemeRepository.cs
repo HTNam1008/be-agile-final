@@ -227,7 +227,7 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
         IQueryable<FasScheme> query = dbContext.Set<FasScheme>().AsNoTracking();
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         query = ApplyStatusFilter(query, status, today);
         query = ApplySearchFilter(query, search);
         query = ApplyDurationFilter(query, durationFrom, durationTo);

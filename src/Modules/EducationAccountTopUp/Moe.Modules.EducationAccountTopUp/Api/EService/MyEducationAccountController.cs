@@ -8,6 +8,7 @@ using Moe.Application.Abstractions.Security;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.EducationAccounts.GetMyEducationAccount;
+using Moe.Modules.EducationAccountTopUp.Application.Interest;
 using Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
 using Moe.SharedKernel.Results;
@@ -67,6 +68,28 @@ public sealed class MyEducationAccountController(
 
         Result<MyEducationAccountTransactionsPage> result = await queries.Send(
             new GetMyEducationAccountTransactionsQuery(personId.Value, page, pageSize, category, sortBy, sortDirection),
+            cancellationToken);
+
+        return ToAccountResponse(result);
+    }
+
+    [HttpGet("interest-history")]
+    [ProducesResponseType(typeof(ApiResponse<EducationAccountInterestHistoryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetInterestHistory(CancellationToken cancellationToken)
+    {
+        long? personId = currentUser.PersonId;
+        if (!currentUser.IsAuthenticated || personId is null)
+        {
+            return ApiResponseFactory.Failure(
+                EducationAccountErrors.AuthenticatedStudentRequired,
+                ApiResponseCodes.Unauthorized,
+                HttpContext.TraceIdentifier);
+        }
+
+        Result<EducationAccountInterestHistoryResponse> result = await queries.Send(
+            new GetMyEducationAccountInterestHistoryQuery(personId.Value),
             cancellationToken);
 
         return ToAccountResponse(result);
