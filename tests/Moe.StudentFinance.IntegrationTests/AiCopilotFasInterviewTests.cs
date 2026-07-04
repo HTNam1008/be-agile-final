@@ -92,6 +92,63 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Assert.Contains(completed.GetProperty("actions").EnumerateArray(), x => x.GetProperty("type").GetString() == "APPLY_FAS_PATCH");
         JsonElement openAction = completed.GetProperty("actions").EnumerateArray().Single(x => x.GetProperty("label").GetString() == "Open FAS application");
         Assert.True(openAction.GetProperty("payload").GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
+        Assert.Contains(completed.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_TASK_STATE");
+    }
+
+    [Fact]
+    public async Task Fas_interview_accepts_corrections_before_eligibility_computation()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("Singapore Citizen", conversationId);
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement corrected = await SendFasMessage("actually 2500 and PR", conversationId);
+
+        Assert.Equal("FAS_INTERVIEW", corrected.GetProperty("mode").GetString());
+        Assert.Equal("CONFIRMING", corrected.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("$2,500.00", corrected.GetProperty("text").GetString());
+        Assert.Contains("Permanent Resident", corrected.GetProperty("text").GetString());
+        Assert.DoesNotContain(corrected.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
+
+        JsonElement completed = await SendFasMessage("yes", conversationId);
+
+        JsonElement data = completed.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION").GetProperty("data");
+        Assert.Equal(625m, data.GetProperty("perCapitaIncome").GetDecimal());
+        JsonElement patch = completed.GetProperty("interviewState").GetProperty("formPatch");
+        Assert.Equal(2500m, patch.GetProperty("income").GetProperty("monthlyHouseholdIncome").GetDecimal());
+        Assert.Equal("Permanent Resident", patch.GetProperty("particulars").GetProperty("parentNationalities")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Completed_fas_scheme_question_uses_saved_eligible_options()
+    {
+        await CreateEligibleScheme(label: "Core", subsidyValue: 75m);
+        await CreateEligibleScheme(label: "Priority", subsidyValue: 95m);
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
+        await SendFasMessage("Foreigner", conversationId);
+
+        JsonElement completed = await SendFasMessage("yes", conversationId);
+        Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement schemes = await SendFasMessage("Which schemes can I apply for?", conversationId);
+
+        Assert.Equal("GENERAL", schemes.GetProperty("mode").GetString());
+        Assert.Contains("eligible option", schemes.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Apply answers to form", schemes.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(schemes.GetProperty("followUpQuestions").EnumerateArray(),
+            x => x.GetString() == "Continue my FAS eligibility check.");
+        JsonElement patch = schemes.GetProperty("interviewState").GetProperty("formPatch");
+        Assert.True(patch.GetProperty("schemes").GetProperty("recommendedSchemeIds").GetArrayLength() > 0);
     }
 
     [Fact]
@@ -293,7 +350,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         using HttpResponseMessage courseResponse = await _client.SendAsync(courseRequest);
         if (courseResponse.StatusCode != HttpStatusCode.Created)
             Assert.Fail($"Course creation failed: {courseResponse.StatusCode}");
-        
+
         using JsonDocument json = JsonDocument.Parse(await courseResponse.Content.ReadAsStringAsync());
         long courseId = json.RootElement.GetProperty("data").GetProperty("courseId").GetInt64();
 
@@ -369,7 +426,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         using HttpResponseMessage courseResponse = await _client.SendAsync(courseRequest);
         if (courseResponse.StatusCode != HttpStatusCode.Created)
             Assert.Fail($"Course creation failed: {courseResponse.StatusCode}");
-        
+
         using JsonDocument json = JsonDocument.Parse(await courseResponse.Content.ReadAsStringAsync());
         long courseId = json.RootElement.GetProperty("data").GetProperty("courseId").GetInt64();
 

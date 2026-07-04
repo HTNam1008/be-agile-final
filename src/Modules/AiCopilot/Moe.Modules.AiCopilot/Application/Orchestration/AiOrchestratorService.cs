@@ -21,7 +21,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 public sealed class AiOrchestratorService(
     IServiceProvider services, MoeDbContext db, ICurrentUser currentUser, AiFinanceReader finance,
     StudentFasApplicationService fas, IKnowledgeRetriever knowledge, SensitiveDataRedactor redactor,
-    ILogger<AiOrchestratorService> logger)
+    AiTurnPlannerService turnPlanner, ILogger<AiOrchestratorService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] AllowedDomains = ["FAS", "PAYMENT", "GENERAL"];
@@ -53,7 +53,31 @@ public sealed class AiOrchestratorService(
 
         try
         {
-            string mode = DetermineMode(sanitizedRequest.Message, conversation.ModeCode, sanitizedRequest.PageContext?.Domain);
+            AiTurnPlan turnPlan = await turnPlanner.PlanAsync(sanitizedRequest, conversation, ct);
+            if (turnPlan.Intent == AiPlannerIntent.ClarifyFasTypo)
+            {
+                var clarification = new AiChatResponse(
+                    conversation.Id,
+                    0,
+                    "Did you mean FAS, Financial Assistance Schemes? I can help you check eligibility and prepare the application form.",
+                    "GENERAL",
+                    new(false, []),
+                    [],
+                    [new("NAVIGATE", "Open FAS application", "/portal/fas")],
+                    null)
+                {
+                    FollowUpQuestions = ["Yes, help me check FAS eligibility.", "What is FAS?", "What documents do I need for FAS?"],
+                    TurnIntent = "CLARIFY_FAS_TYPO",
+                    ConversationPhase = turnPlan.Phase
+                };
+                conversation.Touch("GENERAL", pageJson, conversation.FasInterviewJson, now);
+                var clarificationMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(clarification.Text), now,
+                    latencyMs: (int)stopwatch.ElapsedMilliseconds, responseJson: SerializeResponse(clarification));
+                db.Add(clarificationMessage); await db.SaveChangesAsync(ct);
+                return clarification with { MessageId = clarificationMessage.Id };
+            }
+
+            string mode = ModeFromPlan(turnPlan) ?? DetermineMode(sanitizedRequest.Message, conversation.ModeCode, sanitizedRequest.PageContext?.Domain);
             AiChatResponse response = mode switch
             {
                 "PAYMENT" => await HandlePayment(conversation, sanitizedRequest, now, ct),
@@ -61,6 +85,7 @@ public sealed class AiOrchestratorService(
                 _ => await HandleGeneral(conversation, sanitizedRequest, now, ct)
             };
             response = AttachFollowUps(response, sanitizedRequest);
+            response = AttachV2Metadata(response, turnPlan);
             conversation.Touch(response.Mode, pageJson, conversation.FasInterviewJson, now);
             var assistant = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(response.Text), now,
                 JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
@@ -135,6 +160,15 @@ public sealed class AiOrchestratorService(
             return new(c.Id, 0, withdrawText, "PAYMENT", Grounding(sources), [],
                 [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")], null);
         }
+        if (Regex.IsMatch(intent, @"\b(HOW|METHOD|OPTION|OPTIONS)\b", RegexOptions.IgnoreCase) && intent.Contains("PAY"))
+        {
+            string paymentText = snapshot.TotalOutstanding <= 0m
+                ? "You do not have an outstanding bill to pay right now. When a bill is due, you can usually pay with available Education Account funds, online payment, or split payment where supported."
+                : PaymentOptionsText(snapshot);
+            return new(c.Id, 0, paymentText, "PAYMENT", Grounding(sources),
+                [new("FINANCE_SUMMARY", snapshot)],
+                [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")], null);
+        }
         if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
         {
             string billText = snapshot.BillCount == 0
@@ -167,6 +201,14 @@ public sealed class AiOrchestratorService(
         catch { return new(c.Id, 0, "I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], null); }
         if (state.Status == "CONFIRMING")
         {
+            if (TryApplyFasCorrections(state, request.Message))
+            {
+                state.Status = "CONFIRMING";
+                AiInterviewState correctedInterview = ToInterviewState(state, ConfirmationPrompt(state));
+                c.Touch("FAS_INTERVIEW", request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions), JsonSerializer.Serialize(state, JsonOptions), now);
+                return new(c.Id, 0, $"I updated the FAS details.\n\n{ConfirmationPrompt(state)}", "FAS_INTERVIEW", FasInterviewGrounding(state.Status), [], [], correctedInterview);
+            }
+
             FasExtractionResult confirmation = ExtractConfirmation(request.Message);
             if (confirmation.Status == "CLARIFY")
             {
@@ -191,9 +233,14 @@ public sealed class AiOrchestratorService(
         }
         if (!isNewInterview && state.Status == "COMPLETE")
         {
-            FasRecommendationMatch[] completedSchemes = state.IsWelfareHomeResident == true ? WelfareHomeRecommendationMatches(state) : [];
+            FasRecommendationMatch[] completedSchemes = state.RecommendationMatches.Count > 0
+                ? state.RecommendationMatches.ToArray()
+                : state.IsWelfareHomeResident == true ? WelfareHomeRecommendationMatches(state) : [];
             AiInterviewState completedInterview = ToInterviewState(state, null, completedSchemes);
-            string completedText = state.IsWelfareHomeResident == true
+            bool asksForSchemes = IsLiveSchemeEligibilityRequest(request.Message.ToUpperInvariant()) || IsSchemeKbRequest(request.Message);
+            string completedText = asksForSchemes && completedSchemes.Length > 0
+                ? $"Your confirmed FAS check currently has {completedSchemes.Length} eligible option{(completedSchemes.Length == 1 ? "" : "s")}: {string.Join(", ", completedSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).Take(5))}. Use 'Apply answers to form' to copy the selected actionable schemes, then review the application before submitting."
+                : state.IsWelfareHomeResident == true
                 ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
                 : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
             List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas", completedInterview.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
@@ -254,6 +301,7 @@ public sealed class AiOrchestratorService(
                 {
                     state.Status = "COMPLETE";
                     recommendedSchemes = ReviewRequiredSchemeMatches(state);
+                    state.RecommendationMatches = recommendedSchemes.ToList();
                     AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
                     recommendation = BuildReviewRequiredRecommendation(completeInterview, recommendedSchemes);
                     text = $"I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school. The scheme criteria are not fully configured in the demo data, so I prepared your confirmed answers and scheme selection for review. Use 'Apply answers to form', then check the form before submitting.";
@@ -263,6 +311,7 @@ public sealed class AiOrchestratorService(
                 {
                     state.Status = "COMPLETE";
                     recommendedSchemes = ExtractRecommendationMatches(root);
+                    state.RecommendationMatches = recommendedSchemes.ToList();
                     AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
                     recommendation = BuildFasRecommendation(root, completeInterview);
                     text = "I have enough information to evaluate the active FAS schemes. Review the recommendation below and use 'Apply answers to form' when ready.";
@@ -274,6 +323,7 @@ public sealed class AiOrchestratorService(
                 {
                     state.Status = "COMPLETE";
                     recommendedSchemes = ReviewRequiredSchemeMatches(state);
+                    state.RecommendationMatches = recommendedSchemes.ToList();
                     AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
                     recommendation = BuildReviewRequiredRecommendation(completeInterview, recommendedSchemes);
                     text = $"I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school. The scheme criteria are not fully configured in the demo data, so I prepared your confirmed answers and scheme selection for review. Use 'Apply answers to form', then check the form before submitting.";
@@ -289,6 +339,7 @@ public sealed class AiOrchestratorService(
         {
             state.Status = "COMPLETE";
             recommendedSchemes = WelfareHomeRecommendationMatches(state);
+            state.RecommendationMatches = recommendedSchemes.ToList();
             text = recommendedSchemes.Length > 0
                 ? $"I have your welfare-home status and parent or guardian nationality. I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school and prepared them for the form. Use 'Apply answers to form', then review before submitting."
                 : "I have your welfare-home status and parent or guardian nationality. The FAS form will skip household income and household-size questions. I could not auto-select a scheme, so choose the scheme manually before submitting.";
@@ -425,6 +476,14 @@ public sealed class AiOrchestratorService(
         {
             return FormulaAnswer(question);
         }
+        if (LooksLikeDocumentQuestion(question))
+        {
+            KnowledgeAnswerCard documentCard = BuildKnowledgeAnswerCard(question, sources);
+            string firstFact = documentCard.Summary;
+            return string.IsNullOrWhiteSpace(firstFact)
+                ? "Before submitting FAS, prepare the income and supporting documents requested by the institution, then review the form before submission."
+                : $"Before submitting FAS, prepare the requested supporting documents. {firstFact}";
+        }
 
         KnowledgeResult primary = sources[0];
         KnowledgeAnswerCard card = BuildKnowledgeAnswerCard(question, sources);
@@ -532,6 +591,9 @@ public sealed class AiOrchestratorService(
         Regex.IsMatch(message, @"\b(PCI|PER[-\s]?CAPITA|PER CAPITA INCOME)\b", RegexOptions.IgnoreCase) &&
         Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|MEAN)\b", RegexOptions.IgnoreCase);
 
+    private static bool LooksLikeDocumentQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(document|documents|proof|payslip|cpf|iras|supporting)\b", RegexOptions.IgnoreCase);
+
     private static IEnumerable<string> KnowledgeFacts(string content)
     {
         foreach (string line in KnowledgeLines(content).Where(line => !LooksLikeInstructionHeading(line)))
@@ -544,6 +606,57 @@ public sealed class AiOrchestratorService(
             }
         }
     }
+
+    private static string? ModeFromPlan(AiTurnPlan plan) => plan.Intent switch
+    {
+        AiPlannerIntent.PaymentQuery => "PAYMENT",
+        AiPlannerIntent.AnswerKnowledge => "GENERAL",
+        AiPlannerIntent.StartFas or AiPlannerIntent.ContinueFas => "FAS_INTERVIEW",
+        _ => null
+    };
+
+    private static AiChatResponse AttachV2Metadata(AiChatResponse response, AiTurnPlan plan)
+    {
+        string phase = response.InterviewState?.Status switch
+        {
+            "COLLECTING" or "CLARIFYING" => "collecting",
+            "CONFIRMING" => "confirming",
+            "COMPLETE" => "eligible",
+            "MANUAL_FALLBACK" => "manual_review",
+            _ => response.Mode == "PAYMENT" ? "idle" : plan.Phase
+        };
+        return response with
+        {
+            Cards = AttachFasTaskStateCard(response.Cards, response.InterviewState, phase),
+            TurnIntent = IntentLabel(plan.Intent),
+            ConversationPhase = phase
+        };
+    }
+
+    private static IReadOnlyCollection<AiCard> AttachFasTaskStateCard(IReadOnlyCollection<AiCard> cards, AiInterviewState? interview, string phase)
+    {
+        if (interview is null || cards.Any(x => x.Type == "FAS_TASK_STATE")) return cards;
+        var data = new
+        {
+            phase,
+            status = interview.Status,
+            nextQuestion = interview.NextQuestion,
+            confirmedFacts = interview.Fields.Where(x => x.Confirmed).ToArray(),
+            missingFacts = interview.MissingFields,
+            formPatch = interview.FormPatch
+        };
+        return [new("FAS_TASK_STATE", data), .. cards];
+    }
+
+    private static string IntentLabel(AiPlannerIntent intent) => intent switch
+    {
+        AiPlannerIntent.StartFas => "START_FAS",
+        AiPlannerIntent.ContinueFas => "CONTINUE_FAS",
+        AiPlannerIntent.AnswerKnowledge => "ANSWER_KNOWLEDGE",
+        AiPlannerIntent.PaymentQuery => "PAYMENT_QUERY",
+        AiPlannerIntent.ClarifyFasTypo => "CLARIFY_FAS_TYPO",
+        _ => "FALLBACK"
+    };
 
     private static IEnumerable<string> SelectKnowledgeFacts(string question, string content)
     {
@@ -999,6 +1112,93 @@ public sealed class AiOrchestratorService(
                 s.ParentNationalities = ((IReadOnlyCollection<string>)value!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 break;
         }
+    }
+
+    private static bool TryApplyFasCorrections(FasInterviewData s, string message)
+    {
+        if (!Regex.IsMatch(message, @"\b(actually|change|correction|correct|wait|sorry|make that|meant|instead)\b", RegexOptions.IgnoreCase))
+            return false;
+
+        bool changed = false;
+        string lower = message.ToLowerInvariant();
+        decimal[] numbers = ExtractNumbers(message).ToArray();
+        bool mentionsMembers = Regex.IsMatch(lower, @"\b(member|members|people|pax|household size)\b");
+        bool mentionsOtherIncome = Regex.IsMatch(lower, @"\b(other income|other monthly|additional income)\b");
+        if (lower.Contains("welfare"))
+        {
+            FasExtractionResult welfare = ExtractWelfareHome(message);
+            if (welfare.Status == "ACCEPTED")
+            {
+                ApplyAcceptedValue(s, "isWelfareHomeResident", welfare.Value);
+                changed = true;
+            }
+        }
+
+        if (Regex.IsMatch(lower, @"\b(income|salary|earn|household)\b") && !mentionsMembers && !mentionsOtherIncome)
+        {
+            FasExtractionResult income = ExtractIncome(message);
+            if (income.Status == "ACCEPTED")
+            {
+                ApplyAcceptedValue(s, "monthlyHouseholdIncome", income.Value);
+                changed = true;
+            }
+        }
+        else if (!mentionsMembers && !mentionsOtherIncome && numbers.Length == 1 && s.MonthlyHouseholdIncome.HasValue)
+        {
+            decimal value = numbers[0];
+            if (value is >= 0 and <= 1_000_000)
+            {
+                ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(value, 2));
+                changed = true;
+            }
+        }
+
+        if (mentionsMembers)
+        {
+            FasExtractionResult members = ExtractHouseholdMemberCount(message);
+            if (members.Status == "ACCEPTED")
+            {
+                ApplyAcceptedValue(s, "householdMemberCount", members.Value);
+                changed = true;
+            }
+        }
+
+        if (mentionsOtherIncome)
+        {
+            FasExtractionResult other = ExtractOtherIncome(message);
+            if (other.Status == "ACCEPTED")
+            {
+                ApplyAcceptedValue(s, "otherMonthlyIncome", other.Value);
+                changed = true;
+            }
+        }
+
+        FasExtractionResult nationality = ExtractParentNationalities(message);
+        if (nationality.Status != "ACCEPTED")
+        {
+            string? normalizedNationality = TryNormalizeParentNationality(message);
+            if (normalizedNationality is null && Regex.IsMatch(message, @"\bPR\b", RegexOptions.IgnoreCase))
+                normalizedNationality = "Permanent Resident";
+            if (normalizedNationality is null && Regex.IsMatch(message, @"\bforeigner\b", RegexOptions.IgnoreCase))
+                normalizedNationality = "Foreigner";
+            if (normalizedNationality is null && Regex.IsMatch(message, @"\bsingapore(?: citizen|an)?\b", RegexOptions.IgnoreCase))
+                normalizedNationality = "Singapore Citizen";
+            if (normalizedNationality is not null)
+                nationality = FasExtractionResult.Accepted(new[] { normalizedNationality });
+        }
+        if (nationality.Status == "ACCEPTED")
+        {
+            ApplyAcceptedValue(s, "parentNationalities", nationality.Value);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            s.Status = "CONFIRMING";
+            s.ClarificationField = null;
+            s.ValidationMessage = null;
+        }
+        return changed;
     }
 
     private static FasExtractionResult ExtractWelfareHome(string message)
@@ -1504,6 +1704,7 @@ public sealed class AiOrchestratorService(
         public List<string> RequiredCriteriaTypes { get; set; } = [];
         public List<string> ProfileConfirmedFacts { get; set; } = [];
         public List<string> UserRequiredFacts { get; set; } = [];
+        public List<FasRecommendationMatch> RecommendationMatches { get; set; } = [];
         public string? ClarificationField { get; set; }
         public string? ValidationMessage { get; set; }
         public Dictionary<string, int> ClarificationAttempts { get; set; } = [];
