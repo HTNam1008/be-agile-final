@@ -57,6 +57,21 @@ public sealed class CreateStudentHandlerEmailTests
         scheduler.Jobs.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Handle_WhenMockPassPersonIdProvided_UsesItAsExternalPersonReference()
+    {
+        const string mockPassPersonId = "89f4c2eb-e067-4b33-8fb2-7c8ddd4a7af2";
+        FakeStudentOnboardingRepository students = new();
+        CreateStudentHandler handler = CreateHandler(out _, students);
+        CreateStudentCommand command = ValidCommand() with { MockPassPersonId = mockPassPersonId };
+
+        Result<CreateStudentResponse> result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        students.AddedPerson.Should().NotBeNull();
+        students.AddedPerson!.ExternalPersonReference.Should().Be(mockPassPersonId);
+    }
+
     private CreateStudentHandler CreateHandler(
         out StudentAccountNotificationEmailServiceTests.RecordingEmailNotificationScheduler scheduler,
         FakeStudentOnboardingRepository? students = null,
@@ -103,6 +118,7 @@ public sealed class CreateStudentHandlerEmailTests
         bool studentNumberExists = false) : IStudentOnboardingRepository
     {
         private long _nextPersonId = 123;
+        public Person? AddedPerson { get; private set; }
 
         public Task<bool> IdentityNumberExistsAsync(byte[] identityNumberHash, CancellationToken cancellationToken)
             => Task.FromResult(identityExists);
@@ -113,6 +129,7 @@ public sealed class CreateStudentHandlerEmailTests
         public Task<long> AddPersonAsync(Person person, CancellationToken cancellationToken, bool saveChanges = true)
         {
             long personId = _nextPersonId++;
+            AddedPerson = person;
             typeof(Person).GetProperty(nameof(Person.Id))!.SetValue(person, personId);
             return Task.FromResult(personId);
         }

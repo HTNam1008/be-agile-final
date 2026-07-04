@@ -8,6 +8,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 
@@ -17,7 +18,8 @@ internal sealed class SetSettlementPreferenceHandler(
     IStudentNotificationRecipientResolver notificationRecipients,
     INotificationWriter notificationWriter,
     IClock clock,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    ILogger<SetSettlementPreferenceHandler> logger)
     : ICommandHandler<SetSettlementPreferenceCommand, SettlementPreferenceResponse>
 {
     private const string CpfToken = "CPF_DEFAULT";
@@ -81,18 +83,15 @@ internal sealed class SetSettlementPreferenceHandler(
         }
 
         string status = preference.IsVerified ? "VERIFIED" : "UNVERIFIED";
-        Result<long> create = await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.SettlementPref,
                 "Settlement Preference Updated",
                 $"Destination: {preference.DestinationMasked}. Status: {status}."),
+            logger,
+            "Education account settlement preference updated",
             cancellationToken);
-
-        if (create.IsFailure)
-        {
-            return;
-        }
     }
 
     private static Result<DestinationDetails> CreateDestinationDetails(SetSettlementPreferenceCommand command)

@@ -269,27 +269,20 @@ public sealed class RecipientProcessingService(
             educationAccountId,
             topUpRunId);
 
-        Result<long> create = await notificationWriter.CreateAsync(
+        bool created = await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.TopUpReceived,
                 $"Top-up Credited: {accountNumber}",
                 $"Amount {amountText} has been credited to account {accountNumber}."),
+            logger,
+            "Top-up recipient credited",
             cancellationToken);
 
-        if (create.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create top-up notification for user account {UserAccountId} in run {TopUpRunId}: {ErrorCode}",
-                userAccountId.Value,
-                topUpRunId,
-                create.Error.Code);
-        }
-        else
+        if (created)
         {
             logger.LogInformation(
-                "TOP_UP_RECEIVED notification created successfully with NotificationId {NotificationId} for user account {UserAccountId} in run {TopUpRunId}",
-                create.Value,
+                "TOP_UP_RECEIVED notification created successfully for user account {UserAccountId} in run {TopUpRunId}",
                 userAccountId.Value,
                 topUpRunId);
         }
@@ -356,22 +349,15 @@ public sealed class RecipientProcessingService(
             return;
         }
 
-            Result<long> result = await notificationWriter.CreateAsync(
+            await notificationWriter.CreateForBusinessFlowAsync(
                 new NotificationCreateRequest(
                     userAccountId.Value,
                     NotificationTypeCode.TopUpFailure,
                     "Top-up Transfer Failed",
                     $"Top-up for account {account.AccountNumber} failed. Reason: {reason}. Please contact the administrator."),
+                logger,
+                "Top-up recipient failed",
                 cancellationToken);
-
-        if (result.IsFailure)
-        {
-            logger.LogWarning(
-                "Failed to create TOP_UP_FAILURE notification for user account {UserAccountId} on education account {EducationAccountId}: {ErrorCode}",
-                userAccountId.Value,
-                educationAccountId,
-                result.Error.Code);
-        }
     }
 }
 

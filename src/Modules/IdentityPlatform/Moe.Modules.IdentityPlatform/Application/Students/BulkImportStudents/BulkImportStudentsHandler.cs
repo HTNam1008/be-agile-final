@@ -123,5 +123,6 @@ internal sealed class BulkImportStudentsHandler(
             row.Email,
             row.ContactNumber,
             row.Address,
-            IsAccountHolder: true);
+            IsAccountHolder: true,
+            MockPassPersonId: row.MockPassPersonId);
 }

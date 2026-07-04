@@ -11,6 +11,7 @@ using Moe.Modules.IdentityPlatform.IGateway.Students;
 using Moe.Modules.Notifications.Domain.Notifications;
 using Moe.Modules.Notifications.IGateway.Notifications;
 using Moe.SharedKernel.Results;
+using Microsoft.Extensions.Logging;
 
 namespace Moe.Modules.EducationAccountTopUp.Application.CloseAccount;
 
@@ -25,7 +26,8 @@ internal sealed class CloseManualAccountHandler(
     IAuditService auditService,
     EducationAccountClosureEmailService closureEmails,
     IStudentNotificationRecipientResolver notificationRecipients,
-    INotificationWriter notificationWriter) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
+    INotificationWriter notificationWriter,
+    ILogger<CloseManualAccountHandler> logger) : ICommandHandler<CloseManualAccountCommand, CloseManualAccountResponse>
 {
     public async Task<Result<CloseManualAccountResponse>> Handle(
         CloseManualAccountCommand command,
@@ -137,12 +139,14 @@ internal sealed class CloseManualAccountHandler(
             return;
         }
 
-        await notificationWriter.CreateAsync(
+        await notificationWriter.CreateForBusinessFlowAsync(
             new NotificationCreateRequest(
                 userAccountId.Value,
                 NotificationTypeCode.AccClosed,
                 "Account Closed",
                 $"Reason: {closureReason}."),
+            logger,
+            "Manual education account closed",
             cancellationToken);
     }
 }

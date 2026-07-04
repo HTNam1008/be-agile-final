@@ -13,10 +13,15 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moe.Application.Abstractions.Clock;
+using Moe.Infrastructure.Shared.Clock;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
+using Moe.Modules.CourseBilling.IGateway.Storage;
+using Moe.Modules.CourseBilling.Infrastructure.Storage;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
 using Moe.Modules.EducationAccountTopUp.Domain.EducationAccounts;
+using Moe.Modules.FasPayment.Infrastructure.Documents;
 using Moe.Modules.FasPayment.IGateway.Payments;
 using Moe.Modules.IdentityPlatform.Domain.People;
 using Moe.Modules.IdentityPlatform.Domain.Schooling;
@@ -32,7 +37,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["DevTools:Clock:Enabled"] = "true"
+                ["DevTools:Clock:Enabled"] = "true",
+                ["AzureBlob:ConnectionString"] = "DefaultEndpointsProtocol=https;AccountName=integrationtest;AccountKey=ZmFrZUFjY291bnRLZXlGYWtlQWNjb3VudEtleUZha2VBY2NvdW50S2V5RmFrZUFjY291bnRLZXk=;EndpointSuffix=core.windows.net",
+                ["AzureBlob:ContainerName"] = "integration-tests",
+                ["FasDocuments:AzureBlobConnectionString"] = "DefaultEndpointsProtocol=https;AccountName=integrationtest;AccountKey=ZmFrZUFjY291bnRLZXlGYWtlQWNjb3VudEtleUZha2VBY2NvdW50S2V5RmFrZUFjY291bnRLZXk=;EndpointSuffix=core.windows.net",
+                ["FasDocuments:ContainerName"] = "integration-tests",
+                ["Redis:ConnectionString"] = "",
+                ["AzureOpenAI:Endpoint"] = "https://integration-test.openai.azure.com/",
+                ["AzureOpenAI:ApiKey"] = "integration-test-api-key",
+                ["AzureOpenAI:ChatDeploymentName"] = "integration-test-chat"
             });
         });
 
@@ -56,6 +69,20 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.AddHostedService<IntegrationTestDbSeeder>();
             services.RemoveAll<IStripePaymentGateway>();
             services.AddSingleton<IStripePaymentGateway, IntegrationTestStripeGateway>();
+            services.RemoveAll<ICourseMaterialStorageService>();
+            services.AddSingleton<ICourseMaterialStorageService, IntegrationTestCourseMaterialStorageService>();
+            services.RemoveAll<ICourseMaterialPreviewRedisCache>();
+            services.RemoveAll<ICourseMaterialPreviewBlobCache>();
+            services.RemoveAll<ICourseMaterialPreviewCache>();
+            services.AddSingleton<ICourseMaterialPreviewRedisCache, IntegrationTestCourseMaterialPreviewCache>();
+            services.AddSingleton<ICourseMaterialPreviewBlobCache, IntegrationTestCourseMaterialPreviewCache>();
+            services.AddSingleton<ICourseMaterialPreviewCache, IntegrationTestCourseMaterialPreviewCache>();
+            services.RemoveAll<IFasDocumentStorage>();
+            services.AddSingleton<IFasDocumentStorage, IntegrationTestFasDocumentStorage>();
+            services.RemoveAll<IClock>();
+            services.RemoveAll<DevelopmentManualClock>();
+            services.AddSingleton<DevelopmentManualClock>();
+            services.AddSingleton<IClock>(sp => sp.GetRequiredService<DevelopmentManualClock>());
             services.Configure<EducationAccountLifecycleOptions>(options => options.Enabled = false);
 
             // Mock Authentication
@@ -65,6 +92,29 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 options.DefaultChallengeScheme = "Test";
             })
             .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", options => { });
+
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                ReplaceSchemeHandler(options, AuthenticationSchemes.AdminEntra);
+                ReplaceSchemeHandler(options, AuthenticationSchemes.EServiceSingpass);
+
+                static void ReplaceSchemeHandler(AuthenticationOptions options, string schemeName)
+                {
+                    var scheme = options.Schemes.FirstOrDefault(candidate => candidate.Name == schemeName);
+                    if (scheme is null)
+                    {
+                        options.AddScheme(schemeName, addedScheme =>
+                        {
+                            addedScheme.DisplayName = schemeName;
+                            addedScheme.HandlerType = typeof(TestAuthHandler);
+                        });
+                        return;
+                    }
+
+                    scheme.DisplayName = schemeName;
+                    scheme.HandlerType = typeof(TestAuthHandler);
+                }
+            });
 
             services.Configure<Microsoft.AspNetCore.Authorization.AuthorizationOptions>(options =>
             {
@@ -157,6 +207,82 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 });
             });
         });
+    }
+}
+
+internal sealed class IntegrationTestCourseMaterialStorageService : ICourseMaterialStorageService
+{
+    private readonly ConcurrentDictionary<string, byte[]> files = new();
+
+    public async Task<StoredCourseMaterialFile> SaveAsync(
+        long courseId,
+        string originalFileName,
+        string contentType,
+        Stream content,
+        CancellationToken cancellationToken)
+    {
+        using MemoryStream buffer = new();
+        await content.CopyToAsync(buffer, cancellationToken);
+        string extension = Path.GetExtension(originalFileName);
+        string path = $"integration/course-{courseId}/{Guid.NewGuid():N}{extension}";
+        files[path] = buffer.ToArray();
+
+        return new StoredCourseMaterialFile(
+            Path.GetFileName(path),
+            originalFileName,
+            extension,
+            contentType,
+            buffer.Length,
+            "IN_MEMORY",
+            path,
+            null);
+    }
+
+    public Task<Stream> OpenReadAsync(string storagePath, CancellationToken cancellationToken)
+    {
+        byte[] bytes = files.GetValueOrDefault(storagePath) ?? [];
+        return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
+
+    public Task<Uri?> CreateReadUriAsync(
+        string storagePath,
+        DateTimeOffset expiresAtUtc,
+        CancellationToken cancellationToken)
+        => Task.FromResult<Uri?>(new Uri($"https://integration.test/materials/{Uri.EscapeDataString(storagePath)}"));
+}
+
+internal sealed class IntegrationTestCourseMaterialPreviewCache : ICourseMaterialPreviewRedisCache, ICourseMaterialPreviewBlobCache
+{
+    public Task<Stream?> GetPdfAsync(CourseMaterial material, CancellationToken cancellationToken)
+        => Task.FromResult<Stream?>(null);
+
+    public Task SetPdfAsync(CourseMaterial material, byte[] pdfBytes, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+}
+
+internal sealed class IntegrationTestFasDocumentStorage : IFasDocumentStorage
+{
+    private readonly ConcurrentDictionary<string, byte[]> files = new();
+
+    public async Task<string> UploadAsync(long applicationId, string fileName, Stream content, CancellationToken ct)
+    {
+        using MemoryStream buffer = new();
+        await content.CopyToAsync(buffer, ct);
+        string key = $"integration/fas/{applicationId}/{Guid.NewGuid():N}{Path.GetExtension(fileName)}";
+        files[key] = buffer.ToArray();
+        return key;
+    }
+
+    public Task DeleteAsync(string key, CancellationToken ct)
+    {
+        files.TryRemove(key, out _);
+        return Task.CompletedTask;
+    }
+
+    public Task<Stream> OpenReadAsync(string key, CancellationToken ct)
+    {
+        byte[] bytes = files.GetValueOrDefault(key) ?? [];
+        return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
     }
 }
 
@@ -517,6 +643,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
         if (!Request.Headers.ContainsKey("X-Test-No-Fas-Permission"))
         {
             claims.Add(new Claim(ClaimNames.Permission, "FAS_SCHEME_MANAGE"));
+            claims.Add(new Claim(ClaimNames.Permission, "FAS_REVIEW"));
         }
 
         if (Request.Headers.ContainsKey("X-Test-Ai-Review-Permission"))

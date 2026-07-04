@@ -541,7 +541,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
             description = "AI copilot integration scheme",
             startDate = SingaporeBusinessDay.FromUtc(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
-            courseIds = Array.Empty<long>(),
+            courseIds = new[] { courseId },
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {

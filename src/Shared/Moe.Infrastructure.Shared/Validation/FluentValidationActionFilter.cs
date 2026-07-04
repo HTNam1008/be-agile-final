@@ -45,7 +45,7 @@ public sealed class FluentValidationActionFilter : IAsyncActionFilter
                 : ApiResponseCodes.BadRequest;
 
             context.Result = new ObjectResult(ApiResponse<object>.Fail(
-                "Validation failed.",
+                ApiErrorMessages.ValidationFailed,
                 errors,
                 statusCode,
                 context.HttpContext.TraceIdentifier))

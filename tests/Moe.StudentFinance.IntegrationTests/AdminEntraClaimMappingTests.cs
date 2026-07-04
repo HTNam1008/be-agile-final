@@ -10,15 +10,19 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Messaging;
+using Moe.Application.Abstractions.Persistence;
 using Moe.Infrastructure.Shared;
 using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Configuration;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.IdentityPlatform.Api.Admin;
 using Moe.Modules.IdentityPlatform.Application.Authentication.GetCurrentIdentity;
+using Moe.Modules.IdentityPlatform.Application.Authentication.RecordAdminLogin;
 using Moe.Modules.IdentityPlatform.IGateway.Authentication;
 using Moe.SharedKernel.Results;
 using Xunit;
@@ -65,7 +69,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.OK, response);
         Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith($"{AuthenticationCookies.AdminSession}=", StringComparison.Ordinal));
     }
 
@@ -81,7 +85,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.OK, response);
         Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith($"{AuthenticationCookies.AdminSession}=", StringComparison.Ordinal));
     }
 
@@ -96,7 +100,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.OK, response);
     }
 
     [Fact]
@@ -110,7 +114,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.Unauthorized, response);
     }
 
     [Fact]
@@ -124,7 +128,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.Unauthorized, response);
     }
 
     [Fact]
@@ -138,7 +142,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.Unauthorized, response);
     }
 
     [Fact]
@@ -152,7 +156,7 @@ public sealed class AdminEntraClaimMappingTests
 
         HttpResponseMessage response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.Unauthorized, response);
     }
 
     [Fact]
@@ -164,7 +168,7 @@ public sealed class AdminEntraClaimMappingTests
         HttpResponseMessage tokenResponse = await client.GetAsync("/dev/admin-token");
         string tokenJson = await tokenResponse.Content.ReadAsStringAsync();
 
-        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+        await AssertStatusAsync(HttpStatusCode.OK, tokenResponse);
         Assert.Contains("accessToken", tokenJson, StringComparison.Ordinal);
     }
 
@@ -255,13 +259,30 @@ public sealed class AdminEntraClaimMappingTests
         return handler.ValidateToken(token, options.TokenValidationParameters, out _);
     }
 
+    private static async Task AssertStatusAsync(HttpStatusCode expected, HttpResponseMessage response)
+    {
+        if (response.StatusCode == expected)
+        {
+            return;
+        }
+
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Fail($"Expected {(int)expected} {expected}, got {(int)response.StatusCode} {response.StatusCode}. Body: {body}");
+    }
+
     private static async Task<WebApplication> CreateAuthSessionAppAsync(bool mapDevAdminToken = false)
     {
-        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = Environments.Development
+        });
         builder.WebHost.UseTestServer();
         builder.Configuration.AddConfiguration(CreateConfiguration());
         builder.Services.AddSharedInfrastructure(builder.Configuration);
         builder.Services.AddSingleton<IQueryDispatcher, TestQueryDispatcher>();
+        builder.Services.AddSingleton<ICommandDispatcher, TestCommandDispatcher>();
+        builder.Services.AddSingleton<IAuditService, TestAuditService>();
+        builder.Services.AddSingleton<IUnitOfWork, TestUnitOfWork>();
         builder.Services.AddControllers().AddApplicationPart(typeof(AdminAuthController).Assembly);
         builder.Services.AddApiVersioning(options =>
         {
@@ -317,5 +338,47 @@ public sealed class AdminEntraClaimMappingTests
 
             throw new NotSupportedException($"Unexpected query type {query.GetType().Name}.");
         }
+    }
+
+    private sealed class TestCommandDispatcher : ICommandDispatcher
+    {
+        public Task<Result<TResponse>> Send<TResponse>(
+            ICommand<TResponse> command,
+            CancellationToken cancellationToken)
+            => throw new NotSupportedException($"Unexpected command type {command.GetType().Name}.");
+
+        public Task<Result> Send(
+            ICommand command,
+            CancellationToken cancellationToken)
+        {
+            if (command is RecordAdminLoginCommand)
+            {
+                return Task.FromResult(Result.Success());
+            }
+
+            throw new NotSupportedException($"Unexpected command type {command.GetType().Name}.");
+        }
+    }
+
+    private sealed class TestAuditService : IAuditService
+    {
+        public Task RecordAsync(
+            string actionCode,
+            string entityTypeCode,
+            string entityId,
+            string? detailsJson = null,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task RecordSchoolActionAsync(
+            SchoolAuditContext context,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class TestUnitOfWork : IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
     }
 }

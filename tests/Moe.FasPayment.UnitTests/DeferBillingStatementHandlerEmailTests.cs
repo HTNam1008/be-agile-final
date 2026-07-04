@@ -156,6 +156,11 @@ public sealed class DeferBillingStatementHandlerEmailTests
         public Task<long?> FindCourseOrganizationIdAsync(long courseId, CancellationToken cancellationToken)
             => Task.FromResult<long?>(null);
 
+        public Task<IReadOnlyCollection<BillSchoolOrganization>> FindBillOrganizationIdsAsync(
+            IReadOnlyCollection<long> billIds,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyCollection<BillSchoolOrganization>>([]);
+
         public Task ApplySuccessfulPaymentAsync(long billId, decimal amount, bool paidInFull, DateTime paidAtUtc, CancellationToken cancellationToken)
             => Task.CompletedTask;
 

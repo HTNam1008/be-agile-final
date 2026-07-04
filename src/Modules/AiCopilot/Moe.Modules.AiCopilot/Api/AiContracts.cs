@@ -24,8 +24,12 @@ public sealed record FasRecommendationCard(
     IReadOnlyCollection<FasRecommendationMatch> MatchedSchemes,
     IReadOnlyCollection<AiInterviewField> ConfirmedFacts,
     IReadOnlyCollection<string> MissingFacts,
-    string Warning);
-public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue);
+    string Warning,
+    string RecommendationConfidence = "MEDIUM",
+    bool IsComparable = true,
+    string? RankingSummary = null);
+public sealed record FasRecommendationMatch(long SchemeId, string SchemeName, long TierId, string TierLabel, string SubsidyType, decimal SubsidyValue,
+    int RecommendationRank = 0, string? RecommendationReason = null, string RecommendationConfidence = "MEDIUM", bool IsComparable = true);
 public sealed record KnowledgeAnswerCard(
     string Title,
     string Summary,
@@ -33,7 +37,9 @@ public sealed record KnowledgeAnswerCard(
     IReadOnlyCollection<string> NextSteps,
     IReadOnlyCollection<string> SourceIds,
     string SourceQuality,
-    IReadOnlyCollection<string> FollowUpQuestions);
+    IReadOnlyCollection<string> FollowUpQuestions,
+    IReadOnlyCollection<KnowledgeSourceSummary> SourceSummaries,
+    string KnowledgeVersion);
 public sealed record FasPatchParticulars(string? Email, IReadOnlyCollection<string>? ParentNationalities);
 public sealed record FasPatchIncome(
     bool? IsWelfareHomeResident, string? EmploymentStatusCode,

@@ -59,6 +59,7 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
                 personId,
                 enrollment.CourseId,
                 today,
+                enrollment.Id,
                 command.FasApplicationSchemeIds,
                 ct);
         int requestedFasCount = command.FasApplicationSchemeIds?.Where(id => id > 0).Distinct().Count() ?? 0;

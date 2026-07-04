@@ -1,15 +1,19 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
 
 public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
 {
+    private readonly CustomWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public TopUpCampaignE2ETests(CustomWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -118,6 +122,8 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
         Assert.Equal(runId, duplicateRunId);
 
+        await ProcessRunAsync(runId);
+
         using JsonDocument summary = await WaitForRunSummaryAsync(runId);
         JsonElement data = summary.RootElement.GetProperty("data");
         Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
@@ -168,9 +174,15 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var rulesPayload = new
         {
             topUpCampaignId = campaignId,
-            rules = new[]
+            groups = new[]
             {
-                new { criterionCode = "Age", operatorCode = "GreaterThan", numericValueFrom = 7m }
+                new
+                {
+                    criteria = new object[]
+                    {
+                        new { criterionCode = "Age", operatorCode = "GreaterThan", numericValueFrom = 7m, numericValueTo = (decimal?)null, textValue = (string?)null }
+                    }
+                }
             }
         };
         var upsertResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/rules", rulesPayload);
@@ -204,6 +216,8 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
         Assert.Equal(runId, duplicateRunId);
 
+        await ProcessRunAsync(runId);
+
         using JsonDocument summary = await WaitForRunSummaryAsync(runId);
         JsonElement data = summary.RootElement.GetProperty("data");
         Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
@@ -211,6 +225,78 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(
             data.GetProperty("matchedCount").GetInt32(),
             data.GetProperty("processedCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task DynamicCampaign_RulesEndpoint_PreservesGroupedContract()
+    {
+        long campaignId = await CreateDynamicCampaignAsync();
+        var rulesPayload = new
+        {
+            topUpCampaignId = campaignId,
+            groups = new[]
+            {
+                new
+                {
+                    criteria = new object[]
+                    {
+                        new { criterionCode = "Age", operatorCode = "GreaterThanOrEqual", numericValueFrom = 7m, numericValueTo = (decimal?)null, textValue = (string?)null },
+                        new { criterionCode = "HasEducationAccount", operatorCode = "Equals", numericValueFrom = (decimal?)null, numericValueTo = (decimal?)null, textValue = "YES" }
+                    }
+                },
+                new
+                {
+                    criteria = new object[]
+                    {
+                        new { criterionCode = "Age", operatorCode = "LessThanOrEqual", numericValueFrom = 30m, numericValueTo = (decimal?)null, textValue = (string?)null }
+                    }
+                }
+            }
+        };
+
+        var upsertResponse = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/rules", rulesPayload);
+        if (!upsertResponse.IsSuccessStatusCode)
+        {
+            var err = await upsertResponse.Content.ReadAsStringAsync();
+            throw new Exception($"Grouped upsert failed: {upsertResponse.StatusCode} - {err}");
+        }
+
+        var rulesResponse = await _client.GetAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/rules");
+        rulesResponse.EnsureSuccessStatusCode();
+
+        await using var responseStream = await rulesResponse.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(responseStream);
+        JsonElement groups = document.RootElement;
+
+        Assert.Equal(2, groups.GetArrayLength());
+        Assert.Equal(1, groups[0].GetProperty("displayOrder").GetInt32());
+        Assert.Equal(2, groups[1].GetProperty("displayOrder").GetInt32());
+        Assert.Equal(2, groups[0].GetProperty("criteria").GetArrayLength());
+        Assert.Equal(1, groups[1].GetProperty("criteria").GetArrayLength());
+        Assert.Equal("AGE", groups[0].GetProperty("criteria")[0].GetProperty("criterionCode").GetString());
+        Assert.Equal("HASEDUCATIONACCOUNT", groups[0].GetProperty("criteria")[1].GetProperty("criterionCode").GetString());
+        Assert.Equal("AGE", groups[1].GetProperty("criteria")[0].GetProperty("criterionCode").GetString());
+    }
+
+    [Fact]
+    public async Task DynamicCampaign_RulesEndpoint_RejectsLegacyFlatPayload()
+    {
+        long campaignId = await CreateDynamicCampaignAsync();
+        var legacyPayload = new
+        {
+            topUpCampaignId = campaignId,
+            rules = new[]
+            {
+                new { criterionCode = "Age", operatorCode = "GreaterThan", numericValueFrom = 7m, numericValueTo = (decimal?)null, textValue = (string?)null }
+            }
+        };
+
+        var response = await _client.PutAsJsonAsync($"/api/admin/v1/top-up-campaigns/{campaignId}/rules", legacyPayload);
+
+        Assert.False(response.IsSuccessStatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Groups", body, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<long> RequestManualRunAsync(long campaignId, string idempotencyKey)
@@ -262,6 +348,12 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         throw new TimeoutException($"Run {runId} did not reach a terminal status.");
     }
 
+    private async Task ProcessRunAsync(long runId)
+    {
+        TopUpRunWorker worker = ActivatorUtilities.CreateInstance<TopUpRunWorker>(_factory.Services);
+        await worker.ProcessRunAsync(runId);
+    }
+
     private async Task<long[]> SearchEducationAccountIdsAsync()
     {
         var searchResponse = await _client.GetAsync("/api/admin/v1/top-up/accounts/search?organizationId=1&accountStatusCode=ACTIVE&page=1&pageSize=2");
@@ -282,5 +374,35 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
 
         Assert.True(ids.Length >= 2, $"Expected at least 2 active education accounts, found {ids.Length}.");
         return ids.Take(2).ToArray();
+    }
+
+    private async Task<long> CreateDynamicCampaignAsync()
+    {
+        var createPayload = new
+        {
+            organizationId = 1,
+            campaignCode = $"TEST_DYN_RULES_{Guid.NewGuid():N}",
+            campaignName = "Integration Test Dynamic Rules Contract",
+            recipientModeCode = "DynamicRules",
+            defaultTopUpAmount = 75.00m,
+            reason = "E2E Testing Dynamic Rules Contract",
+            scheduleTypeCode = "Recurring",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(12).ToString("yyyy-MM-dd"),
+            frequencyCode = "Quarterly",
+            frequencyInterval = 1,
+            deliveryTypeCode = "CONDITIONAL_RECURRING",
+            maxTotalAmount = 500.00m
+        };
+        var createResponse = await _client.PostAsJsonAsync("/api/admin/v1/top-up-campaigns", createPayload);
+        if (!createResponse.IsSuccessStatusCode)
+        {
+            var err = await createResponse.Content.ReadAsStringAsync();
+            throw new Exception($"Create dynamic campaign failed: {createResponse.StatusCode} - {err}");
+        }
+
+        var campaignId = await createResponse.Content.ReadFromJsonAsync<long>();
+        Assert.True(campaignId > 0);
+        return campaignId;
     }
 }

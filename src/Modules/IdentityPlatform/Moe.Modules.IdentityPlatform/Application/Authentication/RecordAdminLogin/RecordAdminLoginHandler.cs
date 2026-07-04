@@ -1,3 +1,4 @@
+using Moe.Application.Abstractions.Audit;
 using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Security;
@@ -10,6 +11,8 @@ namespace Moe.Modules.IdentityPlatform.Application.Authentication.RecordAdminLog
 
 internal sealed class RecordAdminLoginHandler(
     ICurrentUser currentUser,
+    IAdminAccessControl adminAccess,
+    IAuditService audit,
     IAdminLoginRecorder loginRecorder,
     IClock clock) : ICommandHandler<RecordAdminLoginCommand>
 {
@@ -29,8 +32,38 @@ internal sealed class RecordAdminLoginHandler(
             clock.UtcNow.UtcDateTime,
             cancellationToken);
 
-        return recorded
-            ? Result.Success()
-            : Result.Failure(IdentityErrors.UserAccountNotFound);
+        if (!recorded)
+        {
+            return Result.Failure(IdentityErrors.UserAccountNotFound);
+        }
+
+        await RecordLoginAuditAsync(cancellationToken);
+        return Result.Success();
+    }
+
+    private async Task RecordLoginAuditAsync(CancellationToken cancellationToken)
+    {
+        if (!adminAccess.IsSchoolAdmin || adminAccess.IsHqAdmin || currentUser.UserAccountId is not long userAccountId)
+        {
+            return;
+        }
+
+        foreach (long organizationId in adminAccess.ScopedOrganizationIds)
+        {
+            await audit.RecordSchoolActionAsync(
+                new SchoolAuditContext(
+                    AuditActionCodes.AdminLogin,
+                    "UserAccount",
+                    userAccountId,
+                    organizationId,
+                    new SchoolAuditDetails(
+                        "Admin login",
+                        RelatedIds: new Dictionary<string, long>
+                        {
+                            ["userAccountId"] = userAccountId
+                        },
+                        ReasonCode: "ADMIN_AUTH")),
+                cancellationToken);
+        }
     }
 }

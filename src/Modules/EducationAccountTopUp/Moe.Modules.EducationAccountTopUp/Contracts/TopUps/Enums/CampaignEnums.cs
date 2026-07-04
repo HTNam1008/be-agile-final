@@ -48,7 +48,8 @@ public enum TopUpCriterionCode
     AccountBalance,
     SchoolingStatus,
     Level,
-    Class
+    Class,
+    HasEducationAccount
 }
 
 public enum OperatorCode

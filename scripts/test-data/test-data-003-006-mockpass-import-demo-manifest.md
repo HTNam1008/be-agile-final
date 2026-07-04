@@ -2,16 +2,20 @@
 
 ## Purpose
 
-These four independent bulk-import fixtures are demo-only files for importing valid students and then logging in through mockpass as the exact imported students. Every row is intentionally valid and backed by a unique mockpass account in `E:/Final Agile/mockpass/static/mock-identities.json`.
+These four independent bulk-import fixtures are demo-only files for importing valid students and then logging in through mockpass as the exact imported students. Each workbook has 17 importable rows backed by unique mockpass accounts in `E:/Final Agile/mockpass/static/mock-identities.json`, plus 3 intentional failed-import rows.
 
-They are independent from the AUTO lifecycle scenario in `test-data-002-auto-lifecycle-bulk-import.xlsx`; no intentionally invalid rows are included here.
+They are independent from the AUTO lifecycle scenario in `test-data-002-auto-lifecycle-bulk-import.xlsx`, but follow the same `17 succeeded / 3 failed` import shape.
 
 ## Schema
 
 - Sheet: `BulkImport`
 - Data rows per file: `20`
-- Header: `SchoolName`, `OrganizationId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `NationalityCode`, `CitizenshipStatusCode`, `StudentNumber`, `AcademicYear`, `LevelCode`, `ClassCode`, `StartDate`, `Email`, `Mobile`, `Address`
+- Header: `SchoolName`, `OrganizationId`, `MockPassPersonId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `NationalityCode`, `CitizenshipStatusCode`, `StudentNumber`, `AcademicYear`, `LevelCode`, `ClassCode`, `StartDate`, `Email`, `Mobile`, `Address`
 - Date columns use typed Excel dates with `yyyy-mm-dd` formatting.
+- `MockPassPersonId`, `IdentityNumber`, `FullName`, `DateOfBirth`, `StudentNumber`, `Email`, `Mobile`, and `Address` mirror the matching records in `mock-identities.json`.
+- `MockPassPersonId` stores the mockpass UUID/subject id so deployed login can resolve `Person.MockPassPersonId` directly.
+- `SchoolName` is blank and `OrganizationId` is `2` for every row so the fixture imports against the seeded school used by the backend test host.
+- Rows 19, 20, and 21 intentionally fail import: invalid identity format, missing full name, and start date before date of birth.
 
 ## Files
 
@@ -27,7 +31,8 @@ Cleanup script: `scripts/test-data/test-data-003-006-mockpass-import-demo-cleanu
 ## MockPass Accounts
 
 - Baseline before these fixtures: 60 students, ending at `S7000060P`.
-- Added by these fixtures: 80 students, `S7000061Z` through `S7000140C`.
+- Referenced by these fixtures: 80 mockpass students, `S7000061Z` through `S7000140C`.
+- Importable from these fixtures: 68 students; 12 rows are intentional failed-import rows.
 - Expected mockpass total after this manifest: 140 students.
 - `singpassId` equals `nric` for every added account.
 - UUID derivation: `uuid5(NAMESPACE_URL, f"mockpass-import-demo:{nric}")`.
@@ -57,8 +62,8 @@ For each workbook, from a clean database without those identities already import
 
 ```text
 totalRows = 20
-succeededCount = 20
-failedCount = 0
+succeededCount = 17
+failedCount = 3
 ```
 
 No rows use `UNI_Y1` or any other `UNI_Y*` level code.

@@ -47,7 +47,7 @@ public sealed class CourseEnrollmentRepositoryEmailTests
         job.PlainTextBody.Should().Contain("you have been enrolled in Admin Course 101 by your school administrator");
         job.PlainTextBody.Should().Contain("Fee Payable: To be confirmed after payment plan selection");
         job.PlainTextBody.Should().Contain("Go to Payment Dashboard");
-        job.HtmlBody.Should().Contain("#ef3340");
+        job.HtmlBody.Should().ContainEquivalentOf("#ef3340");
     }
 
     [Fact]

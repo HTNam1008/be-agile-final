@@ -81,7 +81,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
         job.PlainTextBody.Should().Contain("Hello Ada Student, your consolidated bill for July 2026 is now ready.");
         job.PlainTextBody.Should().Contain("Total Amount Due: SGD 123.45");
         job.PlainTextBody.Should().Contain("Due Date: 01 Jul 2026");
-        job.PlainTextBody.Should().Contain("http://localhost:5173/portal/payments");
+        job.PlainTextBody.Should().Contain("https://portal.example.test/portal/payments");
     }
 
     [Fact]
