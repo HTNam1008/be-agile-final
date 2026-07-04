@@ -126,6 +126,110 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     }
 
     [Fact]
+    public async Task Fas_confirmation_escape_turns_do_not_resurrect_confirmation_gate()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
+        JsonElement confirmation = await SendFasMessage("Foreigner", conversationId);
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement scoped = await SendFasMessage("tell me a joke", conversationId);
+        Assert.Equal("PAUSED", scoped.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("can't help with jokes", scoped.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Before I calculate", scoped.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement sideQuestion = await SendFasMessage("what is pci", conversationId);
+        Assert.Equal("PAUSED", sideQuestion.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("per-capita income", sideQuestion.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Before I calculate", sideQuestion.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement cancelled = await SendFasMessage("i dont want to do fas anymore", conversationId);
+        Assert.Equal("CANCELLED", cancelled.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("stopped", cancelled.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement bareYes = await SendFasMessage("yes", conversationId);
+        Assert.Equal("CANCELLED", bareYes.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.DoesNotContain(bareYes.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
+        Assert.Contains("will not treat this as confirmation", bareYes.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Fas_parent_country_answer_suggests_enum_before_committing()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        await SendFasMessage("4", conversationId);
+        await SendFasMessage("0", conversationId);
+
+        JsonElement suggestion = await SendFasMessage("Vietnam", conversationId);
+
+        Assert.Equal("CLARIFYING", suggestion.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("maps to Foreigner", suggestion.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        JsonElement nationalityBeforeConfirm = Field(suggestion, "parentNationalities");
+        Assert.False(nationalityBeforeConfirm.GetProperty("confirmed").GetBoolean());
+
+        JsonElement confirmation = await SendFasMessage("yes", conversationId);
+
+        Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Equal("Foreigner", Field(confirmation, "parentNationalities").GetProperty("value")[0].GetString());
+        Assert.Contains("Parent or guardian nationality: Foreigner", confirmation.GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task Fas_collecting_understands_interruptions_restart_and_natural_numbers()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+
+        JsonElement pause = await SendFasMessage("maybe i want to ask something else", conversationId);
+        Assert.Equal("PAUSED", pause.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("paused", pause.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement mixedCancelPayment = await SendFasMessage("no, i dont want to do this anymore, my current bills please", conversationId);
+        Assert.Equal("PAYMENT", mixedCancelPayment.GetProperty("mode").GetString());
+        Assert.Equal("CANCELLED", mixedCancelPayment.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("no outstanding course bills", mixedCancelPayment.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement restarted = await SendFasMessage("Check if I qualify for FAS.", conversationId);
+        Assert.Equal("COLLECTING", restarted.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Equal("isWelfareHomeResident", restarted.GetProperty("interviewState").GetProperty("missingFields")[0].GetString());
+        Assert.Contains("welfare home", restarted.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+        JsonElement household = await SendFasMessage("like...4", conversationId);
+        Assert.Equal(4, Field(household, "householdMemberCount").GetProperty("value").GetInt32());
+        Assert.Contains("other monthly household income", household.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Fas_household_policy_question_stays_in_flow_instead_of_manual_fallback()
+    {
+        await CreateEligibleScheme();
+        Guid conversationId = await StartFasInterview();
+        await SendFasMessage("No", conversationId);
+        await SendFasMessage("3000", conversationId);
+
+        JsonElement help = await SendFasMessage("my mom is pregnant, does it count as 5 or 4?", conversationId);
+
+        Assert.Equal("CLARIFYING", help.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Contains("currently in your household", help.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("source of truth", help.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        JsonElement answered = await SendFasMessage("4", conversationId);
+
+        Assert.Equal(4, Field(answered, "householdMemberCount").GetProperty("value").GetInt32());
+        Assert.Contains("other monthly household income", answered.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Completed_fas_scheme_question_uses_saved_eligible_options()
     {
         await CreateEligibleScheme(label: "Core", subsidyValue: 75m);
@@ -205,6 +309,8 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             JsonElement actionableMatch = matches.Single(x => x.GetProperty("schemeName").GetString() == actionableScheme);
             Assert.True(pendingMatch.GetProperty("hasPendingApplication").GetBoolean());
             Assert.False(pendingMatch.GetProperty("canApply").GetBoolean());
+            Assert.Contains("pending application", pendingMatch.GetProperty("recommendationReason").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("apply for now", data.GetProperty("rankingSummary").GetString(), StringComparison.OrdinalIgnoreCase);
             Assert.True(actionableMatch.GetProperty("canApply").GetBoolean());
             Assert.True(Array.FindIndex(matches, x => x.GetProperty("schemeName").GetString() == actionableScheme) <
                         Array.FindIndex(matches, x => x.GetProperty("schemeName").GetString() == pendingScheme));
