@@ -45,7 +45,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Redis:ConnectionString"] = "",
                 ["AzureOpenAI:Endpoint"] = "https://integration-test.openai.azure.com/",
                 ["AzureOpenAI:ApiKey"] = "integration-test-api-key",
-                ["AzureOpenAI:ChatDeploymentName"] = "integration-test-chat"
+                ["AzureOpenAI:ChatDeploymentName"] = "integration-test-chat",
+                ["AiCopilot:PlannerV2UseModel"] = "false"
             });
         });
 

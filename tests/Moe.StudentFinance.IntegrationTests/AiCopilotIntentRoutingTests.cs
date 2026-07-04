@@ -65,11 +65,31 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Income_document_question_prioritizes_supporting_document_guidance()
+    {
+        JsonElement response = await Chat("What documents prove income?", personId: 2101);
+
+        JsonElement firstCitation = response.GetProperty("grounding").GetProperty("citations").EnumerateArray().First();
+        Assert.Equal("FAS-APPLICATION-001", firstCitation.GetProperty("sourceId").GetString());
+        string cardJson = response.GetProperty("cards").EnumerateArray().Single().GetRawText();
+        Assert.Contains("Income proof", cardJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Fas_definition_question_does_not_start_interview()
     {
         JsonElement response = await Chat("What is FAS?", personId: 2101);
         Assert.Contains(response.GetProperty("mode").GetString(), new[] { "GENERAL", "FALLBACK" });
         Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Live_scheme_eligibility_question_starts_interview()
+    {
+        JsonElement response = await Chat("Which schemes can I apply for?", personId: 2101);
+
+        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.True(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]
@@ -136,6 +156,19 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Fas_knowledge_question_without_interview_does_not_suggest_resume()
+    {
+        JsonElement response = await Chat("How is PCI calculated?", personId: 2101);
+
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.StartsWith("PCI means per-capita income", response.GetProperty("text").GetString());
+        Assert.DoesNotContain(response.GetProperty("followUpQuestions").EnumerateArray(),
+            x => x.GetString() == "Continue my FAS eligibility check.");
+        Assert.DoesNotContain(response.GetProperty("followUpQuestions").EnumerateArray(),
+            x => x.GetString() == "How is PCI calculated?");
+    }
+
+    [Fact]
     public async Task Outstanding_keyword_routes_to_payment()
     {
         JsonElement response = await Chat("What is my outstanding amount?", personId: 2101);
@@ -162,6 +195,38 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
         string? mode = response.GetProperty("mode").GetString();
         Assert.True(mode == "FAS_INTERVIEW",
             $"Expected FAS_INTERVIEW for \"{message}\", got {mode}");
+    }
+
+    [Fact]
+    public async Task Feel_like_doing_fas_starts_interview()
+    {
+        JsonElement response = await Chat("I feel like doing fas", personId: 2101);
+
+        Assert.Equal("FAS_INTERVIEW", response.GetProperty("mode").GetString());
+        Assert.Equal("START_FAS", response.GetProperty("turnIntent").GetString());
+        Assert.True(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Likely_fas_typo_clarifies_instead_of_generic_fallback()
+    {
+        JsonElement response = await Chat("i feel like doing fss", personId: 2101);
+
+        Assert.Equal("GENERAL", response.GetProperty("mode").GetString());
+        Assert.Equal("CLARIFY_FAS_TYPO", response.GetProperty("turnIntent").GetString());
+        Assert.Contains("Did you mean FAS", response.GetProperty("text").GetString());
+        Assert.DoesNotContain("cannot answer this reliably", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Education_account_usage_routes_to_payment_tools()
+    {
+        JsonElement response = await Chat("What can I use my Education Account for?", personId: 2101);
+
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        Assert.Contains(response.GetProperty("cards").EnumerateArray(),
+            x => x.GetProperty("type").GetString() == "FINANCE_SUMMARY");
+        Assert.DoesNotContain("cannot answer this reliably", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
