@@ -15,19 +15,19 @@ namespace Moe.Modules.AiCopilot.Api;
 [Route("api/eservice/v{version:apiVersion}/ai")]
 [Authorize(Policy = AuthorizationPolicies.EServicePortal), EnableCors("EServiceCors")]
 public sealed class AiChatController(
-    AiOrchestratorService service,
+    AiTurnRouter router,
     AiStreamingService streaming,
     MoeDbContext db,
     ICurrentUser currentUser) : ControllerBase
 {
     [HttpPost("chat")]
-    public Task<AiChatResponse> Chat([FromBody] AiChatRequest request, CancellationToken ct) => service.ChatAsync(request, ct);
+    public Task<AiChatResponse> Chat([FromBody] AiChatRequest request, CancellationToken ct) => router.ChatAsync(request, ct);
 
     [HttpGet("conversations/{id:guid}")]
-    public Task<AiConversationResponse> Conversation(Guid id, CancellationToken ct) => service.GetConversationAsync(id, ct);
+    public Task<AiConversationResponse> Conversation(Guid id, CancellationToken ct) => router.GetConversationAsync(id, ct);
 
     [HttpPost("admin-center-cases")]
-    public Task<object> CreateCase(CreateAdminCenterCaseRequest request, CancellationToken ct) => service.CreateCaseAsync(request, ct);
+    public Task<object> CreateCase(CreateAdminCenterCaseRequest request, CancellationToken ct) => router.CreateCaseAsync(request, ct);
 
     [HttpPost("chat/stream")]
     public async Task Stream([FromBody] AiChatRequest request, CancellationToken ct)

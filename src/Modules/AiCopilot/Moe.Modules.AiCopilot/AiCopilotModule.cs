@@ -40,7 +40,7 @@ public sealed class AiCopilotModule : IModule
             }
             return builder.Build();
         });
-        services.AddScoped<AiOrchestratorService>();
+        services.AddScoped<AiTurnRouter>();
         services.AddScoped<AiTurnPlannerService>();
         services.AddScoped<AiFinanceReader>();
         services.AddScoped<FallbackHandler>();
