@@ -52,9 +52,8 @@ public sealed class AiTurnRouter(
         {
             AiTurnPlan plan = await turnPlanner.PlanAsync(sanitized, conversation, ct);
 
-            // Agentic path for GENERAL mode
-            string preMode = ModeFromPlan(plan) ?? DetermineMode(sanitized.Message, conversation.ModeCode, sanitized.PageContext?.Domain);
-            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true) && preMode == "GENERAL")
+            // Agentic path — model selects tools via FunctionChoiceBehavior.Auto()
+            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true))
             {
                 try
                 {
