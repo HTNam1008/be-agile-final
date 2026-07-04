@@ -102,6 +102,7 @@ internal sealed class GetAllTransactionsHandler(
             item.EducationAccountId,
             item.CampaignCode,
             item.CampaignName,
+            account?.AccountNumber ?? "Unavailable",
             account is null
                 ? "****"
                 : TopUpDisplayMasker.MaskAccountNumber(account.AccountNumber),

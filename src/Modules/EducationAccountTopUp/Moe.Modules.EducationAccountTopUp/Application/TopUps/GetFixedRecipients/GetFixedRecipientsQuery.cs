@@ -7,6 +7,7 @@ public sealed record GetFixedRecipientsQuery(long TopUpCampaignId) : IQuery<IRea
 public sealed record FixedRecipientDto(
     long EducationAccountId,
     string DisplayName,
+    string AccountNumber,
     string MaskedAccountNumber,
     string StudentNumber,
     int Age,
