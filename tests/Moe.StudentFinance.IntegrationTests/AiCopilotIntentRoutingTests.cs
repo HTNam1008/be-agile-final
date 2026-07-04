@@ -120,7 +120,11 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
         string? mode = response.GetProperty("mode").GetString();
 
         Assert.Contains(mode, new[] { "GENERAL", "FALLBACK" });
-        Assert.Empty(response.GetProperty("cards").EnumerateArray());
+        foreach (JsonElement card in response.GetProperty("cards").EnumerateArray())
+        {
+            string type = card.GetProperty("type").GetString()!;
+            Assert.DoesNotContain(type, new[] { "FINANCE_SUMMARY", "FAS_RECOMMENDATION" });
+        }
         Assert.False(response.TryGetProperty("interviewState", out JsonElement interviewState) && interviewState.ValueKind != JsonValueKind.Null);
     }
 

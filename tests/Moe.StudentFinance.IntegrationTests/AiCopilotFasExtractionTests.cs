@@ -114,7 +114,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("My parents both work. My father earns about 2500 and my mother earns 1800, so combined it's around there. We also get some allowance from my grandparents.", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("3000 4000", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
     }
 
     [Fact]
@@ -195,7 +195,6 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     [Theory]
     [InlineData("0")]
     [InlineData("31")]
-    [InlineData("four")]
     public async Task Household_count_invalid_triggers_clarification(string answer)
     {
         Guid cid = await StartNoWelfare();

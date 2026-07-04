@@ -33,7 +33,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["DevTools:Clock:Enabled"] = "true",
-                ["AiCopilot:PlannerV2UseModel"] = "false"
+                ["AiCopilot:PlannerV2UseModel"] = "false",
+                ["AiCopilot:AgenticEnabled"] = "false"
             });
         });
 

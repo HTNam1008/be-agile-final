@@ -14,6 +14,7 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
         modelBuilder.ApplyConfiguration(new MessageConfiguration());
         modelBuilder.ApplyConfiguration(new ReviewConfiguration());
         modelBuilder.ApplyConfiguration(new CaseConfiguration());
+        modelBuilder.ApplyConfiguration(new KnowledgeDocumentConfiguration());
     }
 
     private sealed class ConversationConfiguration : IEntityTypeConfiguration<AiConversation>
@@ -80,6 +81,30 @@ public sealed class AiModelConfiguration : IModelConfigurationContributor
             b.Property(x => x.DescriptionRedacted).HasMaxLength(2000);
             b.Property(x => x.ContactPreferenceCode).HasMaxLength(20).IsUnicode(false);
             b.Property(x => x.StatusCode).HasMaxLength(20).IsUnicode(false);
+        }
+    }
+
+    private sealed class KnowledgeDocumentConfiguration : IEntityTypeConfiguration<AiKnowledgeDocument>
+    {
+        public void Configure(EntityTypeBuilder<AiKnowledgeDocument> b)
+        {
+            b.ToTable("KnowledgeDocument", "ai");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.Domain, x.Status });
+            b.Property(x => x.Id).HasMaxLength(100).IsUnicode(false);
+            b.Property(x => x.Title).HasMaxLength(500);
+            b.Property(x => x.Section).HasMaxLength(500);
+            b.Property(x => x.Domain).HasMaxLength(30).IsUnicode(false);
+            b.Property(x => x.Status).HasMaxLength(30).IsUnicode(false);
+            b.Property(x => x.Version).HasMaxLength(20).IsUnicode(false);
+            b.Property(x => x.Url).HasMaxLength(500);
+            b.Property(x => x.ReviewOwner).HasMaxLength(200);
+            b.Property(x => x.SynonymsJson).HasMaxLength(2000).HasColumnName("Synonyms");
+            b.Property(x => x.AllowedIntentsJson).HasMaxLength(1000).HasColumnName("AllowedIntents");
+            b.Property(x => x.FollowUpsJson).HasMaxLength(1000).HasColumnName("FollowUps");
+            b.Ignore(x => x.Synonyms);
+            b.Ignore(x => x.AllowedIntents);
+            b.Ignore(x => x.FollowUps);
         }
     }
 }
