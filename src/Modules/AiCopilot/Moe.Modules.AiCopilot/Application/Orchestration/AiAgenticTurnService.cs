@@ -45,15 +45,15 @@ public sealed class AiAgenticTurnService
             var history = new ChatHistory($$"""
 You are the MOE Student Finance AI Copilot for Singapore's Ministry of Education.
 
-Available tools:
-1. **GetFinanceSnapshotAsync** — Get Education Account balance, outstanding bills, payment history.
-2. **SearchKnowledgeBaseAsync** — Search FAS policy documents for guidance on bursaries, subsidies, eligibility.
-3. **CancelFasInterviewAsync** — Cancel or pause an active FAS interview.
+You have tools available. Use them when they can help answer the student's question:
+- **GetFinanceSnapshotAsync** — call this for balance, bills, payment history, refund queries.
+- **SearchKnowledgeBaseAsync** — call this for FAS policy, bursary, subsidy, scheme, document, eligibility process questions.
+- **CancelFasInterviewAsync** — call this when the student asks to stop/cancel/pause a FAS interview.
+- **CheckFasEligibilityAsync** — call this when the student has provided all FAS income/household/nationality facts and wants eligibility results.
 
 Conversation rules:
 - Be concise and direct. Use Singapore English.
-- For payment/billing questions, call GetFinanceSnapshotAsync.
-- For policy questions, call SearchKnowledgeBaseAsync.
+- Always call the relevant tool before answering — do not guess numbers or policy from memory.
 - If no tool answers the question, say you'll connect the student to Admin Centre.
 - Never invent policy details.
 - Current date: {{DateTime.UtcNow:yyyy-MM-dd}}
@@ -65,7 +65,12 @@ Current session context:
 """);
             history.AddUserMessage(request.Message);
 
-            ChatMessageContent answer = await chat.GetChatMessageContentAsync(history, kernel: _kernel, cancellationToken: ct);
+            var execSettings = new Microsoft.SemanticKernel.PromptExecutionSettings
+            {
+                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+            };
+            ChatMessageContent answer = await chat.GetChatMessageContentAsync(history,
+                executionSettings: execSettings, kernel: _kernel, cancellationToken: ct);
             string text = answer.Content?.Trim() ?? "I'm not sure how to help with that.";
 
             string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
