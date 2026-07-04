@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 using Moe.Modules.AiCopilot.Api;
 using Moe.Modules.AiCopilot.Domain;
 
@@ -12,25 +13,6 @@ public sealed class AiAgenticTurnService
 
     private readonly Kernel _kernel;
     private readonly ILogger<AiAgenticTurnService> _logger;
-    private static readonly string SystemPrompt = $$"""
-You are the MOE Student Finance AI Copilot for Singapore's Ministry of Education.
-
-Available tools:
-1. **GetFinanceSnapshotAsync** — Get Education Account balance, outstanding bills, payment history. Always use this when the student asks about bills, payments, balance, refunds, or account.
-2. **SearchKnowledgeBaseAsync** — Search FAS policy documents for guidance on bursaries, subsidies, eligibility, fees, applications, documents. Use this for policy questions.
-3. **CancelFasInterviewAsync** — Cancel or pause an active FAS interview.
-
-Conversation rules:
-- Be concise and direct. Use Singapore English.
-- Always cite your sources when giving policy information.
-- If the student asks about FAS eligibility, guide them to start the FAS wizard.
-- For payment/billing questions, call GetFinanceSnapshotAsync.
-- For policy questions, call SearchKnowledgeBaseAsync.
-- Never invent policy details — always search the knowledge base first.
-- If you cannot answer, suggest contacting the Admin Centre.
-
-Current date: {{DateTime.UtcNow:yyyy-MM-dd}}
-""";
 
     public AiAgenticTurnService(Kernel kernel, ILogger<AiAgenticTurnService> logger)
     {
@@ -42,31 +24,60 @@ Current date: {{DateTime.UtcNow:yyyy-MM-dd}}
     {
         try
         {
-            KernelArguments args = new()
+            IChatCompletionService chat = _kernel.GetRequiredService<IChatCompletionService>();
+
+            string fasState = conversation.FasSession?.StatusCode switch
             {
-                ["request"] = request.Message,
-                ["mode"] = conversation.ModeCode,
-                ["domain"] = request.PageContext?.Domain ?? "GENERAL"
+                "COLLECTING" => "FAS interview in progress — collecting facts. Current field: " +
+                    (conversation.FasSession.NextQuestion ?? "unknown"),
+                "CONFIRMING" => "FAS interview at confirmation step — all facts collected, awaiting yes/no.",
+                "CLARIFYING" => "FAS interview needs clarification on the last answer.",
+                "COMPLETE" => "FAS eligibility check completed.",
+                "PAUSED" => "FAS check is paused. User can resume by asking.",
+                "CANCELLED" => "FAS check was cancelled.",
+                _ => "No active FAS session."
             };
 
-            FunctionResult result = await _kernel.InvokePromptAsync(request.Message, args, cancellationToken: ct);
+            string modeContext = request.PageContext?.Domain is not null
+                ? $"Page domain: {request.PageContext.Domain}. Path: {request.PageContext.Path ?? "none"}."
+                : "No page context.";
 
-            string text = result.GetValue<string>() ?? "I'm not sure how to help with that.";
+            var history = new ChatHistory($$"""
+You are the MOE Student Finance AI Copilot for Singapore's Ministry of Education.
 
-            return new AiHandlerResult(text, DetermineMode(text, conversation), new(false, []), [], []);
+Available tools:
+1. **GetFinanceSnapshotAsync** — Get Education Account balance, outstanding bills, payment history.
+2. **SearchKnowledgeBaseAsync** — Search FAS policy documents for guidance on bursaries, subsidies, eligibility.
+3. **CancelFasInterviewAsync** — Cancel or pause an active FAS interview.
+
+Conversation rules:
+- Be concise and direct. Use Singapore English.
+- For payment/billing questions, call GetFinanceSnapshotAsync.
+- For policy questions, call SearchKnowledgeBaseAsync.
+- If no tool answers the question, say you'll connect the student to Admin Centre.
+- Never invent policy details.
+- Current date: {{DateTime.UtcNow:yyyy-MM-dd}}
+
+Current session context:
+- Mode: {{conversation.ModeCode}}
+- FAS state: {{fasState}}
+- {{modeContext}}
+""");
+            history.AddUserMessage(request.Message);
+
+            ChatMessageContent answer = await chat.GetChatMessageContentAsync(history, kernel: _kernel, cancellationToken: ct);
+            string text = answer.Content?.Trim() ?? "I'm not sure how to help with that.";
+
+            string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
+                ? "FAS_INTERVIEW"
+                : "GENERAL";
+
+            return new AiHandlerResult(text, mode, new(false, []), [], []);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Agentic turn failed — falling back to deterministic path");
             throw;
         }
-    }
-
-    private static string DetermineMode(string response, AiConversation conversation)
-    {
-        if (conversation.FasSession is not null &&
-            conversation.FasSession.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING")
-            return "FAS_INTERVIEW";
-        return "GENERAL";
     }
 }

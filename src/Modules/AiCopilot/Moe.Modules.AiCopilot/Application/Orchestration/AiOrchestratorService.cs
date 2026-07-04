@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.AiCopilot.Api;
@@ -20,6 +21,7 @@ public sealed class AiOrchestratorService(
     KnowledgeAnswerHandler knowledgeHandler,
     FasInterviewHandler fasHandler,
     ILogger<AiOrchestratorService> logger,
+    IConfiguration configuration,
     AiAgenticTurnService? agenticService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -43,8 +45,10 @@ public sealed class AiOrchestratorService(
         {
             AiTurnPlan turnPlan = await turnPlanner.PlanAsync(sanitizedRequest, conversation, ct);
 
-            // Agentic path: when enabled, let the model drive tool selection
-            if (agenticService is not null && turnPlan.Source == "MODEL")
+            // Agentic path: when enabled, try the model-driven path first for GENERAL mode
+            // Falls back to deterministic handlers on exception or null result.
+            string preMode = AiTurnRouter.ModeFromPlan(turnPlan) ?? AiTurnRouter.DetermineMode(sanitizedRequest.Message, conversation.ModeCode, sanitizedRequest.PageContext?.Domain);
+            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true) && preMode == "GENERAL")
             {
                 try
                 {

@@ -59,11 +59,7 @@ public sealed class AiCopilotModule : IModule
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddScoped<AiCopilotPlugin>();
-        bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", true);
-        if (agenticEnabled)
-        {
-            services.AddScoped<AiAgenticTurnService>();
-        }
+        services.AddScoped<AiAgenticTurnService>();
         services.AddScoped<AiStreamingService>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
