@@ -1,9 +1,9 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Moe.Modules.AiCopilot.Application.Finance;
 using Moe.Modules.AiCopilot.Application.Knowledge;
-using Moe.Modules.AiCopilot.Domain;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
@@ -11,15 +11,13 @@ public sealed class AiCopilotPlugin
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly AiFinanceReader _finance;
+    private readonly IServiceProvider _services;
     private readonly IKnowledgeRetriever _knowledge;
-    private readonly FasInterviewHandler _fasHandler;
 
-    public AiCopilotPlugin(AiFinanceReader finance, IKnowledgeRetriever knowledge, FasInterviewHandler fasHandler)
+    public AiCopilotPlugin(IServiceProvider services, IKnowledgeRetriever knowledge)
     {
-        _finance = finance;
+        _services = services;
         _knowledge = knowledge;
-        _fasHandler = fasHandler;
     }
 
     [KernelFunction]
@@ -27,7 +25,8 @@ public sealed class AiCopilotPlugin
     [return: Description("JSON object with currentBalance, heldBalance, availableBalance, totalOutstanding, netAvailable, currencyCode, billCount, nearestDueDate, bills array, recentPayments array")]
     public async Task<string> GetFinanceSnapshotAsync(CancellationToken ct)
     {
-        AiFinanceSnapshot snapshot = await _finance.GetSnapshotAsync(ct);
+        AiFinanceReader finance = _services.GetRequiredService<AiFinanceReader>();
+        AiFinanceSnapshot snapshot = await finance.GetSnapshotAsync(ct);
         return JsonSerializer.Serialize(new
         {
             snapshot.CurrentBalance,

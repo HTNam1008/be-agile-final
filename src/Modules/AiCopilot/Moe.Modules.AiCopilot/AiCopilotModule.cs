@@ -31,7 +31,7 @@ public sealed class AiCopilotModule : IModule
             {
                 builder.AddAzureOpenAITextEmbeddingGeneration(embeddingDeployment, endpoint, apiKey);
             }
-            bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", false);
+            bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", true);
             if (agenticEnabled)
             {
                 Kernel kernel = builder.Build();
@@ -59,7 +59,7 @@ public sealed class AiCopilotModule : IModule
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddScoped<AiCopilotPlugin>();
-        bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", false);
+        bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", true);
         if (agenticEnabled)
         {
             services.AddScoped<AiAgenticTurnService>();
