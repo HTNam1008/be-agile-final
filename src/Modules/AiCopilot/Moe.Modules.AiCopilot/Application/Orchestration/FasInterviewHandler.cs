@@ -2,7 +2,10 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 using Moe.Modules.AiCopilot.Api;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
@@ -16,7 +19,8 @@ public sealed class FasInterviewHandler(
     FallbackHandler fallback,
     PaymentQueryHandler paymentHandler,
     KnowledgeAnswerHandler knowledgeHandler,
-    ILogger<FasInterviewHandler> logger)
+    ILogger<FasInterviewHandler> logger,
+    IServiceProvider services)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -128,7 +132,7 @@ public sealed class FasInterviewHandler(
         bool isFieldHelpTurn = fieldKey is not null && LooksLikeFieldHelpRequest(request.Message);
         bool shouldAskNextQuestion = (isNewInterview && fieldKey is null) || isGuidanceTurn || isFieldHelpTurn;
         string? answeredField = shouldAskNextQuestion ? null : ResolveTargetField(state, fieldKey);
-        FasExtractionResult extraction = shouldAskNextQuestion ? FasExtractionResult.Accepted() : ApplyFasAnswer(state, request.Message, fieldKey);
+        FasExtractionResult extraction = shouldAskNextQuestion ? FasExtractionResult.Accepted() : await ApplyFasAnswerWithLlmAsync(state, request.Message, fieldKey, ct);
 
         if (extraction.Status == "MANUAL_FALLBACK")
         {
@@ -487,6 +491,106 @@ public sealed class FasInterviewHandler(
     }
 
     // ── FAS answer processing ────────────────────────────────────────────
+
+    private async Task<FasExtractionResult> ApplyFasAnswerWithLlmAsync(FasInterviewData s, string message, string? preferredField = null, CancellationToken ct = default)
+    {
+        string? field = ResolveTargetField(s, preferredField);
+        if (field is null) return FasExtractionResult.Accepted();
+
+        FasExtractionResult? llmResult = await TryLlmExtractFieldAsync(message, field, ct);
+        if (llmResult is not null)
+        {
+            if (llmResult.Status == "ACCEPTED")
+            {
+                s.ClarificationField = null;
+                s.ValidationMessage = null;
+                s.PendingParentNationalitySuggestion = null;
+                s.ClarificationAttempts.Remove(field);
+                ApplyAcceptedValue(s, field, llmResult.Value);
+            }
+            return llmResult;
+        }
+
+        return ApplyFasAnswer(s, message, preferredField);
+    }
+
+    private async Task<FasExtractionResult?> TryLlmExtractFieldAsync(string message, string field, CancellationToken ct)
+    {
+        if (field is not "monthlyHouseholdIncome" and not "householdMemberCount" and not "otherMonthlyIncome")
+            return null;
+
+        Kernel kernel;
+        try { kernel = services.GetRequiredService<Kernel>(); } catch { return null; }
+
+        try
+        {
+            IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
+            var history = new ChatHistory($$"""
+You extract student FAS application data from a Singapore user message.
+Return a JSON object with exactly this structure:
+{
+  "value": number | null,
+  "field": "{{field}}",
+  "ambiguous": false
+}
+Rules:
+- For monthlyHouseholdIncome: if user gives a range ("3k to 4k"), use the lower bound.
+- For monthlyHouseholdIncome: if user gives multiple amounts ("mum earns 2k, dad earns 3k"), compute the total.
+- For householdMemberCount: must be an integer.
+- For otherMonthlyIncome: "none", "no", "nothing", "nil", "zero" → 0.
+- "about", "around", "approximately" are not ambiguous — extract the number.
+- Number with "k" or "K" → multiply by 1000.
+- field name is literal, do not guess.
+- Set value to null ONLY if the user message contains no information for this field.
+""");
+            history.AddUserMessage(message);
+
+            ChatMessageContent result = await chat.GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+            string content = result.Content?.Trim() ?? "";
+            using JsonDocument doc = JsonDocument.Parse(content);
+            JsonElement root = doc.RootElement;
+
+            if (!root.TryGetProperty("field", out JsonElement fieldEl) || fieldEl.GetString() != field)
+                return null;
+
+            if (!root.TryGetProperty("value", out JsonElement valueEl) || valueEl.ValueKind == JsonValueKind.Null)
+                return null;
+
+            return field switch
+            {
+                "monthlyHouseholdIncome" => ParseLlmIncome(valueEl),
+                "householdMemberCount" => ParseLlmHouseholdCount(valueEl),
+                "otherMonthlyIncome" => ParseLlmIncome(valueEl),
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static FasExtractionResult ParseLlmIncome(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetDecimal(out decimal amount))
+            return FasExtractionResult.Clarify("I could not understand the income figure. Please provide the amount as a number.");
+
+        if (amount < 0 || amount > 1_000_000)
+            return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+
+        return FasExtractionResult.Accepted(decimal.Round(amount, 2));
+    }
+
+    private static FasExtractionResult ParseLlmHouseholdCount(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int count))
+            return FasExtractionResult.Clarify("I could not understand the household size. Please provide the number of people as a whole number.");
+
+        if (count is < 1 or > 30)
+            return FasExtractionResult.Clarify("Please provide a household member count between 1 and 30.");
+
+        return FasExtractionResult.Accepted(count);
+    }
 
     private static FasExtractionResult ApplyFasAnswer(FasInterviewData s, string message, string? preferredField = null)
     {
