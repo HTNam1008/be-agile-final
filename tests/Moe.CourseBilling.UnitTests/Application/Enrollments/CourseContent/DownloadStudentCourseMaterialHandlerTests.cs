@@ -12,6 +12,36 @@ namespace Moe.CourseBilling.UnitTests.Application.Enrollments.CourseContent;
 
 public sealed class DownloadStudentCourseMaterialHandlerTests
 {
+    [Theory]
+    [InlineData("slide.ppt", "application/vnd.ms-powerpoint", false)]
+    [InlineData("slide.pps", "application/vnd.ms-powerpoint", false)]
+    [InlineData("slide.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", true)]
+    [InlineData("document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", true)]
+    [InlineData("slide.ppsx", "application/vnd.openxmlformats-officedocument.presentationml.slideshow", false)]
+    [InlineData("document.pdf", "application/pdf", false)]
+    [InlineData("image.png", "image/png", false)]
+    [InlineData("notes.txt", "text/plain", false)]
+    public async Task OfficePreview_AcceptsOnlyPowerPointMaterials(
+        string fileName,
+        string contentType,
+        bool expectedSuccess)
+    {
+        CourseMaterial material = CreateMaterial(fileName, contentType);
+        GetStudentCourseMaterialOfficePreviewHandler handler = new(
+            new CurrentUserDouble(),
+            new StudentCourseContentRepositoryDouble(CreateSnapshot(material)),
+            new CourseMaterialStorageServiceDouble(),
+            new ClockDouble());
+
+        var result = await handler.Handle(
+            new GetStudentCourseMaterialOfficePreviewQuery(1, material.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().Be(expectedSuccess);
+        if (expectedSuccess)
+            result.Value.PreviewUrl.Should().StartWith("https://view.officeapps.live.com/op/embed.aspx?src=");
+    }
+
     [Fact]
     public async Task Handle_WhenConcurrentPreviewRequestsMissCache_ConvertsOnlyOnce()
     {
@@ -71,16 +101,18 @@ public sealed class DownloadStudentCourseMaterialHandlerTests
         return new StudentCourseContentSnapshot(enrollment, course, [material]);
     }
 
-    private static CourseMaterial CreateMaterial()
+    private static CourseMaterial CreateMaterial(
+        string originalFileName = "slide.ppt",
+        string contentType = "application/vnd.ms-powerpoint")
         => new(
             1,
             "Slide",
             null,
             "READING_MATERIAL",
-            "slide.ppt",
-            "slide.ppt",
-            ".ppt",
-            "application/vnd.ms-powerpoint",
+            originalFileName,
+            originalFileName,
+            Path.GetExtension(originalFileName),
+            contentType,
             1024,
             "AZURE_BLOB",
             "courses/1/materials/slide.ppt",
@@ -116,7 +148,7 @@ public sealed class DownloadStudentCourseMaterialHandlerTests
             string storagePath,
             DateTimeOffset expiresAtUtc,
             CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+            => Task.FromResult<Uri?>(new Uri("https://example.blob.core.windows.net/materials/slide?sig=test"));
     }
 
     private sealed class PreviewConverterDouble : ICourseMaterialPreviewConverter
