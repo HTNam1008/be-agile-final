@@ -1,6 +1,6 @@
 namespace Moe.Modules.AiCopilot.Domain;
 
-internal sealed class AiFasSession
+public sealed class AiFasSession
 {
     private AiFasSession() { }
 
