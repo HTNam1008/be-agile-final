@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -280,11 +281,11 @@ app.MapGet("/dev/admin-token", (IConfiguration configuration) =>
 
 if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
 {
-    app.MapGet("/dev/clock", (DevelopmentManualClock clock) => Results.Ok(CreateDevelopmentClockResponse(clock)))
+    app.MapGet("/dev/clock", ([FromServices] DevelopmentManualClock clock) => Results.Ok(CreateDevelopmentClockResponse(clock)))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    app.MapPut("/dev/clock", ([FromBody] SetDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         clock.Set(request.UtcNow);
         return Results.Ok(CreateDevelopmentClockResponse(clock));
@@ -292,7 +293,7 @@ if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPost("/dev/clock/advance", (AdvanceDevelopmentClockRequest request, DevelopmentManualClock clock) =>
+    app.MapPost("/dev/clock/advance", ([FromBody] AdvanceDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         TimeSpan delta = request.ToTimeSpan();
         if (delta == TimeSpan.Zero)
@@ -310,7 +311,7 @@ if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapDelete("/dev/clock", (DevelopmentManualClock clock) =>
+    app.MapDelete("/dev/clock", ([FromServices] DevelopmentManualClock clock) =>
     {
         clock.Reset();
         return Results.Ok(CreateDevelopmentClockResponse(clock));

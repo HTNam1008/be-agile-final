@@ -80,15 +80,19 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
             subsidyType = "PERCENTAGE",
             criteriaTemplate = new object[]
             {
-                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 1 },
-                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 2 }
+                new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 1 },
+                new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 2 },
+                new { criteriaType = "PARENT_NATIONALITY", connectorToNext = "AND", displayOrder = 3 },
+                new { criteriaType = "ACCOUNT_TYPE", connectorToNext = (string?)null, displayOrder = 4 }
             },
             tiers = new object[]
             {
                 new { label = "Eligible", subsidyValue = 75m, displayOrder = 1, criteriaValues = new object[]
                 {
-                    new { displayOrder = 1, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Vietnamese", "Singapore Citizen" } },
-                    new { displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
+                    new { displayOrder = 1, numberFrom = 0m, numberTo = 3000m, nationalities = (string[]?)null },
+                    new { displayOrder = 2, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
+                    new { displayOrder = 3, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } },
+                    new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "EDUCATION_ACCOUNT" } }
                 }}
             }
         };
@@ -100,7 +104,7 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         await AssertStatus(HttpStatusCode.OK, detail);
         string body = await detail.Content.ReadAsStringAsync();
         Assert.Contains("PARENT_NATIONALITY", body);
-        Assert.Contains("Vietnamese", body);
+        Assert.Contains("Singapore Citizen", body);
         Assert.Contains("ACCOUNT_TYPE", body);
         Assert.Contains("EDUCATION_ACCOUNT", body);
     }
@@ -260,7 +264,9 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         criteriaTemplate = new object[]
         {
             new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
-            new { criteriaType = "NATIONALITY", connectorToNext = (string?)null, displayOrder = 2 }
+            new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+            new { criteriaType = "PCI", connectorToNext = "AND", displayOrder = 3 },
+            new { criteriaType = "NATIONALITY", connectorToNext = (string?)null, displayOrder = 4 }
         },
         tiers = new object[]
         {
@@ -271,8 +277,10 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
                 displayOrder = 1,
                 criteriaValues = new object[]
                 {
-                    new { displayOrder = 1, numberFrom = 13m, numberTo = 18m, nationalities = (string[]?)null },
-                    new { displayOrder = 2, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } }
+                    new { displayOrder = 1, numberFrom = 16m, numberTo = 18m, nationalities = (string[]?)null },
+                    new { displayOrder = 2, numberFrom = 0m, numberTo = 3000m, nationalities = (string[]?)null },
+                    new { displayOrder = 3, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null },
+                    new { displayOrder = 4, numberFrom = (decimal?)null, numberTo = (decimal?)null, nationalities = new[] { "Singapore Citizen" } }
                 }
             }
         }
@@ -287,7 +295,12 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         endDate = FutureEndDate(),
         courseIds,
         subsidyType = "FIXED",
-        criteriaTemplate = new object[] { new { criteriaType = "AGE", connectorToNext = (string?)null, displayOrder = 1 } },
+        criteriaTemplate = new object[]
+        {
+            new { criteriaType = "AGE", connectorToNext = "AND", displayOrder = 1 },
+            new { criteriaType = "GHI", connectorToNext = "AND", displayOrder = 2 },
+            new { criteriaType = "PCI", connectorToNext = (string?)null, displayOrder = 3 }
+        },
         tiers = new object[]
         {
             new
@@ -295,7 +308,12 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
                 label = "Fixed Support",
                 subsidyValue = 750m,
                 displayOrder = 1,
-                criteriaValues = new object[] { new { displayOrder = 1, numberFrom = 7m, numberTo = 25m, nationalities = (string[]?)null } }
+                criteriaValues = new object[]
+                {
+                    new { displayOrder = 1, numberFrom = 16m, numberTo = 25m, nationalities = (string[]?)null },
+                    new { displayOrder = 2, numberFrom = 0m, numberTo = 3000m, nationalities = (string[]?)null },
+                    new { displayOrder = 3, numberFrom = 0m, numberTo = 1000m, nationalities = (string[]?)null }
+                }
             }
         }
     };

@@ -212,7 +212,7 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
     }
 
     [Fact]
-    public async Task BulkImport_AutoLifecycleTestDataWorkbook_ReturnsExpectedSeventeenSuccessAndThreeFailures()
+    public async Task BulkImport_AutoLifecycleTestDataWorkbook_ReturnsExpectedFifteenSuccessAndFiveFailures()
     {
         byte[] workbook = await File.ReadAllBytesAsync(Path.Combine(
             FindRepositoryRoot(),
@@ -228,11 +228,13 @@ public sealed class StudentBulkImportApiTests(CustomWebApplicationFactory factor
         BulkImportResponse result = await ReadBulkImportResponseAsync(response);
         Assert.Equal(20, result.TotalRows);
         Assert.True(
-            result.SucceededCount == 17,
+            result.SucceededCount == 15,
             JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
-        Assert.Equal(3, result.FailedCount);
+        Assert.Equal(5, result.FailedCount);
         Assert.Equal(0, result.SkippedCount);
-        Assert.Equal(3, result.Results.Count(x => x.Status == "Failed"));
+        Assert.Equal(5, result.Results.Count(x => x.Status == "Failed"));
+        Assert.Equal(2, result.Results.Count(x => x.Status == "Failed"
+            && x.ErrorCode == "IDENTITY.STUDENT_IDENTITY_ALREADY_EXISTS"));
         Assert.Contains(result.Results, x => x.RowNumber == 19
             && x.Status == "Failed"
             && x.ErrorMessage?.Contains("valid Singapore NRIC/FIN", StringComparison.OrdinalIgnoreCase) == true);
