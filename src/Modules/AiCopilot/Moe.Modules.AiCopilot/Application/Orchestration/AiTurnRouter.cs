@@ -1,38 +1,280 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Moe.Application.Abstractions.Security;
 using Moe.Modules.AiCopilot.Api;
+using Moe.Modules.AiCopilot.Application.Security;
+using Moe.Modules.AiCopilot.Domain;
+using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
-internal static class AiTurnRouter
+public sealed class AiTurnRouter(
+    MoeDbContext db,
+    ICurrentUser currentUser,
+    SensitiveDataRedactor redactor,
+    AiTurnPlannerService turnPlanner,
+    FallbackHandler fallbackHandler,
+    PaymentQueryHandler paymentHandler,
+    KnowledgeAnswerHandler knowledgeHandler,
+    FasInterviewHandler fasHandler,
+    ILogger<AiTurnRouter> logger,
+    IConfiguration configuration,
+    AiAgenticTurnService? agenticService = null)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] AllowedDomains = ["FAS", "PAYMENT", "GENERAL"];
     private static readonly string[] AllowedRoutePrefixes =
     [
-        "/portal/account",
-        "/portal/bills",
-        "/portal/courses",
-        "/portal/dashboard",
-        "/portal/education-account",
-        "/portal/fas",
-        "/portal/profile"
+        "/portal/account", "/portal/bills", "/portal/courses", "/portal/dashboard",
+        "/portal/education-account", "/portal/fas", "/portal/profile"
     ];
-
     private static readonly HashSet<string> AllowedFieldKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "isWelfareHomeResident", "monthlyHouseholdIncome", "householdMemberCount",
         "parentNationalities", "employmentStatusCode", "otherMonthlyIncome", "email"
     };
 
-    public static string DetermineMode(string message, string current, string? domain)
+    public async Task<AiChatResponse> ChatAsync(AiChatRequest request, CancellationToken ct)
     {
-        return ClassifyIntent(message, current, domain) switch
+        long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
+        DateTime now = DateTime.UtcNow;
+        AiChatRequest sanitized = SanitizeRequest(request);
+        AiConversation conversation = await GetOrCreateConversation(sanitized.ConversationId, personId, now, ct);
+        string pageJson = sanitized.PageContext is null ? null! : JsonSerializer.Serialize(sanitized.PageContext, JsonOptions);
+        db.Add(AiMessage.Create(conversation.Id, "USER", redactor.Redact(sanitized.Message), now));
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            AiTurnPlan plan = await turnPlanner.PlanAsync(sanitized, conversation, ct);
+
+            // Agentic path for GENERAL mode
+            string preMode = ModeFromPlan(plan) ?? DetermineMode(sanitized.Message, conversation.ModeCode, sanitized.PageContext?.Domain);
+            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true) && preMode == "GENERAL")
+            {
+                try
+                {
+                    AiHandlerResult agenticResult = await agenticService.ExecuteTurnAsync(conversation, sanitized, ct);
+                    if (agenticResult is not null)
+                        return await SaveAndReturn(conversation.Id, pageJson, now, 0, agenticResult, conversation, sanitized, plan, stopwatch, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Agentic path failed for conversation {ConversationId}, falling back to deterministic", conversation.Id);
+                }
+            }
+
+            // Clarify FAS typo
+            if (plan.Intent == AiPlannerIntent.ClarifyFasTypo)
+            {
+                var clarification = new AiHandlerResult(
+                    "Did you mean FAS, Financial Assistance Schemes? I can help you check eligibility and prepare the application form.",
+                    "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")])
+                {
+                    FollowUpQuestions = ["Yes, help me check FAS eligibility.", "What is FAS?", "What documents do I need for FAS?"],
+                    TurnIntent = "CLARIFY_FAS_TYPO",
+                    ConversationPhase = plan.Phase
+                };
+                conversation.Touch("GENERAL", pageJson, now);
+                return await SaveAssistant(conversation.Id, clarification, plan, sanitized, stopwatch, ct);
+            }
+
+            plan = NormalizePlannerIntentForCompositeTurn(plan, sanitized.Message);
+            string mode = ModeFromPlan(plan) ?? DetermineMode(sanitized.Message, conversation.ModeCode, sanitized.PageContext?.Domain);
+            FasInterviewHandler.ApplyFasTaskInterruptBeforeNonFasTurn(conversation, sanitized.Message, mode);
+
+            AiHandlerResult handlerResult = mode switch
+            {
+                "PAYMENT" => await paymentHandler.HandlePaymentAsync(sanitized, ct),
+                "FAS_INTERVIEW" => await fasHandler.HandleFasAsync(conversation, sanitized, now, ct),
+                _ => await knowledgeHandler.HandleGeneralAsync(conversation, sanitized, ct)
+            };
+
+            return await SaveAndReturn(conversation.Id, pageJson, now, 0, handlerResult, conversation, sanitized, plan, stopwatch, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Guid reviewId = await fallbackHandler.CreateReviewAsync(conversation, conversation.PersonId, "MODEL_OR_TOOL_FAILURE",
+                sanitized.PageContext, sanitized.Message, now, ct);
+            logger.LogError(ex, "AI conversation {ConversationId} failed after {ElapsedMs} ms", conversation.Id, stopwatch.ElapsedMilliseconds);
+            AiHandlerResult fbResult = conversation.FasSession?.StatusCode switch
+            {
+                "CANCELLED" => new AiHandlerResult(
+                    "Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.",
+                    "GENERAL", new(false, []), [], []),
+                "PAUSED" => new AiHandlerResult(
+                    LooksLikeScopeTest(sanitized.Message)
+                        ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance."
+                        : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.",
+                    "GENERAL", new(false, []), [], []),
+                _ => fallbackHandler.FallbackResponse(reviewId)
+            };
+            AiChatResponse fbResponse = FasInterviewHandler.AttachDormantFasState(
+                ToChatResponse(conversation.Id, 0, fbResult), conversation.FasSession);
+            var fbMessage = AiMessage.Create(conversation.Id, "ASSISTANT", redactor.Redact(fbResponse.Text), now,
+                latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(fbResponse)));
+            db.Add(fbMessage); await db.SaveChangesAsync(ct);
+            return fbResponse with { MessageId = fbMessage.Id };
+        }
+    }
+
+    public async Task<AiConversationResponse> GetConversationAsync(Guid id, CancellationToken ct)
+    {
+        long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException();
+        AiConversation conversation = await db.Set<AiConversation>().AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == id && x.PersonId == personId, ct)
+            ?? throw new KeyNotFoundException("AI.CONVERSATION_NOT_FOUND");
+        var messageRows = await db.Set<AiMessage>().AsNoTracking().Where(x => x.ConversationId == id)
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => new { x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc, x.ResponseJson })
+            .ToArrayAsync(ct);
+        var messages = messageRows.Select(x => new AiConversationMessageResponse(
+            x.Id, x.RoleCode, x.ContentRedacted, x.CreatedAtUtc,
+            x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions))).ToArray();
+        return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages,
+            DeserializeInterviewState(conversation.FasSession?.CollectedFactsJson));
+    }
+
+    public async Task<object> CreateCaseAsync(CreateAdminCenterCaseRequest request, CancellationToken ct)
+    {
+        long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException();
+        AiReviewRecord review = await db.Set<AiReviewRecord>()
+            .SingleOrDefaultAsync(x => x.Id == request.ReviewRecordId && x.PersonId == personId, ct)
+            ?? throw new KeyNotFoundException("AI.REVIEW_NOT_FOUND");
+        var item = AdminCenterCase.Create(review.Id, personId, redactor.Redact(request.Description),
+            request.ContactPreference, DateTime.UtcNow);
+        db.Add(item); await db.SaveChangesAsync(ct);
+        return new { caseId = item.Id, status = item.StatusCode, createdAtUtc = item.CreatedAtUtc };
+    }
+
+    private async Task<AiChatResponse> SaveAndReturn(Guid conversationId, string pageJson, DateTime now, long messageId,
+        AiHandlerResult result, AiConversation conversation, AiChatRequest request, AiTurnPlan plan, Stopwatch stopwatch, CancellationToken ct)
+    {
+        AiChatResponse response = ToChatResponse(conversationId, messageId, result);
+        response = FasInterviewHandler.AttachDormantFasState(response, conversation.FasSession);
+        response = AiResponseBuilder.AttachV2Metadata(response, plan);
+        response = AiResponseBuilder.AttachFollowUps(response, request);
+        conversation.Touch(response.Mode, pageJson, now);
+        var assistant = AiMessage.Create(conversationId, "ASSISTANT", redactor.Redact(response.Text), DateTime.UtcNow,
+            JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
+            JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
+            (int)stopwatch.ElapsedMilliseconds,
+            redactor.Redact(AiResponseBuilder.SerializeResponse(response)));
+        db.Add(assistant); await db.SaveChangesAsync(ct);
+        logger.LogInformation("AI conversation {ConversationId} mode {Mode} completed in {ElapsedMs} ms",
+            conversationId, response.Mode, stopwatch.ElapsedMilliseconds);
+        return response with { MessageId = assistant.Id };
+    }
+
+    private async Task<AiChatResponse> SaveAssistant(Guid conversationId, AiHandlerResult result, AiTurnPlan plan, AiChatRequest request, Stopwatch stopwatch, CancellationToken ct)
+    {
+        AiChatResponse response = ToChatResponse(conversationId, 0, result);
+        response = AiResponseBuilder.AttachV2Metadata(response, plan);
+        response = AiResponseBuilder.AttachFollowUps(response, request);
+        var assistant = AiMessage.Create(conversationId, "ASSISTANT", redactor.Redact(response.Text), DateTime.UtcNow,
+            JsonSerializer.Serialize(response.Grounding.Citations, JsonOptions),
+            JsonSerializer.Serialize(response.Cards.Select(x => x.Type), JsonOptions),
+            (int)stopwatch.ElapsedMilliseconds,
+            redactor.Redact(AiResponseBuilder.SerializeResponse(response)));
+        db.Add(assistant); await db.SaveChangesAsync(ct);
+        logger.LogInformation("AI conversation {ConversationId} mode {Mode} completed in {ElapsedMs} ms",
+            conversationId, response.Mode, stopwatch.ElapsedMilliseconds);
+        return response with { MessageId = assistant.Id };
+    }
+
+    private async Task<AiConversation> GetOrCreateConversation(Guid? id, long personId, DateTime now, CancellationToken ct)
+    {
+        if (id.HasValue)
+        {
+            var existing = await db.Set<AiConversation>().Include(x => x.FasSession)
+                .SingleOrDefaultAsync(x => x.Id == id.Value, ct);
+            if (existing is not null && existing.PersonId != personId)
+                throw new UnauthorizedAccessException("AI.CONVERSATION_FORBIDDEN");
+            if (existing is not null) return existing;
+        }
+        var created = AiConversation.Start(id ?? Guid.NewGuid(), personId, now);
+        db.Add(created); return created;
+    }
+
+    private static AiChatResponse ToChatResponse(Guid conversationId, long messageId, AiHandlerResult r) => new(
+        conversationId, messageId, r.Text, r.Mode, r.Grounding, r.Cards, r.Actions, r.InterviewState, r.ReviewRecordId)
+    {
+        FollowUpQuestions = r.FollowUpQuestions,
+        TurnIntent = r.TurnIntent,
+        ConversationPhase = r.ConversationPhase
+    };
+
+    private static AiInterviewState? DeserializeInterviewState(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        var state = JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions);
+        return state is null ? null : new AiInterviewState(state.Status, null, [], [], null);
+    }
+
+    private static AiChatRequest SanitizeRequest(AiChatRequest request) => new()
+    {
+        ConversationId = request.ConversationId,
+        Message = request.Message.Trim(),
+        PageContext = SanitizePageContext(request.PageContext)
+    };
+
+    public static AiPageContext? SanitizePageContext(AiPageContext? pageContext)
+    {
+        if (pageContext is null) return null;
+        string domain = AllowedDomains.Contains(pageContext.Domain?.ToUpperInvariant())
+            ? pageContext.Domain!.ToUpperInvariant() : "GENERAL";
+        string? path = IsAllowedPath(pageContext.Path) ? pageContext.Path : null;
+        string? surface = string.IsNullOrWhiteSpace(pageContext.Surface) ? null
+            : pageContext.Surface.Length > 80 ? pageContext.Surface[..80] : pageContext.Surface;
+        JsonElement? entity = null;
+        if (pageContext.Entity.HasValue && domain == "FAS")
+        {
+            var e = pageContext.Entity.Value;
+            if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("fieldKey", out JsonElement fk) &&
+                fk.ValueKind == JsonValueKind.String && fk.GetString() is string fkStr && AllowedFieldKeys.Contains(fkStr))
+                entity = e;
+        }
+        return new AiPageContext(domain, surface, path, entity);
+    }
+
+    private static bool IsAllowedPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith('/')) return false;
+        if (path.Contains("..", StringComparison.Ordinal) || path.Contains("://", StringComparison.Ordinal)) return false;
+        return AllowedRoutePrefixes.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith($"{p}/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ── Intent → Mode mapping ──────────────────────────────────────────
+
+    public static string? ModeFromPlan(AiTurnPlan plan) => plan.Intent switch
+    {
+        AiPlannerIntent.PaymentQuery => "PAYMENT",
+        AiPlannerIntent.AnswerKnowledge or AiPlannerIntent.CourseQuery or
+            AiPlannerIntent.CancelFas or AiPlannerIntent.PauseFas or
+            AiPlannerIntent.SwitchTopic or AiPlannerIntent.OutOfScopeSmallTalk => "GENERAL",
+        AiPlannerIntent.StartFas or AiPlannerIntent.ContinueFas => "FAS_INTERVIEW",
+        _ => null
+    };
+
+    public static string DetermineMode(string message, string current, string? domain) =>
+        ClassifyIntent(message, current, domain) switch
         {
             AiTurnIntent.PaymentQuery => "PAYMENT",
             AiTurnIntent.AnswerKnowledgeQuestion => "GENERAL",
             AiTurnIntent.ContinueInterview or AiTurnIntent.StartInterview or AiTurnIntent.SubmitInterviewAnswer => "FAS_INTERVIEW",
             _ => "GENERAL"
         };
+
+    private enum AiTurnIntent
+    {
+        AnswerKnowledgeQuestion, ContinueInterview, StartInterview,
+        SubmitInterviewAnswer, PaymentQuery, Fallback
     }
 
     private static AiTurnIntent ClassifyIntent(string message, string current, string? domain)
@@ -40,86 +282,42 @@ internal static class AiTurnRouter
         string value = $"{domain} {message}".ToUpperInvariant();
         string msgOnly = message.ToUpperInvariant();
         bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
-        bool msgHasPaymentKeyword = msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") || msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW");
-        if (msgHasPaymentKeyword) return AiTurnIntent.PaymentQuery;
-        if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message)) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") ||
+            msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW") ||
+            (msgOnly.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(msgOnly, @"\b(USE|USED|FOR|COVER|PAY)\b")))
+            return AiTurnIntent.PaymentQuery;
+        if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message))
+            return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsLiveSchemeEligibilityRequest(msgOnly)) return AiTurnIntent.StartInterview;
-        if (current != "FAS_INTERVIEW" && (IsSchemeKbRequest(msgOnly) || LooksLikeNaturalFasAidQuestion(msgOnly))) return AiTurnIntent.AnswerKnowledgeQuestion;
+        if (current != "FAS_INTERVIEW" && (IsSchemeKbRequest(msgOnly) || LooksLikeNaturalFasAidQuestion(msgOnly)))
+            return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
-        if (current == "FAS_INTERVIEW" && IsContinueInterviewRequest(msgOnly)) return AiTurnIntent.ContinueInterview;
-        if (current == "FAS_INTERVIEW" && IsLikelyInterviewAnswer(msgOnly)) return AiTurnIntent.SubmitInterviewAnswer;
+        if (current == "FAS_INTERVIEW" && IsContinueInterviewRequest(msgOnly))
+            return AiTurnIntent.ContinueInterview;
+        if (current == "FAS_INTERVIEW" && IsLikelyInterviewAnswer(msgOnly))
+            return AiTurnIntent.SubmitInterviewAnswer;
         if (IsFasInterviewRequest(value)) return AiTurnIntent.StartInterview;
         if (current == "FAS_INTERVIEW") return AiTurnIntent.SubmitInterviewAnswer;
         if (isPaymentDomain) return AiTurnIntent.PaymentQuery;
         return AiTurnIntent.Fallback;
     }
 
-    public static string? ModeFromPlan(AiTurnPlan plan) => plan.Intent switch
-    {
-        AiPlannerIntent.PaymentQuery => "PAYMENT",
-        AiPlannerIntent.AnswerKnowledge or AiPlannerIntent.CourseQuery or AiPlannerIntent.CancelFas or
-            AiPlannerIntent.PauseFas or AiPlannerIntent.SwitchTopic or AiPlannerIntent.OutOfScopeSmallTalk => "GENERAL",
-        AiPlannerIntent.StartFas or AiPlannerIntent.ContinueFas => "FAS_INTERVIEW",
-        _ => null
-    };
-
     public static AiTurnPlan NormalizePlannerIntentForCompositeTurn(AiTurnPlan plan, string message)
     {
-        if (plan.Intent == AiPlannerIntent.CancelFas && LooksLikePaymentQuery(message.ToUpperInvariant()))
+        string upper = message.ToUpperInvariant();
+        if (plan.Intent == AiPlannerIntent.CancelFas && LooksLikePaymentQuery(upper))
             return plan with { Intent = AiPlannerIntent.PaymentQuery, AnswerGoal = "stop the active FAS task and answer the finance question" };
         if (plan.Intent == AiPlannerIntent.CancelFas && LooksLikeCourseQuestion(message))
             return plan with { Intent = AiPlannerIntent.CourseQuery, AnswerGoal = "stop the active FAS task and answer the course question" };
         return plan;
     }
 
-    public static AiPageContext? SanitizePageContext(AiPageContext? pageContext)
-    {
-        if (pageContext is null) return null;
-
-        string domain = AllowedDomains.Contains(pageContext.Domain?.ToUpperInvariant())
-            ? pageContext.Domain!.ToUpperInvariant()
-            : "GENERAL";
-        string? path = IsAllowedPath(pageContext.Path) ? pageContext.Path : null;
-        string? surface = string.IsNullOrWhiteSpace(pageContext.Surface)
-            ? null
-            : pageContext.Surface.Length > 80 ? pageContext.Surface[..80] : pageContext.Surface;
-
-        JsonElement? entity = null;
-        if (pageContext.Entity.HasValue && domain == "FAS")
-        {
-            JsonElement e = pageContext.Entity.Value;
-            if (e.ValueKind == JsonValueKind.Object &&
-                e.TryGetProperty("fieldKey", out JsonElement fk) &&
-                fk.ValueKind == JsonValueKind.String &&
-                fk.GetString() is string fkStr && AllowedFieldKeys.Contains(fkStr))
-            {
-                entity = e;
-            }
-        }
-
-        return new AiPageContext(domain, surface, path, entity);
-    }
-
-    public static bool IsAllowedPath(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith('/')) return false;
-        if (path.Contains("..", StringComparison.Ordinal) || path.Contains("://", StringComparison.Ordinal)) return false;
-        return AllowedRoutePrefixes.Any(prefix =>
-            path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase));
-    }
-
-    // ── Shared keyword detection ──────────────────────────────────────────
+    // ── Public keyword matchers (used by handlers) ──────────────────────
 
     public static bool LooksLikePaymentQuery(string value) =>
-        value.Contains("PAY", StringComparison.OrdinalIgnoreCase) ||
-        value.Contains("BILL", StringComparison.OrdinalIgnoreCase) ||
-        value.Contains("BALANCE", StringComparison.OrdinalIgnoreCase) ||
-        value.Contains("OUTSTANDING", StringComparison.OrdinalIgnoreCase) ||
-        value.Contains("REFUND", StringComparison.OrdinalIgnoreCase) ||
-        value.Contains("WITHDRAW", StringComparison.OrdinalIgnoreCase) ||
-        (value.Contains("EDUCATION ACCOUNT", StringComparison.OrdinalIgnoreCase) &&
-         Regex.IsMatch(value, @"\b(USE|USED|FOR|COVER|PAY)\b", RegexOptions.IgnoreCase));
+        value.Contains("PAY") || value.Contains("BILL") || value.Contains("BALANCE") ||
+        value.Contains("OUTSTANDING") || value.Contains("REFUND") || value.Contains("WITHDRAW") ||
+        (value.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(value, @"\b(USE|USED|FOR|COVER|PAY)\b"));
 
     public static bool LooksLikeCourseQuestion(string message) =>
         Regex.IsMatch(message, @"^\s*(courses?|course\?)\s*$", RegexOptions.IgnoreCase) ||
@@ -136,8 +334,7 @@ internal static class AiTurnRouter
         Regex.IsMatch(message, @"\b(tell me (a )?joke|make me laugh|sing|poem|roleplay|story|weather|recipe|movie)\b", RegexOptions.IgnoreCase);
 
     public static bool LooksLikeCapabilityQuestion(string message) =>
-        !IsFasQuestion(message) &&
-        Regex.IsMatch(message, @"\b(what can you help|what do you do|help me with|your capabilities|what can i ask)\b", RegexOptions.IgnoreCase);
+        !IsFasQuestion(message) && Regex.IsMatch(message, @"\b(what can you help|what do you do|help me with|your capabilities|what can i ask)\b", RegexOptions.IgnoreCase);
 
     public static bool LooksLikeAdminCenterQuestion(string message) =>
         Regex.IsMatch(message, @"\b(how can admin center help|what can admin center do|admin center help)\b", RegexOptions.IgnoreCase);
@@ -160,70 +357,42 @@ internal static class AiTurnRouter
 
     public static bool IsSchemeKbRequest(string value)
     {
-        bool isInfoIntent = Regex.IsMatch(value,
-            @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION|DOCUMENT|DOCUMENTS|WHICH)\b",
-            RegexOptions.IgnoreCase);
-        bool isProcessInfoIntent = Regex.IsMatch(value,
-            @"\b(WALK ME THROUGH|STEPS?|PROCESS|HOW DO I APPLY|HOW TO APPLY)\b",
-            RegexOptions.IgnoreCase);
-        bool startsLiveAssessment = Regex.IsMatch(value,
-            @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|DO I|AM I|I WANT|I NEED|HELP ME APPLY)\b",
-            RegexOptions.IgnoreCase);
-        bool mentionsFas = value.Contains("FAS", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("FINANCIAL ASSISTANCE", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("BURSARY", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("SUBSIDY", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("SCHEME", StringComparison.OrdinalIgnoreCase);
+        bool isInfoIntent = Regex.IsMatch(value, @"\b(EXPLAIN|WHAT IS|WHAT ARE|HOW DOES|TELL ME ABOUT|DESCRIBE|OVERVIEW|DETAIL|DETAILS|INFO|INFORMATION|DOCUMENT|DOCUMENTS|WHICH)\b");
+        bool isProcessInfoIntent = Regex.IsMatch(value, @"\b(WALK ME THROUGH|STEPS?|PROCESS|HOW DO I APPLY|HOW TO APPLY)\b");
+        bool startsLiveAssessment = Regex.IsMatch(value, @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|DO I|AM I|I WANT|I NEED|HELP ME APPLY)\b");
+        bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE") ||
+            value.Contains("BURSARY") || value.Contains("SUBSIDY") || value.Contains("SCHEME");
         return mentionsFas && (isInfoIntent || isProcessInfoIntent) && (!startsLiveAssessment || isProcessInfoIntent);
     }
 
-    public static bool IsLiveSchemeEligibilityRequest(string value)
-    {
-        bool asksWhichSchemes = Regex.IsMatch(value, @"\b(WHICH|WHAT)\b", RegexOptions.IgnoreCase) &&
-            Regex.IsMatch(value, @"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b", RegexOptions.IgnoreCase);
-        bool asksApplyOrEligibility = Regex.IsMatch(value, @"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b", RegexOptions.IgnoreCase);
-        return asksWhichSchemes && asksApplyOrEligibility;
-    }
+    public static bool IsLiveSchemeEligibilityRequest(string value) =>
+        Regex.IsMatch(value, @"\b(WHICH|WHAT)\b") &&
+        Regex.IsMatch(value, @"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b") &&
+        Regex.IsMatch(value, @"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b");
 
     public static bool IsFasKnowledgeInterrupt(string value)
     {
-        bool asksQuestion = Regex.IsMatch(value, @"\b(WHAT|HOW|WHY|EXPLAIN|CALCULAT|MEAN|MEANS|COUNT|COUNTS|DOCUMENT|DOCUMENTS|DEADLINE|PROCESS|STEP|STEPS|REQUIREMENT|REQUIREMENTS)\b",
-            RegexOptions.IgnoreCase) || value.Contains("?", StringComparison.Ordinal);
-        bool mentionsSpecificFasKnowledge = Regex.IsMatch(value,
-            @"\b(PCI|PER CAPITA|GHI|GROSS HOUSEHOLD|HOUSEHOLD INCOME|INCOME CALCULATION|DOCUMENTS?|BURSARY|SUBSIDY|DEADLINE|PROCESS|STEPS?|REQUIREMENTS?|SCHEMES?)\b",
-            RegexOptions.IgnoreCase);
-        bool startsLiveAssessment = Regex.IsMatch(value,
-            @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|APPLY|APPLICATION|HELP ME|GUIDE ME|DO FAS|DO FINANCIAL ASSISTANCE)\b",
-            RegexOptions.IgnoreCase);
-        bool submitsLikelyFieldValue = Regex.IsMatch(value, @"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$",
-            RegexOptions.IgnoreCase);
-
+        bool asksQuestion = Regex.IsMatch(value, @"\b(WHAT|HOW|WHY|EXPLAIN|CALCULAT|MEAN|MEANS|COUNT|COUNTS|DOCUMENT|DOCUMENTS|DEADLINE|PROCESS|STEP|STEPS|REQUIREMENT|REQUIREMENTS)\b") ||
+            value.Contains("?");
+        bool mentionsSpecificFasKnowledge = Regex.IsMatch(value, @"\b(PCI|PER CAPITA|GHI|GROSS HOUSEHOLD|HOUSEHOLD INCOME|INCOME CALCULATION|DOCUMENTS?|BURSARY|SUBSIDY|DEADLINE|PROCESS|STEPS?|REQUIREMENTS?|SCHEMES?)\b");
+        bool startsLiveAssessment = Regex.IsMatch(value, @"\b(CHECK|ELIGIB|QUALIF|ASSESS|START|APPLY|APPLICATION|HELP ME|GUIDE ME|DO FAS|DO FINANCIAL ASSISTANCE)\b");
+        bool submitsLikelyFieldValue = Regex.IsMatch(value, @"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$");
         return asksQuestion && mentionsSpecificFasKnowledge && !startsLiveAssessment && !submitsLikelyFieldValue;
     }
 
+    // ── Private keyword helpers ─────────────────────────────────────────
+
     private static bool IsContinueInterviewRequest(string value) =>
-        Regex.IsMatch(value, @"\b(CONTINUE|RESUME|GO BACK|KEEP GOING|FINISH)\b", RegexOptions.IgnoreCase) &&
-        Regex.IsMatch(value, @"\b(FAS|FINANCIAL ASSISTANCE|ELIGIBILITY|CHECK|APPLICATION|INTERVIEW)\b", RegexOptions.IgnoreCase);
+        Regex.IsMatch(value, @"\b(CONTINUE|RESUME|GO BACK|KEEP GOING|FINISH)\b") &&
+        Regex.IsMatch(value, @"\b(FAS|FINANCIAL ASSISTANCE|ELIGIBILITY|CHECK|APPLICATION|INTERVIEW)\b");
 
     private static bool IsLikelyInterviewAnswer(string value) =>
-        Regex.IsMatch(value, @"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$",
-            RegexOptions.IgnoreCase);
+        Regex.IsMatch(value, @"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$");
 
     private static bool IsFasInterviewRequest(string value)
     {
         bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE");
-        bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW|QUESTION)\b", RegexOptions.IgnoreCase);
-        bool eligibilityWithoutFas = (value.Contains("ELIGIB") || value.Contains("QUALIF")) && mentionsFas;
-        return eligibilityWithoutFas || (mentionsFas && asksForInterview);
-    }
-
-    private enum AiTurnIntent
-    {
-        AnswerKnowledgeQuestion,
-        ContinueInterview,
-        StartInterview,
-        SubmitInterviewAnswer,
-        PaymentQuery,
-        Fallback
+        bool asksForInterview = Regex.IsMatch(value, @"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW|QUESTION)\b");
+        return (value.Contains("ELIGIB") || value.Contains("QUALIF")) && mentionsFas || (mentionsFas && asksForInterview);
     }
 }
