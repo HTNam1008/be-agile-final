@@ -1,6 +1,6 @@
 namespace Moe.Modules.AiCopilot.Domain;
 
-internal sealed class AiConversation
+public sealed class AiConversation
 {
     private AiConversation() { }
 

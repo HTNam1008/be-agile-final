@@ -1,0 +1,442 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Moe.Application.Abstractions.Security;
+using Moe.Modules.AiCopilot.Api;
+using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.AiCopilot.Application.Security;
+using Moe.Modules.AiCopilot.Domain;
+using Moe.StudentFinance.Persistence;
+
+namespace Moe.Modules.AiCopilot.Application.Orchestration;
+
+public sealed class KnowledgeAnswerHandler(
+    IKnowledgeRetriever knowledge,
+    IServiceProvider serviceProvider,
+    FallbackHandler fallback)
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task<AiHandlerResult> HandleGeneralAsync(AiConversation conversation, AiChatRequest request, CancellationToken ct)
+    {
+        if (AiTurnRouter.LooksLikeScopeTest(request.Message))
+        {
+            return new AiHandlerResult(
+                "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance.",
+                "GENERAL", new(false, []), [], [])
+            {
+                FollowUpQuestions =
+                [
+                    "What can you help me with?",
+                    "Check if I qualify for FAS.",
+                    "Show my Education Account balance."
+                ]
+            };
+        }
+
+        if (AiTurnRouter.LooksLikeCapabilityQuestion(request.Message))
+        {
+            const string capabilityText = "I can help with Education Account balance, outstanding bills, payment history, refunds, and FAS guidance. I can also walk you through a FAS eligibility check before you open the application form.";
+            AiAction[] capabilityActions =
+            [
+                new("NAVIGATE", "Open Bills & payments page", "/portal/bills"),
+                new("NAVIGATE", "Open FAS application", "/portal/fas")
+            ];
+            return new AiHandlerResult(capabilityText, "GENERAL", new(false, []), [], capabilityActions)
+            {
+                FollowUpQuestions =
+                [
+                    "Show my Education Account balance.",
+                    "Check if I qualify for FAS.",
+                    "What documents do I need for FAS?"
+                ]
+            };
+        }
+
+        if (AiTurnRouter.LooksLikeCourseQuestion(request.Message))
+        {
+            const string courseText = "I can help with course-related finance questions, such as outstanding course bills, payment options, and how FAS may apply to eligible course charges. For course enrolment details, open the Courses page.";
+            return new AiHandlerResult(courseText, "GENERAL", new(false, []), [],
+                [new("NAVIGATE", "Open Courses page", "/portal/courses"), new("NAVIGATE", "Open Bills & payments page", "/portal/bills")])
+            {
+                FollowUpQuestions =
+                [
+                    "Show my outstanding course bills.",
+                    "How do I pay this bill?",
+                    "Check if I qualify for FAS."
+                ]
+            };
+        }
+
+        if (AiTurnRouter.LooksLikeAdminCenterQuestion(request.Message))
+        {
+            const string adminText = "Admin Center can review questions the copilot cannot answer safely, such as unusual FAS circumstances, disputed bills, refund issues, or application details that need staff judgement.";
+            return new AiHandlerResult(adminText, "GENERAL", new(false, []), [],
+                [new("CONTACT_ADMIN_CENTER", "Contact Admin Center")])
+            {
+                FollowUpQuestions =
+                [
+                    "Check if I qualify for FAS.",
+                    "Show my outstanding course bills.",
+                    "What can you help me with?"
+                ]
+            };
+        }
+
+        bool isFasKnowledgeRequest = AiTurnRouter.IsSchemeKbRequest(request.Message) ||
+            AiTurnRouter.IsFasKnowledgeInterrupt(request.Message) ||
+            AiTurnRouter.LooksLikeNaturalFasAidQuestion(request.Message);
+        string retrievalDomain = isFasKnowledgeRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
+        IReadOnlyList<KnowledgeResult> sources = knowledge.Retrieve(request.Message, retrievalDomain);
+        if (sources.Count == 0)
+        {
+            Guid review = await fallback.CreateReviewAsync(conversation, conversation.PersonId, "MISSING_POLICY", request.PageContext, request.Message, DateTime.UtcNow, ct);
+            return fallback.FallbackResponse(review);
+        }
+
+        KnowledgeAnswerCard knowledgeCard = BuildKnowledgeAnswerCard(request.Message, sources);
+        string sourceText = string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"));
+        if (isFasKnowledgeRequest && sources.Count > 0)
+        {
+            string deterministicText = BuildKnowledgeAnswer(request.Message, sources);
+            return new AiHandlerResult(deterministicText, "GENERAL", Grounding(sources),
+                [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources))
+            {
+                FollowUpQuestions = ContextualKnowledgeFollowUps(conversation, request.Message, knowledgeCard.FollowUpQuestions)
+            };
+        }
+        var history = new ChatHistory(
+            "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
+            "Keep the answer under 120 words. Lead with the direct answer. Ask at most one next question.\n" +
+            "Use no more than three bullets. Do not include source IDs, bracket citations, or raw document codes in the answer text; the UI renders sources separately.\n" +
+            "Never invent personal data, policy, eligibility, amounts, status, or timelines. If the question is outside student finance or FAS, say what you can help with instead.\n" +
+            "Label prototype uncertainty in plain language only when it affects the answer.\n" +
+            $"Sources:\n{sourceText}");
+        history.AddUserMessage(request.Message);
+        Kernel kernel = serviceProvider.GetRequiredService<Kernel>();
+        ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+        string text = string.IsNullOrWhiteSpace(answer.Content) ? "I do not have enough reliable information to answer that." : answer.Content.Trim();
+        if (sources.Any(x => x.Citation.SourceStatus == "PROTOTYPE"))
+        {
+            text += "\n\nSome parts of this answer are based on prototype guidance and may change. Use the actions below when you want to continue in the portal.";
+        }
+        return new AiHandlerResult(text, "GENERAL", Grounding(sources),
+            [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources))
+        {
+            FollowUpQuestions = ContextualKnowledgeFollowUps(conversation, request.Message, knowledgeCard.FollowUpQuestions)
+        };
+    }
+
+    private static string BuildKnowledgeAnswer(string question, IReadOnlyList<KnowledgeResult> sources)
+    {
+        if (LooksLikeFormulaQuestion(question))
+        {
+            return FormulaAnswer(question);
+        }
+        if (LooksLikeHouseholdIncomeDefinitionQuestion(question))
+        {
+            return "Household income usually means the combined monthly income of household members, including employment income and other regular income such as rental, dividend, or investment income where applicable.";
+        }
+        if (LooksLikeDocumentQuestion(question))
+        {
+            KnowledgeAnswerCard documentCard = BuildKnowledgeAnswerCard(question, sources);
+            string firstFact = documentCard.Summary;
+            return string.IsNullOrWhiteSpace(firstFact)
+                ? "Before submitting FAS, prepare the income and supporting documents requested by the institution, then review the form before submission."
+                : $"Before submitting FAS, prepare the requested supporting documents. {firstFact}";
+        }
+
+        KnowledgeResult primary = sources[0];
+        KnowledgeAnswerCard card = BuildKnowledgeAnswerCard(question, sources);
+        string topic = primary.Citation.Section;
+        return $"I found reviewed guidance for {topic}. I kept the details in the card below so the answer is easier to scan.";
+    }
+
+    private static string FormulaAnswer(string question)
+    {
+        if (LooksLikePciQuestion(question))
+            return "PCI means per-capita income. It is calculated as total monthly household income divided by the number of household members.";
+        if (Regex.IsMatch(question, @"\b(GHI|GROSS HOUSEHOLD INCOME)\b", RegexOptions.IgnoreCase))
+            return "GHI means gross household income. It includes all income earned by every household member from employment, business, investments, and regular allowances before deductions.";
+        if (Regex.IsMatch(question, @"\b(SUBSIDY|BURSARY)\b", RegexOptions.IgnoreCase))
+            return "Subsidy and bursary rates are based on per-capita income (PCI) brackets. Each scheme uses MOE-published tier thresholds that determine the subsidy percentage.";
+        return "I cannot find a specific formula for that. Please ask about PCI calculation, GHI definition, or bursary tier determination.";
+    }
+
+    private static KnowledgeAnswerCard BuildKnowledgeAnswerCard(string question, IReadOnlyList<KnowledgeResult> sources)
+    {
+        KnowledgeResult primary = sources[0];
+        string[] facts; string summaryHint;
+        if (LooksLikeFormulaQuestion(question))
+        {
+            string answer = FormulaAnswer(question);
+            facts = answer.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => s + ".").ToArray();
+            summaryHint = facts.FirstOrDefault() ?? "";
+        }
+        else if (LooksLikeHouseholdIncomeDefinitionQuestion(question))
+        {
+            facts =
+            [
+                "Household income usually means the combined monthly income of household members.",
+                "For employed household members, use income declared to the CPF Board or assumed under CPF Regulations.",
+                "Other income can include taxable rental, dividend, and investment income averaged over 12 months based on the latest available IRAS assessment."
+            ];
+            summaryHint = facts[0];
+        }
+        else
+        {
+            facts = SelectKnowledgeFacts(question, primary.Content).Select(StripBoldMarkers).ToArray();
+            summaryHint = facts.FirstOrDefault() ?? CleanKnowledgeSnippet(primary.Content);
+        }
+        string summary = summaryHint;
+        string[] keyFacts = facts.Skip(1).DefaultIfEmpty(summary).Take(4).ToArray();
+        string[] sourceIds = sources.Select(x => x.Citation.SourceId).Distinct(StringComparer.Ordinal).Take(4).ToArray();
+        KnowledgeSourceSummary[] sourceSummaries = sources
+            .GroupBy(x => x.Citation.SourceId, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                KnowledgeResult result = group.First();
+                return new KnowledgeSourceSummary(
+                    result.Citation.SourceId,
+                    result.Citation.Title,
+                    result.Citation.SourceStatus,
+                    result.Citation.EffectiveDate,
+                    result.ReviewOwner,
+                    result.AllowedIntents);
+            })
+            .Take(4)
+            .ToArray();
+        string sourceQuality = sources.Any(x => x.Citation.SourceStatus == "OFFICIAL")
+            ? "Official MOE guidance"
+            : sources.Any(x => x.Citation.SourceStatus == "GUIDE")
+                ? "Reviewed guidance"
+                : "Prototype or FAQ guidance";
+        string[] followUps = PlanFollowUps("GENERAL", question, null, sources);
+
+        return new KnowledgeAnswerCard(
+            primary.Citation.Section,
+            summary,
+            keyFacts,
+            ["Use Open FAS application below to review live schemes and draft status.", "Ask \"Check if I qualify for FAS\" and I can collect the answers before you open the form."],
+            sourceIds,
+            sourceQuality,
+            followUps,
+            sourceSummaries,
+            string.Join(", ", sources.Select(x => x.Citation.Version).Distinct(StringComparer.Ordinal).Take(3)));
+    }
+
+    private static string CleanKnowledgeSnippet(string content)
+    {
+        string[] lines = KnowledgeLines(content)
+            .Take(4)
+            .ToArray();
+        string text = string.Join(" ", lines);
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        return text.Length <= 360 ? text : $"{text[..360].TrimEnd()}...";
+    }
+
+    private static IEnumerable<string> KnowledgeLines(string content) => content.Split('\n')
+        .Select(line => Regex.Replace(line.Trim(), @"^[#*\-\s|>]+", "").Trim())
+        .Where(line => line.Length > 0 && !line.Contains("---", StringComparison.Ordinal) && !line.StartsWith("|", StringComparison.Ordinal))
+        .Select(line => Regex.Replace(line, @"\s+", " ").Trim())
+        .Where(line => line.Length > 0);
+
+    private static bool LooksLikeInstructionHeading(string line) =>
+        Regex.IsMatch(line, @"^(answer|do not|source|notes?|scope|in scope|explicitly out of scope)\b", RegexOptions.IgnoreCase);
+
+    private static IEnumerable<string> KnowledgeFacts(string content)
+    {
+        foreach (string line in KnowledgeLines(content).Where(line => !LooksLikeInstructionHeading(line)))
+        {
+            foreach (string sentence in Regex.Split(line, @"(?<=[.!?])\s+"))
+            {
+                string value = sentence.Trim();
+                if (value.Length > 0)
+                    yield return value;
+            }
+        }
+    }
+
+    private static IEnumerable<string> SelectKnowledgeFacts(string question, string content)
+    {
+        string lower = question.ToLowerInvariant();
+        string[] facts = KnowledgeFacts(content).ToArray();
+        if (lower.Contains("document") || lower.Contains("proof") || lower.Contains("payslip") || lower.Contains("cpf") || lower.Contains("iras"))
+        {
+            string[] documentFacts = facts
+                .Where(f => Regex.IsMatch(f, @"\b(document|income proof|cpf|iras|payslip|assessment|supporting|attach|declare|rental|dividend|investment)\b", RegexOptions.IgnoreCase))
+                .ToArray();
+            if (documentFacts.Length > 0)
+                return documentFacts;
+        }
+
+        return facts;
+    }
+
+    private static string StripBoldMarkers(string text) =>
+        Regex.Replace(text, @"\*{1,2}", "");
+
+    private static bool LooksLikeFormulaQuestion(string message) =>
+        LooksLikePciQuestion(message) ||
+        (Regex.IsMatch(message, @"\b(GHI|GROSS HOUSEHOLD INCOME)\b", RegexOptions.IgnoreCase) &&
+         Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|DEFINE|MEAN)\b", RegexOptions.IgnoreCase)) ||
+        (Regex.IsMatch(message, @"\b(SUBSIDY|BURSARY)\b", RegexOptions.IgnoreCase) &&
+         Regex.IsMatch(message, @"\b(RATE|CALCULAT\w*|DETERMINE|HOW|FORMULA|TIER)\b", RegexOptions.IgnoreCase));
+
+    private static bool LooksLikePciQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(PCI|PER[-\s]?CAPITA|PER CAPITA INCOME)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|MEAN)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeHouseholdIncomeDefinitionQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(what|which|count|counts|included|include)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(message, @"\b(household income|income for fas|fas income)\b", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeDocumentQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(document|documents|proof|payslip|cpf|iras|supporting)\b", RegexOptions.IgnoreCase);
+
+    private static IReadOnlyList<AiAction> KnowledgeActions(IReadOnlyList<KnowledgeResult> sources)
+    {
+        bool hasFasSource = sources.Any(source => source.Citation.SourceId.StartsWith("FAS-", StringComparison.OrdinalIgnoreCase));
+        return hasFasSource ? [new("NAVIGATE", "Open FAS application", "/portal/fas")] : [];
+    }
+
+    private static string[] ContextualKnowledgeFollowUps(AiConversation conversation, string message, IReadOnlyCollection<string> followUps)
+    {
+        const string resumeInterview = "Continue my FAS eligibility check.";
+        bool hasInterruptedInterview = conversation.ModeCode == "FAS_INTERVIEW" && conversation.FasSession is not null;
+        string currentQuestion = NormalizeFollowUp(message);
+        IEnumerable<string> planned = followUps.Where(x =>
+            !string.Equals(x, resumeInterview, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(NormalizeFollowUp(x), currentQuestion, StringComparison.OrdinalIgnoreCase));
+        if (hasInterruptedInterview)
+        {
+            planned = new[] { resumeInterview }.Concat(planned);
+        }
+
+        return planned
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+    }
+
+    private static string NormalizeFollowUp(string value) =>
+        Regex.Replace(value.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant);
+
+    private static string[] PlanFollowUps(string mode, string message, AiInterviewState? interviewState, IReadOnlyList<KnowledgeResult> sources)
+    {
+        var planned = new List<string>();
+        if (interviewState?.Status is "COLLECTING" or "CLARIFYING")
+        {
+            planned.Add("Continue my FAS eligibility check.");
+        }
+        else if (interviewState?.Status == "PAUSED")
+        {
+            planned.Add("Resume FAS check.");
+        }
+        else if (interviewState?.Status == "CANCELLED")
+        {
+            planned.Add("Restart FAS check.");
+        }
+
+        planned.AddRange(sources.SelectMany(x => x.FollowUps));
+
+        string[] workflow = mode switch
+        {
+            "PAYMENT" => PaymentFollowUps(),
+            "FALLBACK" => FallbackFollowUps(),
+            "GENERAL" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
+            "GENERAL" => AiTurnRouter.IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
+            "FAS_INTERVIEW" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
+            _ => []
+        };
+        planned.AddRange(workflow);
+
+        return FilterCurrentQuestion(planned, message);
+    }
+
+    private static string[] FilterCurrentQuestion(IEnumerable<string> followUps, string message)
+    {
+        string currentQuestion = NormalizeFollowUp(message);
+        return followUps
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Where(x => !string.Equals(NormalizeFollowUp(x), currentQuestion, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+    }
+
+    private static string[] FasKnowledgeFollowUps(string question)
+    {
+        string lower = question.ToLowerInvariant();
+        if (lower.Contains("pci") || lower.Contains("per capita") || lower.Contains("ghi") || lower.Contains("household income"))
+        {
+            return
+            [
+                "What counts as household income?",
+                "What documents prove household income?",
+                "Which FAS schemes can I apply for?"
+            ];
+        }
+
+        if (lower.Contains("document"))
+        {
+            return
+            [
+                "Walk me through the FAS application process.",
+                "Which FAS schemes can I apply for?",
+                "How is PCI calculated?"
+            ];
+        }
+
+        if (lower.Contains("apply") || lower.Contains("process") || lower.Contains("step") || lower.Contains("walk"))
+        {
+            return
+            [
+                "What FAS documents do I need?",
+                "Which FAS schemes can I apply for?",
+                "Check if I qualify for FAS."
+            ];
+        }
+
+        return
+        [
+            "Which FAS schemes can I apply for?",
+            "What FAS documents do I need?",
+            "Walk me through the FAS application process."
+        ];
+    }
+
+    private static string[] FasCompleteFollowUps() =>
+    [
+        "What documents do I need before submitting FAS?",
+        "Explain how FAS approval works.",
+        "What happens after I submit the FAS application?"
+    ];
+
+    private static string[] PaymentFollowUps() =>
+    [
+        "Show my outstanding course bills.",
+        "How do I pay this bill?",
+        "Show my recent payment history and refunds."
+    ];
+
+    private static string[] GeneralFinanceFollowUps() =>
+    [
+        "What can I use my Education Account for?",
+        "How do I top up my Education Account?",
+        "What can FAS help pay for?"
+    ];
+
+    private static string[] FallbackFollowUps() =>
+    [
+        "What can you help me with?",
+        "How can Admin Center help me?",
+        "Show my Education Account balance."
+    ];
+
+    private static AiGrounding Grounding(IReadOnlyList<KnowledgeResult> sources) => new(sources.Count > 0, sources.Select(x => x.Citation).ToArray());
+}

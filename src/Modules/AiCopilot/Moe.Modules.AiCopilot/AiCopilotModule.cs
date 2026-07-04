@@ -30,6 +30,10 @@ public sealed class AiCopilotModule : IModule
         services.AddScoped<AiOrchestratorService>();
         services.AddScoped<AiTurnPlannerService>();
         services.AddScoped<AiFinanceReader>();
+        services.AddScoped<FallbackHandler>();
+        services.AddScoped<PaymentQueryHandler>();
+        services.AddScoped<KnowledgeAnswerHandler>();
+        services.AddScoped<FasInterviewHandler>();
         services.AddSingleton<IKnowledgeRetriever, LocalKnowledgeRetriever>();
         services.AddSingleton<SensitiveDataRedactor>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
