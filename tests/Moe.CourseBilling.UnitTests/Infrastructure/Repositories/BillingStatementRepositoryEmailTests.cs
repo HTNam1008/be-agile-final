@@ -317,7 +317,7 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
             => Task.FromResult<CourseBillingPlan?>(new CourseBillingPlan(
                 coursePaymentPlanId,
                 CourseId: 1,
-                PlanTypeCode: "INSTALLMENT",
+                PlanTypeCode: CoursePaymentPlanTypeCodes.Installment,
                 InstallmentCount: 3,
                 IntervalMonths: 1,
                 IsActive: true));

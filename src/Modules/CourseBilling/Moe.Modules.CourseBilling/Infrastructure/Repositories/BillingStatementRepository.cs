@@ -86,7 +86,7 @@ internal sealed class BillingStatementRepository(
                     row.Course,
                     row.Enrollment,
                     PlanTypeCode = planTypeCode,
-                    IsInstallment = planTypeCode == "INSTALLMENT"
+                    IsInstallment = planTypeCode == CoursePaymentPlanTypeCodes.Installment
                 };
             })
             .ToList();
