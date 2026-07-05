@@ -54,6 +54,7 @@ using Moe.Modules.IdentityPlatform.Infrastructure.People;
 using Moe.Modules.IdentityPlatform.Infrastructure.Repositories;
 using Moe.Modules.IdentityPlatform.Infrastructure.Singpass;
 using Moe.Modules.IdentityPlatform.Infrastructure.Students;
+using Moe.Modules.Mfa.Application.RecoverPin;
 
 namespace Moe.Modules.IdentityPlatform;
 
@@ -71,6 +72,7 @@ public sealed class IdentityPlatformModule : IModule
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<ISchoolAuditLogReader, SchoolAuditLogReader>();
         services.AddScoped<IEServiceLoginResolver, EServiceLoginResolver>();
+        services.AddScoped<IMfaRecoveryContactResolver, MfaRecoveryContactResolver>();
         services.AddScoped<IAdminLoginRecorder, AdminLoginRecorder>();
         services.AddHttpClient<IEntraWorkforceDirectoryClient, EntraWorkforceDirectoryClient>();
         if (services.All(x => x.ServiceType != typeof(ISingpassLoginGateway)))

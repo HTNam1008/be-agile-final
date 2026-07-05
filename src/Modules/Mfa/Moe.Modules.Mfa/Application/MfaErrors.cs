@@ -47,4 +47,8 @@ internal static class MfaErrors
     public static readonly Error ResetReasonRequired = new(
         "MFA.RESET_REASON_REQUIRED",
         "A reset reason is required.");
+
+    public static readonly Error RecoveryEmailUnavailable = new("MFA.RECOVERY_EMAIL_UNAVAILABLE", "No recovery email is available for this account.");
+    public static readonly Error RecoveryLinkInvalid = new("MFA.RECOVERY_LINK_INVALID", "The recovery link is invalid or has already been used.");
+    public static readonly Error RecoveryLinkExpired = new("MFA.RECOVERY_LINK_EXPIRED", "The recovery link has expired.");
 }
