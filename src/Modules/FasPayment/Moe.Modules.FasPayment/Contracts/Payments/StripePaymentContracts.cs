@@ -15,6 +15,15 @@ public sealed record CoursePaymentPlanResponse(
     int Version,
     bool IsActive);
 
+public sealed record CoursePaymentPlanPolicyResponse(
+    CoursePaymentPlanTypeCodeResponse PlanTypeCodes,
+    IReadOnlyCollection<int> AllowedInstallmentCounts,
+    int DefaultInstallmentCount);
+
+public sealed record CoursePaymentPlanTypeCodeResponse(
+    string FullPayment,
+    string Installment);
+
 public sealed record CreateStripeCheckoutRequest(long BillId, long CoursePaymentPlanId);
 
 public sealed record StripeCheckoutResponse(

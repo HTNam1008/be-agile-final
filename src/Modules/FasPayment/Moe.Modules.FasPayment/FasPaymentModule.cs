@@ -87,6 +87,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<ICoursePaymentPlanGateway, CoursePaymentPlanGateway>();
         services.AddScoped<ICommandHandler<CreateCoursePaymentPlanCommand, CoursePaymentPlanResponse>, CreateCoursePaymentPlanHandler>();
         services.AddScoped<IQueryHandler<ListCoursePaymentPlansQuery, IReadOnlyCollection<CoursePaymentPlanResponse>>, ListCoursePaymentPlansHandler>();
+        services.AddScoped<IQueryHandler<GetCoursePaymentPlanPolicyQuery, CoursePaymentPlanPolicyResponse>, GetCoursePaymentPlanPolicyHandler>();
         services.AddScoped<ICommandHandler<CreateStripeCheckoutCommand, StripeCheckoutResponse>, CreateStripeCheckoutHandler>();
         services.AddScoped<IQueryHandler<GetPaymentCheckoutStatusQuery, PaymentCheckoutStatusResponse>, GetPaymentCheckoutStatusHandler>();
         services.AddScoped<ICommandHandler<ProcessStripeWebhookCommand>, ProcessStripeWebhookHandler>();

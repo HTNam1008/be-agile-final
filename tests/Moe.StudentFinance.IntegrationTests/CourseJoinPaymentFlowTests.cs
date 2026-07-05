@@ -1209,7 +1209,7 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
             new
             {
                 schoolName = (string?)null,
-                identityNumber = $"J{suffix[..7]}T",
+                identityNumber = ValidIdentityNumber(suffix),
                 fullName = $"Payment Test Student {suffix}",
                 dateOfBirth = new DateOnly(2008, 5, 12),
                 nationalityCode = "SG",
@@ -1483,6 +1483,47 @@ public sealed class CourseJoinPaymentFlowTests(CustomWebApplicationFactory facto
 
     private static string NewSuffix()
         => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+    private static string ValidIdentityNumber(string suffix)
+    {
+        string digits = StableSevenDigitNumber(suffix).ToString("D7");
+        return $"S{digits}{ComputeChecksum('S', digits)}";
+    }
+
+    private static int StableSevenDigitNumber(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261;
+            foreach (byte item in Encoding.UTF8.GetBytes(value))
+            {
+                hash ^= item;
+                hash *= 16777619;
+            }
+
+            return (int)(hash % 10_000_000);
+        }
+    }
+
+    private static char ComputeChecksum(char prefix, string digits)
+    {
+        int[] weights = [2, 7, 6, 5, 4, 3, 2];
+        int sum = prefix is 'T' or 'G' ? 4 : prefix is 'M' ? 3 : 0;
+        for (int index = 0; index < weights.Length; index++)
+        {
+            sum += (digits[index] - '0') * weights[index];
+        }
+
+        string checksumTable = prefix switch
+        {
+            'S' or 'T' => "JZIHGFEDCBA",
+            'F' or 'G' => "XWUTRQPNMLK",
+            'M' => "XWUTRQPNJLK",
+            _ => throw new ArgumentOutOfRangeException(nameof(prefix), prefix, null)
+        };
+
+        return checksumTable[sum % 11];
+    }
 
     private static DateOnly InstallmentDueDateInCurrentMonth()
     {

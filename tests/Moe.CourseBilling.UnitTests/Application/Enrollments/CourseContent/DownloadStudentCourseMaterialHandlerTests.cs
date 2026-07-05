@@ -75,6 +75,47 @@ public sealed class DownloadStudentCourseMaterialHandlerTests
         cache.SetCalls.Should().Be(1);
     }
 
+    [Fact]
+    public async Task Download_UsesSingaporeBusinessDateForCourseContentAvailability()
+    {
+        CourseMaterial material = CreateMaterial();
+        DateTime utcNow = new(2026, 6, 30, 17, 0, 0, DateTimeKind.Utc);
+        Course course = new(
+            1,
+            "C-001",
+            "Course",
+            null,
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 31),
+            utcNow.AddDays(-10),
+            utcNow.AddDays(-2),
+            1,
+            utcNow);
+        CourseEnrollment enrollment = CourseEnrollment.JoinSelf(
+            11,
+            1,
+            1,
+            99,
+            utcNow,
+            100,
+            50).Value;
+        enrollment.GrantPaidAccess(paidInFull: true);
+        DownloadStudentCourseMaterialHandler handler = new(
+            new CurrentUserDouble(),
+            new StudentCourseContentRepositoryDouble(new StudentCourseContentSnapshot(enrollment, course, [material])),
+            new CourseMaterialStorageServiceDouble(),
+            new PreviewConverterDouble(),
+            new PreviewCacheDouble(),
+            NullLogger<DownloadStudentCourseMaterialHandler>.Instance,
+            new ClockDouble(new DateTimeOffset(utcNow)));
+
+        var result = await handler.Handle(
+            new DownloadStudentCourseMaterialQuery(1, material.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
     private static StudentCourseContentSnapshot CreateSnapshot(CourseMaterial material)
     {
         DateTime now = DateTime.UtcNow;
@@ -204,9 +245,9 @@ public sealed class DownloadStudentCourseMaterialHandlerTests
         public bool HasPermission(string permission) => true;
     }
 
-    private sealed class ClockDouble : IClock
+    private sealed class ClockDouble(DateTimeOffset? utcNow = null) : IClock
     {
-        public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
+        public DateTimeOffset UtcNow => utcNow ?? DateTimeOffset.UtcNow;
 
         public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
     }
