@@ -115,7 +115,7 @@ internal sealed class MissedInstallmentPaymentEmailWorker(
             CourseBillingPlan? plan = await paymentPlans.FindPlanAsync(
                 candidate.CoursePaymentPlanId,
                 cancellationToken);
-            if (plan?.PlanTypeCode != "INSTALLMENT")
+            if (plan?.PlanTypeCode != CoursePaymentPlanTypeCodes.Installment)
             {
                 continue;
             }

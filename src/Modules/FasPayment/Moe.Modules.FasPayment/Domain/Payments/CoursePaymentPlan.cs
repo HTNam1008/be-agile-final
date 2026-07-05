@@ -1,3 +1,4 @@
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.SharedKernel.Domain;
 using Moe.SharedKernel.Results;
 
@@ -76,6 +77,6 @@ internal sealed class CoursePaymentPlan : Entity<long>
 
 public static class PaymentPlanTypeCodes
 {
-    public const string FullPayment = "FULL_PAYMENT";
-    public const string Installment = "INSTALLMENT";
+    public const string FullPayment = CoursePaymentPlanTypeCodes.FullPayment;
+    public const string Installment = CoursePaymentPlanTypeCodes.Installment;
 }

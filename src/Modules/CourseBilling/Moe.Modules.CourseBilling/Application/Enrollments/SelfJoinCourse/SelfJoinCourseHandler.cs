@@ -109,7 +109,7 @@ internal sealed class SelfJoinCourseHandler(
             return Result<CourseEnrollmentResponse>.Failure(enrollmentResult.Error);
         }
 
-        bool installment = plan.PlanTypeCode == "INSTALLMENT";
+        bool installment = plan.PlanTypeCode == CoursePaymentPlanTypeCodes.Installment;
         if (installment)
             enrollmentResult.Value.ActivateInstallmentEnrollment();
 

@@ -176,7 +176,7 @@ public sealed class SingaporeBusinessDayRedTests
     private sealed class InstallmentPlanGateway : ICoursePaymentPlanGateway
     {
         public Task<CourseBillingPlan?> FindPlanAsync(long coursePaymentPlanId, CancellationToken cancellationToken) =>
-            Task.FromResult<CourseBillingPlan?>(new(coursePaymentPlanId, 1, "INSTALLMENT", 3, 1, true));
+            Task.FromResult<CourseBillingPlan?>(new(coursePaymentPlanId, 1, CoursePaymentPlanTypeCodes.Installment, 3, 1, true));
     }
 
     private sealed class FakeCurrentUser : ICurrentUser

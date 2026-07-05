@@ -50,7 +50,7 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseFeesNotConfigured);
         DateTime now = clock.UtcNow.UtcDateTime;
         DateOnly today = clock.TodayInSingapore();
-        bool installment = plan.PlanTypeCode == "INSTALLMENT";
+        bool installment = plan.PlanTypeCode == CoursePaymentPlanTypeCodes.Installment;
         DateOnly dueDate = installment
             ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(today)
             : today;

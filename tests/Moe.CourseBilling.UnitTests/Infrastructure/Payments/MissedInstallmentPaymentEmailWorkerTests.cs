@@ -31,7 +31,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 6, 30),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT");
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment);
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
 
@@ -48,7 +48,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 6, 30),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT");
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment);
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
@@ -62,7 +62,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 6, 30),
             outstandingAmount: 25m,
-            planTypeCode: "FULL_PAYMENT");
+            planTypeCode: CoursePaymentPlanTypeCodes.FullPayment);
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
 
@@ -75,7 +75,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 7, 1),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT");
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment);
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
 
@@ -88,7 +88,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 6, 30),
             outstandingAmount: 0m,
-            planTypeCode: "INSTALLMENT");
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment);
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
 
@@ -101,7 +101,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 6, 30),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT",
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment,
             mailEnabled: false);
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
@@ -116,7 +116,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 8, 8),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT",
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment,
             utcNow: new DateTimeOffset(2026, 8, 8, 8, 0, 0, TimeSpan.Zero));
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
@@ -130,7 +130,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 8, 8),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT",
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment,
             utcNow: new DateTimeOffset(2026, 8, 9, 8, 0, 0, TimeSpan.Zero));
 
         await context.Worker.SendDueNotificationsAsync(CancellationToken.None);
@@ -146,7 +146,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
         TestContext context = await CreateContextAsync(
             dueDate: new DateOnly(2026, 8, 8),
             outstandingAmount: 25m,
-            planTypeCode: "INSTALLMENT",
+            planTypeCode: CoursePaymentPlanTypeCodes.Installment,
             utcNow: new DateTimeOffset(2026, 8, 9, 8, 0, 0, TimeSpan.Zero),
             seedMissedNotification: true);
 
@@ -271,7 +271,7 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
                 coursePaymentPlanId,
                 1,
                 planTypeCode,
-                planTypeCode == "INSTALLMENT" ? 2 : 1,
+                planTypeCode == CoursePaymentPlanTypeCodes.Installment ? 2 : 1,
                 1,
                 true));
         }
