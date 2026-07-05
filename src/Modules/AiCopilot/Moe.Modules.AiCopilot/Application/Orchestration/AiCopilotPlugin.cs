@@ -14,13 +14,11 @@ public sealed class AiCopilotPlugin
 
     private readonly AiFinanceReader _finance;
     private readonly StudentFasApplicationService _fas;
-    private readonly IKnowledgeRetriever _knowledge;
 
-    public AiCopilotPlugin(AiFinanceReader finance, StudentFasApplicationService fas, IKnowledgeRetriever knowledge)
+    public AiCopilotPlugin(AiFinanceReader finance, StudentFasApplicationService fas)
     {
         _finance = finance;
         _fas = fas;
-        _knowledge = knowledge;
     }
 
     // Set by AiAgenticTurnService before the agentic loop runs, so CancelFasInterview
@@ -29,7 +27,6 @@ public sealed class AiCopilotPlugin
     internal AiConversation? CurrentConversation { get; set; }
 
     internal AiFinanceSnapshot? FetchedSnapshot { get; private set; }
-    internal IReadOnlyList<KnowledgeResult>? FetchedSources { get; private set; }
 
     [KernelFunction]
     [Description("Get the student's Education Account balance, outstanding bills, recent payments, and net available amount.")]
@@ -51,30 +48,6 @@ public sealed class AiCopilotPlugin
             bills = snapshot.Bills.Select(b => new { b.BillId, b.BillNumber, b.Description, dueDate = b.DueDate.ToString("O"), b.OutstandingAmount, b.StatusCode }),
             recentPayments = snapshot.RecentPayments.Select(p => new { p.PaymentId, p.PaymentNumber, p.Amount, p.StatusCode, p.InitiatedAtUtc, p.RefundedAmount })
         }, JsonOptions);
-    }
-
-    [KernelFunction]
-    [Description("Search the FAS policy knowledge base for guidance on fees, bursaries, subsidies, eligibility, applications, or documents.")]
-    [return: Description("JSON array of knowledge results with title, content, source, score, and follow-up questions")]
-    public async Task<string> SearchKnowledgeBaseAsync(
-        [Description("Natural language search query — what the student is asking about")] string query,
-        [Description("Optional domain filter: FAS, PAYMENT, or GENERAL")] string? domain,
-        CancellationToken ct)
-    {
-        IReadOnlyList<KnowledgeResult> results = await _knowledge.RetrieveAsync(query, domain, ct: ct);
-        FetchedSources = results;
-        return JsonSerializer.Serialize(results.Select(r => new
-        {
-            r.Citation.SourceId,
-            r.Citation.Title,
-            r.Citation.Section,
-            r.Citation.SourceStatus,
-            r.Citation.EffectiveDate,
-            content = TruncateAtSentenceBoundary(r.Content, 800),
-            r.Score,
-            followUps = r.FollowUps,
-            allowedIntents = r.AllowedIntents
-        }), JsonOptions);
     }
 
     [KernelFunction]
@@ -143,13 +116,5 @@ public sealed class AiCopilotPlugin
             return "FAS_PAUSED";
         }
         return "INVALID_ACTION";
-    }
-
-    private static string TruncateAtSentenceBoundary(string text, int maxLength)
-    {
-        if (text.Length <= maxLength) return text;
-        int cut = text.LastIndexOfAny(['.', '!', '?'], maxLength - 1);
-        if (cut > maxLength * 0.6) return text[..(cut + 1)];
-        return text[..maxLength] + "...";
     }
 }

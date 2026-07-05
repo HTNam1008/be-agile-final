@@ -41,7 +41,7 @@ public sealed class KnowledgeAnswerHandler(
             const string capabilityText = "I can help with Education Account balance, outstanding bills, payment history, refunds, and FAS guidance. I can also walk you through a FAS eligibility check before you open the application form.";
             AiAction[] capabilityActions =
             [
-                new("NAVIGATE", "Open Bills & payments page", "/portal/bills"),
+                new("NAVIGATE", "Open Bills & payments page", "/portal/payments"),
                 new("NAVIGATE", "Open FAS application", "/portal/fas")
             ];
             return new AiHandlerResult(capabilityText, "GENERAL", new(false, []), [], capabilityActions)
@@ -59,7 +59,7 @@ public sealed class KnowledgeAnswerHandler(
         {
             const string courseText = "I can help with course-related finance questions, such as outstanding course bills, payment options, and how FAS may apply to eligible course charges. For course enrolment details, open the Courses page.";
             return new AiHandlerResult(courseText, "GENERAL", new(false, []), [],
-                [new("NAVIGATE", "Open Courses page", "/portal/courses"), new("NAVIGATE", "Open Bills & payments page", "/portal/bills")])
+                [new("NAVIGATE", "Open Courses page", "/portal/courses"), new("NAVIGATE", "Open Bills & payments page", "/portal/payments")])
             {
                 FollowUpQuestions =
                 [

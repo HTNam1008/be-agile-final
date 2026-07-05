@@ -8,7 +8,7 @@ internal static class AiRouterHelpers
     private static readonly string[] AllowedDomains = ["FAS", "PAYMENT", "GENERAL"];
     private static readonly string[] AllowedRoutePrefixes =
     [
-        "/portal/account", "/portal/bills", "/portal/courses", "/portal/dashboard",
+        "/portal/account", "/portal/payments", "/portal/courses", "/portal/dashboard",
         "/portal/education-account", "/portal/fas", "/portal/profile"
     ];
     private static readonly HashSet<string> AllowedFieldKeys = new(StringComparer.OrdinalIgnoreCase)

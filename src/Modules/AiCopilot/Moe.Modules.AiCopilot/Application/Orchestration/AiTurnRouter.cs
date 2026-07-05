@@ -16,8 +16,7 @@ public sealed class AiTurnRouter(
     KnowledgeAnswerHandler knowledgeHandler,
     FasInterviewHandler fasHandler,
     ILogger<AiTurnRouter> logger,
-    IConfiguration configuration,
-    AiAgenticTurnService? agenticService = null)
+    IConfiguration configuration)
 {
     private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
     private readonly bool _fasEnabled = configuration.GetValue("AiCopilot:FasEnabled", true);
@@ -72,19 +71,34 @@ public sealed class AiTurnRouter(
                 return Save(c.Id, pj, now, 0, fasResult, c, sanitized, fasPlan, sw, ct, true);
             }
 
-            // Agentic path — try first for all modes (FAS state machine sessions handled above).
-            // If the agentic response would be FAS_INTERVIEW, don't let it steal the FAS turn —
-            // fall through to the deterministic planner.
-            if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true))
-                try
-                {
-                    var ar = await agenticService.ExecuteTurnAsync(c, sanitized, ct);
-                    if (ar is not null && !(_fasEnabled && ar.Mode == "FAS_INTERVIEW"))
-                        return Save(c.Id, pj, now, 0, ar, c, sanitized, new AiTurnPlan(AiPlannerIntent.Fallback, "idle", null, 0.5m, "AGENTIC"), sw, ct, true);
-                }
-                catch (Exception ex) { logger.LogWarning(ex, "Agentic path failed for conv {Id}", c.Id); }
+            // Fast-path deterministic gates (skip agentic path + model planner for simple queries)
+            if (AiKeywordMatchers.LooksLikeScopeTest(sanitized.Message))
+            {
+                var fpPlan = new AiTurnPlan(AiPlannerIntent.OutOfScopeSmallTalk, "idle", null, 0.95m, "FAST_PATH");
+                return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
+            }
+            if (AiKeywordMatchers.LooksLikeCapabilityQuestion(sanitized.Message))
+            {
+                var fpPlan = new AiTurnPlan(AiPlannerIntent.AnswerKnowledge, "idle", null, 0.95m, "FAST_PATH");
+                return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
+            }
+            if (AiKeywordMatchers.LooksLikeAdminCenterQuestion(sanitized.Message))
+            {
+                var fpPlan = new AiTurnPlan(AiPlannerIntent.AnswerKnowledge, "idle", null, 0.95m, "FAST_PATH");
+                return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
+            }
+            if (AiKeywordMatchers.LooksLikeCourseQuestion(sanitized.Message))
+            {
+                var fpPlan = new AiTurnPlan(AiPlannerIntent.CourseQuery, "idle", null, 0.85m, "FAST_PATH");
+                return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
+            }
+            if (AiKeywordMatchers.LooksLikePaymentQuery(sanitized.Message))
+            {
+                var fpPlan = new AiTurnPlan(AiPlannerIntent.PaymentQuery, "idle", null, 0.95m, "FAST_PATH");
+                return Save(c.Id, pj, now, 0, await paymentHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
+            }
 
-            // Fall back to deterministic path: planner + mode dispatch
+            // Deterministic path: planner + mode dispatch. Hardcoded RAG stays ahead of model-led tool loops.
             var plan = await turnPlanner.PlanAsync(sanitized, c, ct);
 
             if (plan.Intent == AiPlannerIntent.ClarifyFasTypo)

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
 using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
@@ -104,7 +105,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     public async Task Knowledge_retriever_maps_natural_school_fee_help_to_fas()
     {
         var store = new EmbeddedKnowledgeDocumentStore();
-        var retriever = new LocalKnowledgeRetriever(store, new FakeTextEmbeddingGenerationService());
+        var retriever = new LocalKnowledgeRetriever(store, NullLogger<LocalKnowledgeRetriever>.Instance);
 
         IReadOnlyList<Moe.Modules.AiCopilot.Application.Knowledge.KnowledgeResult> results =
             await retriever.RetrieveAsync("My family does not earn much. Can I get help with school fees?", "GENERAL");
@@ -275,7 +276,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         {
             domain = "PAYMENT",
             surface = "PORTAL",
-            path = "/portal/bills",
+            path = "/portal/payments",
             entity = new { fieldKey = "monthlyHouseholdIncome" }
         });
         // FieldKey should be ignored in non-FAS domain; request still processes as FAS due to keywords
