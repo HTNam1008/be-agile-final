@@ -128,6 +128,7 @@ public sealed class FasInterviewHandler(
         string? next = NextQuestion(st, fk);
         if (next is not null) st.ClarificationField = nf;
         if (next is not null && st.Status == "COLLECTING_CONFIRMED") st.Status = "COLLECTING";
+        if (st.Status == "CLARIFYING") st.Status = "COLLECTING";
 
         object? rec = null;
         FasRecommendationMatch[] schemes = [];
@@ -244,6 +245,19 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+
+            // Mirror NormalizePlannerIntentForCompositeTurn: when the user cancels FAS
+            // AND also asks a payment/course question, redirect instead of just acknowledging cancel.
+            if (AiKeywordMatchers.LooksLikePaymentQuery(req.Message))
+                return new AiHandlerResult(req.Message, "PAYMENT", new(false, []), [], [],
+                    FasConfirmationService.ToInterviewState(st, null))
+                { Signal = HandlerDispatchSignal.RedirectPayment };
+
+            if (AiKeywordMatchers.LooksLikeCourseQuestion(req.Message))
+                return new AiHandlerResult(req.Message, "GENERAL", new(false, []), [], [],
+                    FasConfirmationService.ToInterviewState(st, null))
+                { Signal = HandlerDispatchSignal.RedirectKnowledge };
+
             return new("This FAS check is already stopped. I will not calculate eligibility from those answers unless you restart the check.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], FasConfirmationService.ToInterviewState(st, null)) { FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."] };
         }
 
