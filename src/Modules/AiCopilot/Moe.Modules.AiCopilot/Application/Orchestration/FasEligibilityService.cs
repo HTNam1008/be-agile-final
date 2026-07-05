@@ -1,11 +1,12 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Moe.Modules.AiCopilot.Api;
 using Moe.Modules.FasPayment.Application.StudentApplications;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
-public sealed class FasEligibilityService(StudentFasApplicationService fas)
+public sealed class FasEligibilityService(StudentFasApplicationService fas, ILogger<FasEligibilityService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -47,6 +48,8 @@ public sealed class FasEligibilityService(StudentFasApplicationService fas)
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "FAS eligibility check failed for status {Status}", state.Status);
+
             bool isTransient = ex is HttpRequestException
                 or TaskCanceledException
                 or OperationCanceledException

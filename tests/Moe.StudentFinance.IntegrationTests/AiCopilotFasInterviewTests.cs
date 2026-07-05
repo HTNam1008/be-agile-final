@@ -34,7 +34,7 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await CreateSchemeWithPciCap(500);
         Guid conversationId = await StartFasInterview();
         await SendFasMessage("No", conversationId);
-        await SendFasMessage("999999", conversationId);
+        await SendFasMessage("9999", conversationId);
         await SendFasMessage("1", conversationId);
         await SendFasMessage("0", conversationId);
 
