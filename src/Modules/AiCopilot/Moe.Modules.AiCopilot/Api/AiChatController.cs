@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Asp.Versioning;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +22,8 @@ public sealed class AiChatController(
     AiStreamingService streaming,
     MoeDbContext db,
     ICurrentUser currentUser,
-    SensitiveDataRedactor redactor) : ControllerBase
+    SensitiveDataRedactor redactor,
+    ILogger<AiChatController> logger) : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -93,6 +95,23 @@ public sealed class AiChatController(
         {
             await streaming.WriteErrorEventAsync(HttpContext,
                 "AI.CONCURRENCY_CONFLICT: This FAS session was modified by another request. Please retry.", ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Client disconnected — no SSE possible
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "AI stream conv {Id} failed", sanitized.ConversationId);
+            try
+            {
+                await streaming.WriteErrorEventAsync(HttpContext,
+                    "AI_STREAM_ERROR: Something went wrong. Please retry or use the Help links.", ct);
+            }
+            catch
+            {
+                // Response may already be committed
+            }
         }
     }
 
