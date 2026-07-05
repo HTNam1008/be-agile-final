@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Moe.Application.Abstractions.Clock;
@@ -15,6 +16,7 @@ using Moe.Infrastructure.Shared.Clock;
 using Moe.Infrastructure.Shared.Configuration;
 using Moe.Infrastructure.Shared.Messaging;
 using Moe.Infrastructure.Shared.Middleware;
+using Moe.Infrastructure.Shared.Observability;
 using Moe.Infrastructure.Shared.Security;
 
 namespace Moe.Infrastructure.Shared;
@@ -24,6 +26,15 @@ public static class DependencyInjection
     public static IServiceCollection AddSharedInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddHttpContextAccessor();
+        services.AddTransient<CorrelationIdDelegatingHandler>();
+        services.ConfigureAll<HttpClientFactoryOptions>(options =>
+        {
+            options.HttpMessageHandlerBuilderActions.Add(builder =>
+            {
+                builder.AdditionalHandlers.Add(
+                    builder.Services.GetRequiredService<CorrelationIdDelegatingHandler>());
+            });
+        });
         services.AddDataProtection()
             .PersistKeysToFileSystem(ResolveDataProtectionKeysDirectory())
             .SetApplicationName("Moe.StudentFinance");
@@ -159,9 +170,10 @@ public static class DependencyInjection
         app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseMiddleware<ApiVersionHeaderMiddleware>();
         app.UseMiddleware<SecurityHeadersMiddleware>();
+        app.UseAuthentication();
+        app.UseMiddleware<UserContextLoggingMiddleware>();
         app.UseMiddleware<RequestLoggingMiddleware>();
         app.UseMiddleware<PerformanceTrackingMiddleware>();
-        app.UseAuthentication();
         app.UseAuthorization();
         return app;
     }

@@ -56,6 +56,23 @@ public sealed class MonthlyBillNotificationWorkerTests
     }
 
     [Fact]
+    public async Task RunIfDueAsync_WhenSingaporeFirstDayButUtcPreviousDay_ProcessesOutstandingBills()
+    {
+        DbContextOptions<MoeDbContext> options = CreateOptions();
+        await SeedBillAsync(options, personId: 711, outstandingAmount: 25m);
+        RecordingBillingStatementRepository statements = new();
+        MonthlyBillNotificationWorker worker = CreateWorker(
+            options,
+            statements,
+            new DateTimeOffset(2026, 6, 30, 16, 30, 0, TimeSpan.Zero));
+
+        await worker.RunIfDueAsync(CancellationToken.None);
+
+        statements.PersonIds.Should().Equal(711);
+        statements.NotificationModes.Should().Equal(BillingStatementNotificationMode.SendMonthlyBill);
+    }
+
+    [Fact]
     public async Task RunIfDueAsync_DeduplicatesPersonWithMultipleOutstandingBills()
     {
         DbContextOptions<MoeDbContext> options = CreateOptions();
@@ -145,22 +162,28 @@ public sealed class MonthlyBillNotificationWorkerTests
         dbContext.Add(course);
         await dbContext.SaveChangesAsync();
 
-        CourseEnrollment enrollment = pendingPlanSelection
-            ? CourseEnrollment.EnrollByAdminPendingPlanSelection(
+        CourseEnrollment enrollment;
+        if (pendingPlanSelection)
+        {
+            enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
                 personId,
                 course.Id,
-                adminLoginAccountId: 1,
-                enrolledAtUtc: new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc),
-                beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
-                afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value
-            : CourseEnrollment.EnrollByAdmin(
-                personId,
-                course.Id,
-                coursePaymentPlanId: personId,
                 adminLoginAccountId: 1,
                 enrolledAtUtc: new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc),
                 beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
                 afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+        }
+        else
+        {
+            enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
+                personId,
+                course.Id,
+                adminLoginAccountId: 1,
+                enrolledAtUtc: new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc),
+                beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
+                afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+            enrollment.ChangePaymentPlan(coursePaymentPlanId: personId, installment: false);
+        }
         dbContext.Add(enrollment);
         await dbContext.SaveChangesAsync();
 

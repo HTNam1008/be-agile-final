@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
@@ -33,8 +34,27 @@ using NSwag.Generation.Processors.Security;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.SingleLine = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+});
+builder.Logging.Configure(options =>
+{
+    options.ActivityTrackingOptions =
+        ActivityTrackingOptions.TraceId
+        | ActivityTrackingOptions.SpanId
+        | ActivityTrackingOptions.ParentId
+        | ActivityTrackingOptions.Baggage
+        | ActivityTrackingOptions.Tags;
+});
 builder.Logging.AddLog4Net();
+
+if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+{
+    builder.Services.AddOpenTelemetry().UseAzureMonitor();
+}
 
 builder.Services.AddSharedInfrastructure(builder.Configuration);
 if (IsDevelopmentClockEnabled(builder.Environment, builder.Configuration))
@@ -109,7 +129,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options 
             .Distinct()
             .ToArray();
         return new Microsoft.AspNetCore.Mvc.ObjectResult(ApiResponse<object>.Fail(
-            "Validation failed.",
+            ApiErrorMessages.ValidationFailed,
             ["FAS.INVALID_REQUEST", .. errors],
             ApiResponseCodes.UnprocessableEntity,
             context.HttpContext.TraceIdentifier))
@@ -274,7 +294,7 @@ if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPut("/dev/clock", (SetDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
+    app.MapPut("/dev/clock", ([FromBody] SetDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         clock.Set(request.UtcNow);
         return Results.Ok(CreateDevelopmentClockResponse(clock));
@@ -282,7 +302,7 @@ if (IsDevelopmentClockEnabled(app.Environment, app.Configuration))
         .AllowAnonymous()
         .RequireCors("PortalCors");
 
-    app.MapPost("/dev/clock/advance", (AdvanceDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
+    app.MapPost("/dev/clock/advance", ([FromBody] AdvanceDevelopmentClockRequest request, [FromServices] DevelopmentManualClock clock) =>
     {
         TimeSpan delta = request.ToTimeSpan();
         if (delta == TimeSpan.Zero)

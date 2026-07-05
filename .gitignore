@@ -23,3 +23,10 @@ test_*.ps1
 
 .verification
 src/Hosts/Moe.StudentFinance.Api/appsettings.json
+
+# UAT deploy local files and downloaded Azure secrets
+uat-app-service-settings.local.json
+*.PublishSettings
+*.publishsettings
+*.pubxml
+*.pubxml.user

@@ -48,7 +48,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : I
         long organizationId,
         CancellationToken cancellationToken)
     {
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
 
         return await dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()
@@ -65,7 +65,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : I
         AdminStudentSearchCriteria criteria,
         CancellationToken cancellationToken)
     {
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()
@@ -121,7 +121,7 @@ internal sealed class StudentDirectory(MoeDbContext dbContext, IClock clock) : I
         AdminStudentSearchCriteria criteria,
         CancellationToken cancellationToken)
     {
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
         var query =
             from enrollment in dbContext.Set<SchoolEnrollment>().AsNoTracking()
             join person in dbContext.Set<Person>().AsNoTracking()

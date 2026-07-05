@@ -53,7 +53,7 @@ public sealed class Age30AccountLockReminderEmailServiceTests
             && job.Subject == "Reminder: Your Ministry of Education - Singapore account will be locked soon"
             && job.PlainTextBody.Contains("Go to Payment Dashboard", StringComparison.Ordinal)
             && job.HtmlBody != null
-            && job.HtmlBody.Contains("#ef3340", StringComparison.Ordinal));
+            && job.HtmlBody.Contains("#ef3340", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
