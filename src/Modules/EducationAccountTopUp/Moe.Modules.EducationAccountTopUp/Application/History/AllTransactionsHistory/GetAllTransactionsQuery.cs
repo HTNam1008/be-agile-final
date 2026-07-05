@@ -24,5 +24,6 @@ public sealed record AllTransactionsItem(
     string CurrencyCode,
     string Status,
     string? FailureReason,
+    string? Reason,
     DateTime? ProcessedAtUtc,
     DateTime RunDateUtc);
