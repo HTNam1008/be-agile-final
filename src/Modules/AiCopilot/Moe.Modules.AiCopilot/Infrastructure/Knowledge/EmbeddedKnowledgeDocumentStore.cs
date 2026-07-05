@@ -11,7 +11,7 @@ public sealed class EmbeddedKnowledgeDocumentStore : IKnowledgeDocumentStore
         new("PAY-ACCOUNT-001", "Student Finance AI Scope", "Education account and outstanding charges", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
             "The assistant presents current Education Account balance, total outstanding charges, and net available amount. Outstanding charges are highlighted before new enrolments or withdrawals.", "/portal/account", ["education account", "balance", "available amount", "outstanding charges"], false),
         new("PAY-METHOD-001", "Student Finance AI Scope", "Payment methods", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "Course fees and bills may use Education Account funds, online payment, or split payment when supported. Insufficient Education Account funds require another payment source for the remainder.", "/portal/bills", ["payment method", "pay bill", "course fees", "split payment"], false),
+            "Course fees and bills may use Education Account funds, online payment, or split payment when supported. Insufficient Education Account funds require another payment source for the remainder.", "/portal/payments", ["payment method", "pay bill", "course fees", "split payment"], false),
         new("PAY-REFUND-001", "Student Finance AI Scope", "Refund guidance", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
             "Refund explanations must use the enrollment's snapshotted refund policy and actual refund status. The assistant must not invent eligibility, amounts, timelines, or documentation.", "/portal/courses", ["refund", "withdrawal refund", "refund status", "refund policy"], false),
         new("PROTO-WITHDRAW-001", "Prototype Finance Guidance", "Education Account withdrawal", "PAYMENT", "PROTOTYPE", "1.0", new DateOnly(2026, 6, 24),
@@ -113,7 +113,7 @@ public sealed class EmbeddedKnowledgeDocumentStore : IKnowledgeDocumentStore
             string[] allowedIntents = meta.TryGetValue("allowed_intents", out string? intents) ? ParseYamlList(intents) : DefaultAllowedIntents(domain);
             string[] followUps = meta.TryGetValue("follow_ups", out string? followUpText) ? ParseYamlList(followUpText) : DefaultFollowUps(domain, title);
             string content = body.Trim();
-            string url = meta.GetValueOrDefault("url", domain == "PAYMENT" ? "/portal/bills" : "/portal/fas");
+            string url = meta.GetValueOrDefault("url", domain == "PAYMENT" ? "/portal/payments" : "/portal/fas");
 
             chunks.Add(new KnowledgeDocument(chunkId, title, title, domain, status, "1.0", effectiveDate,
                 content, url, synonyms, alwaysInclude, meta.GetValueOrDefault("review_owner", "Student Finance Product"), allowedIntents, followUps));

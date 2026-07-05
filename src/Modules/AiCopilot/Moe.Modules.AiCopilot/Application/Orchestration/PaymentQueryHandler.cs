@@ -29,14 +29,14 @@ public sealed class PaymentQueryHandler(
                 : $"You have {snapshot.RecentPayments.Count} recent payment record{(snapshot.RecentPayments.Count == 1 ? "" : "s")}. Refunds are processed based on the original payment method and may take 5-14 business days. Contact your school or Admin Center for refund eligibility.";
             return new AiHandlerResult(historyText, "PAYMENT", Grounding(sources),
                 [new("PAYMENT_HISTORY", snapshot.RecentPayments)],
-                [new("NAVIGATE", "Open Bills & payments page", "/portal/bills")]);
+                [new("NAVIGATE", "Open Bills & payments page", "/portal/payments")]);
         }
 
         if (intent.Contains("WITHDRAW"))
         {
             string withdrawText = "To withdraw from a course, start by reviewing the withdrawal policy on the Bills & payments page. Withdrawals may affect your outstanding charges and Education Account balance. Contact your school for eligibility, deadlines, and any supporting documents needed. You can also reach the Admin Center for further assistance.";
             return new AiHandlerResult(withdrawText, "PAYMENT", Grounding(sources), [],
-                [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")]);
+                [new("NAVIGATE", "Open Bills & payments page", "/portal/payments"), new("NAVIGATE", "Open education account", "/portal/account")]);
         }
 
         if (intent.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(intent, @"\b(PAY|USE|USED|FOR|COVER)\b", RegexOptions.IgnoreCase))
@@ -46,7 +46,7 @@ public sealed class PaymentQueryHandler(
                 : $"You have {ccy(snapshot.AvailableBalance)} available in your Education Account. You can use it for eligible course bills and supported student-finance charges. You currently have {ccy(snapshot.TotalOutstanding)} outstanding; open Bills & payments to review what can be paid now.";
             return new AiHandlerResult(accountUseText, "PAYMENT", Grounding(sources),
                 [new("FINANCE_SUMMARY", snapshot)],
-                [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")]);
+                [new("NAVIGATE", "Open Bills & payments page", "/portal/payments"), new("NAVIGATE", "Open education account", "/portal/account")]);
         }
 
         if (Regex.IsMatch(intent, @"\b(HOW|METHOD|OPTION|OPTIONS)\b", RegexOptions.IgnoreCase) && intent.Contains("PAY"))
@@ -56,7 +56,7 @@ public sealed class PaymentQueryHandler(
                 : PaymentOptionsText(snapshot);
             return new AiHandlerResult(paymentText, "PAYMENT", Grounding(sources),
                 [new("FINANCE_SUMMARY", snapshot)],
-                [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")]);
+                [new("NAVIGATE", "Open Bills & payments page", "/portal/payments"), new("NAVIGATE", "Open education account", "/portal/account")]);
         }
 
         if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
@@ -65,7 +65,7 @@ public sealed class PaymentQueryHandler(
                 ? "You have no outstanding course bills right now. Check the Bills & payments page for your payment history."
                 : $"You have {snapshot.BillCount} outstanding course bill{(snapshot.BillCount == 1 ? "" : "s")} totalling {ccy(snapshot.TotalOutstanding)}. View and pay these on the Bills & payments page.";
             return new AiHandlerResult(billText, "PAYMENT", Grounding(sources),
-                [new("OUTSTANDING_BILLS", snapshot.Bills)], [new("NAVIGATE", "Open Bills & payments page", "/portal/bills")]);
+                [new("OUTSTANDING_BILLS", snapshot.Bills)], [new("NAVIGATE", "Open Bills & payments page", "/portal/payments")]);
         }
 
         string paymentStatus = snapshot.TotalOutstanding <= 0
@@ -73,7 +73,7 @@ public sealed class PaymentQueryHandler(
             : "Review the available balance and outstanding charges before paying.";
         string text = $"Your live Education Account summary is below, including available balance, outstanding charges, and net available amount.\n\n{paymentStatus}\n\nUse the actions below to open the exact Bills & payments or Education Account view.";
         AiCard card = new("FINANCE_SUMMARY", snapshot);
-        AiAction[] actions = [new("NAVIGATE", "Open Bills & payments page", "/portal/bills"), new("NAVIGATE", "Open education account", "/portal/account")];
+        AiAction[] actions = [new("NAVIGATE", "Open Bills & payments page", "/portal/payments"), new("NAVIGATE", "Open education account", "/portal/account")];
         return new AiHandlerResult(text, "PAYMENT", Grounding(sources), [card], actions);
     }
 

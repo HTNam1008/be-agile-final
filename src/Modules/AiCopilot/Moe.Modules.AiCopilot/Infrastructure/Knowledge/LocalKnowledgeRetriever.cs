@@ -1,22 +1,60 @@
-using Microsoft.SemanticKernel.Embeddings;
+using Microsoft.Extensions.Logging;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 
 namespace Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 
 public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 {
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
+    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "an", "and", "are", "as", "at", "be", "can", "do", "does", "for", "from", "how",
+        "i", "in", "is", "it", "me", "my", "of", "on", "or", "the", "this", "to", "what",
+        "when", "where", "which", "with", "you"
+    };
+
     private readonly IKnowledgeDocumentStore _store;
-    private readonly ITextEmbeddingGenerationService _embeddings;
+    private readonly ILogger<LocalKnowledgeRetriever> _logger;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private KnowledgeDocument[]? _documents;
-    private ReadOnlyMemory<float>[]? _documentEmbeddings;
     private DateTime _lastLoadUtc = DateTime.MinValue;
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-    public LocalKnowledgeRetriever(IKnowledgeDocumentStore store, ITextEmbeddingGenerationService embeddings)
+    public LocalKnowledgeRetriever(IKnowledgeDocumentStore store, ILogger<LocalKnowledgeRetriever> logger)
     {
         _store = store;
-        _embeddings = embeddings;
+        _logger = logger;
+    }
+
+    public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
+    {
+        try
+        {
+            await EnsureDocumentsLoadedAsync(ct);
+            string[] queryTerms = Terms(query).ToArray();
+            if (queryTerms.Length == 0) return Array.Empty<KnowledgeResult>();
+
+            var scored = _documents!
+                .Where(doc => SearchesDomain(doc, domain))
+                .Select(doc => (Doc: doc, Score: Score(doc, query, queryTerms)))
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
+                .ToList();
+
+            scored = DeduplicateConflicting(scored);
+
+            return scored
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
+                .Take(Math.Clamp(limit, 1, 8))
+                .Select(MakeResult)
+                .ToArray();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Knowledge retrieval failed for query: {Query}", query);
+            return Array.Empty<KnowledgeResult>();
+        }
     }
 
     private async Task EnsureDocumentsLoadedAsync(CancellationToken ct)
@@ -27,55 +65,52 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         {
             if (_documents is not null && DateTime.UtcNow - _lastLoadUtc < CacheDuration) return;
             _documents = (await _store.GetAllAsync(ct)).ToArray();
-            _documentEmbeddings = null;
             _lastLoadUtc = DateTime.UtcNow;
         }
-        finally { _cacheLock.Release(); }
-    }
-
-    public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
-    {
-        await EnsureDocumentsLoadedAsync(ct);
-        ReadOnlyMemory<float>[] docEmbeddings = await GetDocumentEmbeddingsAsync(ct);
-        return await SemanticRetrieveAsync(query, domain, docEmbeddings, limit, ct);
-    }
-
-    private async Task<ReadOnlyMemory<float>[]> GetDocumentEmbeddingsAsync(CancellationToken ct)
-    {
-        if (_documentEmbeddings is not null) return _documentEmbeddings;
-        await _cacheLock.WaitAsync(ct);
-        try
+        finally
         {
-            if (_documentEmbeddings is not null) return _documentEmbeddings;
-            string[] texts = _documents!.Select(d => $"{d.Title}\n{d.Section}\n{d.Content}\n{string.Join(" ", d.Synonyms ?? [])}").ToArray();
-            IList<ReadOnlyMemory<float>> embeddings = await _embeddings.GenerateEmbeddingsAsync(texts, cancellationToken: ct);
-            _documentEmbeddings = embeddings.ToArray();
-            return _documentEmbeddings;
+            _cacheLock.Release();
         }
-        finally { _cacheLock.Release(); }
     }
 
-    private async Task<IReadOnlyList<KnowledgeResult>> SemanticRetrieveAsync(string query, string? domain, ReadOnlyMemory<float>[] docEmbeddings, int limit, CancellationToken ct)
+    private static bool SearchesDomain(KnowledgeDocument doc, string? domain) =>
+        string.IsNullOrWhiteSpace(domain) ||
+        domain.Equals("GENERAL", StringComparison.OrdinalIgnoreCase) ||
+        doc.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase);
+
+    private static double Score(KnowledgeDocument doc, string query, string[] queryTerms)
     {
-        ReadOnlyMemory<float> queryEmbedding = await _embeddings.GenerateEmbeddingAsync(query, cancellationToken: ct);
-        string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
+        string title = doc.Title.ToUpperInvariant();
+        string section = doc.Section.ToUpperInvariant();
+        string content = doc.Content.ToUpperInvariant();
+        string[] synonymTerms = (doc.Synonyms ?? []).SelectMany(Terms).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        string fullText = $"{title} {section} {content} {string.Join(' ', synonymTerms)}";
+        int hits = queryTerms.Count(term => fullText.Contains(term, StringComparison.Ordinal));
+        if (hits == 0 && !doc.AlwaysInclude) return 0;
 
-        var scored = _documents!
-            .Select((doc, i) => (Doc: doc, Score: (double)CosineSimilarity(queryEmbedding.Span, docEmbeddings[i].Span)))
-            .Where(x => x.Score > 0.72)
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
-            .ToList();
+        double score = hits / (double)queryTerms.Length;
+        score += queryTerms.Count(term => title.Contains(term, StringComparison.Ordinal)) * 0.30;
+        score += queryTerms.Count(term => section.Contains(term, StringComparison.Ordinal)) * 0.25;
+        score += queryTerms.Count(term => synonymTerms.Contains(term, StringComparer.OrdinalIgnoreCase)) * 0.35;
 
-        scored = DeduplicateConflicting(scored);
+        string normalizedQuery = query.ToUpperInvariant();
+        foreach (string synonym in doc.Synonyms ?? [])
+        {
+            if (normalizedQuery.Contains(synonym.ToUpperInvariant(), StringComparison.Ordinal))
+                score += 0.70;
+        }
 
-        return scored
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
-            .Take(Math.Clamp(limit, 1, 8))
-            .Select(MakeResult)
-            .ToArray();
+        if (doc.AlwaysInclude) score += 0.10;
+        if (doc.Status.Equals("OFFICIAL", StringComparison.OrdinalIgnoreCase)) score += 0.06;
+        else if (doc.Status.Equals("GUIDE", StringComparison.OrdinalIgnoreCase)) score += 0.03;
+        return score;
     }
+
+    private static IEnumerable<string> Terms(string text) =>
+        text.ToUpperInvariant()
+            .Split([' ', '\t', '\n', '\r', ',', '.', '!', '?', ':', ';', '/', '\\', '-', '(', ')', '[', ']', '"', '\''], StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => x.Length > 1 && !StopWords.Contains(x));
 
     private static KnowledgeResult MakeResult((KnowledgeDocument Doc, double Score) x) => new(
         new KnowledgeCitation(x.Doc.Id, x.Doc.Title, x.Doc.Section, x.Doc.Status,
@@ -84,18 +119,6 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         x.Doc.FollowUps ?? DefaultFollowUps(x.Doc.Domain, x.Doc.Title),
         x.Doc.AllowedIntents ?? DefaultAllowedIntents(x.Doc.Domain),
         x.Doc.ReviewOwner);
-
-    private static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
-    {
-        float dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-        return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
-    }
 
     private static List<(KnowledgeDocument Doc, double Score)> DeduplicateConflicting(List<(KnowledgeDocument Doc, double Score)> scored)
     {

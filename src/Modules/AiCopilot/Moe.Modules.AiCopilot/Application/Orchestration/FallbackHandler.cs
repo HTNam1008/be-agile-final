@@ -44,7 +44,7 @@ public sealed class FallbackHandler(
     private static AiAction[] FallbackActions(Guid review) =>
         [
             new("NAVIGATE", "Education Account FAQ", "/portal/account"),
-            new("NAVIGATE", "Payment FAQ", "/portal/bills"),
+            new("NAVIGATE", "Payment FAQ", "/portal/payments"),
             new("NAVIGATE", "FAS FAQ", "/portal/fas"),
             new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })
         ];

@@ -4,7 +4,6 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Moe.Modules.AiCopilot.Api;
 using Moe.Modules.AiCopilot.Application.Finance;
-using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
 using Moe.Modules.FasPayment.Application.StudentApplications;
 
@@ -17,22 +16,20 @@ public sealed class AiAgenticTurnService
     private readonly Kernel _singletonKernel;
     private readonly AiFinanceReader _finance;
     private readonly StudentFasApplicationService _fasService;
-    private readonly IKnowledgeRetriever _knowledge;
     private readonly ILogger<AiAgenticTurnService> _logger;
 
-    public AiAgenticTurnService(Kernel singletonKernel, AiFinanceReader finance, StudentFasApplicationService fasService, IKnowledgeRetriever knowledge, ILogger<AiAgenticTurnService> logger)
+    public AiAgenticTurnService(Kernel singletonKernel, AiFinanceReader finance, StudentFasApplicationService fasService, ILogger<AiAgenticTurnService> logger)
     {
         _singletonKernel = singletonKernel;
         _finance = finance;
         _fasService = fasService;
-        _knowledge = knowledge;
         _logger = logger;
     }
 
     public async Task<AiHandlerResult> ExecuteTurnAsync(AiConversation conversation, AiChatRequest request, CancellationToken ct)
     {
         Kernel kernel = _singletonKernel.Clone();
-        var plugin = new AiCopilotPlugin(_finance, _fasService, _knowledge) { CurrentConversation = conversation };
+        var plugin = new AiCopilotPlugin(_finance, _fasService) { CurrentConversation = conversation };
         kernel.ImportPluginFromObject(plugin, "AiCopilot");
         IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
 
@@ -106,8 +103,6 @@ Current session context:
     {
         var cards = new List<AiCard>();
         var actions = new List<AiAction>();
-        IReadOnlyCollection<KnowledgeCitation> citations = Array.Empty<KnowledgeCitation>();
-        bool isGrounded = false;
 
         if (mode == "PAYMENT" && plugin.FetchedSnapshot is { } snap)
         {
@@ -115,34 +110,21 @@ Current session context:
             if (intent.Contains("HISTORY") || intent.Contains("PAID") || intent.Contains("REFUND"))
             {
                 cards.Add(new("PAYMENT_HISTORY", snap.RecentPayments));
-                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/bills"));
+                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/payments"));
             }
             else if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
             {
                 cards.Add(new("OUTSTANDING_BILLS", snap.Bills));
-                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/bills"));
+                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/payments"));
             }
             else
             {
                 cards.Add(new("FINANCE_SUMMARY", snap));
-                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/bills"));
+                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/payments"));
                 actions.Add(new("NAVIGATE", "Open education account", "/portal/account"));
             }
         }
 
-        if (plugin.FetchedSources is { Count: > 0 } sources)
-        {
-            isGrounded = true;
-            citations = sources.Select(x => x.Citation).ToArray();
-            var card = KnowledgeAnswerHandler.BuildKnowledgeAnswerCard(message, sources);
-            cards.Add(new("KNOWLEDGE_ANSWER", card));
-            bool hasFasSource = sources.Any(s => s.Citation.SourceId.StartsWith("FAS-", StringComparison.OrdinalIgnoreCase));
-            if (hasFasSource)
-            {
-                actions.Add(new("NAVIGATE", "Open FAS application", "/portal/fas"));
-            }
-        }
-
-        return new AiHandlerResult(text, mode, new(isGrounded, citations), cards, actions);
+        return new AiHandlerResult(text, mode, new(false, []), cards, actions);
     }
 }

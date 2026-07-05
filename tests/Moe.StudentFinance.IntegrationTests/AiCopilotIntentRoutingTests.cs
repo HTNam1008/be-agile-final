@@ -242,7 +242,7 @@ public sealed class AiCopilotIntentRoutingTests(CustomWebApplicationFactory fact
         request.Content = JsonContent.Create(new
         {
             message = "help me with fas",
-            pageContext = new { domain = "PAYMENT", surface = "PORTAL", path = "/portal/bills" }
+            pageContext = new { domain = "PAYMENT", surface = "PORTAL", path = "/portal/payments" }
         });
         using HttpResponseMessage response = await _client.SendAsync(request);
         JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
