@@ -29,7 +29,11 @@ public sealed class AiStreamingService
             messageId = response.MessageId,
             text = response.Text,
             mode = response.Mode,
-            interviewState = response.InterviewState
+            interviewState = response.InterviewState,
+            followUpQuestions = response.FollowUpQuestions,
+            turnIntent = response.TurnIntent,
+            conversationPhase = response.ConversationPhase,
+            reviewRecordId = response.ReviewRecordId
         };
         await WriteSseEventAsync(httpContext, "done", JsonSerializer.Serialize(donePayload, JsonOptions), ct);
     }
