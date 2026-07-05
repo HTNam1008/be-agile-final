@@ -97,6 +97,7 @@ public sealed class CourseBillingModule : IModule
 
         services.AddScoped<IQueryHandler<ListCourseMaterialsQuery, IReadOnlyList<CourseMaterialDto>>, ListCourseMaterialsQueryHandler>();
         services.AddScoped<ICommandHandler<AddCourseMaterialCommand, CourseMaterialDto>, AddCourseMaterialCommandHandler>();
+        services.AddScoped<ICommandHandler<CopyCourseMaterialsCommand, IReadOnlyList<CourseMaterialDto>>, CopyCourseMaterialsCommandHandler>();
         services.AddScoped<ICommandHandler<UpdateCourseMaterialCommand, CourseMaterialDto>, UpdateCourseMaterialCommandHandler>();
         services.AddScoped<ICommandHandler<ReplaceCourseMaterialFileCommand, CourseMaterialDto>, ReplaceCourseMaterialFileCommandHandler>();
         services.AddScoped<ICommandHandler<DeleteCourseMaterialCommand, CourseMaterialDto>, DeleteCourseMaterialCommandHandler>();

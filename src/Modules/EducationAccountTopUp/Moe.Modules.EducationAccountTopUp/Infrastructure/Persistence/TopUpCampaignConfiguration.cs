@@ -12,6 +12,8 @@ internal sealed class TopUpCampaignConfiguration : IEntityTypeConfiguration<TopU
         {
             t.HasCheckConstraint("CK_TopUpCampaign_Amount", "[DefaultTopUpAmount] > 0");
             t.HasCheckConstraint("CK_TopUpCampaign_Schedule", "[ScheduleTypeCode] != 'RECURRING' OR ([FrequencyCode] IS NOT NULL AND [FrequencyInterval] IS NOT NULL AND [EndDate] IS NOT NULL AND [EndDate] >= [StartDate])");
+            t.HasCheckConstraint("CK_TopUpCampaign_WeeklyDayOfWeek", "[WeeklyDayOfWeek] IS NULL OR [WeeklyDayOfWeek] BETWEEN 0 AND 6");
+            t.HasCheckConstraint("CK_TopUpCampaign_MonthlyDay", "[MonthlyDay] IS NULL OR [MonthlyDay] BETWEEN 1 AND 31");
         });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("TopUpCampaignId").UseIdentityColumn();

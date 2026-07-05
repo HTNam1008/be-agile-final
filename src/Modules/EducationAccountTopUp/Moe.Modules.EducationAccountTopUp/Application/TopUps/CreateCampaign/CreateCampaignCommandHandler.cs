@@ -47,12 +47,8 @@ internal sealed class CreateCampaignCommandHandler(
         {
             frequencyCode = request.FrequencyCode;
             frequencyInterval = request.FrequencyInterval;
-            weeklyDayOfWeek = string.Equals(frequencyCode, FrequencyCode.Weekly.ToString(), StringComparison.OrdinalIgnoreCase)
-                ? request.WeeklyDayOfWeek
-                : null;
-            monthlyDay = string.Equals(frequencyCode, FrequencyCode.Monthly.ToString(), StringComparison.OrdinalIgnoreCase)
-                ? request.MonthlyDay
-                : null;
+            weeklyDayOfWeek = request.WeeklyDayOfWeek;
+            monthlyDay = request.MonthlyDay;
             endDate = request.EndDate;
         }
 
