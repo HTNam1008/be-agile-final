@@ -30,9 +30,12 @@ internal static class FasConfirmationService
             facts.Add($"Other monthly income: {s.OtherMonthlyIncome?.ToString("C", CultureInfo.GetCultureInfo("en-SG")) ?? "Not provided"}");
         }
         facts.Add($"Parent or guardian nationality: {(s.ParentNationalities.Count == 0 ? "Not provided" : string.Join(", ", s.ParentNationalities))}");
+        if (s.Email is not null)
+            facts.Add($"Application email: {s.Email}");
 
-        return $"Before I calculate FAS eligibility, please confirm these details are correct:\n\n{string.Join("\n", facts.Select(x => $"- {x}"))}\n\nReply yes to calculate eligibility, or no to stop and edit the form manually.";
+        return $"Before I calculate FAS eligibility, please confirm these details are correct:\n\n{string.Join("\n", facts.Select(x => $"- {x}"))}\n\nReply yes to calculate eligibility. To correct any detail above, just say what you want to change (e.g. \"actually 2500\" or \"change to Foreigner\").";
     }
+
 
     internal static AiInterviewState ToInterviewState(FasInterviewData s, string? next, IReadOnlyCollection<FasRecommendationMatch>? recommendedSchemes = null)
     {

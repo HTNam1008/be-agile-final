@@ -19,6 +19,57 @@ public sealed class KnowledgeAnswerHandler(
 {
     private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
+    // ── Pre-compiled regex patterns (CA1869 fix) ───────────────────────────
+    private static readonly Regex InstructionHeadingPattern = new(
+        @"^(answer|do not|source|notes?|scope|in scope|explicitly out of scope)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex DocumentFactPattern = new(
+        @"\b(document|income proof|cpf|iras|payslip|assessment|supporting|attach|declare|rental|dividend|investment)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex GhiFormulaPattern = new(
+        @"\b(GHI|GROSS HOUSEHOLD INCOME)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex GhiCalcPattern = new(
+        @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|DEFINE|MEAN)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex SubsidyBursaryPattern = new(
+        @"\b(SUBSIDY|BURSARY)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex SubsidyRatePattern = new(
+        @"\b(RATE|CALCULAT\w*|DETERMINE|HOW|FORMULA|TIER)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PciTermPattern = new(
+        @"\b(PCI|PER[-\s]?CAPITA|PER CAPITA INCOME)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PciCalcPattern = new(
+        @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|MEAN)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex HouseholdIncomeWhatPattern = new(
+        @"\b(what|which|count|counts|included|include)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex HouseholdIncomeContextPattern = new(
+        @"\b(household income|income for fas|fas income)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex DocumentQuestionPattern = new(
+        @"\b(document|documents|proof|payslip|cpf|iras|supporting)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex WhitespaceNormalizePattern = new(
+        @"\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex BoldMarkerPattern = new(
+        @"\*{1,2}",
+        RegexOptions.Compiled);
+    private static readonly Regex SentenceSplitPattern = new(
+        @"(?<=[.!?])\s+",
+        RegexOptions.Compiled);
+    private static readonly Regex HeadingStripPattern = new(
+        @"^[#*\-\s|>]+",
+        RegexOptions.Compiled);
+    private static readonly Regex NormalizeFollowUpPattern = new(
+        @"\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // ───────────────────────────────────────────────────────────────────────
+
     public async Task<AiHandlerResult> HandleAsync(AiConversation conversation, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
     {
         if (AiKeywordMatchers.LooksLikeScopeTest(request.Message))
@@ -98,15 +149,36 @@ public sealed class KnowledgeAnswerHandler(
 
         KnowledgeAnswerCard knowledgeCard = BuildKnowledgeAnswerCard(request.Message, sources);
         string sourceText = string.Join("\n", sources.Select(x => $"[{x.Citation.SourceId}] ({x.Citation.SourceStatus}) {x.Content}"));
-        if (isFasKnowledgeRequest && sources.Count > 0)
+
+        // Formula and document questions get deterministic fast-path answers.
+        // All other questions — including FAS scheme info — go through the LLM
+        // so the student gets a real synthesised answer, not a generic card-redirect.
+        string? fastPathText = null;
+        if (isFasKnowledgeRequest)
         {
-            string deterministicText = BuildKnowledgeAnswer(request.Message, sources);
-            return new AiHandlerResult(deterministicText, "GENERAL", Grounding(sources),
+            if (LooksLikeFormulaQuestion(request.Message))
+                fastPathText = FormulaAnswer(request.Message);
+            else if (LooksLikeHouseholdIncomeDefinitionQuestion(request.Message))
+                fastPathText = "Household income usually means the combined monthly income of household members, including employment income and other regular income such as rental, dividend, or investment income where applicable.";
+            else if (LooksLikeDocumentQuestion(request.Message))
+            {
+                string firstFact = knowledgeCard.Summary;
+                fastPathText = string.IsNullOrWhiteSpace(firstFact)
+                    ? "Before submitting FAS, prepare the income and supporting documents requested by the institution, then review the form before submission."
+                    : $"Before submitting FAS, prepare the requested supporting documents. {firstFact}";
+            }
+        }
+
+        if (fastPathText is not null)
+        {
+            return new AiHandlerResult(fastPathText, "GENERAL", Grounding(sources),
                 [new("KNOWLEDGE_ANSWER", knowledgeCard)], KnowledgeActions(sources))
             {
                 FollowUpQuestions = ContextualKnowledgeFollowUps(conversation, request.Message, knowledgeCard.FollowUpQuestions)
             };
         }
+
+        // LLM-synthesised answer for all grounded questions (FAS scheme info, process, eligibility facts, etc.)
         var history = new ChatHistory(
             "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
             "Keep the answer under 120 words. Lead with the direct answer. Ask at most one next question.\n" +
@@ -128,29 +200,22 @@ public sealed class KnowledgeAnswerHandler(
         };
     }
 
-    private static string BuildKnowledgeAnswer(string question, IReadOnlyList<KnowledgeResult> sources)
+    // BuildKnowledgeAnswer is no longer the primary FAS answer path — LLM handles those.
+    // Retained for formula/document fast-paths only, called inline above.
+    private static string BuildKnowledgeAnswerFallback(string question, IReadOnlyList<KnowledgeResult> sources)
     {
-        if (LooksLikeFormulaQuestion(question))
-        {
-            return FormulaAnswer(question);
-        }
+        if (LooksLikeFormulaQuestion(question)) return FormulaAnswer(question);
         if (LooksLikeHouseholdIncomeDefinitionQuestion(question))
-        {
             return "Household income usually means the combined monthly income of household members, including employment income and other regular income such as rental, dividend, or investment income where applicable.";
-        }
         if (LooksLikeDocumentQuestion(question))
         {
-            KnowledgeAnswerCard documentCard = BuildKnowledgeAnswerCard(question, sources);
-            string firstFact = documentCard.Summary;
+            string firstFact = BuildKnowledgeAnswerCard(question, sources).Summary;
             return string.IsNullOrWhiteSpace(firstFact)
                 ? "Before submitting FAS, prepare the income and supporting documents requested by the institution, then review the form before submission."
                 : $"Before submitting FAS, prepare the requested supporting documents. {firstFact}";
         }
-
-        KnowledgeResult primary = sources[0];
-        KnowledgeAnswerCard card = BuildKnowledgeAnswerCard(question, sources);
-        string topic = primary.Citation.Section;
-        return $"I found reviewed guidance for {topic}. I kept the details in the card below so the answer is easier to scan.";
+        // Generic grounded fallback — LLM path should be preferred over this.
+        return $"Here is what I found about {sources[0].Citation.Section}. Review the card below for details.";
     }
 
     private static string FormulaAnswer(string question)
@@ -232,24 +297,24 @@ public sealed class KnowledgeAnswerHandler(
             .Take(4)
             .ToArray();
         string text = string.Join(" ", lines);
-        text = Regex.Replace(text, @"\s+", " ").Trim();
+        text = WhitespaceNormalizePattern.Replace(text, " ").Trim();
         return text.Length <= 360 ? text : $"{text[..360].TrimEnd()}...";
     }
 
     private static IEnumerable<string> KnowledgeLines(string content) => content.Split('\n')
-        .Select(line => Regex.Replace(line.Trim(), @"^[#*\-\s|>]+", "").Trim())
+        .Select(line => HeadingStripPattern.Replace(line.Trim(), "").Trim())
         .Where(line => line.Length > 0 && !line.Contains("---", StringComparison.Ordinal) && !line.StartsWith("|", StringComparison.Ordinal))
-        .Select(line => Regex.Replace(line, @"\s+", " ").Trim())
+        .Select(line => WhitespaceNormalizePattern.Replace(line, " ").Trim())
         .Where(line => line.Length > 0);
 
     private static bool LooksLikeInstructionHeading(string line) =>
-        Regex.IsMatch(line, @"^(answer|do not|source|notes?|scope|in scope|explicitly out of scope)\b", RegexOptions.IgnoreCase);
+        InstructionHeadingPattern.IsMatch(line);
 
     private static IEnumerable<string> KnowledgeFacts(string content)
     {
         foreach (string line in KnowledgeLines(content).Where(line => !LooksLikeInstructionHeading(line)))
         {
-            foreach (string sentence in Regex.Split(line, @"(?<=[.!?])\s+"))
+            foreach (string sentence in SentenceSplitPattern.Split(line))
             {
                 string value = sentence.Trim();
                 if (value.Length > 0)
@@ -265,7 +330,7 @@ public sealed class KnowledgeAnswerHandler(
         if (lower.Contains("document") || lower.Contains("proof") || lower.Contains("payslip") || lower.Contains("cpf") || lower.Contains("iras"))
         {
             string[] documentFacts = facts
-                .Where(f => Regex.IsMatch(f, @"\b(document|income proof|cpf|iras|payslip|assessment|supporting|attach|declare|rental|dividend|investment)\b", RegexOptions.IgnoreCase))
+                .Where(f => DocumentFactPattern.IsMatch(f))
                 .ToArray();
             if (documentFacts.Length > 0)
                 return documentFacts;
@@ -275,25 +340,21 @@ public sealed class KnowledgeAnswerHandler(
     }
 
     private static string StripBoldMarkers(string text) =>
-        Regex.Replace(text, @"\*{1,2}", "");
+        BoldMarkerPattern.Replace(text, "");
 
     private static bool LooksLikeFormulaQuestion(string message) =>
         LooksLikePciQuestion(message) ||
-        (Regex.IsMatch(message, @"\b(GHI|GROSS HOUSEHOLD INCOME)\b", RegexOptions.IgnoreCase) &&
-         Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|DEFINE|MEAN)\b", RegexOptions.IgnoreCase)) ||
-        (Regex.IsMatch(message, @"\b(SUBSIDY|BURSARY)\b", RegexOptions.IgnoreCase) &&
-         Regex.IsMatch(message, @"\b(RATE|CALCULAT\w*|DETERMINE|HOW|FORMULA|TIER)\b", RegexOptions.IgnoreCase));
+        (GhiFormulaPattern.IsMatch(message) && GhiCalcPattern.IsMatch(message)) ||
+        (SubsidyBursaryPattern.IsMatch(message) && SubsidyRatePattern.IsMatch(message));
 
     private static bool LooksLikePciQuestion(string message) =>
-        Regex.IsMatch(message, @"\b(PCI|PER[-\s]?CAPITA|PER CAPITA INCOME)\b", RegexOptions.IgnoreCase) &&
-        Regex.IsMatch(message, @"\b(CALCULAT\w*|FORMULA|HOW|WHAT|MEAN)\b", RegexOptions.IgnoreCase);
+        PciTermPattern.IsMatch(message) && PciCalcPattern.IsMatch(message);
 
     private static bool LooksLikeHouseholdIncomeDefinitionQuestion(string message) =>
-        Regex.IsMatch(message, @"\b(what|which|count|counts|included|include)\b", RegexOptions.IgnoreCase) &&
-        Regex.IsMatch(message, @"\b(household income|income for fas|fas income)\b", RegexOptions.IgnoreCase);
+        HouseholdIncomeWhatPattern.IsMatch(message) && HouseholdIncomeContextPattern.IsMatch(message);
 
     private static bool LooksLikeDocumentQuestion(string message) =>
-        Regex.IsMatch(message, @"\b(document|documents|proof|payslip|cpf|iras|supporting)\b", RegexOptions.IgnoreCase);
+        DocumentQuestionPattern.IsMatch(message);
 
     private static IReadOnlyList<AiAction> KnowledgeActions(IReadOnlyList<KnowledgeResult> sources)
     {
@@ -322,7 +383,7 @@ public sealed class KnowledgeAnswerHandler(
     }
 
     private static string NormalizeFollowUp(string value) =>
-        Regex.Replace(value.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant);
+        NormalizeFollowUpPattern.Replace(value.Trim().TrimEnd('.', '?', '!'), " ");
 
     private static string[] PlanFollowUps(string mode, string message, AiInterviewState? interviewState, IReadOnlyList<KnowledgeResult> sources)
     {

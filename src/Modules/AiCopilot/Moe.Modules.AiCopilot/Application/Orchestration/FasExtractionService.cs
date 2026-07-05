@@ -228,8 +228,8 @@ Rules:
 - "about"/"around"/"approximately" -> extract the number, ambiguous=false.
 - "yes"/"yeah"/"y"/"correct" for isWelfareHomeResident -> true
 - "no"/"n"/"nah" for isWelfareHomeResident -> false
-- parentNationalities: standard demonyms (Singaporean, Malaysian, Chinese, Indian, etc.)
-- employmentStatusCode: "working"->EMPLOYED, "no job"->UNEMPLOYED, "freelance"->SELF_EMPLOYED
+- parentNationalities: MUST be one of exactly these strings: "Singapore Citizen" (for Singaporean/SG citizen/SC), "Permanent Resident" (for PR), "Foreigner" (for any other nationality including Malaysian, Chinese, Indian, Vietnamese, etc.). Return as array.
+- employmentStatusCode: "working"/"employed"/"employee"/"full-time"/"part-time"->EMPLOYED, "no job"/"jobless"/"not working"/"unemployed"->UNEMPLOYED, "freelance"/"self-employed"/"business owner"/"contractor"->SELF_EMPLOYED
 
 CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know or can't provide a number ("I'm not sure", "I don't know", "maybe 3k or 4k" with doubt). If the user provides ANY specific amounts (even as a range or multiple numbers), set ambiguous=false and extract the best value.
 """);

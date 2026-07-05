@@ -157,9 +157,25 @@ public sealed class FasInterviewHandler(
         string em = st.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
         c.Touch(em, pj, now); SaveFasState(c, st, now);
         List<AiCard> cards = rec is null ? [] : [new("FAS_RECOMMENDATION", rec)];
+        if (st.Status == "COMPLETE")
+        {
+            // FAS_TASK_STATE card — summarises the concluded interview task for the frontend task-state panel.
+            int confirmedCount = ivw.Fields.Count(f => f.Confirmed);
+            cards.Add(new("FAS_TASK_STATE", new
+            {
+                status = "COMPLETE",
+                confirmedFieldCount = confirmedCount,
+                recommendedSchemeCount = schemes.Length,
+                isWelfareHomeResident = st.IsWelfareHomeResident,
+                perCapitaIncome = (st.MonthlyHouseholdIncome.HasValue && st.HouseholdMemberCount is > 0)
+                    ? (decimal?)decimal.Round(st.MonthlyHouseholdIncome.Value / st.HouseholdMemberCount!.Value, 2)
+                    : null
+            }));
+        }
         List<AiAction> acts = st.Status == "COMPLETE" ? [new("NAVIGATE", "Open FAS application", "/portal/fas", ivw.FormPatch)] : [];
         if (st.Status == "COMPLETE") acts.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: ivw.FormPatch));
         return new(text, em, new(false, []), cards, acts, ivw);
+
     }
 
     private async Task<AiHandlerResult?> HandleConfirmingGate(AiConversation c, AiChatRequest req, FasInterviewData st, DateTime now, CancellationToken ct)
