@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Embeddings;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
 using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
@@ -102,7 +104,11 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     [Fact]
     public async Task Knowledge_retriever_maps_natural_school_fee_help_to_fas()
     {
-        var services = new ServiceCollection().BuildServiceProvider();
+        var builder = Kernel.CreateBuilder();
+        builder.Services.AddSingleton<ITextEmbeddingGenerationService>(new FakeTextEmbeddingGenerationService());
+        var services = new ServiceCollection()
+            .AddSingleton(builder.Build())
+            .BuildServiceProvider();
         var store = new EmbeddedKnowledgeDocumentStore();
         var retriever = new LocalKnowledgeRetriever(services, store);
 

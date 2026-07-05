@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -12,7 +11,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class AiTurnPlannerService(
     IConfiguration configuration,
-    IServiceProvider services,
+    Kernel kernel,
     ILogger<AiTurnPlannerService> logger)
 {
     internal async Task<AiTurnPlan> PlanAsync(AiChatRequest request, AiConversation conversation, CancellationToken ct)
@@ -34,7 +33,6 @@ public sealed class AiTurnPlannerService(
     {
         try
         {
-            Kernel kernel = services.GetRequiredService<Kernel>();
             var history = new ChatHistory(
                 "You classify one MOE Student Finance copilot turn. Return compact JSON only with keys: intent, phase, confidence, answerGoal. " +
                 "Allowed intents: START_FAS, CONTINUE_FAS, ANSWER_KNOWLEDGE, PAYMENT_QUERY, COURSE_QUERY, CANCEL_FAS, PAUSE_FAS, SWITCH_TOPIC, OUT_OF_SCOPE_SMALL_TALK, CLARIFY_FAS_TYPO, FALLBACK. " +

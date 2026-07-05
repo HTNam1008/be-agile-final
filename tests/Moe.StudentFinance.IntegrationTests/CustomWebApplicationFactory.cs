@@ -13,6 +13,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Embeddings;
+using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.EducationAccountTopUp.Application.Lifecycle;
@@ -43,6 +47,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // Remove the app's DbContext registration.
             services.RemoveAll(typeof(DbContextOptions<MoeDbContext>));
             services.RemoveAll(typeof(DbContextOptions));
+            services.RemoveAll<IKnowledgeRetriever>();
+            services.AddSingleton<IKnowledgeRetriever>(_ => new StubKnowledgeRetriever());
 
             // Create a single shared internal service provider for all in-memory database contexts.
             var inMemoryServiceProvider = new ServiceCollection()
@@ -450,6 +456,62 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
     private static void SetProperty(object entity, string propertyName, object? value)
     {
         entity.GetType().GetProperty(propertyName)!.SetValue(entity, value);
+    }
+}
+
+#pragma warning disable SKEXP0001
+internal sealed class FakeTextEmbeddingGenerationService : ITextEmbeddingGenerationService
+{
+    private static readonly ReadOnlyMemory<float> DummyEmbedding = new float[] { 1, 0, 0, 0, 0, 0, 0, 0 };
+
+    public IReadOnlyDictionary<string, object?> Attributes { get; } = new Dictionary<string, object?>();
+
+    public Task<ReadOnlyMemory<float>> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)
+        => Task.FromResult(DummyEmbedding);
+
+    public Task<IList<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IList<string> texts, CancellationToken cancellationToken = default)
+        => Task.FromResult<IList<ReadOnlyMemory<float>>>(texts.Select(_ => DummyEmbedding).ToArray());
+
+    public Task<IList<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IList<string> data, Kernel? kernel, CancellationToken cancellationToken = default)
+        => Task.FromResult<IList<ReadOnlyMemory<float>>>(data.Select(_ => DummyEmbedding).ToArray());
+}
+#pragma warning restore SKEXP0001
+
+internal sealed class StubKnowledgeRetriever : IKnowledgeRetriever
+{
+    private readonly EmbeddedKnowledgeDocumentStore _store = new();
+
+    public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
+    {
+        IReadOnlyList<KnowledgeDocument> docs = await _store.GetAllAsync(ct);
+        string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
+
+        return docs
+            .Where(d => d.Domain == normalizedDomain)
+            .Take(Math.Clamp(limit, 1, 8))
+            .Select(d => new KnowledgeResult(
+                new KnowledgeCitation(d.Id, d.Title, d.Section, d.Status, d.Version, d.EffectiveDate, d.Url),
+                d.Content, 1.0,
+                d.FollowUps ?? DefaultFollowUps(d.Domain, d.Title),
+                d.AllowedIntents ?? DefaultAllowedIntents(d.Domain),
+                d.ReviewOwner))
+            .ToArray();
+    }
+
+    private static string[] DefaultAllowedIntents(string domain) =>
+        domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase)
+            ? ["AnswerKnowledgeQuestion", "PaymentQuery"]
+            : ["AnswerKnowledgeQuestion", "StartInterview", "ContinueInterview"];
+
+    private static string[] DefaultFollowUps(string domain, string title)
+    {
+        if (domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase))
+            return ["Show my outstanding bills.", "How can I pay a bill?", "Explain refunds."];
+        if (title.Contains("Application", StringComparison.OrdinalIgnoreCase))
+            return ["What documents prove income?", "Which schemes can I apply for?", "How is PCI calculated?"];
+        if (title.Contains("Bursary", StringComparison.OrdinalIgnoreCase) || title.Contains("Subsidy", StringComparison.OrdinalIgnoreCase))
+            return ["Which schemes can I apply for?", "What documents prove income?", "How is PCI calculated?"];
+        return ["How is PCI calculated?", "Which schemes can I apply for?", "What documents prove income?"];
     }
 }
 

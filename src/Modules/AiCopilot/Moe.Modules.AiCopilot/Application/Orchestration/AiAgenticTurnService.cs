@@ -48,7 +48,8 @@ You are the MOE Student Finance AI Copilot for Singapore's Ministry of Education
 You have tools available. Use them when they can help answer the student's question:
 - **GetFinanceSnapshotAsync** — call this for balance, bills, payment history, refund queries.
 - **SearchKnowledgeBaseAsync** — call this for FAS policy, bursary, subsidy, scheme, document, eligibility process questions.
-- **CancelFasInterviewAsync** — call this when the student asks to stop/cancel/pause a FAS interview.
+- **CancelFasInterview** — call this when the student asks to stop/cancel/pause a FAS interview.
+- **GetProfileFacts** — call this to retrieve student profile facts for FAS prefill (email, nationality, institution).
 - **CheckFasEligibilityAsync** — call this when the student has provided all FAS income/household/nationality facts and wants eligibility results.
 
 Conversation rules:
@@ -69,9 +70,24 @@ Current session context:
             {
                 FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
             };
-            ChatMessageContent answer = await chat.GetChatMessageContentAsync(history,
-                executionSettings: execSettings, kernel: _kernel, cancellationToken: ct);
-            string text = answer.Content?.Trim() ?? "I'm not sure how to help with that.";
+            string text;
+            while (true)
+            {
+                ChatMessageContent answer = await chat.GetChatMessageContentAsync(history,
+                    executionSettings: execSettings, kernel: _kernel, cancellationToken: ct);
+
+                // If the assistant sent text content (not a tool call), we're done
+                if (!string.IsNullOrEmpty(answer.Content))
+                {
+                    text = answer.Content.Trim();
+                    break;
+                }
+
+                // Assistant made tool calls — SK auto-invoked them and added results
+                // to history. Add the assistant's message so the next LLM call sees
+                // both the function call and its result.
+                history.Add(answer);
+            }
 
             string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
                 ? "FAS_INTERVIEW"

@@ -2,13 +2,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
-public sealed class FasExtractionService(IServiceProvider services)
+public sealed class FasExtractionService(Kernel kernel)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -38,7 +37,7 @@ public sealed class FasExtractionService(IServiceProvider services)
         AllExtractionSchemaElement = doc.RootElement.Clone();
     }
 
-    private static PromptExecutionSettings CreateJsonSchemaExecutionSettings(JsonElement schemaElement, string schemaName)
+    private static PromptExecutionSettings CreateJsonSchemaExecutionSettings(JsonElement schemaElement, string schemaName, bool strict = true)
     {
         return new PromptExecutionSettings
         {
@@ -50,7 +49,7 @@ public sealed class FasExtractionService(IServiceProvider services)
                     ["json_schema"] = new Dictionary<string, object>
                     {
                         ["name"] = schemaName,
-                        ["strict"] = true,
+                        ["strict"] = strict,
                         ["schema"] = schemaElement
                     }
                 }
@@ -89,8 +88,6 @@ public sealed class FasExtractionService(IServiceProvider services)
         if (LooksLikeFieldHelpRequest(message))
             return null;
 
-        Kernel kernel;
-        try { kernel = services.GetRequiredService<Kernel>(); } catch { return null; }
         try
         {
             IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
@@ -105,14 +102,19 @@ Their answer may cover one or more needed fields: {{fieldsNeeded}}
 
 Rules:
 - "k"/"K" -> multiply by 1000
-- range -> lower bound, ambiguous=true
-- multiple incomes -> compute total
+- Always try to extract a number. Set ambiguous=false and extract the best value you can find.
+- Multiple numbers ("3000 4000") -> add them together to get total. Example: "3000 4000" -> monthlyHouseholdIncome=7000, ambiguous=false.
+- Multiple incomes in a story ("father earns 2500 and mother earns 1800") -> add them together. Example: "father earns about 2500 and mother earns 1800, combined it's around there" -> monthlyHouseholdIncome=4300, ambiguous=false.
+- "combined", "total", "together" -> add the mentioned amounts, ambiguous=false.
+- Range with clear bounds ("between 3000 and 4000", "3k to 4k") -> use the lower bound, ambiguous=false.
 - "none"/"nil"/"zero" for otherMonthlyIncome -> 0
-- "about"/"around" -> extract, NOT ambiguous
+- "about"/"around"/"approximately" -> extract the number, ambiguous=false.
 - "yes"/"yeah"/"y"/"correct" for isWelfareHomeResident -> true
 - "no"/"n"/"nah" for isWelfareHomeResident -> false
 - parentNationalities: standard demonyms (Singaporean, Malaysian, Chinese, Indian, etc.)
 - employmentStatusCode: "working"->EMPLOYED, "no job"->UNEMPLOYED, "freelance"->SELF_EMPLOYED
+
+CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know or can't provide a number ("I'm not sure", "I don't know", "maybe 3k or 4k" with doubt). If the user provides ANY specific amounts (even as a range or multiple numbers), set ambiguous=false and extract the best value.
 """);
             history.AddUserMessage(message);
 
@@ -131,9 +133,6 @@ Rules:
         bool ambiguous = root.TryGetProperty("ambiguous", out JsonElement ambEl) && ambEl.ValueKind == JsonValueKind.True;
         string? ambiguityReason = ambiguous && root.TryGetProperty("ambiguityReason", out JsonElement reasonEl)
             ? reasonEl.GetString() : null;
-
-        if (ambiguous)
-            return FasExtractionResult.Clarify(ambiguityReason ?? "Could you clarify your answer for the FAS application?");
 
         bool anyAccepted = false;
 
@@ -276,9 +275,6 @@ Rules:
         if (field is not "monthlyHouseholdIncome" and not "householdMemberCount" and not "otherMonthlyIncome")
             return null;
 
-        Kernel kernel;
-        try { kernel = services.GetRequiredService<Kernel>(); } catch { return null; }
-
         try
         {
             IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
@@ -295,21 +291,23 @@ Rules:
             }
             """;
             using var schemaDoc = JsonDocument.Parse(fieldSchema);
-            var settings = CreateJsonSchemaExecutionSettings(schemaDoc.RootElement.Clone(), "fas_field_extraction");
+            var settings = CreateJsonSchemaExecutionSettings(schemaDoc.RootElement.Clone(), "fas_field_extraction", strict: false);
 
             var history = new ChatHistory($$"""
 You extract student FAS application data from a Singapore user message.
 Field to extract: "{{field}}"
 
 Rules:
-- For monthlyHouseholdIncome: if user gives a range ("3k to 4k"), use the lower bound.
-- For monthlyHouseholdIncome: if user gives multiple amounts ("mum earns 2k, dad earns 3k"), compute the total.
+- For monthlyHouseholdIncome: multiple amounts ("mum earns 2k, dad earns 3k", "3000 4000") -> add them together, ambiguous=false.
+- For monthlyHouseholdIncome: "combined", "total", "together" -> add the amounts, ambiguous=false.
+- For monthlyHouseholdIncome: range ("between 3k and 4k", "3k to 4k") -> use lower bound, ambiguous=false.
 - For householdMemberCount: must be an integer.
 - For otherMonthlyIncome: "none", "no", "nothing", "nil", "zero" → 0.
-- "about", "around", "approximately" are not ambiguous — extract the number.
-- Number with "k" or "K" → multiply by 1000.
+- "about", "around", "approximately" -> extract the number, ambiguous=false.
+- Number with "k" or "K" -> multiply by 1000.
 - field name is literal, do not guess.
 - Set value to null ONLY if the user message contains no information for this field.
+- CRITICAL: Set ambiguous=true ONLY when user says they don't know (e.g. "I'm not sure", "I don't know"). If user gives ANY specific amounts, set ambiguous=false.
 """);
             history.AddUserMessage(message);
 

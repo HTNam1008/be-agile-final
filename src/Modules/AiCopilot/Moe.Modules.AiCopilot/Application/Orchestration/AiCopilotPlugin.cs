@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Moe.Modules.AiCopilot.Application.Finance;
 using Moe.Modules.AiCopilot.Application.Knowledge;
@@ -12,12 +11,14 @@ public sealed class AiCopilotPlugin
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly IServiceProvider _services;
+    private readonly AiFinanceReader _finance;
+    private readonly StudentFasApplicationService _fas;
     private readonly IKnowledgeRetriever _knowledge;
 
-    public AiCopilotPlugin(IServiceProvider services, IKnowledgeRetriever knowledge)
+    public AiCopilotPlugin(AiFinanceReader finance, StudentFasApplicationService fas, IKnowledgeRetriever knowledge)
     {
-        _services = services;
+        _finance = finance;
+        _fas = fas;
         _knowledge = knowledge;
     }
 
@@ -26,8 +27,7 @@ public sealed class AiCopilotPlugin
     [return: Description("JSON object with currentBalance, heldBalance, availableBalance, totalOutstanding, netAvailable, currencyCode, billCount, nearestDueDate, bills array, recentPayments array")]
     public async Task<string> GetFinanceSnapshotAsync(CancellationToken ct)
     {
-        AiFinanceReader finance = _services.GetRequiredService<AiFinanceReader>();
-        AiFinanceSnapshot snapshot = await finance.GetSnapshotAsync(ct);
+        AiFinanceSnapshot snapshot = await _finance.GetSnapshotAsync(ct);
         return JsonSerializer.Serialize(new
         {
             snapshot.CurrentBalance,
@@ -76,8 +76,7 @@ public sealed class AiCopilotPlugin
         [Description("Comma-separated parent nationalities, e.g. 'Singaporean,Malaysian'")] string? parentNationalities,
         CancellationToken ct)
     {
-        StudentFasApplicationService fas = _services.GetRequiredService<StudentFasApplicationService>();
-        EligibilityResponse response = await fas.CheckEligibility(new EligibilityRequest(
+        EligibilityResponse response = await _fas.CheckEligibility(new EligibilityRequest(
             monthlyHouseholdIncome,
             householdMemberCount,
             otherMonthlyIncome,

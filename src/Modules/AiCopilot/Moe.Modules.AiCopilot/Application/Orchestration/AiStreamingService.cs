@@ -1,11 +1,13 @@
-using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Moe.Modules.AiCopilot.Api;
 using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.AiCopilot.Application.Security;
 using Moe.Modules.AiCopilot.Domain;
+using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
@@ -16,18 +18,25 @@ public sealed class AiStreamingService
     private readonly Kernel _kernel;
     private readonly IKnowledgeRetriever _knowledge;
     private readonly ILogger<AiStreamingService> _logger;
+    private readonly MoeDbContext _db;
+    private readonly SensitiveDataRedactor _redactor;
 
-    public AiStreamingService(Kernel kernel, IKnowledgeRetriever knowledge, ILogger<AiStreamingService> logger)
+    public AiStreamingService(Kernel kernel, IKnowledgeRetriever knowledge, ILogger<AiStreamingService> logger,
+        MoeDbContext db, SensitiveDataRedactor redactor)
     {
         _kernel = kernel;
         _knowledge = knowledge;
         _logger = logger;
+        _db = db;
+        _redactor = redactor;
     }
 
     public async Task StreamResponseAsync(HttpContext httpContext, AiConversation conversation, AiChatRequest request, CancellationToken ct)
     {
         httpContext.Response.ContentType = "text/event-stream";
         httpContext.Response.Headers.CacheControl = "no-cache";
+
+        var sw = Stopwatch.StartNew();
 
         try
         {
@@ -56,11 +65,25 @@ public sealed class AiStreamingService
                 await WriteSseEventAsync(httpContext, "text", token, ct);
             }
 
+            string finalText = fullText.ToString();
+            string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
+                ? "FAS_INTERVIEW"
+                : AiKeywordMatchers.DetermineMode(request.Message, conversation.ModeCode, request.PageContext?.Domain);
+
+            AiInterviewState? interviewState = null;
+            if (mode == "FAS_INTERVIEW" && conversation.FasSession?.CollectedFactsJson is { Length: > 0 } fasJson)
+            {
+                var fasData = JsonSerializer.Deserialize<FasInterviewData>(fasJson, JsonOptions);
+                if (fasData is not null)
+                    interviewState = FasConfirmationService.ToInterviewState(fasData, null);
+            }
+
             IReadOnlyList<AiAction> actions = knowledgeResults.Count > 0
                 ? [new("NAVIGATE", "Open FAS application", "/portal/fas")]
                 : [];
-            IReadOnlyList<AiCard> cards = [];
-            string finalText = fullText.ToString();
+            IReadOnlyList<AiCard> cards = mode == "PAYMENT"
+                ? [new("FINANCE_SUMMARY", new { availableBalance = 0, totalOutstanding = 0, netAvailable = 0, billCount = 0, nearestDueDate = (string?)null })]
+                : [];
 
             var grounding = new AiGrounding(
                 knowledgeResults.Count > 0,
@@ -69,7 +92,22 @@ public sealed class AiStreamingService
             await WriteSseEventAsync(httpContext, "actions", JsonSerializer.Serialize(actions, JsonOptions), ct);
             await WriteSseEventAsync(httpContext, "grounding", JsonSerializer.Serialize(grounding, JsonOptions), ct);
 
-            var donePayload = new { conversationId = conversation.Id, messageId = 0, text = finalText, mode = "GENERAL" };
+            var msg = AiMessage.Create(conversation.Id, "ASSISTANT", _redactor.Redact(finalText), DateTime.UtcNow,
+                citationsJson: JsonSerializer.Serialize(grounding.Citations, JsonOptions),
+                toolSummaryJson: JsonSerializer.Serialize(cards.Select(x => x.Type), JsonOptions),
+                latencyMs: (int)sw.ElapsedMilliseconds,
+                responseJson: _redactor.Redact(JsonSerializer.Serialize(new
+                {
+                    mode,
+                    cards,
+                    actions,
+                    grounding,
+                    interviewState
+                }, JsonOptions)));
+            _db.Add(msg);
+            await _db.SaveChangesAsync(ct);
+
+            var donePayload = new { conversationId = conversation.Id, messageId = msg.Id, text = finalText, mode, interviewState };
             await WriteSseEventAsync(httpContext, "done", JsonSerializer.Serialize(donePayload, JsonOptions), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

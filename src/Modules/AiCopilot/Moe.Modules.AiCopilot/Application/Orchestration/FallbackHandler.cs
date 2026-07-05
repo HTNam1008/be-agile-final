@@ -35,11 +35,17 @@ public sealed class FallbackHandler(
         };
     }
 
+    public async Task<AiHandlerResult> HandleAsync(AiConversation conversation, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
+    {
+        Guid review = await CreateReviewAsync(conversation, conversation.PersonId, "FALLBACK", request.PageContext, request.Message, DateTime.UtcNow, ct);
+        return FallbackResponse(review);
+    }
+
     private static AiAction[] FallbackActions(Guid review) =>
-    [
-        new("NAVIGATE", "Education Account FAQ", "/portal/account"),
-        new("NAVIGATE", "Payment FAQ", "/portal/bills"),
-        new("NAVIGATE", "FAS FAQ", "/portal/fas"),
-        new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })
-    ];
+        [
+            new("NAVIGATE", "Education Account FAQ", "/portal/account"),
+            new("NAVIGATE", "Payment FAQ", "/portal/bills"),
+            new("NAVIGATE", "FAS FAQ", "/portal/fas"),
+            new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })
+        ];
 }

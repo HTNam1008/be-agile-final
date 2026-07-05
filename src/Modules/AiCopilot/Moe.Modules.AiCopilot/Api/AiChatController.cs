@@ -74,12 +74,23 @@ public sealed class AiChatController(
     {
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
         DateTime now = DateTime.UtcNow;
+
+        var sanitized = new AiChatRequest
+        {
+            ConversationId = request.ConversationId ?? Guid.NewGuid(),
+            Message = request.Message,
+            PageContext = AiRouterHelpers.SanitizePageContext(request.PageContext)
+        };
+
         AiConversation conversation = await db.Set<AiConversation>().Include(x => x.FasSession)
-            .SingleOrDefaultAsync(x => x.Id == request.ConversationId!.Value, ct)
-            ?? AiConversation.Start(request.ConversationId ?? Guid.NewGuid(), personId, now);
+            .SingleOrDefaultAsync(x => x.Id == sanitized.ConversationId!.Value, ct)
+            ?? AiConversation.Start(sanitized.ConversationId!.Value, personId, now);
         if (conversation.PersonId != personId) throw new UnauthorizedAccessException("AI.CONVERSATION_FORBIDDEN");
 
-        await streaming.StreamResponseAsync(HttpContext, conversation, request, ct);
+        string pj = sanitized.PageContext is null ? null! : JsonSerializer.Serialize(sanitized.PageContext, JsonOptions);
+        db.Add(AiMessage.Create(conversation.Id, "USER", redactor.Redact(sanitized.Message), now));
+
+        await streaming.StreamResponseAsync(HttpContext, conversation, sanitized, ct);
     }
 
     private static AiInterviewState? DeserializeInterviewState(string? json)
