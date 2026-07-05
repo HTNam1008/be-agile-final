@@ -173,39 +173,41 @@ internal sealed class AdminCourseRepository(
 
     private IQueryable<Course> SortByTotalFee(IQueryable<Course> query, bool descending)
     {
-        IQueryable<CourseFeeTotalSortProjection> totalFeeQuery =
-            from fee in dbContext.Set<CourseFee>().AsNoTracking()
-            join component in dbContext.Set<FeeComponent>().AsNoTracking()
-                on fee.FeeComponentId equals component.Id
-            where fee.IsActive && component.IsActive
-            group new { fee, component } by fee.CourseId
-            into feeGroup
-            select new CourseFeeTotalSortProjection(
-                feeGroup.Key,
-                feeGroup.Sum(x => !x.component.IsTaxComponent
-                    && x.component.CalculationTypeCode != FeeComponentCalculationTypes.Percentage
-                        ? x.fee.FeeValue
-                        : 0m),
-                feeGroup.Sum(x => x.component.IsTaxComponent
-                    && x.component.CalculationTypeCode == FeeComponentCalculationTypes.Percentage
-                        ? x.fee.FeeValue
-                        : 0m),
-                feeGroup.Sum(x => x.component.IsTaxComponent
-                    && x.component.CalculationTypeCode != FeeComponentCalculationTypes.Percentage
-                        ? x.fee.FeeValue
-                        : 0m));
-
-        var sortableQuery =
-            from course in query
-            join feeTotal in totalFeeQuery on course.Id equals feeTotal.CourseId into feeTotals
-            from feeTotal in feeTotals.DefaultIfEmpty()
-            select new
-            {
-                Course = course,
-                TotalFee = feeTotal == null
-                    ? 0m
-                    : feeTotal.Subtotal + feeTotal.TaxFixedAmount + (feeTotal.Subtotal * feeTotal.TaxPercentage / 100m)
-            };
+        var sortableQuery = query.Select(course => new
+        {
+            Course = course,
+            Subtotal = (
+                from fee in dbContext.Set<CourseFee>().AsNoTracking()
+                join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                    on fee.FeeComponentId equals component.Id
+                where fee.CourseId == course.Id && fee.IsActive && component.IsActive
+                select !component.IsTaxComponent
+                    && component.CalculationTypeCode != FeeComponentCalculationTypes.Percentage
+                        ? (decimal?)fee.FeeValue
+                        : 0m).Sum() ?? 0m,
+            TaxPercentage = (
+                from fee in dbContext.Set<CourseFee>().AsNoTracking()
+                join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                    on fee.FeeComponentId equals component.Id
+                where fee.CourseId == course.Id && fee.IsActive && component.IsActive
+                select component.IsTaxComponent
+                    && component.CalculationTypeCode == FeeComponentCalculationTypes.Percentage
+                        ? (decimal?)fee.FeeValue
+                        : 0m).Sum() ?? 0m,
+            TaxFixedAmount = (
+                from fee in dbContext.Set<CourseFee>().AsNoTracking()
+                join component in dbContext.Set<FeeComponent>().AsNoTracking()
+                    on fee.FeeComponentId equals component.Id
+                where fee.CourseId == course.Id && fee.IsActive && component.IsActive
+                select component.IsTaxComponent
+                    && component.CalculationTypeCode != FeeComponentCalculationTypes.Percentage
+                        ? (decimal?)fee.FeeValue
+                        : 0m).Sum() ?? 0m
+        }).Select(x => new
+        {
+            x.Course,
+            TotalFee = x.Subtotal + x.TaxFixedAmount + (x.Subtotal * x.TaxPercentage / 100m)
+        });
 
         return descending
             ? sortableQuery.OrderByDescending(x => x.TotalFee).ThenByDescending(x => x.Course.Id).Select(x => x.Course)
@@ -623,8 +625,3 @@ internal sealed record CourseFeeProjection(
         => new(CourseFeeId, FeeComponentId, FeeComponentName, CalculationTypeCode, IsTaxComponent, FeeValue);
 }
 
-internal sealed record CourseFeeTotalSortProjection(
-    long CourseId,
-    decimal Subtotal,
-    decimal TaxPercentage,
-    decimal TaxFixedAmount);
