@@ -77,6 +77,48 @@ public sealed class StudentDashboardCourseRepositoryTests : IAsyncLifetime
         courses.Single().TotalFee.Should().Be(1090m);
     }
 
+    [Fact]
+    public async Task ListCurrentCoursesAsync_UsesSingaporeBusinessDateForCurrentCourseWindow()
+    {
+        await using MoeDbContext dbContext = new(
+            new DbContextOptionsBuilder<MoeDbContext>()
+                .UseInMemoryDatabase($"student-dashboard-courses-sgt-{Guid.NewGuid():N}")
+                .Options,
+            [new CourseBillingModelConfiguration()]);
+        await dbContext.Database.EnsureCreatedAsync();
+        StudentDashboardCourseRepository repository = new(
+            dbContext,
+            new TestClock(new DateTimeOffset(2026, 6, 30, 17, 0, 0, TimeSpan.Zero)));
+        Course course = new(
+            organizationId: 10,
+            courseCode: "SGT-COURSE",
+            courseName: "Singapore Date Course",
+            description: null,
+            startDate: new DateOnly(2026, 7, 1),
+            endDate: new DateOnly(2026, 7, 31),
+            enrollmentOpenAtUtc: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            enrollmentCloseAtUtc: new DateTime(2026, 7, 31, 16, 0, 0, DateTimeKind.Utc),
+            actorLoginAccountId: 42,
+            utcNow: new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc));
+        dbContext.Add(course);
+        await dbContext.SaveChangesAsync();
+
+        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
+            personId: 5002,
+            courseId: course.Id,
+            adminLoginAccountId: 42,
+            enrolledAtUtc: new DateTime(2026, 6, 30, 17, 0, 0, DateTimeKind.Utc),
+            beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
+            afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+        enrollment.ChangePaymentPlan(101, installment: false);
+        dbContext.Add(enrollment);
+        await dbContext.SaveChangesAsync();
+
+        var courses = await repository.ListCurrentCoursesAsync(5002, search: null, status: null, CancellationToken.None);
+
+        courses.Should().ContainSingle();
+    }
+
     private sealed class TestClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;

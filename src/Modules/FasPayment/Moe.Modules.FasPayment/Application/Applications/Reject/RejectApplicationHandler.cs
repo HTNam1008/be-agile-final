@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using Moe.Application.Abstractions.Clock;
 using Moe.Application.Abstractions.Messaging;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Application.Abstractions.Security;
@@ -15,7 +16,8 @@ internal sealed class RejectApplicationHandler(
     ICurrentUser currentUser,
     IUnitOfWork unitOfWork,
     FasEmailNotificationService fasEmails,
-    FasInAppNotificationService fasNotifications) : ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>
+    FasInAppNotificationService fasNotifications,
+    IClock clock) : ICommandHandler<RejectApplicationCommand, RejectApplicationResponse>
 {
     public async Task<Result<RejectApplicationResponse>> Handle(RejectApplicationCommand command, CancellationToken cancellationToken)
     {
@@ -32,9 +34,10 @@ internal sealed class RejectApplicationHandler(
 
         long reviewerId = currentUser?.UserAccountId ?? 1111;
 
-        application.Reject();
+        DateTime now = clock.UtcNow.UtcDateTime;
+        application.Reject(reviewerId, now);
 
-        var decision = FasApplicationReviewDecision.CreateRejection(application.Id, reviewerId, command.RejectionReasonCode, command.Remarks, DateTime.UtcNow);
+        var decision = FasApplicationReviewDecision.CreateRejection(application.Id, reviewerId, command.RejectionReasonCode, command.Remarks, now);
         await repository.AddDecisionAsync(decision, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

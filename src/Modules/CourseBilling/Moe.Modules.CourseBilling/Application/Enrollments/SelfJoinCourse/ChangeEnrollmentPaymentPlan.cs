@@ -52,7 +52,7 @@ internal sealed class ChangeEnrollmentPaymentPlanHandler(
         DateOnly today = clock.TodayInSingapore();
         bool installment = plan.PlanTypeCode == "INSTALLMENT";
         DateOnly dueDate = installment
-            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(now)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(today)
             : today;
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(

@@ -61,7 +61,7 @@ internal sealed class GetStudentCourseContentHandler(
         Result access = CourseContentAccessPolicy.Check(
             snapshot.Enrollment,
             snapshot.Course,
-            DateOnly.FromDateTime(clock.UtcNow.UtcDateTime));
+            clock.TodayInSingapore());
         return access.IsFailure
             ? Result<StudentCourseContentSnapshot>.Failure(access.Error)
             : Result<StudentCourseContentSnapshot>.Success(snapshot);

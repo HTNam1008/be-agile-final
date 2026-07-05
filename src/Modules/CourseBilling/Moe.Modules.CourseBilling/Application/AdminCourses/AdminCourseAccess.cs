@@ -21,6 +21,8 @@ internal sealed class AdminCourseAccess(
 
     public DateTime UtcNow() => clock.UtcNow.UtcDateTime;
 
+    public DateOnly TodayInSingapore() => clock.TodayInSingapore();
+
     public Result RequireAdmin()
         => currentAdmin.IsAdmin ? Result.Success() : Result.Failure(CourseErrors.AdminRequired);
 
@@ -48,7 +50,7 @@ internal sealed class AdminCourseAccess(
 
         DateTime utcNow = UtcNow();
         await courses.DisableEndedCoursesAsync(
-            DateOnly.FromDateTime(utcNow),
+            TodayInSingapore(),
             utcNow,
             actorId,
             scopedOrganizationIds,
@@ -157,7 +159,7 @@ internal sealed class AdminCourseAccess(
         CancellationToken cancellationToken)
     {
         DateTime utcNow = UtcNow();
-        DateOnly today = DateOnly.FromDateTime(utcNow);
+        DateOnly today = TodayInSingapore();
         DateTime currentMinute = new(
             utcNow.Year,
             utcNow.Month,
