@@ -8,6 +8,7 @@ using Moe.Modules.Mfa.Application;
 using Moe.Modules.Mfa.Application.ChangePin;
 using Moe.Modules.Mfa.Application.GetMfaStatus;
 using Moe.Modules.Mfa.Application.ResetPin;
+using Moe.Modules.Mfa.Application.RecoverPin;
 using Moe.Modules.Mfa.Application.SetupPin;
 using Moe.Modules.Mfa.Application.StartChallenge;
 using Moe.Modules.Mfa.Application.VerifyPin;
@@ -40,6 +41,9 @@ public sealed class MfaModule : IModule
         services.AddScoped<ICommandHandler<VerifyMfaPinCommand, MfaVerificationResponse>, VerifyMfaPinHandler>();
         services.AddScoped<ICommandHandler<ChangeMfaPinCommand, MfaStatusResponse>, ChangeMfaPinHandler>();
         services.AddScoped<ICommandHandler<ResetMfaPinCommand, MfaStatusResponse>, ResetMfaPinHandler>();
+        services.AddScoped<ICommandHandler<RequestMfaPinRecoveryCommand, bool>, RequestMfaPinRecoveryHandler>();
+        services.AddScoped<ICommandHandler<CompleteMfaPinRecoveryCommand, bool>, CompleteMfaPinRecoveryHandler>();
+        services.AddScoped<IQueryHandler<ValidateMfaPinRecoveryQuery, MfaPinRecoveryTokenStatus>, ValidateMfaPinRecoveryHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
