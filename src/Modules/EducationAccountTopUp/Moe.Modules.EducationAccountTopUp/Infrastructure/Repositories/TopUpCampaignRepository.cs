@@ -7,7 +7,7 @@ using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.EducationAccountTopUp.Infrastructure.Repositories;
 
-internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCampaignRepository, ITopUpCampaignRuleGroupRepository
+internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCampaignRepository, ITopUpCampaignRuleGroupRepository, ITopUpCampaignDeletionRepository
 {
     public Task<TopUpCampaign?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
@@ -59,6 +59,30 @@ internal sealed class TopUpCampaignRepository(MoeDbContext dbContext) : ITopUpCa
     public async Task AddAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
     {
         await dbContext.Set<TopUpCampaign>().AddAsync(campaign, cancellationToken);
+    }
+
+    public async Task DeleteDraftAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default)
+    {
+        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true)
+        {
+            await dbContext.Set<TopUpCampaignRecipient>()
+                .IgnoreQueryFilters()
+                .Where(x => x.TopUpCampaignId == campaign.Id)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
+            dbContext.Set<TopUpCampaign>().Remove(campaign);
+            return;
+        }
+
+        var recipients = await dbContext.Set<TopUpCampaignRecipient>()
+            .IgnoreQueryFilters()
+            .Where(x => x.TopUpCampaignId == campaign.Id)
+            .ToListAsync(cancellationToken);
+
+        dbContext.Set<TopUpCampaignRecipient>().RemoveRange(recipients);
+        await DeleteRuleGroupsByCampaignIdAsync(campaign.Id, cancellationToken);
+        dbContext.Set<TopUpCampaign>().Remove(campaign);
     }
 
     public Task<int> CountActiveRulesAsync(long campaignId, CancellationToken cancellationToken = default)
