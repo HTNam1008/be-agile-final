@@ -271,14 +271,14 @@ public sealed class BillingStatementRepositoryEmailTests : IAsyncLifetime
         _dbContext.AddRange(person, course);
         await _dbContext.SaveChangesAsync();
 
-        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdmin(
+        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
             personId,
             course.Id,
-            coursePaymentPlanId: 100,
             adminLoginAccountId: 42,
             enrolledAtUtc: new DateTime(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc),
             beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
             afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+        enrollment.ChangePaymentPlan(coursePaymentPlanId: 100, installment: false);
 
         _dbContext.Add(enrollment);
         await _dbContext.SaveChangesAsync();

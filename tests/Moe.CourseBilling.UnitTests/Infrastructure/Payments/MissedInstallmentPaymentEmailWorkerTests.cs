@@ -192,14 +192,14 @@ public sealed class MissedInstallmentPaymentEmailWorkerTests
             dbContext.AddRange(person, course);
             await dbContext.SaveChangesAsync();
 
-            CourseEnrollment enrollment = CourseEnrollment.EnrollByAdmin(
+            CourseEnrollment enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
                 person.Id,
                 course.Id,
-                901,
                 1,
                 new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
                 CourseRefundPolicyDefaults.BeforeStartPercentage,
                 CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+            enrollment.ChangePaymentPlan(coursePaymentPlanId: 901, installment: false);
             dbContext.Add(enrollment);
             await dbContext.SaveChangesAsync();
 

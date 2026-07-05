@@ -42,40 +42,7 @@ internal sealed class CourseEnrollment : Entity<long>
     public string? ExitReasonCode { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
 
-    public static Result<CourseEnrollment> EnrollByAdmin(
-        long personId,
-        long courseId,
-        long coursePaymentPlanId,
-        long adminLoginAccountId,
-        DateTime enrolledAtUtc,
-        decimal beforeStartRefundPercentage,
-        decimal afterStartRefundPercentage)
-    {
-        Result validation = ValidateEnrollment(
-            personId,
-            courseId,
-            coursePaymentPlanId,
-            adminLoginAccountId,
-            beforeStartRefundPercentage,
-            afterStartRefundPercentage);
-        if (validation.IsFailure)
-        {
-            return Result<CourseEnrollment>.Failure(validation.Error);
-        }
 
-        CourseEnrollment enrollment = new(
-            personId,
-            courseId,
-            coursePaymentPlanId,
-            CourseEnrollmentSourceCodes.AdminAdd,
-            adminLoginAccountId,
-            enrolledAtUtc,
-            beforeStartRefundPercentage,
-            afterStartRefundPercentage,
-            CourseEnrollmentStatusCodes.PendingPayment);
-
-        return Result<CourseEnrollment>.Success(enrollment);
-    }
 
     public static Result<CourseEnrollment> EnrollByAdminPendingPlanSelection(
         long personId,

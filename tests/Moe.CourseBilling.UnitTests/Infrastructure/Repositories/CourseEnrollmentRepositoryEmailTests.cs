@@ -56,14 +56,14 @@ public sealed class CourseEnrollmentRepositoryEmailTests
         using MoeDbContext dbContext = CreateDbContext();
         TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         (Person person, Course course) = await SeedPersonAndCourseAsync(dbContext);
-        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdmin(
+        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
             person.Id,
             course.Id,
-            coursePaymentPlanId: 10,
             adminLoginAccountId: 9001,
             Now,
             100m,
             50m).Value;
+        enrollment.ChangePaymentPlan(coursePaymentPlanId: 10, installment: false);
         CourseEnrollmentRepository repository = CreateRepository(dbContext, mailQueue);
 
         await repository.AddEnrollmentAndIssueBillsAsync(
