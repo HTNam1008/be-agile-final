@@ -41,6 +41,12 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.UpdatedAtUtc,
                 dbContext.Set<TopUpRun>()
                     .Where(r => r.TopUpCampaignId == c.Id)
+                    .OrderByDescending(r => r.ScheduledForUtc)
+                    .ThenByDescending(r => r.Id)
+                    .Select(r => (long?)r.Id)
+                    .FirstOrDefault(),
+                dbContext.Set<TopUpRun>()
+                    .Where(r => r.TopUpCampaignId == c.Id)
                     .SelectMany(r => dbContext.Set<TopUpTransaction>().Where(t => t.TopUpRunId == r.Id && t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed))
                     .Select(t => t.EducationAccountId)
                     .Distinct()
@@ -111,6 +117,12 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc,
+                dbContext.Set<TopUpRun>()
+                    .Where(r => r.TopUpCampaignId == c.Id)
+                    .OrderByDescending(r => r.ScheduledForUtc)
+                    .ThenByDescending(r => r.Id)
+                    .Select(r => (long?)r.Id)
+                    .FirstOrDefault(),
                 dbContext.Set<TopUpRun>()
                     .Where(r => r.TopUpCampaignId == c.Id)
                     .SelectMany(r => dbContext.Set<TopUpTransaction>().Where(t => t.TopUpRunId == r.Id && t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed))

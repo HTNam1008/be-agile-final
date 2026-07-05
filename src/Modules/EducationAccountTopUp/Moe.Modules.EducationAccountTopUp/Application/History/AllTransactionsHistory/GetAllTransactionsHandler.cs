@@ -114,6 +114,7 @@ internal sealed class GetAllTransactionsHandler(
             CurrencyCodes.SingaporeDollar,
             item.StatusCode,
             TopUpSafeReasonPresenter.Present(item.Reason),
+            item.CampaignReason,
             item.CompletedAtUtc,
             item.RunDateUtc);
     }
