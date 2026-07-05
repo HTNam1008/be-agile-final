@@ -120,75 +120,79 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             string content = result.Content?.Trim() ?? "";
             using JsonDocument doc = JsonDocument.Parse(content);
             JsonElement root = doc.RootElement;
-            return ValidateAndApplyExtraction(s, root, expectedField);
+            var (extResult, changes) = ValidateExtraction(root, s, expectedField);
+            if (extResult.Status == "ACCEPTED")
+            {
+                foreach (var (field, value) in changes)
+                    ApplyAcceptedValue(s, field, value);
+                s.ClarificationField = null;
+                s.ValidationMessage = null;
+                s.PendingParentNationalitySuggestion = null;
+                foreach (var (field, _) in changes)
+                    s.ClarificationAttempts.Remove(field);
+            }
+            return extResult;
         }
         catch { return null; }
     }
 
-    private static FasExtractionResult ValidateAndApplyExtraction(FasInterviewData s, JsonElement root, string target)
+    private static (FasExtractionResult Result, List<(string Field, object? Value)> Changes) ValidateExtraction(JsonElement root, FasInterviewData s, string target)
     {
         bool ambiguous = root.TryGetProperty("ambiguous", out JsonElement ambEl) && ambEl.ValueKind == JsonValueKind.True;
-        string? ambiguityReason = ambiguous && root.TryGetProperty("ambiguityReason", out JsonElement reasonEl)
-            ? reasonEl.GetString() : null;
 
-        bool anyAccepted = false;
-        var acceptedFields = new List<string>();
+        var changes = new List<(string Field, object? Value)>();
 
         if (TryGetJsonBool(root, "isWelfareHomeResident") is bool welfare)
         {
             if (s.IsWelfareHomeResident.HasValue && s.IsWelfareHomeResident.Value != welfare)
-                return FasExtractionResult.Clarify(welfare
+                return (FasExtractionResult.Clarify(welfare
                     ? "You previously said you are NOT a welfare home resident. Do you want to change that to YES, you live in an approved welfare home?"
-                    : "You previously said you ARE a welfare home resident. Do you want to change that to NO, you don't live in a welfare home?");
+                    : "You previously said you ARE a welfare home resident. Do you want to change that to NO, you don't live in a welfare home?"), changes);
             if (!s.IsWelfareHomeResident.HasValue || s.IsWelfareHomeResident.Value != welfare)
             {
-                ApplyAcceptedValue(s, "isWelfareHomeResident", welfare);
-                anyAccepted = true; acceptedFields.Add("isWelfareHomeResident");
+                changes.Add(("isWelfareHomeResident", welfare));
             }
         }
 
         if (TryGetJsonString(root, "email") is string email && email.Contains('@'))
         {
-            s.Email = email; anyAccepted = true; acceptedFields.Add("email");
+            changes.Add(("email", email));
         }
 
         if (TryGetJsonString(root, "employmentStatusCode") is string emp && emp is "EMPLOYED" or "SELF_EMPLOYED" or "UNEMPLOYED")
         {
-            s.EmploymentStatusCode = emp; anyAccepted = true; acceptedFields.Add("employmentStatusCode");
+            changes.Add(("employmentStatusCode", emp));
         }
 
         if (TryGetJsonDecimal(root, "monthlyHouseholdIncome") is decimal income)
         {
             if (income < 0 || income > 100_000)
-                return ambiguous
+                return (ambiguous
                     ? FasExtractionResult.Clarify($"I think the household income is around ${income:N0}, but that seems high. Could you confirm the exact monthly household income in SGD?")
-                    : FasExtractionResult.Clarify($"${income:N0} seems high for monthly household income. Could you check and provide the correct amount?");
+                    : FasExtractionResult.Clarify($"${income:N0} seems high for monthly household income. Could you check and provide the correct amount?"), changes);
             if (!s.MonthlyHouseholdIncome.HasValue || s.MonthlyHouseholdIncome != income)
             {
-                ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(income, 2));
-                anyAccepted = true; acceptedFields.Add("monthlyHouseholdIncome");
+                changes.Add(("monthlyHouseholdIncome", decimal.Round(income, 2)));
             }
         }
 
         if (TryGetJsonInt(root, "householdMemberCount") is int count)
         {
             if (count < 1 || count > 30)
-                return FasExtractionResult.Clarify($"A household of {count} people seems unusual. Could you confirm the number of household members?");
+                return (FasExtractionResult.Clarify($"A household of {count} people seems unusual. Could you confirm the number of household members?"), changes);
             if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount != count)
             {
-                ApplyAcceptedValue(s, "householdMemberCount", count);
-                anyAccepted = true; acceptedFields.Add("householdMemberCount");
+                changes.Add(("householdMemberCount", count));
             }
         }
 
         if (TryGetJsonDecimal(root, "otherMonthlyIncome") is decimal otherInc)
         {
             if (otherInc < 0 || otherInc > 100_000)
-                return FasExtractionResult.Clarify($"The other monthly income of ${otherInc:N0} seems high. Could you confirm?");
+                return (FasExtractionResult.Clarify($"The other monthly income of ${otherInc:N0} seems high. Could you confirm?"), changes);
             if (!s.OtherMonthlyIncome.HasValue || s.OtherMonthlyIncome != otherInc)
             {
-                ApplyAcceptedValue(s, "otherMonthlyIncome", decimal.Round(otherInc, 2));
-                anyAccepted = true; acceptedFields.Add("otherMonthlyIncome");
+                changes.Add(("otherMonthlyIncome", decimal.Round(otherInc, 2)));
             }
         }
 
@@ -206,27 +210,19 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             }
             if (nats.Count > 0)
             {
-                s.ParentNationalities = nats.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                anyAccepted = true; acceptedFields.Add("parentNationalities");
+                changes.Add(("parentNationalities", nats.Distinct(StringComparer.OrdinalIgnoreCase).ToList()));
             }
         }
 
-        if (!anyAccepted && ambiguous)
-            return FasExtractionResult.Clarify(root.TryGetProperty("ambiguityReason", out JsonElement reason2El)
+        if (changes.Count == 0 && ambiguous)
+            return (FasExtractionResult.Clarify(root.TryGetProperty("ambiguityReason", out JsonElement reason2El)
                 ? reason2El.GetString() ?? "Could you clarify your answer for the FAS application?"
-                : "Could you clarify your answer for the FAS application?");
+                : "Could you clarify your answer for the FAS application?"), changes);
 
-        if (anyAccepted)
-        {
-            s.ClarificationField = null;
-            s.ValidationMessage = null;
-            s.PendingParentNationalitySuggestion = null;
-            foreach (string af in acceptedFields)
-                s.ClarificationAttempts.Remove(af);
-            return FasExtractionResult.Accepted();
-        }
+        if (changes.Count > 0)
+            return (FasExtractionResult.Accepted(), changes);
 
-        return FasExtractionResult.Clarify("Let me check — could you tell me more so I can fill in the next field for the FAS application?");
+        return (FasExtractionResult.Clarify("Let me check — could you tell me more so I can fill in the next field for the FAS application?"), changes);
     }
 
     private static IEnumerable<string> NextAllMissingFields(FasInterviewData s)

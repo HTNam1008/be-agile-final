@@ -106,6 +106,10 @@ internal static class AiKeywordMatchers
         LiveSchemeWhatPattern.IsMatch(value) &&
         LiveSchemeEligibPattern.IsMatch(value);
 
+    internal static readonly Regex CompoundFieldValuePattern = new(
+        @"\b(yes|no|y|n|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\b|\d[\d,]*(?:\.\d+)?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public static bool IsFasKnowledgeInterrupt(string value)
     {
         bool asksQuestion = KnowledgeQuestionPattern.IsMatch(value) || value.Contains('?');
@@ -113,7 +117,15 @@ internal static class AiKeywordMatchers
         bool startsLiveAssessment = KnowledgeLiveAssessPattern.IsMatch(value);
         bool submitsLikelyFieldValue = KnowledgeFieldValuePattern.IsMatch(value);
         bool messageStartsWithFieldValue = FieldValueStartPattern.IsMatch(value);
-        return asksQuestion && mentionsSpecificFasKnowledge && !startsLiveAssessment && !submitsLikelyFieldValue && !messageStartsWithFieldValue;
+        bool leadingClauseHasFieldValue = false;
+        if (asksQuestion && mentionsSpecificFasKnowledge && !submitsLikelyFieldValue && !messageStartsWithFieldValue)
+        {
+            var questionMatch = Regex.Match(value, @"\b(what|how|why|explain|does|do)\b", RegexOptions.IgnoreCase);
+            string leading = questionMatch.Success ? value[..questionMatch.Index] : value;
+            leadingClauseHasFieldValue = Regex.IsMatch(leading,
+                @"\b(yes|no|y|n|none|nil|zero)\b|\d[\d,]*(?:\.\d+)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+        return asksQuestion && mentionsSpecificFasKnowledge && !startsLiveAssessment && !submitsLikelyFieldValue && !messageStartsWithFieldValue && !leadingClauseHasFieldValue;
     }
 
     public static AiTurnPlan NormalizePlannerIntentForCompositeTurn(AiTurnPlan plan, string message)
