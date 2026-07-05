@@ -9,6 +9,7 @@ public sealed record GetStudentEnrolledCoursesQuery(
     int PageSize) : IQuery<PageResponse<AdminStudentEnrolledCourseItem>>;
 
 public sealed record AdminStudentEnrolledCourseItem(
+    long CourseEnrollmentId,
     long CourseId,
     string CourseName,
     string StatusLabel,
