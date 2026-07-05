@@ -492,7 +492,17 @@ public sealed class StudentFasApplicationService(
         }
 
         var filteredRows = (await query.ToListAsync(ct))
-            .Where(x => MatchesAdminApplicationStatus(ToAdminVisibleStatus(x.application.StatusCode, x.selection.StatusCode), status))
+            .Select(x => new
+            {
+                x.application,
+                x.selection,
+                x.scheme,
+                x.account,
+                reviewStatus = AdminFasApplicationStatusPolicy.TryGetReviewStatus(x.application.StatusCode, x.selection.StatusCode, out string? reviewStatus)
+                    ? reviewStatus
+                    : null
+            })
+            .Where(x => x.reviewStatus is not null && AdminFasApplicationStatusPolicy.MatchesReviewStatus(x.reviewStatus, status))
             .ToArray();
 
         int total = filteredRows.Length;
@@ -511,7 +521,6 @@ public sealed class StudentFasApplicationService(
 
         var items = pageRows.Select(row =>
         {
-            string visibleStatus = ToAdminVisibleStatus(row.application.StatusCode, row.selection.StatusCode);
             string? approvedTier = ExtractApprovedTierLabel(row.selection.ApprovedComponentsJson);
             FasRecommendationResult recommendation = RecommendationService.Recommend(
                 [new FasRecommendationScheme(row.scheme.Id, row.scheme.Name, row.scheme.Description)],
@@ -532,11 +541,11 @@ public sealed class StudentFasApplicationService(
                 accountNumber = row.account?.AccountNumber,
                 schemeId = row.scheme.Id,
                 schemeName = row.scheme.Name,
-                schemeTier = visibleStatus == "APPROVED" ? approvedTier ?? recommendedTier : null,
+                schemeTier = row.reviewStatus == "APPROVED" ? approvedTier ?? recommendedTier : null,
                 recommendation.RecommendationStatus,
                 recommendation.ManualReviewReason,
                 submittedAt = row.application.SubmittedAtUtc,
-                status = visibleStatus
+                status = row.reviewStatus
             };
         }).ToArray();
 
@@ -1411,19 +1420,6 @@ public sealed class StudentFasApplicationService(
     {
         if (string.Equals(itemStatus, "CANCELLED", StringComparison.OrdinalIgnoreCase)) return "WITHDRAWN";
         return !SchemeIsAvailable(schemeStatus) && itemStatus is "DRAFT" or "PENDING" ? "NOT_AVAILABLE" : itemStatus;
-    }
-
-    private static string ToAdminVisibleStatus(string applicationStatus, string selectionStatus)
-    {
-        if (string.Equals(applicationStatus, FasApplicationStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase)) return "WITHDRAWN";
-        return string.Equals(selectionStatus, "CANCELLED", StringComparison.OrdinalIgnoreCase) ? "WITHDRAWN" : selectionStatus;
-    }
-
-    private static bool MatchesAdminApplicationStatus(string visibleStatus, string? status)
-    {
-        string normalized = status?.Trim().ToUpperInvariant() ?? "ALL";
-        bool adminVisible = visibleStatus is "PENDING" or "APPROVED" or "REJECTED";
-        return adminVisible && (string.IsNullOrWhiteSpace(normalized) || normalized == "ALL" || string.Equals(visibleStatus, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IEnumerable<T> ApplyAdminApplicationSort<T>(IReadOnlyCollection<T> rows, string? sortBy, string? sortDirection)
