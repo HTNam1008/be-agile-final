@@ -227,12 +227,14 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         // Answer welfare home as "No" to proceed to income
         await SendFas("No", cid);
-        // Give ambiguous income answers twice -> manual fallback
+        // Give ambiguous income answers three times -> manual fallback
         JsonElement first = await SendFas("I do not know", cid);
         Assert.Equal("CLARIFYING", GetInterviewStatus(first));
         JsonElement second = await SendFas("Still not sure", cid);
-        Assert.Equal("MANUAL_FALLBACK", GetInterviewStatus(second));
-        Assert.Contains("couldn't safely prefill that field", second.GetProperty("text").GetString());
+        Assert.Equal("CLARIFYING", GetInterviewStatus(second));
+        JsonElement third = await SendFas("I do not know", cid);
+        Assert.Equal("MANUAL_FALLBACK", GetInterviewStatus(third));
+        Assert.Contains("couldn't safely prefill that field", third.GetProperty("text").GetString());
     }
 
     [Fact]
@@ -244,6 +246,10 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Assert.Contains("nationality", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
 
         response = await SendFas("Singaporean", cid);
+        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        Assert.Contains("email", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        response = await SendFas("student@example.com", cid);
         Assert.Equal("CONFIRMING", GetInterviewStatus(response));
 
         response = await SendFas("yes", cid);

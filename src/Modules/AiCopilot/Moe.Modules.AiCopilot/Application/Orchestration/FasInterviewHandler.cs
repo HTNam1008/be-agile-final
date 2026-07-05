@@ -225,7 +225,8 @@ public sealed class FasInterviewHandler(
             : st.IsWelfareHomeResident == true ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
             : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
         List<AiAction> acts = [new("NAVIGATE", "Open FAS application", "/portal/fas", iv.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: iv.FormPatch)];
-        c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+        c.Touch("GENERAL", pj, now);
+        if (c.FasSession?.StatusCode != "COMPLETE") SaveFasState(c, st, now);
         return new(txt, "GENERAL", new(false, []), [], acts, iv);
     }
 
@@ -329,13 +330,22 @@ public sealed class FasInterviewHandler(
             if (!s.OtherMonthlyIncome.HasValue) return "otherMonthlyIncome";
         }
         if (ParentNationalityRequired(s) && s.ParentNationalities.Count == 0) return "parentNationalities";
+        if (s.Email is null) return "email";
+        if (!s.IsWelfareHomeResident.Value && s.EmploymentStatusCode is null) return "employmentStatusCode";
         return null;
     }
 
     private static string? ResolveTargetField(FasInterviewData s, string? preferred = null) =>
         preferred is null ? s.ClarificationField ?? NextMissingField(s) : NextMissingField(s, preferred) ?? s.ClarificationField ?? NextMissingField(s);
 
-    private static bool IsReadyForEligibilityComputation(FasInterviewData s) => s.Status == "COLLECTING_CONFIRMED";
+    private static bool IsReadyForEligibilityComputation(FasInterviewData s) => s.Status == "COLLECTING_CONFIRMED" && IsFasDataCompleteForEligibility(s);
+    private static bool IsFasDataCompleteForEligibility(FasInterviewData s)
+    {
+        if (!s.IsWelfareHomeResident.HasValue) return false;
+        if (s.ParentNationalities.Count == 0) return false;
+        if (s.IsWelfareHomeResident == true) return true;
+        return s.MonthlyHouseholdIncome.HasValue && s.HouseholdMemberCount.HasValue && s.OtherMonthlyIncome.HasValue;
+    }
     private static bool IncomeFactsRequired(FasInterviewData s) => CriteriaPlanUnknown(s) || s.RequiredCriteriaTypes.Any(c => c is "GDP" or "GHI" or "PCI") || s.ApplicableSchemes.Count > 0;
     private static bool ParentNationalityRequired(FasInterviewData _) => true;
     private static bool CriteriaPlanUnknown(FasInterviewData s) => s.RequiredCriteriaTypes.Count == 0 && s.ApplicableSchemeNames.Count == 0;
@@ -366,22 +376,34 @@ public sealed class FasInterviewHandler(
         {
             var w = FasExtractionService.ExtractWelfareHome(msg);
             if (w.Status != "ACCEPTED") { FasExtractionService.Restore(s, snapshot); return false; }
-            changes.Add(("isWelfareHomeResident", w.Value));
+            if (s.IsWelfareHomeResident != (bool)w.Value!)
+                changes.Add(("isWelfareHomeResident", w.Value));
         }
 
         if (hasIncome && !hasMembers && !hasOther)
         {
             var i = FasExtractionService.ExtractIncome(msg);
             if (i.Status == "ACCEPTED")
-                changes.Add(("monthlyHouseholdIncome", i.Value));
+            {
+                if (s.MonthlyHouseholdIncome != (decimal)i.Value!)
+                    changes.Add(("monthlyHouseholdIncome", i.Value));
+            }
             else if (nums.Length == 1 && snapshot.MonthlyHouseholdIncome.HasValue && nums[0] is >= 0 and <= 1_000_000)
-                changes.Add(("monthlyHouseholdIncome", decimal.Round(nums[0], 2)));
+            {
+                decimal rounded = decimal.Round(nums[0], 2);
+                if (s.MonthlyHouseholdIncome != rounded)
+                    changes.Add(("monthlyHouseholdIncome", rounded));
+            }
             else { FasExtractionService.Restore(s, snapshot); return false; }
         }
         else if (!hasMembers && !hasOther && nums.Length == 1 && snapshot.MonthlyHouseholdIncome.HasValue)
         {
             if (nums[0] is >= 0 and <= 1_000_000)
-                changes.Add(("monthlyHouseholdIncome", decimal.Round(nums[0], 2)));
+            {
+                decimal rounded = decimal.Round(nums[0], 2);
+                if (s.MonthlyHouseholdIncome != rounded)
+                    changes.Add(("monthlyHouseholdIncome", rounded));
+            }
             else { FasExtractionService.Restore(s, snapshot); return false; }
         }
 
@@ -389,17 +411,17 @@ public sealed class FasInterviewHandler(
         {
             var m = FasExtractionService.ExtractHouseholdMemberCount(msg);
             if (m.Status != "ACCEPTED") { FasExtractionService.Restore(s, snapshot); return false; }
-            changes.Add(("householdMemberCount", m.Value));
+            if (s.HouseholdMemberCount != (int)m.Value!)
+                changes.Add(("householdMemberCount", m.Value));
         }
 
         if (hasOther)
         {
             var o = FasExtractionService.ExtractOtherIncome(msg);
             if (o.Status != "ACCEPTED") { FasExtractionService.Restore(s, snapshot); return false; }
-            changes.Add(("otherMonthlyIncome", o.Value));
+            if (s.OtherMonthlyIncome != (decimal)o.Value!)
+                changes.Add(("otherMonthlyIncome", o.Value));
         }
-
-        if (changes.Count == 0 && !hasWelfare) { FasExtractionService.Restore(s, snapshot); return false; }
 
         var nat = FasExtractionService.ExtractParentNationalities(msg);
         if (nat.Status != "ACCEPTED")
@@ -410,7 +432,8 @@ public sealed class FasInterviewHandler(
             if (nn is null && CorrectionSingaporePattern.IsMatch(msg)) nn = "Singapore Citizen";
             if (nn is not null) nat = FasExtractionResult.Accepted(new[] { nn });
         }
-        if (nat.Status == "ACCEPTED") changes.Add(("parentNationalities", nat.Value));
+        if (nat.Status == "ACCEPTED" && !((IReadOnlyCollection<string>)nat.Value!).SequenceEqual(s.ParentNationalities, StringComparer.OrdinalIgnoreCase))
+            changes.Add(("parentNationalities", nat.Value));
 
         if (changes.Count == 0) { FasExtractionService.Restore(s, snapshot); return false; }
 

@@ -38,7 +38,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("1", conversationId);
         await SendFasMessage("0", conversationId);
 
-        JsonElement confirmation = await SendFasMessage("Foreigner", conversationId);
+        await SendFasMessage("Foreigner", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("employed", conversationId);
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
         JsonElement completed = await SendFasMessage("yes", conversationId);
@@ -64,7 +67,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Assert.Equal(4, Field(beforeNationality, "householdMemberCount").GetProperty("value").GetInt32());
         Assert.Equal(0m, Field(beforeNationality, "otherMonthlyIncome").GetProperty("value").GetDecimal());
 
-        JsonElement confirmation = await SendFasMessage("Singapore Citizen", conversationId);
+        await SendFasMessage("Singapore Citizen", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("employed", conversationId);
 
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.DoesNotContain(confirmation.GetProperty("cards").EnumerateArray(), x => x.GetProperty("type").GetString() == "FAS_RECOMMENDATION");
@@ -104,7 +110,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
 
-        JsonElement confirmation = await SendFasMessage("Singapore Citizen", conversationId);
+        await SendFasMessage("Singapore Citizen", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("employed", conversationId);
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
         JsonElement corrected = await SendFasMessage("actually 2500 and PR", conversationId);
@@ -133,7 +142,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("3000", conversationId);
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
-        JsonElement confirmation = await SendFasMessage("Foreigner", conversationId);
+        await SendFasMessage("Foreigner", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("employed", conversationId);
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
         JsonElement scoped = await SendFasMessage("tell me a joke", conversationId);
@@ -167,14 +179,15 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
 
+        // "Vietnam" now maps directly to "Foreigner" via TryMapCountryToParentNationalitySuggestion
         JsonElement suggestion = await SendFasMessage("Vietnam", conversationId);
 
-        Assert.Equal("CLARIFYING", suggestion.GetProperty("interviewState").GetProperty("status").GetString());
-        Assert.Contains("maps to Foreigner", suggestion.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
-        JsonElement nationalityBeforeConfirm = Field(suggestion, "parentNationalities");
-        Assert.False(nationalityBeforeConfirm.GetProperty("confirmed").GetBoolean());
+        Assert.Equal("COLLECTING", suggestion.GetProperty("interviewState").GetProperty("status").GetString());
+        Assert.Equal("Foreigner", Field(suggestion, "parentNationalities").GetProperty("value")[0].GetString());
 
-        JsonElement confirmation = await SendFasMessage("yes", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("employed", conversationId);
 
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
         Assert.Equal("Foreigner", Field(confirmation, "parentNationalities").GetProperty("value")[0].GetString());
@@ -239,9 +252,13 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
         await SendFasMessage("Foreigner", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
 
-        JsonElement completed = await SendFasMessage("yes", conversationId);
-        Assert.Equal("COMPLETE", completed.GetProperty("interviewState").GetProperty("status").GetString());
+        JsonElement completed = await SendFasMessage("employed", conversationId);
+        Assert.Equal("CONFIRMING", completed.GetProperty("interviewState").GetProperty("status").GetString());
+
+        JsonElement confirmed = await SendFasMessage("yes", conversationId);
+        Assert.Equal("COMPLETE", confirmed.GetProperty("interviewState").GetProperty("status").GetString());
 
         JsonElement schemes = await SendFasMessage("Which schemes can I apply for?", conversationId);
 
@@ -265,7 +282,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         await SendFasMessage("4", conversationId);
         await SendFasMessage("0", conversationId);
 
-        JsonElement confirmation = await SendFasMessage("Singaporean", conversationId);
+        await SendFasMessage("Singaporean", conversationId);
+        await SendFasMessage("student@example.com", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("employed", conversationId);
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
         JsonElement completed = await SendFasMessage("yes", conversationId);
@@ -296,8 +316,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             await SendFasMessage("3000", conversationId);
             await SendFasMessage("4", conversationId);
             await SendFasMessage("0", conversationId);
+            await SendFasMessage("Singaporean", conversationId);
+            await SendFasMessage("student@example.com", conversationId);
 
-            JsonElement confirmation = await SendFasMessage("Singaporean", conversationId);
+            JsonElement confirmation = await SendFasMessage("employed", conversationId);
             Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
             JsonElement completed = await SendFasMessage("yes", conversationId);
@@ -338,8 +360,10 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
             await SendFasMessage("3000", conversationId);
             await SendFasMessage("4", conversationId);
             await SendFasMessage("0", conversationId);
+            await SendFasMessage("Singaporean", conversationId);
+            await SendFasMessage("student@example.com", conversationId);
 
-            JsonElement confirmation = await SendFasMessage("Singaporean", conversationId);
+            JsonElement confirmation = await SendFasMessage("employed", conversationId);
             Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
             JsonElement completed = await SendFasMessage("yes", conversationId);
@@ -372,7 +396,9 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
         Guid conversationId = await StartFasInterview();
         await SendFasMessage("Yes", conversationId);
 
-        JsonElement confirmation = await SendFasMessage("Singapore Citizen", conversationId);
+        await SendFasMessage("Singapore Citizen", conversationId);
+
+        JsonElement confirmation = await SendFasMessage("student@example.com", conversationId);
         Assert.Equal("CONFIRMING", confirmation.GetProperty("interviewState").GetProperty("status").GetString());
 
         JsonElement completed = await SendFasMessage("yes", conversationId);
