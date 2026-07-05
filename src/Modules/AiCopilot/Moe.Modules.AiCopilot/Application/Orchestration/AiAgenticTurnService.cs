@@ -3,7 +3,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Moe.Modules.AiCopilot.Api;
+using Moe.Modules.AiCopilot.Application.Finance;
+using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
+using Moe.Modules.FasPayment.Application.StudentApplications;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
@@ -12,52 +15,50 @@ public sealed class AiAgenticTurnService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly Kernel _singletonKernel;
-    private readonly AiCopilotPlugin _plugin;
+    private readonly AiFinanceReader _finance;
+    private readonly StudentFasApplicationService _fasService;
+    private readonly IKnowledgeRetriever _knowledge;
     private readonly ILogger<AiAgenticTurnService> _logger;
 
-    public AiAgenticTurnService(Kernel singletonKernel, AiCopilotPlugin plugin, ILogger<AiAgenticTurnService> logger)
+    public AiAgenticTurnService(Kernel singletonKernel, AiFinanceReader finance, StudentFasApplicationService fasService, IKnowledgeRetriever knowledge, ILogger<AiAgenticTurnService> logger)
     {
         _singletonKernel = singletonKernel;
-        _plugin = plugin;
+        _finance = finance;
+        _fasService = fasService;
+        _knowledge = knowledge;
         _logger = logger;
     }
 
     public async Task<AiHandlerResult> ExecuteTurnAsync(AiConversation conversation, AiChatRequest request, CancellationToken ct)
     {
-        _plugin.CurrentConversation = conversation;
-        try
+        Kernel kernel = _singletonKernel.Clone();
+        var plugin = new AiCopilotPlugin(_finance, _fasService, _knowledge) { CurrentConversation = conversation };
+        kernel.ImportPluginFromObject(plugin, "AiCopilot");
+        IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
+
+        string fasState = conversation.FasSession?.StatusCode switch
         {
-            // Clone the singleton kernel to share its IChatCompletionService (and HttpClient),
-            // then import the scoped plugin so its functions are available for auto-invocation.
-            // This avoids creating a new HttpClient socket pool per turn.
-            Kernel kernel = _singletonKernel.Clone();
-            kernel.ImportPluginFromObject(_plugin, "AiCopilot");
-            IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
+            "COLLECTING" => "FAS interview in progress — collecting facts. Current field: " +
+                (conversation.FasSession.NextQuestion ?? "unknown"),
+            "CONFIRMING" => "FAS interview at confirmation step — all facts collected, awaiting yes/no.",
+            "CLARIFYING" => "FAS interview needs clarification on the last answer.",
+            "COMPLETE" => "FAS eligibility check completed.",
+            "PAUSED" => "FAS check is paused. User can resume by asking.",
+            "CANCELLED" => "FAS check was cancelled.",
+            _ => "No active FAS session."
+        };
 
-            string fasState = conversation.FasSession?.StatusCode switch
-            {
-                "COLLECTING" => "FAS interview in progress — collecting facts. Current field: " +
-                    (conversation.FasSession.NextQuestion ?? "unknown"),
-                "CONFIRMING" => "FAS interview at confirmation step — all facts collected, awaiting yes/no.",
-                "CLARIFYING" => "FAS interview needs clarification on the last answer.",
-                "COMPLETE" => "FAS eligibility check completed.",
-                "PAUSED" => "FAS check is paused. User can resume by asking.",
-                "CANCELLED" => "FAS check was cancelled.",
-                _ => "No active FAS session."
-            };
+        string modeContext = request.PageContext?.Domain is not null
+            ? $"Page domain: {request.PageContext.Domain}. Path: {request.PageContext.Path ?? "none"}."
+            : "No page context.";
 
-            string modeContext = request.PageContext?.Domain is not null
-                ? $"Page domain: {request.PageContext.Domain}. Path: {request.PageContext.Path ?? "none"}."
-                : "No page context.";
-
-            var history = new ChatHistory($$"""
+        var history = new ChatHistory($$"""
 You are the MOE Student Finance AI Copilot for Singapore's Ministry of Education.
 
 You have tools available. Use them when they can help answer the student's question:
 - **GetFinanceSnapshotAsync** — call this for balance, bills, payment history, refund queries.
 - **SearchKnowledgeBaseAsync** — call this for FAS policy, bursary, subsidy, scheme, document, eligibility process questions.
 - **CancelFasInterview** — call this when the student asks to stop/cancel/pause a FAS interview.
-- **GetProfileFacts** — call this to retrieve student profile facts for FAS prefill (email, nationality, institution).
 - **CheckFasEligibilityAsync** — call this when the student has provided all FAS income/household/nationality facts and wants eligibility results.
 
 Conversation rules:
@@ -72,41 +73,31 @@ Current session context:
 - FAS state: {{fasState}}
 - {{modeContext}}
 """);
-            history.AddUserMessage(request.Message);
+        history.AddUserMessage(request.Message);
 
-            var execSettings = new Microsoft.SemanticKernel.PromptExecutionSettings
+        var execSettings = new Microsoft.SemanticKernel.PromptExecutionSettings
+        {
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+        };
+        string text;
+        int iterations = 0;
+        while (iterations++ < 8)
+        {
+            ChatMessageContent answer = await chat.GetChatMessageContentAsync(history,
+                executionSettings: execSettings, kernel: kernel, cancellationToken: ct);
+
+            if (!string.IsNullOrEmpty(answer.Content))
             {
-                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
-            };
-            string text;
-            while (true)
-            {
-                ChatMessageContent answer = await chat.GetChatMessageContentAsync(history,
-                    executionSettings: execSettings, kernel: kernel, cancellationToken: ct);
-
-                // If the assistant sent text content (not a tool call), we're done
-                if (!string.IsNullOrEmpty(answer.Content))
-                {
-                    text = answer.Content.Trim();
-                    break;
-                }
-
-                // Assistant made tool calls — SK auto-invoked them and added results
-                // to history. Add the assistant's message so the next LLM call sees
-                // both the function call and its result.
-                history.Add(answer);
+                text = answer.Content.Trim();
+                string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
+                    ? "FAS_INTERVIEW"
+                    : "GENERAL";
+                return new AiHandlerResult(text, mode, new(false, []), [], []);
             }
 
-            string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
-                ? "FAS_INTERVIEW"
-                : "GENERAL";
+            history.Add(answer);
+        }
 
-            return new AiHandlerResult(text, mode, new(false, []), [], []);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Agentic turn failed — falling back to deterministic path");
-            throw;
-        }
+        throw new InvalidOperationException("Agentic turn exceeded max iterations without producing text response");
     }
 }

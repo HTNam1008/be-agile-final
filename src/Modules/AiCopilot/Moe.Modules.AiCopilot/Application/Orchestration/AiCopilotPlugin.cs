@@ -25,6 +25,7 @@ public sealed class AiCopilotPlugin
 
     // Set by AiAgenticTurnService before the agentic loop runs, so CancelFasInterview
     // can mutate the tracked FasSession entity without needing MoeDbContext directly.
+    // Each agentic turn constructs a fresh AiCopilotPlugin, so this is not shared.
     internal AiConversation? CurrentConversation { get; set; }
 
     [KernelFunction]
@@ -64,7 +65,7 @@ public sealed class AiCopilotPlugin
             r.Citation.Section,
             r.Citation.SourceStatus,
             r.Citation.EffectiveDate,
-            content = r.Content.Length > 800 ? r.Content[..800] + "..." : r.Content,
+            content = TruncateAtSentenceBoundary(r.Content, 800),
             r.Score,
             followUps = r.FollowUps,
             allowedIntents = r.AllowedIntents
@@ -139,11 +140,11 @@ public sealed class AiCopilotPlugin
         return "INVALID_ACTION";
     }
 
-    [KernelFunction]
-    [Description("Get profile facts about the student for FAS prefill — email, nationality, institution details.")]
-    [return: Description("JSON object with prefill data from the student's profile")]
-    public string GetProfileFacts()
+    private static string TruncateAtSentenceBoundary(string text, int maxLength)
     {
-        return "Facts are handled internally by the FAS interview handler.";
+        if (text.Length <= maxLength) return text;
+        int cut = text.LastIndexOfAny(['.', '!', '?'], maxLength - 1);
+        if (cut > maxLength * 0.6) return text[..(cut + 1)];
+        return text[..maxLength] + "...";
     }
 }

@@ -107,7 +107,9 @@ public sealed class AiTurnRouter(
             var fbr = ToChatResponse(c.Id, 0, fb);
             fbr = FasInterviewHandler.AttachDormantFasState(fbr, c.FasSession);
             var fbm = AiMessage.Create(c.Id, "ASSISTANT", redactor.Redact(fbr.Text), now, latencyMs: (int)sw.ElapsedMilliseconds, responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(fbr)));
-            db.Add(fbm); await db.SaveChangesAsync(ct);
+            db.Add(fbm);
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateConcurrencyException) { /* concurrent modification — fallback response already computed */ }
             return fbr with { MessageId = fbm.Id };
         }
     }

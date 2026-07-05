@@ -24,8 +24,7 @@ internal static class AiKeywordMatchers
         };
 
     public static bool LooksLikePaymentQuery(string value) =>
-        value.Contains("PAY") || value.Contains("BILL") || value.Contains("BALANCE") ||
-        value.Contains("OUTSTANDING") || value.Contains("REFUND") || value.Contains("WITHDRAW") ||
+        Regex.IsMatch(value, @"\b(PAY(?:MENT|ABLE|ING|S)?|BILL(?:S|ING)?|BALANCE|OUTSTANDING|REFUND|WITHDRAW(?:AL)?)\b") ||
         (value.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(value, @"\b(USE|USED|FOR|COVER|PAY)\b"));
 
     public static bool LooksLikeCourseQuestion(string message) =>
@@ -111,11 +110,7 @@ internal static class AiKeywordMatchers
     {
         string value = $"{domain} {message}".ToUpperInvariant();
         string msgOnly = message.ToUpperInvariant();
-        bool isPaymentDomain = domain?.ToUpperInvariant() == "PAYMENT";
-        if (msgOnly.Contains("PAY") || msgOnly.Contains("BILL") || msgOnly.Contains("BALANCE") ||
-            msgOnly.Contains("OUTSTANDING") || msgOnly.Contains("REFUND") || msgOnly.Contains("WITHDRAW") ||
-            (msgOnly.Contains("EDUCATION ACCOUNT") && Regex.IsMatch(msgOnly, @"\b(USE|USED|FOR|COVER|PAY)\b")))
-            return AiTurnIntent.PaymentQuery;
+        if (domain?.ToUpperInvariant() == "PAYMENT" || LooksLikePaymentQuery(msgOnly)) return AiTurnIntent.PaymentQuery;
         if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message))
             return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsLiveSchemeEligibilityRequest(msgOnly)) return AiTurnIntent.StartInterview;
@@ -128,7 +123,6 @@ internal static class AiKeywordMatchers
             return AiTurnIntent.SubmitInterviewAnswer;
         if (IsFasInterviewRequest(value)) return AiTurnIntent.StartInterview;
         if (current == "FAS_INTERVIEW") return AiTurnIntent.SubmitInterviewAnswer;
-        if (isPaymentDomain) return AiTurnIntent.PaymentQuery;
         return AiTurnIntent.Fallback;
     }
 
