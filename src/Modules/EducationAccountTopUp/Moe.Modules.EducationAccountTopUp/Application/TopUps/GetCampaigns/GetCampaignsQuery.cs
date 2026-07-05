@@ -32,6 +32,8 @@ public sealed record CampaignListItem(
     DateOnly? EndDate,
     string? FrequencyCode,
     int? FrequencyInterval,
+    int? WeeklyDayOfWeek,
+    int? MonthlyDay,
     DateTime? NextRunAt,
     string CampaignStatusCode,
     int CampaignVersion,
