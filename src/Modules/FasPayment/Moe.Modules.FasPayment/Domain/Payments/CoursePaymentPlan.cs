@@ -54,7 +54,7 @@ internal sealed class CoursePaymentPlan : Entity<long>
         bool installment = planTypeCode == PaymentPlanTypeCodes.Installment;
         if ((!fullPayment && !installment) ||
             (fullPayment && installmentCount != 1) ||
-            (installment && installmentCount is not (3 or 6)))
+            (installment && !CoursePaymentPlanPolicy.IsAllowedInstallmentCount(installmentCount)))
         {
             return Result<CoursePaymentPlan>.Failure(PaymentDomainErrors.InvalidPaymentPlan);
         }
