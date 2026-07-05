@@ -46,6 +46,7 @@ internal sealed class GetStudentEnrolledCoursesHandler(
 
         AdminStudentEnrolledCourseItem[] items = page.Items
             .Select(x => new AdminStudentEnrolledCourseItem(
+                x.CourseEnrollmentId,
                 x.CourseId,
                 x.CourseName,
                 ToStatusLabel(x.EnrollmentStatusCode),

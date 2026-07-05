@@ -12,6 +12,7 @@ internal interface IAdminStudentEnrolledCourseReader
 }
 
 internal sealed record AdminStudentEnrolledCourseProjection(
+    long CourseEnrollmentId,
     long CourseId,
     string CourseName,
     string EnrollmentStatusCode,
