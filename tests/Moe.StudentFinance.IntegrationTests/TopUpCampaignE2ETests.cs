@@ -1,15 +1,19 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Moe.Modules.EducationAccountTopUp.Application.RunExecution;
 using Xunit;
 
 namespace Moe.StudentFinance.IntegrationTests;
 
 public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
 {
+    private readonly CustomWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public TopUpCampaignE2ETests(CustomWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -118,6 +122,8 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
         Assert.Equal(runId, duplicateRunId);
 
+        await ProcessRunAsync(runId);
+
         using JsonDocument summary = await WaitForRunSummaryAsync(runId);
         JsonElement data = summary.RootElement.GetProperty("data");
         Assert.Equal("COMPLETED", data.GetProperty("status").GetString());
@@ -209,6 +215,8 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         var runId = await RequestManualRunAsync(campaignId, idempotencyKey);
         var duplicateRunId = await RequestManualRunAsync(campaignId, idempotencyKey);
         Assert.Equal(runId, duplicateRunId);
+
+        await ProcessRunAsync(runId);
 
         using JsonDocument summary = await WaitForRunSummaryAsync(runId);
         JsonElement data = summary.RootElement.GetProperty("data");
@@ -338,6 +346,12 @@ public class TopUpCampaignE2ETests : IClassFixture<CustomWebApplicationFactory>
         }
 
         throw new TimeoutException($"Run {runId} did not reach a terminal status.");
+    }
+
+    private async Task ProcessRunAsync(long runId)
+    {
+        TopUpRunWorker worker = ActivatorUtilities.CreateInstance<TopUpRunWorker>(_factory.Services);
+        await worker.ProcessRunAsync(runId);
     }
 
     private async Task<long[]> SearchEducationAccountIdsAsync()

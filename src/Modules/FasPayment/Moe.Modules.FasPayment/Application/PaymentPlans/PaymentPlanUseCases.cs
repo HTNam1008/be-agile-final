@@ -17,6 +17,9 @@ internal sealed record CreateCoursePaymentPlanCommand(
 internal sealed record ListCoursePaymentPlansQuery(long CourseId)
     : IQuery<IReadOnlyCollection<CoursePaymentPlanResponse>>;
 
+internal sealed record GetCoursePaymentPlanPolicyQuery
+    : IQuery<CoursePaymentPlanPolicyResponse>;
+
 internal sealed class CreateCoursePaymentPlanRequestValidator : AbstractValidator<CreateCoursePaymentPlanRequest>
 {
     public CreateCoursePaymentPlanRequestValidator()
@@ -27,7 +30,7 @@ internal sealed class CreateCoursePaymentPlanRequestValidator : AbstractValidato
         RuleFor(request => request.InstallmentCount)
             .Must((request, count) => request.PlanTypeCode == PaymentPlanTypeCodes.FullPayment
                 ? count == 1
-                : count is 3 or 6);
+                : CoursePaymentPlanPolicy.IsAllowedInstallmentCount(count));
     }
 }
 
@@ -94,5 +97,23 @@ internal sealed class ListCoursePaymentPlansHandler(IPaymentCheckoutRepository p
             plan.Version,
             plan.IsActive)).ToArray();
         return Result<IReadOnlyCollection<CoursePaymentPlanResponse>>.Success(response);
+    }
+}
+
+internal sealed class GetCoursePaymentPlanPolicyHandler
+    : IQueryHandler<GetCoursePaymentPlanPolicyQuery, CoursePaymentPlanPolicyResponse>
+{
+    public Task<Result<CoursePaymentPlanPolicyResponse>> Handle(
+        GetCoursePaymentPlanPolicyQuery query,
+        CancellationToken cancellationToken)
+    {
+        var response = new CoursePaymentPlanPolicyResponse(
+            new CoursePaymentPlanTypeCodeResponse(
+                PaymentPlanTypeCodes.FullPayment,
+                PaymentPlanTypeCodes.Installment),
+            CoursePaymentPlanPolicy.AllowedInstallmentCounts,
+            CoursePaymentPlanPolicy.DefaultInstallmentCount);
+
+        return Task.FromResult(Result<CoursePaymentPlanPolicyResponse>.Success(response));
     }
 }

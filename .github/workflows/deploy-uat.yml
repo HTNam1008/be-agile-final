@@ -1,0 +1,115 @@
+name: backend-uat-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run the full test suite before deploying
+        required: false
+        default: false
+        type: boolean
+      run_smoke:
+        description: Run UAT smoke checks after deploying
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [ brian/deploy ]
+
+concurrency:
+  group: backend-uat-deploy
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  BUILD_CONFIGURATION: Release
+  API_PROJECT: src/Hosts/Moe.StudentFinance.Api/Moe.StudentFinance.Api.csproj
+  MIGRATIONS_PROJECT: src/Database/Moe.StudentFinance.Migrations/Moe.StudentFinance.Migrations.csproj
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore MOE.StudentFinance.sln
+
+      - name: Build
+        run: dotnet build MOE.StudentFinance.sln --configuration $env:BUILD_CONFIGURATION --no-restore
+
+      - name: Validate deploy configuration
+        shell: pwsh
+        env:
+          AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+          AZURE_WEBAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:AZURE_WEBAPP_NAME)) {
+            throw "Repository variable AZURE_WEBAPP_NAME is required."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:AZURE_WEBAPP_PUBLISH_PROFILE)) {
+            throw "Repository secret AZURE_WEBAPP_PUBLISH_PROFILE is required."
+          }
+
+      - name: Test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests }}
+        run: dotnet test MOE.StudentFinance.sln --configuration $env:BUILD_CONFIGURATION --no-build --collect:"XPlat Code Coverage"
+
+      - name: Publish API
+        run: dotnet publish $env:API_PROJECT --configuration $env:BUILD_CONFIGURATION --no-build --output publish
+
+      - name: Package API
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath publish-api.zip -Force
+
+      - name: Generate idempotent migration script
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.8
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          New-Item -ItemType Directory -Force -Path artifacts/sql | Out-Null
+          dotnet ef migrations script --idempotent --configuration $env:BUILD_CONFIGURATION --project $env:MIGRATIONS_PROJECT --startup-project $env:API_PROJECT --output artifacts/sql/migrate-uat.sql
+
+      - name: Upload migration script
+        uses: actions/upload-artifact@v4
+        with:
+          name: uat-migration-script
+          path: artifacts/sql/migrate-uat.sql
+
+      - name: Deploy API to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: publish-api.zip
+
+      - name: Resolve smoke test URLs
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_smoke }}
+        shell: pwsh
+        run: |
+          $apiBaseUrl = "${{ vars.UAT_API_BASE_URL }}"
+          if ([string]::IsNullOrWhiteSpace($apiBaseUrl)) {
+            $apiBaseUrl = "https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+          }
+
+          if ([string]::IsNullOrWhiteSpace($apiBaseUrl)) {
+            throw "Repository variable UAT_API_BASE_URL or AZURE_WEBAPP_NAME is required for smoke testing."
+          }
+
+          "UAT_API_BASE_URL=$apiBaseUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "UAT_FRONTEND_BASE_URL=${{ vars.UAT_FRONTEND_BASE_URL }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Smoke test UAT
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_smoke }}
+        shell: pwsh
+        run: |
+          $arguments = @("-ApiBaseUrl", $env:UAT_API_BASE_URL)
+          if (-not [string]::IsNullOrWhiteSpace($env:UAT_FRONTEND_BASE_URL)) {
+            $arguments += @("-FrontendBaseUrl", $env:UAT_FRONTEND_BASE_URL)
+          }
+          $arguments += "-RequireSwagger"
+
+          & .\scripts\azure\test-uat.ps1 @arguments

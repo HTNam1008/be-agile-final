@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -285,8 +286,8 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
         request.Headers.Add("X-Test-UserAccountId", login.UserAccountId.ToString());
         using HttpResponseMessage response = await _client.SendAsync(request);
 
-        await AssertStatusAsync(HttpStatusCode.Conflict, response);
-        Assert.Contains("COURSE.CONTENT_NOT_OPEN", await response.Content.ReadAsStringAsync());
+        await AssertStatusAsync(HttpStatusCode.Forbidden, response);
+        Assert.Contains("COURSE.CONTENT_LOCKED", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -524,7 +525,7 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
     private async Task<StudentLogin> CreateStudentAndLoginAsync()
     {
         string suffix = NewSuffix();
-        string identityNumber = $"H{suffix[..7]}E";
+        string identityNumber = ValidIdentityNumber(suffix);
 
         using HttpResponseMessage createResponse = await _client.PostAsJsonAsync(
             "/api/admin/v1/students",
@@ -635,6 +636,47 @@ public sealed class CourseBillingAuthorizationApiTests(CustomWebApplicationFacto
 
     private static string NewSuffix()
         => Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+    private static string ValidIdentityNumber(string suffix)
+    {
+        string digits = StableSevenDigitNumber(suffix).ToString("D7");
+        return $"S{digits}{ComputeChecksum('S', digits)}";
+    }
+
+    private static int StableSevenDigitNumber(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261;
+            foreach (byte item in Encoding.UTF8.GetBytes(value))
+            {
+                hash ^= item;
+                hash *= 16777619;
+            }
+
+            return (int)(hash % 10_000_000);
+        }
+    }
+
+    private static char ComputeChecksum(char prefix, string digits)
+    {
+        int[] weights = [2, 7, 6, 5, 4, 3, 2];
+        int sum = prefix is 'T' or 'G' ? 4 : prefix is 'M' ? 3 : 0;
+        for (int index = 0; index < weights.Length; index++)
+        {
+            sum += (digits[index] - '0') * weights[index];
+        }
+
+        string checksumTable = prefix switch
+        {
+            'S' or 'T' => "JZIHGFEDCBA",
+            'F' or 'G' => "XWUTRQPNMLK",
+            'M' => "XWUTRQPNJLK",
+            _ => throw new ArgumentOutOfRangeException(nameof(prefix), prefix, null)
+        };
+
+        return checksumTable[sum % 11];
+    }
 
     private sealed record StudentLogin(long UserAccountId, long PersonId, string StudentNumber);
 }

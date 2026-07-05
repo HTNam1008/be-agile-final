@@ -72,7 +72,7 @@ internal sealed class StudentDashboardCourseRepository(MoeDbContext dbContext, I
         CancellationToken cancellationToken)
     {
         string? normalizedSearch = Normalize(search);
-        DateOnly today = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
+        DateOnly today = clock.TodayInSingapore();
 
         IQueryable<long> activeOrganizationIds = dbContext.Set<SchoolEnrollment>()
             .AsNoTracking()

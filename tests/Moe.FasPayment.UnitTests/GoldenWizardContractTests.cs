@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Moe.Application.Abstractions.Clock;
 using Moe.Modules.FasPayment.Application.AdminFasSchemes;
 using Moe.Modules.FasPayment.Contracts.AdminFasSchemes;
 using Xunit;
@@ -28,7 +29,7 @@ public sealed class GoldenWizardContractTests
         request.SubsidyType.Should().Be(subsidyType);
         request.CourseIds.Should().HaveCount(courseCount);
         request.Tiers.Should().HaveCount(tierCount);
-        new CreateFasSchemeRequestValidator().Validate(request).IsValid.Should().BeTrue();
+        new CreateFasSchemeRequestValidator(new TestClock()).Validate(request).IsValid.Should().BeTrue();
     }
 
     [Theory]
@@ -53,4 +54,11 @@ public sealed class GoldenWizardContractTests
 
     private static string ReadFixture(string fixture)
         => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture));
+
+    private sealed class TestClock : IClock
+    {
+        public DateTimeOffset UtcNow { get; } = new(2026, 7, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public DateOnly TodayInSingapore() => SingaporeBusinessDay.FromUtc(UtcNow);
+    }
 }

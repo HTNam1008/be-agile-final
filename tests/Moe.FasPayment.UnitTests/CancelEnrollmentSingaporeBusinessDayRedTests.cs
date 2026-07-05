@@ -188,7 +188,7 @@ public sealed class CancelEnrollmentSingaporeBusinessDayRedTests
     private sealed class FixedBrandingProvider : IEmailBrandingProvider
     {
         public string AppName => "Ministry of Education - Singapore";
-        public string PaymentDashboardUrl => "http://localhost:5173/portal/payments";
+        public string PaymentDashboardUrl => "https://portal.example.test/portal/payments";
         public string FasPortalUrl => "http://localhost:5173/portal/fas";
         public string AccountPortalUrl => "http://localhost:5173/portal/account";
         public string CourseDetailUrl(long courseId) => $"http://localhost:5173/portal/courses/{courseId}";
