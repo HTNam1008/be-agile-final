@@ -31,6 +31,10 @@ public sealed class AdminCourseMaterialsController(
         CancellationToken cancellationToken)
         => this.ToCourseBillingResponse(await commands.Send(new AddCourseMaterialCommand(courseId, request), cancellationToken), created: true);
 
+    [HttpPost("copy-from/{sourceCourseId:long}")]
+    public async Task<IActionResult> CopyFrom(long courseId, long sourceCourseId, CancellationToken cancellationToken)
+        => this.ToCourseBillingResponse(await commands.Send(new CopyCourseMaterialsCommand(courseId, sourceCourseId), cancellationToken), created: true);
+
     [HttpPut("{courseMaterialId:long}")]
     public async Task<IActionResult> Update(
         long courseId,

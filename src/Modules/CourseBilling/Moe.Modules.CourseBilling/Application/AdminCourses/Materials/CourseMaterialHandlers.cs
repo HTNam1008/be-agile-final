@@ -87,6 +87,33 @@ internal sealed class AddCourseMaterialCommandHandler(
         => CourseMaterialTypeCodes.All.Contains(materialTypeCode, StringComparer.OrdinalIgnoreCase);
 }
 
+internal sealed class CopyCourseMaterialsCommandHandler(AdminCourseAccess access)
+    : ICommandHandler<CopyCourseMaterialsCommand, IReadOnlyList<CourseMaterialDto>>
+{
+    public async Task<Result<IReadOnlyList<CourseMaterialDto>>> Handle(CopyCourseMaterialsCommand command, CancellationToken cancellationToken)
+    {
+        Result<Course> target = await access.RequireMutableCourseAsync(command.CourseId, cancellationToken);
+        if (target.IsFailure)
+            return Result<IReadOnlyList<CourseMaterialDto>>.Failure(target.Error);
+
+        Result<Course> source = await access.RequireCourseAsync(command.SourceCourseId, cancellationToken);
+        if (source.IsFailure)
+            return Result<IReadOnlyList<CourseMaterialDto>>.Failure(source.Error);
+
+        IReadOnlyList<CourseMaterial> sourceMaterials = await access.Courses.ListMaterialsAsync(command.SourceCourseId, cancellationToken);
+        var copies = sourceMaterials.Select(material => new CourseMaterial(
+            command.CourseId, material.MaterialTitle, material.MaterialDescription, material.MaterialTypeCode,
+            material.FileName, material.OriginalFileName, material.FileExtension, material.ContentType,
+            material.FileSizeBytes, material.StorageProviderCode, material.StoragePath, material.PublicUrl,
+            material.DisplayOrder, material.IsRequired, access.UtcNow())).ToArray();
+
+        foreach (CourseMaterial copy in copies)
+            await access.Courses.AddMaterialAsync(copy, cancellationToken);
+
+        return Result<IReadOnlyList<CourseMaterialDto>>.Success(copies.Select(CourseMaterialMapper.ToMaterialDto).ToArray());
+    }
+}
+
 internal sealed class UpdateCourseMaterialCommandHandler(AdminCourseAccess access)
     : ICommandHandler<UpdateCourseMaterialCommand, CourseMaterialDto>
 {
