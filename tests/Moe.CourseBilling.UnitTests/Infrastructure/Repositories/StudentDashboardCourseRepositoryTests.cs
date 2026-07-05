@@ -55,17 +55,19 @@ public sealed class StudentDashboardCourseRepositoryTests : IAsyncLifetime
         _dbContext.AddRange(course, tuition, gst);
         await _dbContext.SaveChangesAsync();
 
+        var enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
+            personId: 5001,
+            courseId: course.Id,
+            adminLoginAccountId: 42,
+            enrolledAtUtc: new DateTime(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc),
+            beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
+            afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+        enrollment.ChangePaymentPlan(100, installment: false);
+
         _dbContext.AddRange(
             new CourseFee(course.Id, tuition.Id, 1000m, 1),
             new CourseFee(course.Id, gst.Id, 9m, 999),
-            CourseEnrollment.EnrollByAdmin(
-                personId: 5001,
-                courseId: course.Id,
-                coursePaymentPlanId: 100,
-                adminLoginAccountId: 42,
-                enrolledAtUtc: new DateTime(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc),
-                beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
-                afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value);
+            enrollment);
         await _dbContext.SaveChangesAsync();
 
         var courses = await _repository.ListCurrentCoursesAsync(5001, search: null, status: null, CancellationToken.None);

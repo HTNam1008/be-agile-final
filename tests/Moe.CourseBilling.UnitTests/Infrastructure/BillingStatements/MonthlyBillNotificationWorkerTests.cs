@@ -145,22 +145,28 @@ public sealed class MonthlyBillNotificationWorkerTests
         dbContext.Add(course);
         await dbContext.SaveChangesAsync();
 
-        CourseEnrollment enrollment = pendingPlanSelection
-            ? CourseEnrollment.EnrollByAdminPendingPlanSelection(
+        CourseEnrollment enrollment;
+        if (pendingPlanSelection)
+        {
+            enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
                 personId,
                 course.Id,
-                adminLoginAccountId: 1,
-                enrolledAtUtc: new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc),
-                beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
-                afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value
-            : CourseEnrollment.EnrollByAdmin(
-                personId,
-                course.Id,
-                coursePaymentPlanId: personId,
                 adminLoginAccountId: 1,
                 enrolledAtUtc: new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc),
                 beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
                 afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+        }
+        else
+        {
+            enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
+                personId,
+                course.Id,
+                adminLoginAccountId: 1,
+                enrolledAtUtc: new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc),
+                beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
+                afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+            enrollment.ChangePaymentPlan(coursePaymentPlanId: personId, installment: false);
+        }
         dbContext.Add(enrollment);
         await dbContext.SaveChangesAsync();
 
