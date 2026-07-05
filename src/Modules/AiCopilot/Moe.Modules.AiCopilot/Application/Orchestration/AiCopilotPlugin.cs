@@ -28,12 +28,16 @@ public sealed class AiCopilotPlugin
     // Each agentic turn constructs a fresh AiCopilotPlugin, so this is not shared.
     internal AiConversation? CurrentConversation { get; set; }
 
+    internal AiFinanceSnapshot? FetchedSnapshot { get; private set; }
+    internal IReadOnlyList<KnowledgeResult>? FetchedSources { get; private set; }
+
     [KernelFunction]
     [Description("Get the student's Education Account balance, outstanding bills, recent payments, and net available amount.")]
     [return: Description("JSON object with currentBalance, heldBalance, availableBalance, totalOutstanding, netAvailable, currencyCode, billCount, nearestDueDate, bills array, recentPayments array")]
     public async Task<string> GetFinanceSnapshotAsync(CancellationToken ct)
     {
         AiFinanceSnapshot snapshot = await _finance.GetSnapshotAsync(ct);
+        FetchedSnapshot = snapshot;
         return JsonSerializer.Serialize(new
         {
             snapshot.CurrentBalance,
@@ -58,6 +62,7 @@ public sealed class AiCopilotPlugin
         CancellationToken ct)
     {
         IReadOnlyList<KnowledgeResult> results = await _knowledge.RetrieveAsync(query, domain, ct: ct);
+        FetchedSources = results;
         return JsonSerializer.Serialize(results.Select(r => new
         {
             r.Citation.SourceId,

@@ -91,13 +91,58 @@ Current session context:
                 text = answer.Content.Trim();
                 string mode = conversation.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
                     ? "FAS_INTERVIEW"
-                    : "GENERAL";
-                return new AiHandlerResult(text, mode, new(false, []), [], []);
+                    : (plugin.FetchedSnapshot is not null || AiKeywordMatchers.LooksLikePaymentQuery(request.Message)) ? "PAYMENT" : "GENERAL";
+                return BuildEnrichedResult(text, mode, plugin, request.Message);
             }
 
             history.Add(answer);
         }
 
         throw new InvalidOperationException("Agentic turn exceeded max iterations without producing text response");
+    }
+
+    private static AiHandlerResult BuildEnrichedResult(
+        string text, string mode, AiCopilotPlugin plugin, string message)
+    {
+        var cards = new List<AiCard>();
+        var actions = new List<AiAction>();
+        IReadOnlyCollection<KnowledgeCitation> citations = Array.Empty<KnowledgeCitation>();
+        bool isGrounded = false;
+
+        if (mode == "PAYMENT" && plugin.FetchedSnapshot is { } snap)
+        {
+            string intent = message.ToUpperInvariant();
+            if (intent.Contains("HISTORY") || intent.Contains("PAID") || intent.Contains("REFUND"))
+            {
+                cards.Add(new("PAYMENT_HISTORY", snap.RecentPayments));
+                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/bills"));
+            }
+            else if (intent.Contains("BILL") || intent.Contains("OUTSTANDING") || intent.Contains("DUE"))
+            {
+                cards.Add(new("OUTSTANDING_BILLS", snap.Bills));
+                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/bills"));
+            }
+            else
+            {
+                cards.Add(new("FINANCE_SUMMARY", snap));
+                actions.Add(new("NAVIGATE", "Open Bills & payments page", "/portal/bills"));
+                actions.Add(new("NAVIGATE", "Open education account", "/portal/account"));
+            }
+        }
+
+        if (plugin.FetchedSources is { Count: > 0 } sources)
+        {
+            isGrounded = true;
+            citations = sources.Select(x => x.Citation).ToArray();
+            var card = KnowledgeAnswerHandler.BuildKnowledgeAnswerCard(message, sources);
+            cards.Add(new("KNOWLEDGE_ANSWER", card));
+            bool hasFasSource = sources.Any(s => s.Citation.SourceId.StartsWith("FAS-", StringComparison.OrdinalIgnoreCase));
+            if (hasFasSource)
+            {
+                actions.Add(new("NAVIGATE", "Open FAS application", "/portal/fas"));
+            }
+        }
+
+        return new AiHandlerResult(text, mode, new(isGrounded, citations), cards, actions);
     }
 }
