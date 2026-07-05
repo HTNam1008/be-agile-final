@@ -65,12 +65,12 @@ internal sealed class CreateCampaignCommandHandler(
             endDate: endDate,
             frequencyCode: frequencyCode,
             frequencyInterval: frequencyInterval,
-            weeklyDayOfWeek: weeklyDayOfWeek,
-            monthlyDay: monthlyDay,
             deliveryTypeCode: request.DeliveryTypeCode,
             maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
-            nowUtc: clock.UtcNow.UtcDateTime);
+            nowUtc: clock.UtcNow.UtcDateTime,
+            weeklyDayOfWeek: weeklyDayOfWeek,
+            monthlyDay: monthlyDay);
 
         await campaigns.AddAsync(campaign, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
