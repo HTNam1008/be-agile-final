@@ -73,7 +73,6 @@ public sealed class AiChatController(
     public async Task Stream([FromBody] AiChatRequest request, CancellationToken ct)
     {
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
-        DateTime now = DateTime.UtcNow;
 
         var sanitized = new AiChatRequest
         {
@@ -82,15 +81,19 @@ public sealed class AiChatController(
             PageContext = AiRouterHelpers.SanitizePageContext(request.PageContext)
         };
 
-        AiConversation conversation = await db.Set<AiConversation>().Include(x => x.FasSession)
-            .SingleOrDefaultAsync(x => x.Id == sanitized.ConversationId!.Value, ct)
-            ?? AiConversation.Start(sanitized.ConversationId!.Value, personId, now);
-        if (conversation.PersonId != personId) throw new UnauthorizedAccessException("AI.CONVERSATION_FORBIDDEN");
+        HttpContext.Response.ContentType = "text/event-stream";
+        HttpContext.Response.Headers.CacheControl = "no-cache";
 
-        string pj = sanitized.PageContext is null ? null! : JsonSerializer.Serialize(sanitized.PageContext, JsonOptions);
-        db.Add(AiMessage.Create(conversation.Id, "USER", redactor.Redact(sanitized.Message), now));
-
-        await streaming.StreamResponseAsync(HttpContext, conversation, sanitized, ct);
+        try
+        {
+            AiChatResponse response = await router.ChatAsync(sanitized, ct);
+            await streaming.StreamResponseAsync(HttpContext, response, ct);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            await streaming.WriteErrorEventAsync(HttpContext,
+                "AI.CONCURRENCY_CONFLICT: This FAS session was modified by another request. Please retry.", ct);
+        }
     }
 
     private static AiInterviewState? DeserializeInterviewState(string? json)
