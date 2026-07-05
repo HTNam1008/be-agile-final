@@ -25,6 +25,7 @@ public sealed class AiTurnRouter(
     AiAgenticTurnService? agenticService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly bool _fasEnabled = configuration.GetValue("AiCopilot:FasEnabled", true);
 
     public async Task<AiChatResponse> ChatAsync(AiChatRequest request, CancellationToken ct)
     {
@@ -41,7 +42,7 @@ public sealed class AiTurnRouter(
             // Active FAS session — route through FasInterviewHandler for interview turns;
             // let knowledge questions, capability queries, and admin center questions fall through
             // to the agentic/deterministic path so they can interrupt the FAS session.
-            if (c.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
+            if (_fasEnabled && c.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
                 && !AiKeywordMatchers.IsFasKnowledgeInterrupt(sanitized.Message)
                 && !AiKeywordMatchers.LooksLikeCapabilityQuestion(sanitized.Message)
                 && !AiKeywordMatchers.LooksLikeAdminCenterQuestion(sanitized.Message))
@@ -96,21 +97,61 @@ public sealed class AiTurnRouter(
         catch (ConcurrencyConflictException) { throw; }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Guid rid = await fallbackHandler.CreateReviewAsync(c, c.PersonId, "MODEL_OR_TOOL_FAILURE", sanitized.PageContext, sanitized.Message, now, ct);
-            logger.LogError(ex, "AI conv {Id} failed {Elapsed} ms", c.Id, sw.ElapsedMilliseconds);
-            AiHandlerResult fb = c.FasSession?.StatusCode switch
+            logger.LogError(ex, "AI conv {Id} failed after {Elapsed}ms", c.Id, sw.ElapsedMilliseconds);
+
+            Guid? reviewId = null;
+            try
             {
-                "CANCELLED" => new AiHandlerResult("Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", new(false, []), [], []),
-                "PAUSED" => new AiHandlerResult(AiKeywordMatchers.LooksLikeScopeTest(sanitized.Message) ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance." : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.", "GENERAL", new(false, []), [], []),
-                _ => fallbackHandler.FallbackResponse(rid)
-            };
+                reviewId = await fallbackHandler.CreateReviewAsync(
+                    c, c.PersonId, "MODEL_OR_TOOL_FAILURE",
+                    sanitized.PageContext, sanitized.Message, now, ct);
+            }
+            catch (Exception reviewEx)
+            {
+                logger.LogError(reviewEx, "Fallback review creation failed for conv {Id}", c.Id);
+            }
+
+            AiHandlerResult fb;
+            if (_fasEnabled && c.FasSession?.StatusCode == "CANCELLED")
+            {
+                fb = new AiHandlerResult("Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", new(false, []), [], []);
+            }
+            else if (_fasEnabled && c.FasSession?.StatusCode == "PAUSED")
+            {
+                fb = new AiHandlerResult(AiKeywordMatchers.LooksLikeScopeTest(sanitized.Message) ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance." : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.", "GENERAL", new(false, []), [], []);
+            }
+            else
+            {
+                fb = reviewId.HasValue
+                    ? fallbackHandler.FallbackResponse(reviewId.Value)
+                    : new AiHandlerResult(
+                        "Ask AI is temporarily unavailable. Payments and forms work normally.",
+                        "GENERAL", new(false, []), [], []);
+            }
+
             var fbr = ToChatResponse(c.Id, 0, fb);
-            fbr = FasInterviewHandler.AttachDormantFasState(fbr, c.FasSession);
-            var fbm = AiMessage.Create(c.Id, "ASSISTANT", redactor.Redact(fbr.Text), now, latencyMs: (int)sw.ElapsedMilliseconds, responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(fbr)));
-            db.Add(fbm);
-            try { await db.SaveChangesAsync(ct); }
-            catch (DbUpdateConcurrencyException) { /* concurrent modification — fallback response already computed */ }
-            return fbr with { MessageId = fbm.Id };
+            if (_fasEnabled)
+            {
+                fbr = FasInterviewHandler.AttachDormantFasState(fbr, c.FasSession);
+            }
+
+            long fbmId = 0;
+            try
+            {
+                var fbm = AiMessage.Create(c.Id, "ASSISTANT",
+                    redactor.Redact(fbr.Text), now,
+                    latencyMs: (int)sw.ElapsedMilliseconds,
+                    responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(fbr)));
+                db.Add(fbm);
+                await db.SaveChangesAsync(ct);
+                fbmId = fbm.Id;
+            }
+            catch (Exception saveEx)
+            {
+                logger.LogError(saveEx, "Fallback persistence failed for conv {Id}", c.Id);
+            }
+
+            return fbr with { MessageId = fbmId };
         }
     }
 
@@ -120,7 +161,7 @@ public sealed class AiTurnRouter(
     private async Task<AiChatResponse> Save(Guid cid, string? pageJson, DateTime now, long mid, AiHandlerResult result, AiConversation? c, AiChatRequest req, AiTurnPlan plan, Stopwatch sw, CancellationToken ct, bool withFasState = false)
     {
         var r = ToChatResponse(cid, mid, result);
-        if (withFasState && c is not null) r = FasInterviewHandler.AttachDormantFasState(r, c.FasSession);
+        if (_fasEnabled && withFasState && c is not null) r = FasInterviewHandler.AttachDormantFasState(r, c.FasSession);
         r = AiResponseBuilder.AttachV2Metadata(r, plan);
         r = AiResponseBuilder.AttachFollowUps(r, req);
         if (c is not null && pageJson is not null) c.Touch(r.Mode, pageJson, now);
@@ -136,7 +177,12 @@ public sealed class AiTurnRouter(
     {
         if (id.HasValue)
         {
-            var existing = await db.Set<AiConversation>().Include(x => x.FasSession).SingleOrDefaultAsync(x => x.Id == id.Value, ct);
+            IQueryable<AiConversation> query = db.Set<AiConversation>();
+            if (_fasEnabled)
+            {
+                query = query.Include(x => x.FasSession);
+            }
+            var existing = await query.SingleOrDefaultAsync(x => x.Id == id.Value, ct);
             if (existing is not null && existing.PersonId != personId) throw new UnauthorizedAccessException("AI.CONVERSATION_FORBIDDEN");
             if (existing is not null) return existing;
         }
