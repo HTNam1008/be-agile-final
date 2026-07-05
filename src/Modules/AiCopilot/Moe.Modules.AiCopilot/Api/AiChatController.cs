@@ -49,11 +49,13 @@ public sealed class AiChatController(
         var conversation = await db.Set<AiConversation>().AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id && x.PersonId == personId, ct)
             ?? throw new KeyNotFoundException("AI.CONVERSATION_NOT_FOUND");
-        var messages = await db.Set<AiMessage>().AsNoTracking().Where(x => x.ConversationId == id)
+        var rawMessages = await db.Set<AiMessage>().AsNoTracking().Where(x => x.ConversationId == id)
             .OrderBy(x => x.CreatedAtUtc)
-            .Select(x => new AiConversationMessageResponse(x.Id, x.RoleCode, x.Content, x.CreatedAtUtc,
-                x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions)))
+            .Select(x => new { x.Id, x.RoleCode, x.Content, x.CreatedAtUtc, x.ResponseJson })
             .ToArrayAsync(ct);
+        var messages = rawMessages.Select(x => new AiConversationMessageResponse(x.Id, x.RoleCode, x.Content, x.CreatedAtUtc,
+            x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions)))
+            .ToArray();
         return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages,
             DeserializeInterviewState(conversation.FasSession?.CollectedFactsJson));
     }
