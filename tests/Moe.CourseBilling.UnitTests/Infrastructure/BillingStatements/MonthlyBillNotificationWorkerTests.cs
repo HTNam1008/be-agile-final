@@ -56,6 +56,23 @@ public sealed class MonthlyBillNotificationWorkerTests
     }
 
     [Fact]
+    public async Task RunIfDueAsync_WhenSingaporeFirstDayButUtcPreviousDay_ProcessesOutstandingBills()
+    {
+        DbContextOptions<MoeDbContext> options = CreateOptions();
+        await SeedBillAsync(options, personId: 711, outstandingAmount: 25m);
+        RecordingBillingStatementRepository statements = new();
+        MonthlyBillNotificationWorker worker = CreateWorker(
+            options,
+            statements,
+            new DateTimeOffset(2026, 6, 30, 16, 30, 0, TimeSpan.Zero));
+
+        await worker.RunIfDueAsync(CancellationToken.None);
+
+        statements.PersonIds.Should().Equal(711);
+        statements.NotificationModes.Should().Equal(BillingStatementNotificationMode.SendMonthlyBill);
+    }
+
+    [Fact]
     public async Task RunIfDueAsync_DeduplicatesPersonWithMultipleOutstandingBills()
     {
         DbContextOptions<MoeDbContext> options = CreateOptions();

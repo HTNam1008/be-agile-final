@@ -8,7 +8,8 @@ namespace Moe.FasPayment.UnitTests;
 
 public sealed class CreateFasSchemeValidationTests
 {
-    private readonly CreateFasSchemeRequestValidator _validator = new();
+    private readonly CreateFasSchemeRequestValidator _validator = new(
+        new TestClock(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero)));
 
     [Fact]
     public void Valid_wizard_payload_passes() => _validator.Validate(FasSchemeTestData.ValidRequest()).IsValid.Should().BeTrue();
@@ -52,7 +53,7 @@ public sealed class CreateFasSchemeValidationTests
     public void Start_date_before_today_fails()
     {
         CreateFasSchemeRequest source = FasSchemeTestData.ValidRequest();
-        DateOnly yesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        DateOnly yesterday = new(2026, 6, 30);
         _validator.Validate(source with { StartDate = yesterday, EndDate = yesterday.AddDays(30) }).IsValid.Should().BeFalse();
     }
 

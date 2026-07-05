@@ -106,7 +106,7 @@ internal sealed class PaymentPlanBillPreviewBuilder(
         DateOnly today = clock.TodayInSingapore();
         bool installment = plan.PlanTypeCode == "INSTALLMENT";
         DateOnly dueDate = installment
-            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(now)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(today)
             : today;
 
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =

@@ -282,7 +282,7 @@ internal sealed class PublishCourseCommandHandler(
             command.CourseId,
             $"BILL-{utcNow:yyyyMMdd}",
             utcNow,
-            DateOnly.FromDateTime(utcNow).AddDays(30),
+            access.TodayInSingapore().AddDays(30),
             cancellationToken);
 
         await audit.RecordSchoolActionAsync(
