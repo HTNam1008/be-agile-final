@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -11,12 +12,14 @@ public sealed class AiAgenticTurnService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly Kernel _kernel;
+    private readonly IConfiguration _config;
+    private readonly AiCopilotPlugin _plugin;
     private readonly ILogger<AiAgenticTurnService> _logger;
 
-    public AiAgenticTurnService(Kernel kernel, ILogger<AiAgenticTurnService> logger)
+    public AiAgenticTurnService(IConfiguration config, AiCopilotPlugin plugin, ILogger<AiAgenticTurnService> logger)
     {
-        _kernel = kernel;
+        _config = config;
+        _plugin = plugin;
         _logger = logger;
     }
 
@@ -24,7 +27,13 @@ public sealed class AiAgenticTurnService
     {
         try
         {
-            IChatCompletionService chat = _kernel.GetRequiredService<IChatCompletionService>();
+            string endpoint = _config["AzureOpenAI:Endpoint"] ?? throw new InvalidOperationException("AzureOpenAI:Endpoint required");
+            string apiKey = _config["AzureOpenAI:ApiKey"] ?? throw new InvalidOperationException("AzureOpenAI:ApiKey required");
+            string deployment = _config["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName required");
+            var builder = Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(deployment, endpoint, apiKey);
+            Kernel kernel = builder.Build();
+            kernel.ImportPluginFromObject(_plugin, "AiCopilot");
+            IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
 
             string fasState = conversation.FasSession?.StatusCode switch
             {
@@ -74,7 +83,7 @@ Current session context:
             while (true)
             {
                 ChatMessageContent answer = await chat.GetChatMessageContentAsync(history,
-                    executionSettings: execSettings, kernel: _kernel, cancellationToken: ct);
+                    executionSettings: execSettings, kernel: kernel, cancellationToken: ct);
 
                 // If the assistant sent text content (not a tool call), we're done
                 if (!string.IsNullOrEmpty(answer.Content))

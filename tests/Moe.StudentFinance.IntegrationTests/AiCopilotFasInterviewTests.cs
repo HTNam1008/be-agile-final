@@ -143,7 +143,8 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
 
         JsonElement sideQuestion = await SendFasMessage("what is pci", conversationId);
         Assert.Equal("PAUSED", sideQuestion.GetProperty("interviewState").GetProperty("status").GetString());
-        Assert.Matches("(?i)(per[-\\s]?capita)", sideQuestion.GetProperty("text").GetString());
+        string pciText = sideQuestion.GetProperty("text").GetString()!;
+        Assert.Contains("per capita", pciText.Replace('\u2011', ' ').Replace('\u2010', ' ').Replace('-', ' '), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Before I calculate", sideQuestion.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
 
         JsonElement cancelled = await SendFasMessage("i dont want to do fas anymore", conversationId);

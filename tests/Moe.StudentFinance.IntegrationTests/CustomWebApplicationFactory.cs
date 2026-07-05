@@ -47,8 +47,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // Remove the app's DbContext registration.
             services.RemoveAll(typeof(DbContextOptions<MoeDbContext>));
             services.RemoveAll(typeof(DbContextOptions));
-            services.RemoveAll<IKnowledgeRetriever>();
-            services.AddSingleton<IKnowledgeRetriever>(_ => new StubKnowledgeRetriever());
+            services.RemoveAll<ITextEmbeddingGenerationService>();
+            services.AddSingleton<ITextEmbeddingGenerationService>(new FakeTextEmbeddingGenerationService());
 
             // Create a single shared internal service provider for all in-memory database contexts.
             var inMemoryServiceProvider = new ServiceCollection()
@@ -477,43 +477,6 @@ internal sealed class FakeTextEmbeddingGenerationService : ITextEmbeddingGenerat
 }
 #pragma warning restore SKEXP0001
 
-internal sealed class StubKnowledgeRetriever : IKnowledgeRetriever
-{
-    private readonly EmbeddedKnowledgeDocumentStore _store = new();
-
-    public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
-    {
-        IReadOnlyList<KnowledgeDocument> docs = await _store.GetAllAsync(ct);
-        string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
-
-        return docs
-            .Where(d => d.Domain == normalizedDomain)
-            .Take(Math.Clamp(limit, 1, 8))
-            .Select(d => new KnowledgeResult(
-                new KnowledgeCitation(d.Id, d.Title, d.Section, d.Status, d.Version, d.EffectiveDate, d.Url),
-                d.Content, 1.0,
-                d.FollowUps ?? DefaultFollowUps(d.Domain, d.Title),
-                d.AllowedIntents ?? DefaultAllowedIntents(d.Domain),
-                d.ReviewOwner))
-            .ToArray();
-    }
-
-    private static string[] DefaultAllowedIntents(string domain) =>
-        domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase)
-            ? ["AnswerKnowledgeQuestion", "PaymentQuery"]
-            : ["AnswerKnowledgeQuestion", "StartInterview", "ContinueInterview"];
-
-    private static string[] DefaultFollowUps(string domain, string title)
-    {
-        if (domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase))
-            return ["Show my outstanding bills.", "How can I pay a bill?", "Explain refunds."];
-        if (title.Contains("Application", StringComparison.OrdinalIgnoreCase))
-            return ["What documents prove income?", "Which schemes can I apply for?", "How is PCI calculated?"];
-        if (title.Contains("Bursary", StringComparison.OrdinalIgnoreCase) || title.Contains("Subsidy", StringComparison.OrdinalIgnoreCase))
-            return ["Which schemes can I apply for?", "What documents prove income?", "How is PCI calculated?"];
-        return ["How is PCI calculated?", "Which schemes can I apply for?", "What documents prove income?"];
-    }
-}
 
 public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {

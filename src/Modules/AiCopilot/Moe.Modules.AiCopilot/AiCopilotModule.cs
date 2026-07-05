@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Embeddings;
 using Moe.Application.Abstractions.Modules;
 using Moe.Application.Abstractions.Persistence;
 using Moe.Modules.AiCopilot.Application.Finance;
@@ -20,26 +21,18 @@ public sealed class AiCopilotModule : IModule
 
     public void AddServices(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton(provider =>
+        string endpoint = configuration["AzureOpenAI:Endpoint"] ?? throw new InvalidOperationException("AzureOpenAI:Endpoint is required for AI requests.");
+        string apiKey = configuration["AzureOpenAI:ApiKey"] ?? throw new InvalidOperationException("AzureOpenAI:ApiKey is required for AI requests.");
+        string chatDeployment = configuration["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName is required for AI requests.");
+        services.AddSingleton(_ => Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(chatDeployment, endpoint, apiKey).Build());
+        string? embeddingDeployment = configuration["AzureOpenAI:EmbeddingDeploymentName"];
+        if (embeddingDeployment is not null)
         {
-            string endpoint = configuration["AzureOpenAI:Endpoint"] ?? throw new InvalidOperationException("AzureOpenAI:Endpoint is required for AI requests.");
-            string apiKey = configuration["AzureOpenAI:ApiKey"] ?? throw new InvalidOperationException("AzureOpenAI:ApiKey is required for AI requests.");
-            string chatDeployment = configuration["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName is required for AI requests.");
-            string? embeddingDeployment = configuration["AzureOpenAI:EmbeddingDeploymentName"];
-            IKernelBuilder builder = Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(chatDeployment, endpoint, apiKey);
-            if (embeddingDeployment is not null)
-            {
-                builder.AddAzureOpenAITextEmbeddingGeneration(embeddingDeployment, endpoint, apiKey);
-            }
-            bool agenticEnabled = configuration.GetValue("AiCopilot:AgenticEnabled", true);
-            if (agenticEnabled)
-            {
-                Kernel kernel = builder.Build();
-                kernel.ImportPluginFromObject(provider.GetRequiredService<AiCopilotPlugin>(), "AiCopilot");
-                return kernel;
-            }
-            return builder.Build();
-        });
+            IKernelBuilder embedBuilder = Kernel.CreateBuilder();
+            embedBuilder.AddAzureOpenAITextEmbeddingGeneration(embeddingDeployment, endpoint, apiKey);
+            Kernel embedKernel = embedBuilder.Build();
+            services.AddSingleton<ITextEmbeddingGenerationService>(_ => embedKernel.GetRequiredService<ITextEmbeddingGenerationService>());
+        }
         services.AddScoped<AiTurnRouter>();
         services.AddScoped<AiTurnPlannerService>();
         services.AddScoped<AiFinanceReader>();
