@@ -2,12 +2,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Moe.Modules.AiCopilot.Api;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
-public sealed class FasExtractionService(Kernel kernel)
+public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -30,11 +32,23 @@ public sealed class FasExtractionService(Kernel kernel)
     """;
 
     private static readonly JsonElement AllExtractionSchemaElement;
+    private static readonly JsonElement IncomeFieldSchemaElement;
+    private static readonly JsonElement HouseholdCountFieldSchemaElement;
+    private static readonly JsonElement OtherIncomeFieldSchemaElement;
 
     static FasExtractionService()
     {
         using var doc = JsonDocument.Parse(AllExtractionSchema);
         AllExtractionSchemaElement = doc.RootElement.Clone();
+        IncomeFieldSchemaElement = JsonDocument.Parse("""
+        {"type":"object","properties":{"value":{"type":["number","null"]},"field":{"type":"string","enum":["monthlyHouseholdIncome"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
+        """).RootElement.Clone();
+        HouseholdCountFieldSchemaElement = JsonDocument.Parse("""
+        {"type":"object","properties":{"value":{"type":["number","null"]},"field":{"type":"string","enum":["householdMemberCount"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
+        """).RootElement.Clone();
+        OtherIncomeFieldSchemaElement = JsonDocument.Parse("""
+        {"type":"object","properties":{"value":{"type":["number","null"]},"field":{"type":"string","enum":["otherMonthlyIncome"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
+        """).RootElement.Clone();
     }
 
     private static PromptExecutionSettings CreateJsonSchemaExecutionSettings(JsonElement schemaElement, string schemaName, bool strict = true)
@@ -133,7 +147,7 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             }
             return extResult;
         }
-        catch { return null; }
+        catch (Exception ex) { logger.LogWarning(ex, "TryLlmExtractAllAsync failed for field {Field}", expectedField); return null; }
     }
 
     private static (FasExtractionResult Result, List<(string Field, object? Value)> Changes) ValidateExtraction(JsonElement root, FasInterviewData s, string target)
@@ -235,6 +249,8 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             if (!s.OtherMonthlyIncome.HasValue) yield return "otherMonthlyIncome";
         }
         if (s.ParentNationalities.Count == 0) yield return "parentNationalities";
+        if (s.Email is null) yield return "email";
+        if (s.EmploymentStatusCode is null) yield return "employmentStatusCode";
     }
 
     private static bool? TryGetJsonBool(JsonElement root, string key)
@@ -274,19 +290,14 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
         {
             IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
 
-            string fieldSchema = $$"""
+            JsonElement schemaEl = field switch
             {
-              "type": "object",
-              "properties": {
-                "value": { "type": ["number", "null"] },
-                "field": { "type": "string", "enum": ["{{field}}"] },
-                "ambiguous": { "type": "boolean" }
-              },
-              "required": ["value", "field", "ambiguous"]
-            }
-            """;
-            using var schemaDoc = JsonDocument.Parse(fieldSchema);
-            var settings = CreateJsonSchemaExecutionSettings(schemaDoc.RootElement.Clone(), "fas_field_extraction", strict: false);
+                "monthlyHouseholdIncome" => IncomeFieldSchemaElement,
+                "householdMemberCount" => HouseholdCountFieldSchemaElement,
+                "otherMonthlyIncome" => OtherIncomeFieldSchemaElement,
+                _ => throw new InvalidOperationException($"Unexpected field: {field}")
+            };
+            var settings = CreateJsonSchemaExecutionSettings(schemaEl, "fas_field_extraction", strict: false);
 
             var history = new ChatHistory($$"""
 You extract student FAS application data from a Singapore user message.
@@ -325,8 +336,9 @@ Rules:
                 _ => null
             };
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "TryLlmExtractFieldAsync failed for field {Field}", field);
             return null;
         }
     }
@@ -393,7 +405,7 @@ Rules:
             if (LooksLikeUncertaintyAnswer(message))
             {
                 int helpAttempts = s.HelpAttempts.GetValueOrDefault(field);
-                if (helpAttempts >= 1)
+                if (helpAttempts >= 2)
                 {
                     s.ClarificationField = null;
                     s.ValidationMessage = HelpForField(field);
@@ -436,7 +448,7 @@ Rules:
         }
 
         int attempts = s.ClarificationAttempts.GetValueOrDefault(field);
-        if (attempts >= 1)
+        if (attempts >= 2)
         {
             s.ClarificationField = null;
             s.ValidationMessage = result.Message;
@@ -459,9 +471,11 @@ Rules:
         bool notNegatesWelfare = Regex.IsMatch(value, @"\b(not|don't|do not)\b.{0,30}\b(welfare|approved|home|one)\b", RegexOptions.IgnoreCase);
         if (notNegatesWelfare) return FasExtractionResult.Accepted(false);
 
-        bool yes = Regex.IsMatch(value, @"\b(yes|y|welfare home|approved welfare)\b", RegexOptions.IgnoreCase)
+        bool yes = Regex.IsMatch(value, @"\b(yes|yeah|welfare home|approved welfare)\b", RegexOptions.IgnoreCase)
+            || value.Equals("y", StringComparison.OrdinalIgnoreCase)
             || Regex.IsMatch(value, @"\b(do have|have|reside in|live in)\b.{0,30}\b(welfare|approved home|home|one)\b", RegexOptions.IgnoreCase);
-        bool no = Regex.IsMatch(value, @"\b(no|n|not|do not|don't)\b", RegexOptions.IgnoreCase);
+        bool no = Regex.IsMatch(value, @"\b(no|nah|not|do not|don't)\b", RegexOptions.IgnoreCase)
+            || value.Equals("n", StringComparison.OrdinalIgnoreCase);
 
         if (yes && !no) return FasExtractionResult.Accepted(true);
         if (no && !yes) return FasExtractionResult.Accepted(false);
@@ -482,8 +496,7 @@ Rules:
     {
         decimal[] numbers = ExtractNumbers(message).ToArray();
         if (numbers.Length == 0) return FasExtractionResult.Clarify("Please provide your total monthly household income as an SGD amount, for example 3200.");
-        if (numbers.Length > 1) return FasExtractionResult.Clarify("I found more than one amount. Please reply with only the total monthly household income in SGD.");
-        decimal income = numbers[0];
+        decimal income = numbers.Sum();
         if (income < 0 || income > 1_000_000) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
         return FasExtractionResult.Accepted(decimal.Round(income, 2));
     }
@@ -535,7 +548,7 @@ Rules:
             return FasExtractionResult.Clarify(ParentNationalityClarification());
 
         string[] values = Regex.Split(normalized, @"\s*(?:,|/|\band\b|&)\s*", RegexOptions.IgnoreCase)
-            .Select(x => TryNormalizeParentNationality(x))
+            .Select(x => TryNormalizeParentNationality(x) ?? TryMapCountryToParentNationalitySuggestion(x))
             .Where(x => x is not null)
             .Select(x => x!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -633,12 +646,12 @@ Rules:
         HouseholdMemberCount = s.HouseholdMemberCount,
         OtherMonthlyIncome = s.OtherMonthlyIncome,
         ParentNationalities = new List<string>(s.ParentNationalities),
-        ApplicableSchemes = s.ApplicableSchemes,
-        ApplicableSchemeNames = s.ApplicableSchemeNames,
-        RequiredCriteriaTypes = s.RequiredCriteriaTypes,
-        ProfileConfirmedFacts = s.ProfileConfirmedFacts,
-        UserRequiredFacts = s.UserRequiredFacts,
-        RecommendationMatches = s.RecommendationMatches,
+        ApplicableSchemes = new List<FasApplicableSchemeOption>(s.ApplicableSchemes),
+        ApplicableSchemeNames = new List<string>(s.ApplicableSchemeNames),
+        RequiredCriteriaTypes = new List<string>(s.RequiredCriteriaTypes),
+        ProfileConfirmedFacts = new List<string>(s.ProfileConfirmedFacts),
+        UserRequiredFacts = new List<string>(s.UserRequiredFacts),
+        RecommendationMatches = new List<FasRecommendationMatch>(s.RecommendationMatches),
         ClarificationField = s.ClarificationField,
         ValidationMessage = s.ValidationMessage,
         PendingParentNationalitySuggestion = s.PendingParentNationalitySuggestion,
@@ -649,6 +662,7 @@ Rules:
     internal static void Restore(FasInterviewData s, FasInterviewData snapshot)
     {
         s.Status = snapshot.Status;
+        s.Profile = snapshot.Profile;
         s.IsWelfareHomeResident = snapshot.IsWelfareHomeResident;
         s.Email = snapshot.Email;
         s.EmploymentStatusCode = snapshot.EmploymentStatusCode;
@@ -656,6 +670,12 @@ Rules:
         s.HouseholdMemberCount = snapshot.HouseholdMemberCount;
         s.OtherMonthlyIncome = snapshot.OtherMonthlyIncome;
         s.ParentNationalities = snapshot.ParentNationalities;
+        s.ApplicableSchemes = snapshot.ApplicableSchemes;
+        s.ApplicableSchemeNames = snapshot.ApplicableSchemeNames;
+        s.RequiredCriteriaTypes = snapshot.RequiredCriteriaTypes;
+        s.ProfileConfirmedFacts = snapshot.ProfileConfirmedFacts;
+        s.UserRequiredFacts = snapshot.UserRequiredFacts;
+        s.RecommendationMatches = snapshot.RecommendationMatches;
         s.ClarificationField = snapshot.ClarificationField;
         s.ValidationMessage = snapshot.ValidationMessage;
         s.PendingParentNationalitySuggestion = snapshot.PendingParentNationalitySuggestion;

@@ -45,8 +45,20 @@ public sealed class FasEligibilityService(StudentFasApplicationService fas)
             return ("I have enough information to evaluate the active FAS schemes. Review the recommendation below and use 'Apply answers to form' when ready.",
                 state, matchedSchemes, fasRecommendation);
         }
-        catch
+        catch (Exception ex)
         {
+            bool isTransient = ex is HttpRequestException
+                or TaskCanceledException
+                or OperationCanceledException
+                or TimeoutException;
+
+            if (isTransient)
+            {
+                state.Status = "MANUAL_FALLBACK";
+                return ("I was unable to check eligibility right now due to a connection issue. Please try again in a moment, or use 'Open FAS application' to complete the form manually.",
+                    state, [], null);
+            }
+
             if (CanPrepareOpenSchemeForReview(state))
             {
                 state.Status = "COMPLETE";
@@ -98,7 +110,7 @@ public sealed class FasEligibilityService(StudentFasApplicationService fas)
         string subsidyType = match.SubsidyType.ToUpperInvariant();
         return subsidyType switch
         {
-            "PERCENTAGE" => match.SubsidyValue * 1000m,
+            "PERCENTAGE" => match.IsComparable ? match.SubsidyValue * 1000m : 0m,
             "FIXED" => match.SubsidyValue,
             _ => 0m
         };
