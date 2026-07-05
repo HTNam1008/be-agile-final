@@ -53,8 +53,8 @@ public sealed class AiTurnRouter(
                     if (fasResult.Mode == "REDIRECT_FALLBACK")
                     {
                         Guid rid = await fallbackHandler.CreateReviewAsync(c, c.PersonId, fasResult.TurnIntent ?? "FAS_MANUAL_FALLBACK", sanitized.PageContext, sanitized.Message, now, ct);
-                        var fb = fallbackHandler.FallbackResponse(rid);
-                        fb = fb with { InterviewState = fasResult.InterviewState, FollowUpQuestions = fb.FollowUpQuestions.Count > 0 ? fb.FollowUpQuestions : fasResult.FollowUpQuestions };
+                        var fallbackResp = fallbackHandler.FallbackResponse(rid);
+                        var fb = fasResult with { Mode = "FALLBACK", ReviewRecordId = rid, Actions = fallbackResp.Actions, FollowUpQuestions = fasResult.FollowUpQuestions.Count > 0 ? fasResult.FollowUpQuestions : fallbackResp.FollowUpQuestions };
                         return await Save(c.Id, pj, now, 0, fb, c, sanitized, fasPlan, sw, ct, true);
                     }
                     var dispatched = fasResult.Mode == "REDIRECT_PAYMENT"

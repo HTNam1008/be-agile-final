@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Embeddings;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 
@@ -14,11 +12,10 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private DateTime _lastLoadUtc = DateTime.MinValue;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-    public LocalKnowledgeRetriever(IServiceProvider services, IKnowledgeDocumentStore store)
+    public LocalKnowledgeRetriever(IKnowledgeDocumentStore store, ITextEmbeddingGenerationService embeddings)
     {
         _store = store;
-        Kernel kernel = services.GetRequiredService<Kernel>();
-        _embeddings = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+        _embeddings = embeddings;
     }
 
     private async Task EnsureDocumentsLoadedAsync(CancellationToken ct)
