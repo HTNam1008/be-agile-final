@@ -36,6 +36,90 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
     private static readonly JsonElement HouseholdCountFieldSchemaElement;
     private static readonly JsonElement OtherIncomeFieldSchemaElement;
 
+    private static readonly Regex WelfareUncertaintyPattern = new(
+        @"\b(not sure|maybe|i don't know|i do not know|what is|unsure|uncertain)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WelfareNotNegatesPattern = new(
+        @"\b(no|not|don't|do not)\b.{0,30}\b(welfare|approved|home|one)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WelfareYesPattern = new(
+        @"\b(yes|yeah|welfare home|approved welfare)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WelfareYesExtendedPattern = new(
+        @"\b(do have|have|reside in|live in)\b.{0,30}\b(welfare|approved home|home|one)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WelfareNoPattern = new(
+        @"\b(no|nah|not|do not|don't)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ConfirmationYesPattern = new(
+        @"\b(yes|y|correct|confirm|confirmed|looks right|that's right|that is right)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ConfirmationNoPattern = new(
+        @"\b(no|n|wrong|incorrect|edit|change|not correct|not right)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex NonePattern = new(
+        @"\b(none|no other|nothing|nil|zero)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex SelfEmployedPattern = new(
+        @"\b(self[-\s]?employed|freelance|freelancer)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex UnemployedPattern = new(
+        @"\b(unemployed|not employed|no job|jobless)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex EmployedPattern = new(
+        @"\b(employed|working|employee|full[-\s]?time|part[-\s]?time)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex EmailPattern = new(
+        @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ParentNationalitySplitPattern = new(
+        @"\s*(?:,|/|\band\b|&)\s*",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ExtractNumberPattern = new(
+        @"(?<![\w])-?\d[\d,]*(?:\.\d+)?\s*[kK]?",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex WhitespacePattern = new(
+        @"\s+",
+        RegexOptions.Compiled);
+
+    private static readonly Regex CompactPattern = new(
+        @"[\s._-]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex StripNonAlphaPattern = new(
+        @"[^A-Za-z]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex HelpRequestPattern = new(
+        @"\b(what are|what is|options|option|choose|choices|example|examples|not sure|don't know|do not know|idk|help|does it count|should i count|count as|which one)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex UncertaintyPattern = new(
+        @"\b(not sure|don't know|do not know|idk|still not sure|unsure|uncertain)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WelfareCorrectionPattern = new(
+        @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex CorrectionAmbiguousPattern = new(
+        @"\b(wait|actually|sorry|correction|meant)\b.{0,20}\b(yes|y|no|n)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     static FasExtractionService()
     {
         using var doc = JsonDocument.Parse(AllExtractionSchema);
@@ -347,8 +431,10 @@ Rules:
     {
         if (value.ValueKind != JsonValueKind.Number || !value.TryGetDecimal(out decimal amount))
             return FasExtractionResult.Clarify("I could not understand the income figure. Please provide the amount as a number.");
-        if (amount < 0 || amount > 1_000_000)
+        if (amount < 0)
             return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+        if (amount > 100_000)
+            return FasExtractionResult.Clarify($"${amount:N0} seems high for a monthly figure. If that is your annual income, the monthly amount would be ${amount / 12:N0}. Could you confirm the monthly household income?");
         return FasExtractionResult.Accepted(decimal.Round(amount, 2));
     }
 
@@ -465,16 +551,16 @@ Rules:
     {
         string value = message.Trim().ToLowerInvariant();
 
-        if (Regex.IsMatch(value, @"\b(not sure|maybe|i don't know|i do not know|what is|unsure|uncertain)\b", RegexOptions.IgnoreCase))
+        if (WelfareUncertaintyPattern.IsMatch(value))
             return FasExtractionResult.Clarify("Please confirm welfare-home status with yes or no.");
 
-        bool notNegatesWelfare = Regex.IsMatch(value, @"\b(not|don't|do not)\b.{0,30}\b(welfare|approved|home|one)\b", RegexOptions.IgnoreCase);
+        bool notNegatesWelfare = WelfareNotNegatesPattern.IsMatch(value);
         if (notNegatesWelfare) return FasExtractionResult.Accepted(false);
 
-        bool yes = Regex.IsMatch(value, @"\b(yes|yeah|welfare home|approved welfare)\b", RegexOptions.IgnoreCase)
+        bool yes = WelfareYesPattern.IsMatch(value)
             || value.Equals("y", StringComparison.OrdinalIgnoreCase)
-            || Regex.IsMatch(value, @"\b(do have|have|reside in|live in)\b.{0,30}\b(welfare|approved home|home|one)\b", RegexOptions.IgnoreCase);
-        bool no = Regex.IsMatch(value, @"\b(no|nah|not|do not|don't)\b", RegexOptions.IgnoreCase)
+            || WelfareYesExtendedPattern.IsMatch(value);
+        bool no = WelfareNoPattern.IsMatch(value)
             || value.Equals("n", StringComparison.OrdinalIgnoreCase);
 
         if (yes && !no) return FasExtractionResult.Accepted(true);
@@ -485,8 +571,8 @@ Rules:
     internal static FasExtractionResult ExtractConfirmation(string message)
     {
         string value = message.Trim();
-        bool yes = Regex.IsMatch(value, @"\b(yes|y|correct|confirm|confirmed|looks right|that's right|that is right)\b", RegexOptions.IgnoreCase);
-        bool no = Regex.IsMatch(value, @"\b(no|n|wrong|incorrect|edit|change|not correct|not right)\b", RegexOptions.IgnoreCase);
+        bool yes = ConfirmationYesPattern.IsMatch(value);
+        bool no = ConfirmationNoPattern.IsMatch(value);
         if (yes && !no) return FasExtractionResult.Accepted(true);
         if (no && !yes) return FasExtractionResult.Accepted(false);
         return FasExtractionResult.Clarify("Please reply yes if these details are correct, or no if you want to stop and edit the form manually.");
@@ -497,7 +583,8 @@ Rules:
         decimal[] numbers = ExtractNumbers(message).ToArray();
         if (numbers.Length == 0) return FasExtractionResult.Clarify("Please provide your total monthly household income as an SGD amount, for example 3200.");
         decimal income = numbers.Sum();
-        if (income < 0 || income > 1_000_000) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+        if (income < 0) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+        if (income > 100_000) return FasExtractionResult.Clarify($"${income:N0} seems high for a monthly figure. If that is your annual income, the monthly amount would be ${income / 12:N0}. Could you confirm the monthly household income?");
         return FasExtractionResult.Accepted(decimal.Round(income, 2));
     }
 
@@ -505,15 +592,25 @@ Rules:
     {
         decimal[] numbers = ExtractNumbers(message).ToArray();
         if (numbers.Length == 0) return FasExtractionResult.Clarify("Please provide the number of people in your household, for example 4.");
-        if (numbers.Length > 1 || numbers[0] != decimal.Truncate(numbers[0])) return FasExtractionResult.Clarify("Please reply with one whole number for household members.");
-        int count = (int)numbers[0];
-        if (count is < 1 or > 30) return FasExtractionResult.Clarify("Please provide a household member count between 1 and 30.");
-        return FasExtractionResult.Accepted(count);
+
+        decimal[] wholeNumbers = numbers.Where(n => n == decimal.Truncate(n) && n >= 1 && n <= 30).ToArray();
+        if (wholeNumbers.Length == 0)
+            return FasExtractionResult.Clarify("Please reply with one whole number for household members.");
+
+        decimal count = wholeNumbers.OrderBy(n => n).First();
+        if (wholeNumbers.Length > 1)
+        {
+            decimal second = wholeNumbers.OrderBy(n => n).Skip(1).First();
+            if (second / count < 10)
+                return FasExtractionResult.Clarify("Please reply with just the number of people in your household, for example 4.");
+        }
+
+        return FasExtractionResult.Accepted((int)count);
     }
 
     internal static FasExtractionResult ExtractOtherIncome(string message)
     {
-        if (Regex.IsMatch(message, @"\b(none|no other|nothing|nil|zero)\b", RegexOptions.IgnoreCase))
+        if (NonePattern.IsMatch(message))
             return FasExtractionResult.Accepted(0m);
         FasExtractionResult result = ExtractIncome(message);
         return result.Status == "CLARIFY" && result.Message is not null
@@ -524,18 +621,18 @@ Rules:
     private static FasExtractionResult ExtractEmploymentStatus(string message)
     {
         string value = message.Trim().ToLowerInvariant();
-        if (Regex.IsMatch(value, @"\b(self[-\s]?employed|freelance|freelancer)\b", RegexOptions.IgnoreCase))
+        if (SelfEmployedPattern.IsMatch(value))
             return FasExtractionResult.Accepted("SELF_EMPLOYED");
-        if (Regex.IsMatch(value, @"\b(unemployed|not employed|no job|jobless)\b", RegexOptions.IgnoreCase))
+        if (UnemployedPattern.IsMatch(value))
             return FasExtractionResult.Accepted("UNEMPLOYED");
-        if (Regex.IsMatch(value, @"\b(employed|working|employee|full[-\s]?time|part[-\s]?time)\b", RegexOptions.IgnoreCase))
+        if (EmployedPattern.IsMatch(value))
             return FasExtractionResult.Accepted("EMPLOYED");
         return FasExtractionResult.Clarify("Please choose employed, self-employed, or unemployed.");
     }
 
     private static FasExtractionResult ExtractEmail(string message)
     {
-        Match match = Regex.Match(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        Match match = EmailPattern.Match(message);
         return match.Success
             ? FasExtractionResult.Accepted(match.Value)
             : FasExtractionResult.Clarify("Please provide a valid email address, for example student@example.com.");
@@ -547,13 +644,13 @@ Rules:
         if (normalized.Length is < 2 or > 120 || ExtractNumbers(normalized).Any())
             return FasExtractionResult.Clarify(ParentNationalityClarification());
 
-        string[] values = Regex.Split(normalized, @"\s*(?:,|/|\band\b|&)\s*", RegexOptions.IgnoreCase)
+        string[] values = ParentNationalitySplitPattern.Split(normalized)
             .Select(x => TryNormalizeParentNationality(x) ?? TryMapCountryToParentNationalitySuggestion(x))
             .Where(x => x is not null)
             .Select(x => x!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        int requestedValues = Regex.Split(normalized, @"\s*(?:,|/|\band\b|&)\s*", RegexOptions.IgnoreCase).Count(x => !string.IsNullOrWhiteSpace(x));
+        int requestedValues = ParentNationalitySplitPattern.Split(normalized).Count(x => !string.IsNullOrWhiteSpace(x));
         return values.Length == 0 || values.Length != requestedValues
             ? FasExtractionResult.Clarify(ParentNationalityClarification())
             : FasExtractionResult.Accepted(values);
@@ -561,7 +658,7 @@ Rules:
 
     internal static IEnumerable<decimal> ExtractNumbers(string message)
     {
-        foreach (Match match in Regex.Matches(message, @"(?<![\w])-?\d[\d,]*(?:\.\d+)?\s*[kK]?", RegexOptions.CultureInvariant))
+        foreach (Match match in ExtractNumberPattern.Matches(message))
         {
             string raw = match.Value.Trim();
             bool thousand = raw.EndsWith("k", StringComparison.OrdinalIgnoreCase);
@@ -573,8 +670,8 @@ Rules:
 
     internal static string? TryNormalizeParentNationality(string value)
     {
-        string trimmed = Regex.Replace(value.Trim().Trim('.'), @"\s+", " ");
-        string compact = Regex.Replace(trimmed, @"[\s._-]+", "", RegexOptions.CultureInvariant).ToUpperInvariant();
+        string trimmed = WhitespacePattern.Replace(value.Trim().Trim('.'), " ");
+        string compact = CompactPattern.Replace(trimmed, "").ToUpperInvariant();
         if (compact is "SG" or "SINGAPORE" or "SINGAPOREAN" or "SINGAPORECITIZEN" or "CITIZEN")
             return "Singapore Citizen";
         if (compact is "PR" or "PERMANENTRESIDENT" or "SINGAPOREPR")
@@ -586,8 +683,8 @@ Rules:
 
     private static string? TryMapCountryToParentNationalitySuggestion(string value)
     {
-        string normalized = Regex.Replace(value.Trim().Trim('?', '.', '!', ','), @"\s+", " ");
-        string compact = Regex.Replace(normalized, @"[^A-Za-z]", "", RegexOptions.CultureInvariant).ToUpperInvariant();
+        string normalized = WhitespacePattern.Replace(value.Trim().Trim('?', '.', '!', ','), " ");
+        string compact = StripNonAlphaPattern.Replace(normalized, "").ToUpperInvariant();
         if (compact is "SINGAPORE" or "SG")
             return "Singapore Citizen";
         if (compact is
@@ -613,6 +710,14 @@ Rules:
                     s.MonthlyHouseholdIncome = null;
                     s.HouseholdMemberCount = null;
                     s.OtherMonthlyIncome = null;
+                    if (s.ClarificationField is "monthlyHouseholdIncome" or "householdMemberCount" or "otherMonthlyIncome")
+                    {
+                        s.ClarificationField = null;
+                        s.ValidationMessage = null;
+                    }
+                    s.ClarificationAttempts.Remove("monthlyHouseholdIncome");
+                    s.ClarificationAttempts.Remove("householdMemberCount");
+                    s.ClarificationAttempts.Remove("otherMonthlyIncome");
                 }
                 break;
             case "email": s.Email = (string)value!; break;
@@ -700,7 +805,7 @@ Rules:
 
         string schemeText = s.ApplicableSchemeNames.Count switch
         {
-            0 when s.RequiredCriteriaTypes.Count > 0 || s.ApplicableSchemeNames.Count > 0 => "I did not find an open FAS scheme for your school yet.",
+            0 when s.RequiredCriteriaTypes.Count > 0 => "I did not find an open FAS scheme for your school yet.",
             0 => "I will check the active FAS schemes for your school.",
             1 => $"I found 1 open FAS scheme for your school: {s.ApplicableSchemeNames[0]}.",
             _ => $"I found {s.ApplicableSchemeNames.Count} open FAS schemes for your school: {string.Join(", ", s.ApplicableSchemeNames.Take(3))}{(s.ApplicableSchemeNames.Count > 3 ? ", and more" : string.Empty)}."
@@ -752,24 +857,24 @@ Rules:
 
     internal static bool LooksLikeFieldHelpRequest(string message)
     {
-        if (Regex.IsMatch(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase))
+        if (EmailPattern.IsMatch(message))
             return false;
 
-        return Regex.IsMatch(message, @"\b(what are|what is|options|option|choose|choices|example|examples|not sure|don't know|do not know|idk|help|does it count|should i count|count as|which one)\b", RegexOptions.IgnoreCase);
+        return HelpRequestPattern.IsMatch(message);
     }
 
     internal static bool LooksLikeUncertaintyAnswer(string message) =>
-        Regex.IsMatch(message, @"\b(not sure|don't know|do not know|idk|still not sure|unsure|uncertain)\b", RegexOptions.IgnoreCase);
+        UncertaintyPattern.IsMatch(message);
 
     internal static bool LooksLikeWelfareHomeCorrection(string message, bool? currentWelfareHome)
     {
-        if (Regex.IsMatch(message, @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b", RegexOptions.IgnoreCase))
+        if (WelfareCorrectionPattern.IsMatch(message))
             return true;
 
         if (!currentWelfareHome.HasValue)
             return false;
 
-        return Regex.IsMatch(message, @"\b(wait|actually|sorry|correction|meant)\b.{0,20}\b(yes|y|no|n)\b", RegexOptions.IgnoreCase);
+        return CorrectionAmbiguousPattern.IsMatch(message);
     }
 
     private static string? TryGetString(JsonElement element, string property)
