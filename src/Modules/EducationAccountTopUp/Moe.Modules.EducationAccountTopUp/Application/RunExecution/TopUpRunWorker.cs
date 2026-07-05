@@ -410,6 +410,8 @@ public sealed class TopUpRunWorker(
                 execution.Value.TotalSucceeded,
                 execution.Value.TotalFailed);
 
+            TopUpCampaign? campaign = await campaigns.GetByIdAsync(run.TopUpCampaignId, ct);
+
             foreach (var payment in payments)
             {
                 var contract = payment.Contract;
@@ -423,7 +425,9 @@ public sealed class TopUpRunWorker(
                             contract.FrequencyCode,
                             contract.FrequencyInterval,
                             contract.NextPaymentDate!.Value,
-                            null);
+                            null,
+                            campaign?.WeeklyDayOfWeek,
+                            campaign?.MonthlyDay);
                         contract.SetNextPaymentDate(nextPaymentDate, nowUtc);
                     }
                 }

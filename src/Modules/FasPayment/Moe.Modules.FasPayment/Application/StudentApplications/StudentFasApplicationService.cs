@@ -608,7 +608,39 @@ public sealed class StudentFasApplicationService(
                 item.IsActive,
                 tiers = tiers
                     .Where(t => t.FasSchemeId == item.FasSchemeId)
-                    .Select(t => new { tierId = t.Id, t.Label, t.SubsidyType, t.SubsidyValue, t.DisplayOrder })
+                    .Select(t => new
+                    {
+                        tierId = t.Id,
+                        t.Label,
+                        t.SubsidyType,
+                        t.SubsidyValue,
+                        t.DisplayOrder,
+                        criteriaGroups = groups
+                            .Where(g => g.FasTierId == t.Id)
+                            .OrderBy(g => g.DisplayOrder)
+                            .Select(g => new
+                            {
+                                groupId = g.Id,
+                                g.DisplayOrder,
+                                criteria = criteria
+                                    .Where(c => c.FasTierCriteriaGroupId == g.Id && c.CriteriaType != "GHI")
+                                    .OrderBy(c => c.DisplayOrder)
+                                    .Select(c => new
+                                    {
+                                        c.CriteriaType,
+                                        c.NumberFrom,
+                                        c.NumberTo,
+                                        c.ConnectorToNext,
+                                        c.DisplayOrder,
+                                        values = categorical
+                                            .Where(value => value.FasTierCriteriaId == c.Id)
+                                            .Select(value => value.Nationality)
+                                            .ToArray()
+                                    })
+                                    .ToArray()
+                            })
+                            .ToArray()
+                    })
                     .ToArray(),
                 recommendedTierId = recommendation.Recommended?.TierId,
                 recommendation.RecommendationStatus,
@@ -644,6 +676,8 @@ public sealed class StudentFasApplicationService(
             app.NricFinMasked,
             app.DateOfBirth,
             app.NationalityCode,
+            app.ParentNationalitiesJson,
+            app.AccountTypeCode,
             app.Mobile,
             app.Address,
             app.Email,

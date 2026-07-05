@@ -8,6 +8,7 @@ using Moe.Infrastructure.Shared.Api;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.DeleteCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetFixedRecipients;
@@ -119,6 +120,25 @@ public sealed class TopUpCampaignsController(
         if (id != commandRequest.TopUpCampaignId)
             return ApiResponseFactory.Failure(new Error("Campaign.IdMismatch", "URL ID does not match Payload ID."), ApiResponseCodes.BadRequest, HttpContext.TraceIdentifier);
         var result = await commandDispatcher.Send(commandRequest, cancellationToken);
+
+        if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Removes a draft Top-Up Campaign that has not produced any runs.
+    /// </summary>
+    [HttpDelete("{id:long}")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTopUps)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(
+        long id,
+        CancellationToken cancellationToken)
+    {
+        var result = await commandDispatcher.Send(new DeleteCampaignCommand(id), cancellationToken);
 
         if (result.IsFailure) return TopUpErrorResponseMapper.ToFailureResponse(result.Error, HttpContext);
         return NoContent();
