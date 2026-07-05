@@ -164,7 +164,7 @@ public sealed class KnowledgeAnswerHandler(
         return "I cannot find a specific formula for that. Please ask about PCI calculation, GHI definition, or bursary tier determination.";
     }
 
-    private static KnowledgeAnswerCard BuildKnowledgeAnswerCard(string question, IReadOnlyList<KnowledgeResult> sources)
+    internal static KnowledgeAnswerCard BuildKnowledgeAnswerCard(string question, IReadOnlyList<KnowledgeResult> sources)
     {
         KnowledgeResult primary = sources[0];
         string[] facts; string summaryHint;
