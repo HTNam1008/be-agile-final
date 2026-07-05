@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -12,26 +11,26 @@ public sealed class AiAgenticTurnService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly IConfiguration _config;
+    private readonly Kernel _singletonKernel;
     private readonly AiCopilotPlugin _plugin;
     private readonly ILogger<AiAgenticTurnService> _logger;
 
-    public AiAgenticTurnService(IConfiguration config, AiCopilotPlugin plugin, ILogger<AiAgenticTurnService> logger)
+    public AiAgenticTurnService(Kernel singletonKernel, AiCopilotPlugin plugin, ILogger<AiAgenticTurnService> logger)
     {
-        _config = config;
+        _singletonKernel = singletonKernel;
         _plugin = plugin;
         _logger = logger;
     }
 
     public async Task<AiHandlerResult> ExecuteTurnAsync(AiConversation conversation, AiChatRequest request, CancellationToken ct)
     {
+        _plugin.CurrentConversation = conversation;
         try
         {
-            string endpoint = _config["AzureOpenAI:Endpoint"] ?? throw new InvalidOperationException("AzureOpenAI:Endpoint required");
-            string apiKey = _config["AzureOpenAI:ApiKey"] ?? throw new InvalidOperationException("AzureOpenAI:ApiKey required");
-            string deployment = _config["AzureOpenAI:ChatDeploymentName"] ?? throw new InvalidOperationException("AzureOpenAI:ChatDeploymentName required");
-            var builder = Kernel.CreateBuilder().AddAzureOpenAIChatCompletion(deployment, endpoint, apiKey);
-            Kernel kernel = builder.Build();
+            // Clone the singleton kernel to share its IChatCompletionService (and HttpClient),
+            // then import the scoped plugin so its functions are available for auto-invocation.
+            // This avoids creating a new HttpClient socket pool per turn.
+            Kernel kernel = _singletonKernel.Clone();
             kernel.ImportPluginFromObject(_plugin, "AiCopilot");
             IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
 

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.SemanticKernel;
 using Moe.Modules.AiCopilot.Application.Finance;
 using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.AiCopilot.Domain;
 using Moe.Modules.FasPayment.Application.StudentApplications;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
@@ -21,6 +22,10 @@ public sealed class AiCopilotPlugin
         _fas = fas;
         _knowledge = knowledge;
     }
+
+    // Set by AiAgenticTurnService before the agentic loop runs, so CancelFasInterview
+    // can mutate the tracked FasSession entity without needing MoeDbContext directly.
+    internal AiConversation? CurrentConversation { get; set; }
 
     [KernelFunction]
     [Description("Get the student's Education Account balance, outstanding bills, recent payments, and net available amount.")]
@@ -115,12 +120,23 @@ public sealed class AiCopilotPlugin
     public string CancelFasInterview(
         [Description("Action: 'cancel' to stop permanently, 'pause' to pause")] string action)
     {
-        return action.ToLowerInvariant() switch
+        AiFasSession? session = CurrentConversation?.FasSession;
+        if (session is null) return "NO_ACTIVE_SESSION";
+
+        string actionL = action.ToLowerInvariant();
+        if (actionL == "cancel")
         {
-            "cancel" => "FAS_CANCELLED",
-            "pause" => "FAS_PAUSED",
-            _ => "INVALID_ACTION"
-        };
+            session.StatusCode = "CANCELLED";
+            session.UpdatedAtUtc = DateTime.UtcNow;
+            return "FAS_CANCELLED";
+        }
+        if (actionL == "pause")
+        {
+            session.StatusCode = "PAUSED";
+            session.UpdatedAtUtc = DateTime.UtcNow;
+            return "FAS_PAUSED";
+        }
+        return "INVALID_ACTION";
     }
 
     [KernelFunction]

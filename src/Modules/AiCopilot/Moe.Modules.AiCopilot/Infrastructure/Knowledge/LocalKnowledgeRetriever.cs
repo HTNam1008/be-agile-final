@@ -7,6 +7,7 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 {
     private readonly IKnowledgeDocumentStore _store;
     private readonly ITextEmbeddingGenerationService _embeddings;
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private KnowledgeDocument[]? _documents;
     private ReadOnlyMemory<float>[]? _documentEmbeddings;
     private DateTime _lastLoadUtc = DateTime.MinValue;
@@ -21,9 +22,15 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private async Task EnsureDocumentsLoadedAsync(CancellationToken ct)
     {
         if (_documents is not null && DateTime.UtcNow - _lastLoadUtc < CacheDuration) return;
-        _documents = (await _store.GetAllAsync(ct)).ToArray();
-        _documentEmbeddings = null;
-        _lastLoadUtc = DateTime.UtcNow;
+        await _cacheLock.WaitAsync(ct);
+        try
+        {
+            if (_documents is not null && DateTime.UtcNow - _lastLoadUtc < CacheDuration) return;
+            _documents = (await _store.GetAllAsync(ct)).ToArray();
+            _documentEmbeddings = null;
+            _lastLoadUtc = DateTime.UtcNow;
+        }
+        finally { _cacheLock.Release(); }
     }
 
     public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
@@ -36,11 +43,16 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
     private async Task<ReadOnlyMemory<float>[]> GetDocumentEmbeddingsAsync(CancellationToken ct)
     {
         if (_documentEmbeddings is not null) return _documentEmbeddings;
-
-        string[] texts = _documents!.Select(d => $"{d.Title}\n{d.Section}\n{d.Content}\n{string.Join(" ", d.Synonyms ?? [])}").ToArray();
-        IList<ReadOnlyMemory<float>> embeddings = await _embeddings.GenerateEmbeddingsAsync(texts, cancellationToken: ct);
-        _documentEmbeddings = embeddings.ToArray();
-        return _documentEmbeddings;
+        await _cacheLock.WaitAsync(ct);
+        try
+        {
+            if (_documentEmbeddings is not null) return _documentEmbeddings;
+            string[] texts = _documents!.Select(d => $"{d.Title}\n{d.Section}\n{d.Content}\n{string.Join(" ", d.Synonyms ?? [])}").ToArray();
+            IList<ReadOnlyMemory<float>> embeddings = await _embeddings.GenerateEmbeddingsAsync(texts, cancellationToken: ct);
+            _documentEmbeddings = embeddings.ToArray();
+            return _documentEmbeddings;
+        }
+        finally { _cacheLock.Release(); }
     }
 
     private async Task<IReadOnlyList<KnowledgeResult>> SemanticRetrieveAsync(string query, string? domain, ReadOnlyMemory<float>[] docEmbeddings, int limit, CancellationToken ct)
