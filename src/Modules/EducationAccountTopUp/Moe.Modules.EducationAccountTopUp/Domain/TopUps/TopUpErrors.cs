@@ -60,6 +60,12 @@ public static class TopUpErrors
     public static readonly Error CampaignAlreadyExecuted =
         new("TopUp.CampaignAlreadyExecuted", "Immediate campaign has already been executed successfully.");
 
+    public static readonly Error CannotDeleteNonDraftCampaign =
+        new("TopUp.CannotDeleteNonDraftCampaign", "Only draft top-up campaigns can be removed.");
+
+    public static readonly Error CannotDeleteCampaignWithRuns =
+        new("TopUp.CannotDeleteCampaignWithRuns", "Top-up campaigns with existing runs cannot be removed.");
+
     public static readonly Error DateMismatch =
         new("TopUp.DateMismatch", "End date must be greater than or equal to start date.");
 
