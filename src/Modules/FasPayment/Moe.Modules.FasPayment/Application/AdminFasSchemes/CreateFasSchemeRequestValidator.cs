@@ -181,7 +181,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
 
     private static void ValidateRequiredCriteria(IReadOnlyList<FasCriteriaTemplateItem> template, ValidationContext<CreateFasSchemeRequest> context)
     {
-        string[] requiredCriteria = ["GHI", "PCI"];
+        string[] requiredCriteria = ["PCI"];
         string[] missing = requiredCriteria
             .Where(required => template.All(item => item.CriteriaType != required))
             .ToArray();
