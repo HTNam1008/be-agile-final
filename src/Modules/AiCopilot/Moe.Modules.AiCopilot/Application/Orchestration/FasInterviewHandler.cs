@@ -9,9 +9,6 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class FasInterviewHandler(
     StudentFasApplicationService fas,
-    FallbackHandler fallback,
-    PaymentQueryHandler paymentHandler,
-    KnowledgeAnswerHandler knowledgeHandler,
     ILogger<FasInterviewHandler> logger,
     FasExtractionService extraction,
     FasEligibilityService eligibility)
@@ -29,8 +26,9 @@ public sealed class FasInterviewHandler(
         c.FasSession.UpdatedAtUtc = now;
     }
 
-    public async Task<AiHandlerResult> HandleFasAsync(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
+    public async Task<AiHandlerResult> HandleAsync(AiConversation c, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
     {
+        DateTime now = DateTime.UtcNow;
         bool isNew = c.FasSession is null;
         string? fk = request.PageContext?.Entity is JsonElement e && e.ValueKind == JsonValueKind.Object && e.TryGetProperty("fieldKey", out JsonElement fke) && fke.ValueKind == JsonValueKind.String && fke.GetString() is string fks ? fks : null;
         string? pj = request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions);
@@ -68,8 +66,12 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            var sr = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()) ? await paymentHandler.HandlePaymentAsync(request, ct) : await knowledgeHandler.HandleGeneralAsync(c, request, ct);
-            return sr with { InterviewState = FasConfirmationService.ToInterviewState(st, null), FollowUpQuestions = FilterCurrentQuestion(["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"], request.Message) };
+            string redirectMode = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()) ? "REDIRECT_PAYMENT" : "REDIRECT_KNOWLEDGE";
+            return new AiHandlerResult(request.Message, redirectMode, new(false, []), [], [],
+                FasConfirmationService.ToInterviewState(st, null))
+            {
+                FollowUpQuestions = FilterCurrentQuestion(["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"], request.Message)
+            };
         }
 
         bool isGuide = fk is null && LooksLikeFasSchemeGuidanceRequest(request.Message);
@@ -82,9 +84,8 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "MANUAL_FALLBACK";
             var miv = FasConfirmationService.ToInterviewState(st, null);
-            Guid r = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
             c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
-            return new(ext.Message!, "FAS_INTERVIEW", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = r })], miv, r);
+            return new AiHandlerResult(ext.Message!, "REDIRECT_FALLBACK", new(false, []), [], [], miv) { TurnIntent = "FAS_MANUAL_FALLBACK" };
         }
 
         if (ext.Status == "CLARIFY")
@@ -119,15 +120,17 @@ public sealed class FasInterviewHandler(
         }
 
         var ivw = FasConfirmationService.ToInterviewState(st, next, schemes);
+        if (st.Status == "MANUAL_FALLBACK")
+        {
+            c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
+            return new AiHandlerResult(text, "REDIRECT_FALLBACK", new(false, []), [], [], ivw) { TurnIntent = "FAS_MANUAL_FALLBACK" };
+        }
         string em = st.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
         c.Touch(em, pj, now); SaveFasState(c, st, now);
         List<AiCard> cards = rec is null ? [] : [new("FAS_RECOMMENDATION", rec)];
-        Guid? fr = null;
-        if (st.Status == "MANUAL_FALLBACK") fr = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
-        List<AiAction> acts = st.Status == "COMPLETE" ? [new("NAVIGATE", "Open FAS application", "/portal/fas", ivw.FormPatch)] : st.Status == "MANUAL_FALLBACK" ? [new("NAVIGATE", "Open FAS application", "/portal/fas")] : [];
-        if (fr.HasValue) acts.Add(new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = fr.Value }));
+        List<AiAction> acts = st.Status == "COMPLETE" ? [new("NAVIGATE", "Open FAS application", "/portal/fas", ivw.FormPatch)] : [];
         if (st.Status == "COMPLETE") acts.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: ivw.FormPatch));
-        return new(text, st.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW", new(false, []), cards, acts, ivw, fr);
+        return new(text, em, new(false, []), cards, acts, ivw);
     }
 
     private async Task<AiHandlerResult?> HandleConfirmingGate(AiConversation c, AiChatRequest req, FasInterviewData st, DateTime now, CancellationToken ct)
@@ -154,8 +157,11 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            var kr = await knowledgeHandler.HandleGeneralAsync(c, req, ct);
-            return kr with { InterviewState = FasConfirmationService.ToInterviewState(st, null), FollowUpQuestions = ["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."] };
+            return new AiHandlerResult(req.Message, "REDIRECT_KNOWLEDGE", new(false, []), [], [],
+                FasConfirmationService.ToInterviewState(st, null))
+            {
+                FollowUpQuestions = ["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."]
+            };
         }
 
         if (TryApplyFasCorrections(st, req.Message))
@@ -177,9 +183,8 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
             var iv = FasConfirmationService.ToInterviewState(st, null);
-            Guid r = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_CONFIRMATION_REJECTED", req.PageContext, req.Message, now, ct);
             c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
-            return new("No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], iv, r) { FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."] };
+            return new AiHandlerResult("No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "REDIRECT_FALLBACK", new(false, []), [], [], iv) { TurnIntent = "FAS_CONFIRMATION_REJECTED", FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."] };
         }
 
         st.Status = "COLLECTING_CONFIRMED";
@@ -222,15 +227,20 @@ public sealed class FasInterviewHandler(
         if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message.ToUpperInvariant()) || AiKeywordMatchers.LooksLikeCapabilityQuestion(req.Message) || AiKeywordMatchers.LooksLikeAdminCenterQuestion(req.Message))
         {
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            var r = await knowledgeHandler.HandleGeneralAsync(c, req, ct);
-            return r with { InterviewState = FasConfirmationService.ToInterviewState(st, null), FollowUpQuestions = isCanc ? FilterCurrentQuestion(["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message) : FilterCurrentQuestion(["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message) };
+            return new AiHandlerResult(req.Message, "REDIRECT_KNOWLEDGE", new(false, []), [], [],
+                FasConfirmationService.ToInterviewState(st, null))
+            {
+                FollowUpQuestions = isCanc
+                    ? FilterCurrentQuestion(["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message)
+                    : FilterCurrentQuestion(["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message)
+            };
         }
 
         if (AiKeywordMatchers.LooksLikePaymentQuery(req.Message.ToUpperInvariant()))
         {
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            var r = await paymentHandler.HandlePaymentAsync(req, ct);
-            return r with { InterviewState = FasConfirmationService.ToInterviewState(st, null) };
+            return new AiHandlerResult(req.Message, "REDIRECT_PAYMENT", new(false, []), [], [],
+                FasConfirmationService.ToInterviewState(st, null));
         }
 
         if (FasExtractionService.ExtractConfirmation(req.Message).Value is bool)

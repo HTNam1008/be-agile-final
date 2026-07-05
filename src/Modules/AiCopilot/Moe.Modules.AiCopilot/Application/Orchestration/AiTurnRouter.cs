@@ -46,9 +46,24 @@ public sealed class AiTurnRouter(
                 && !AiKeywordMatchers.LooksLikeCapabilityQuestion(sanitized.Message)
                 && !AiKeywordMatchers.LooksLikeAdminCenterQuestion(sanitized.Message))
             {
-                var fasResult = await fasHandler.HandleFasAsync(c, sanitized, now, ct);
-                return await Save(c.Id, pj, now, 0, fasResult, c, sanitized,
-                    new AiTurnPlan(AiPlannerIntent.ContinueFas, "collecting", null, 1.0m, "ROUTER"), sw, ct, true);
+                var fasPlan = new AiTurnPlan(AiPlannerIntent.ContinueFas, "collecting", null, 1.0m, "ROUTER");
+                var fasResult = await fasHandler.HandleAsync(c, sanitized, fasPlan, ct);
+                if (fasResult.Mode is "REDIRECT_PAYMENT" or "REDIRECT_KNOWLEDGE" or "REDIRECT_FALLBACK")
+                {
+                    if (fasResult.Mode == "REDIRECT_FALLBACK")
+                    {
+                        Guid rid = await fallbackHandler.CreateReviewAsync(c, c.PersonId, fasResult.TurnIntent ?? "FAS_MANUAL_FALLBACK", sanitized.PageContext, sanitized.Message, now, ct);
+                        var fb = fallbackHandler.FallbackResponse(rid);
+                        fb = fb with { InterviewState = fasResult.InterviewState, FollowUpQuestions = fb.FollowUpQuestions.Count > 0 ? fb.FollowUpQuestions : fasResult.FollowUpQuestions };
+                        return await Save(c.Id, pj, now, 0, fb, c, sanitized, fasPlan, sw, ct, true);
+                    }
+                    var dispatched = fasResult.Mode == "REDIRECT_PAYMENT"
+                        ? await paymentHandler.HandleAsync(c, sanitized, fasPlan, ct)
+                        : await knowledgeHandler.HandleAsync(c, sanitized, fasPlan, ct);
+                    dispatched = dispatched with { InterviewState = fasResult.InterviewState };
+                    return await Save(c.Id, pj, now, 0, dispatched, c, sanitized, fasPlan, sw, ct, true);
+                }
+                return await Save(c.Id, pj, now, 0, fasResult, c, sanitized, fasPlan, sw, ct, true);
             }
 
             // Agentic path — try first for all modes (FAS state machine sessions handled above)
@@ -72,9 +87,9 @@ public sealed class AiTurnRouter(
 
             AiHandlerResult result = mode switch
             {
-                "PAYMENT" => await paymentHandler.HandlePaymentAsync(sanitized, ct),
-                "FAS_INTERVIEW" => await fasHandler.HandleFasAsync(c, sanitized, now, ct),
-                _ => await knowledgeHandler.HandleGeneralAsync(c, sanitized, ct)
+                "PAYMENT" => await paymentHandler.HandleAsync(c, sanitized, plan, ct),
+                "FAS_INTERVIEW" => await fasHandler.HandleAsync(c, sanitized, plan, ct),
+                _ => await knowledgeHandler.HandleAsync(c, sanitized, plan, ct)
             };
             return await Save(c.Id, pj, now, 0, result, c, sanitized, plan, sw, ct, true);
         }

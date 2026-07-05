@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -15,12 +14,12 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class KnowledgeAnswerHandler(
     IKnowledgeRetriever knowledge,
-    IServiceProvider serviceProvider,
+    Kernel kernel,
     FallbackHandler fallback)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<AiHandlerResult> HandleGeneralAsync(AiConversation conversation, AiChatRequest request, CancellationToken ct)
+    public async Task<AiHandlerResult> HandleAsync(AiConversation conversation, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
     {
         if (AiKeywordMatchers.LooksLikeScopeTest(request.Message))
         {
@@ -116,7 +115,6 @@ public sealed class KnowledgeAnswerHandler(
             "Label prototype uncertainty in plain language only when it affects the answer.\n" +
             $"Sources:\n{sourceText}");
         history.AddUserMessage(request.Message);
-        Kernel kernel = serviceProvider.GetRequiredService<Kernel>();
         ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
         string text = string.IsNullOrWhiteSpace(answer.Content) ? "I do not have enough reliable information to answer that." : answer.Content.Trim();
         if (sources.Any(x => x.Citation.SourceStatus == "PROTOTYPE"))

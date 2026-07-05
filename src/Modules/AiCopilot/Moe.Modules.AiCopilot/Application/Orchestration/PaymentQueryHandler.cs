@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Moe.Modules.AiCopilot.Api;
 using Moe.Modules.AiCopilot.Application.Finance;
 using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.AiCopilot.Domain;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
@@ -13,7 +14,7 @@ public sealed class PaymentQueryHandler(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<AiHandlerResult> HandlePaymentAsync(AiChatRequest request, CancellationToken ct)
+    public async Task<AiHandlerResult> HandleAsync(AiConversation conversation, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
     {
         AiFinanceSnapshot snapshot = await finance.GetSnapshotAsync(ct);
         IReadOnlyList<KnowledgeResult> sources = await knowledge.RetrieveAsync(request.Message, "PAYMENT", ct: ct);
