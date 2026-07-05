@@ -103,7 +103,9 @@ public sealed class TopUpAssessmentWorker(
                                         campaign.FrequencyCode ?? "MONTHLY",
                                         campaign.FrequencyInterval ?? 1,
                                         nowUtc,
-                                        campaign.EndDate) ?? nowUtc,
+                                        campaign.EndDate,
+                                        campaign.WeeklyDayOfWeek,
+                                        campaign.MonthlyDay) ?? nowUtc,
                                     nowUtc);
                             }
                         }

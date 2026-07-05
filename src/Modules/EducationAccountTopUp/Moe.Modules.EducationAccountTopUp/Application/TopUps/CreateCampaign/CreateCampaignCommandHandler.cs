@@ -37,6 +37,8 @@ internal sealed class CreateCampaignCommandHandler(
 
         string? frequencyCode = null;
         int? frequencyInterval = null;
+        int? weeklyDayOfWeek = null;
+        int? monthlyDay = null;
         DateOnly? endDate = null;
 
         if (scheduleTypeCode == ScheduleTypeCode.Recurring ||
@@ -45,6 +47,8 @@ internal sealed class CreateCampaignCommandHandler(
         {
             frequencyCode = request.FrequencyCode;
             frequencyInterval = request.FrequencyInterval;
+            weeklyDayOfWeek = request.WeeklyDayOfWeek;
+            monthlyDay = request.MonthlyDay;
             endDate = request.EndDate;
         }
 
@@ -61,6 +65,8 @@ internal sealed class CreateCampaignCommandHandler(
             endDate: endDate,
             frequencyCode: frequencyCode,
             frequencyInterval: frequencyInterval,
+            weeklyDayOfWeek: weeklyDayOfWeek,
+            monthlyDay: monthlyDay,
             deliveryTypeCode: request.DeliveryTypeCode,
             maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
