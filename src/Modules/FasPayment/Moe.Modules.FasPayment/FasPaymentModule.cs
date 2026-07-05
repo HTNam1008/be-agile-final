@@ -65,9 +65,7 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<PaymentNotificationEmailService>();
         services.AddScoped<PaymentReceiptService>();
         services.AddScoped<FasApiExceptionFilter>();
-        services.AddSingleton<IFasDocumentStorage>(sp => string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"]) && string.IsNullOrWhiteSpace(configuration["AzureBlob:ConnectionString"])
-            ? new PrivateFileFasDocumentStorage()
-            : new AzureBlobFasDocumentStorage(configuration));
+        services.AddSingleton<IFasDocumentStorage>(_ => CreateFasDocumentStorage(configuration));
         services.AddSingleton<IFasDocumentScanner, ConfiguredFasDocumentScanner>();
 
         services.AddScoped<IQueryHandler<GetSchemeApplicationsQuery, GetSchemeApplicationsResponse>, GetSchemeApplicationsHandler>();
@@ -111,4 +109,26 @@ public sealed class FasPaymentModule : IModule
         services.AddScoped<IValidator<CancelEnrollmentRequest>, CancelEnrollmentRequestValidator>();
     }
     public void MapEndpoints(IEndpointRouteBuilder endpoints) { }
+
+    internal static IFasDocumentStorage CreateFasDocumentStorage(IConfiguration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(configuration["FasDocuments:AzureBlobConnectionString"]) &&
+            string.IsNullOrWhiteSpace(configuration["AzureBlob:ConnectionString"]))
+        {
+            return new PrivateFileFasDocumentStorage();
+        }
+
+        try
+        {
+            return new AzureBlobFasDocumentStorage(configuration);
+        }
+        catch (FormatException)
+        {
+            return new PrivateFileFasDocumentStorage();
+        }
+        catch (ArgumentException)
+        {
+            return new PrivateFileFasDocumentStorage();
+        }
+    }
 }

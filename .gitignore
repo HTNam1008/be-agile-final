@@ -14,9 +14,10 @@ artifacts/
 .codex-runlogs/
 .manual-test-logs/
 api-swagger.*.log
+**/Properties/ServiceDependencies/
+**/Properties/serviceDependencies.*.json
 
-
-
+**/Properties/serviceDependencies.json
 localdev.db*
 appsettings.Development.json
 test_*.ps1

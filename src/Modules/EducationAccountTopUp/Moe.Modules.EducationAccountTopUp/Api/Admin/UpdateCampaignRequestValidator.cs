@@ -49,14 +49,24 @@ public sealed class UpdateCampaignRequestValidator : AbstractValidator<UpdateCam
                 When(x => string.Equals(x.FrequencyCode, FrequencyCode.Weekly.ToString(), StringComparison.OrdinalIgnoreCase), () =>
                 {
                     RuleFor(x => x.WeeklyDayOfWeek)
-                        .NotNull().WithMessage("WeeklyDayOfWeek is required for weekly recurring campaigns.")
-                        .InclusiveBetween(0, 6);
+                        .NotNull()
+                        .InclusiveBetween(0, 6)
+                        .WithMessage("WeeklyDayOfWeek must be 0-6 for weekly campaigns.");
+                    RuleFor(x => x.MonthlyDay).Null();
                 });
                 When(x => string.Equals(x.FrequencyCode, FrequencyCode.Monthly.ToString(), StringComparison.OrdinalIgnoreCase), () =>
                 {
                     RuleFor(x => x.MonthlyDay)
-                        .NotNull().WithMessage("MonthlyDay is required for monthly recurring campaigns.")
-                        .InclusiveBetween(1, 31);
+                        .NotNull()
+                        .InclusiveBetween(1, 31)
+                        .WithMessage("MonthlyDay must be 1-31 for monthly campaigns.");
+                    RuleFor(x => x.WeeklyDayOfWeek).Null();
+                });
+                When(x => !string.Equals(x.FrequencyCode, FrequencyCode.Weekly.ToString(), StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(x.FrequencyCode, FrequencyCode.Monthly.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+                {
+                    RuleFor(x => x.WeeklyDayOfWeek).Null();
+                    RuleFor(x => x.MonthlyDay).Null();
                 });
                 RuleFor(x => x.EndDate)
                     .NotNull().WithMessage("EndDate is required for Recurring or Contract campaigns.")
