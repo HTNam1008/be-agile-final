@@ -24,4 +24,5 @@ public sealed class FasInterviewData
     public string? ValidationMessage { get; set; }
     public string? PendingParentNationalitySuggestion { get; set; }
     public Dictionary<string, int> ClarificationAttempts { get; set; } = [];
+    public Dictionary<string, int> HelpAttempts { get; set; } = [];
 }

@@ -62,21 +62,18 @@ public sealed class FasExtractionService(Kernel kernel)
         string? field = resolveTargetField(preferredField);
         if (field is null) return FasExtractionResult.Accepted();
 
+        FasInterviewData preSnapshot = Snapshot(s);
         FasExtractionResult? allResult = await TryLlmExtractAllAsync(s, message, field, ct);
         if (allResult?.Status == "ACCEPTED")
             return allResult;
+
+        Restore(s, preSnapshot);
 
         FasExtractionResult? llmResult = await TryLlmExtractFieldAsync(message, field, ct);
         if (llmResult is not null)
         {
             if (llmResult.Status == "ACCEPTED")
-            {
-                s.ClarificationField = null;
-                s.ValidationMessage = null;
-                s.PendingParentNationalitySuggestion = null;
-                s.ClarificationAttempts.Remove(field);
-                ApplyAcceptedValue(s, field, llmResult.Value);
-            }
+                ApplyExtraction(s, field, llmResult.Value);
             return llmResult;
         }
 
@@ -135,6 +132,7 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             ? reasonEl.GetString() : null;
 
         bool anyAccepted = false;
+        var acceptedFields = new List<string>();
 
         if (TryGetJsonBool(root, "isWelfareHomeResident") is bool welfare)
         {
@@ -145,18 +143,18 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             if (!s.IsWelfareHomeResident.HasValue || s.IsWelfareHomeResident.Value != welfare)
             {
                 ApplyAcceptedValue(s, "isWelfareHomeResident", welfare);
-                anyAccepted = true;
+                anyAccepted = true; acceptedFields.Add("isWelfareHomeResident");
             }
         }
 
         if (TryGetJsonString(root, "email") is string email && email.Contains('@'))
         {
-            s.Email = email; anyAccepted = true;
+            s.Email = email; anyAccepted = true; acceptedFields.Add("email");
         }
 
         if (TryGetJsonString(root, "employmentStatusCode") is string emp && emp is "EMPLOYED" or "SELF_EMPLOYED" or "UNEMPLOYED")
         {
-            s.EmploymentStatusCode = emp; anyAccepted = true;
+            s.EmploymentStatusCode = emp; anyAccepted = true; acceptedFields.Add("employmentStatusCode");
         }
 
         if (TryGetJsonDecimal(root, "monthlyHouseholdIncome") is decimal income)
@@ -168,7 +166,7 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             if (!s.MonthlyHouseholdIncome.HasValue || s.MonthlyHouseholdIncome != income)
             {
                 ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(income, 2));
-                anyAccepted = true;
+                anyAccepted = true; acceptedFields.Add("monthlyHouseholdIncome");
             }
         }
 
@@ -179,7 +177,7 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount != count)
             {
                 ApplyAcceptedValue(s, "householdMemberCount", count);
-                anyAccepted = true;
+                anyAccepted = true; acceptedFields.Add("householdMemberCount");
             }
         }
 
@@ -190,7 +188,7 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             if (!s.OtherMonthlyIncome.HasValue || s.OtherMonthlyIncome != otherInc)
             {
                 ApplyAcceptedValue(s, "otherMonthlyIncome", decimal.Round(otherInc, 2));
-                anyAccepted = true;
+                anyAccepted = true; acceptedFields.Add("otherMonthlyIncome");
             }
         }
 
@@ -202,14 +200,14 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
                 if (item.ValueKind == JsonValueKind.String)
                 {
                     string raw = item.GetString()!;
-                    string? norm = TryNormalizeParentNationality(raw);
+                    string? norm = TryNormalizeParentNationality(raw) ?? TryMapCountryToParentNationalitySuggestion(raw);
                     if (norm is not null) nats.Add(norm);
                 }
             }
             if (nats.Count > 0)
             {
                 s.ParentNationalities = nats.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                anyAccepted = true;
+                anyAccepted = true; acceptedFields.Add("parentNationalities");
             }
         }
 
@@ -223,7 +221,8 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             s.ClarificationField = null;
             s.ValidationMessage = null;
             s.PendingParentNationalitySuggestion = null;
-            s.ClarificationAttempts.Clear();
+            foreach (string af in acceptedFields)
+                s.ClarificationAttempts.Remove(af);
             return FasExtractionResult.Accepted();
         }
 
@@ -368,10 +367,7 @@ Rules:
                 {
                     string suggestion = s.PendingParentNationalitySuggestion;
                     s.PendingParentNationalitySuggestion = null;
-                    s.ClarificationField = null;
-                    s.ValidationMessage = null;
-                    s.ClarificationAttempts.Remove(field);
-                    ApplyAcceptedValue(s, field, new[] { suggestion });
+                    ApplyExtraction(s, field, new[] { suggestion });
                     return FasExtractionResult.Accepted(new[] { suggestion });
                 }
 
@@ -387,11 +383,11 @@ Rules:
             FasExtractionResult welfareCorrection = ExtractWelfareHome(message);
             if (welfareCorrection.Status == "ACCEPTED")
             {
-                s.ClarificationField = null;
-                s.ValidationMessage = null;
                 s.ClarificationAttempts.Remove(field);
                 s.ClarificationAttempts.Remove("isWelfareHomeResident");
                 ApplyAcceptedValue(s, "isWelfareHomeResident", welfareCorrection.Value);
+                s.ClarificationField = null;
+                s.ValidationMessage = null;
                 return welfareCorrection;
             }
         }
@@ -400,7 +396,7 @@ Rules:
         {
             if (LooksLikeUncertaintyAnswer(message))
             {
-                int helpAttempts = s.ClarificationAttempts.GetValueOrDefault(field);
+                int helpAttempts = s.HelpAttempts.GetValueOrDefault(field);
                 if (helpAttempts >= 1)
                 {
                     s.ClarificationField = null;
@@ -408,7 +404,7 @@ Rules:
                     return FasExtractionResult.ManualFallback("I couldn't safely prefill that field. The FAS form is still the source of truth; please complete it manually.");
                 }
 
-                s.ClarificationAttempts[field] = helpAttempts + 1;
+                s.HelpAttempts[field] = helpAttempts + 1;
             }
 
             s.ClarificationField = field;
@@ -439,11 +435,7 @@ Rules:
 
         if (result.Status == "ACCEPTED")
         {
-            s.ClarificationField = null;
-            s.ValidationMessage = null;
-            s.PendingParentNationalitySuggestion = null;
-            s.ClarificationAttempts.Remove(field);
-            ApplyAcceptedValue(s, field, result.Value);
+            ApplyExtraction(s, field, result.Value);
             return result;
         }
 
@@ -483,8 +475,8 @@ Rules:
     internal static FasExtractionResult ExtractConfirmation(string message)
     {
         string value = message.Trim();
-        bool yes = Regex.IsMatch(value, @"^\s*(yes|y|correct|confirm|confirmed|looks right|that's right|that is right)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
-        bool no = Regex.IsMatch(value, @"^\s*(no|n|wrong|incorrect|edit|change|not correct|not right)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
+        bool yes = Regex.IsMatch(value, @"\b(yes|y|correct|confirm|confirmed|looks right|that's right|that is right)\b", RegexOptions.IgnoreCase);
+        bool no = Regex.IsMatch(value, @"\b(no|n|wrong|incorrect|edit|change|not correct|not right)\b", RegexOptions.IgnoreCase);
         if (yes && !no) return FasExtractionResult.Accepted(true);
         if (no && !yes) return FasExtractionResult.Accepted(false);
         return FasExtractionResult.Clarify("Please reply yes if these details are correct, or no if you want to stop and edit the form manually.");
@@ -623,6 +615,56 @@ Rules:
                 s.ParentNationalities = ((IReadOnlyCollection<string>)value!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 break;
         }
+    }
+
+    private static void ApplyExtraction(FasInterviewData s, string field, object? value)
+    {
+        ApplyAcceptedValue(s, field, value);
+        s.ClarificationField = null;
+        s.ValidationMessage = null;
+        s.PendingParentNationalitySuggestion = null;
+        s.ClarificationAttempts.Remove(field);
+    }
+
+    private static FasInterviewData Snapshot(FasInterviewData s) => new()
+    {
+        Status = s.Status,
+        Profile = s.Profile,
+        IsWelfareHomeResident = s.IsWelfareHomeResident,
+        Email = s.Email,
+        EmploymentStatusCode = s.EmploymentStatusCode,
+        MonthlyHouseholdIncome = s.MonthlyHouseholdIncome,
+        HouseholdMemberCount = s.HouseholdMemberCount,
+        OtherMonthlyIncome = s.OtherMonthlyIncome,
+        ParentNationalities = new List<string>(s.ParentNationalities),
+        ApplicableSchemes = s.ApplicableSchemes,
+        ApplicableSchemeNames = s.ApplicableSchemeNames,
+        RequiredCriteriaTypes = s.RequiredCriteriaTypes,
+        ProfileConfirmedFacts = s.ProfileConfirmedFacts,
+        UserRequiredFacts = s.UserRequiredFacts,
+        RecommendationMatches = s.RecommendationMatches,
+        ClarificationField = s.ClarificationField,
+        ValidationMessage = s.ValidationMessage,
+        PendingParentNationalitySuggestion = s.PendingParentNationalitySuggestion,
+        ClarificationAttempts = new Dictionary<string, int>(s.ClarificationAttempts),
+        HelpAttempts = new Dictionary<string, int>(s.HelpAttempts),
+    };
+
+    private static void Restore(FasInterviewData s, FasInterviewData snapshot)
+    {
+        s.Status = snapshot.Status;
+        s.IsWelfareHomeResident = snapshot.IsWelfareHomeResident;
+        s.Email = snapshot.Email;
+        s.EmploymentStatusCode = snapshot.EmploymentStatusCode;
+        s.MonthlyHouseholdIncome = snapshot.MonthlyHouseholdIncome;
+        s.HouseholdMemberCount = snapshot.HouseholdMemberCount;
+        s.OtherMonthlyIncome = snapshot.OtherMonthlyIncome;
+        s.ParentNationalities = snapshot.ParentNationalities;
+        s.ClarificationField = snapshot.ClarificationField;
+        s.ValidationMessage = snapshot.ValidationMessage;
+        s.PendingParentNationalitySuggestion = snapshot.PendingParentNationalitySuggestion;
+        s.ClarificationAttempts = snapshot.ClarificationAttempts;
+        s.HelpAttempts = snapshot.HelpAttempts;
     }
 
     internal static string ProfileFactsIntro(FasInterviewData s)

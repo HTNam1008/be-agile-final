@@ -62,11 +62,11 @@ public sealed class FasInterviewHandler(
             return new(pt, "GENERAL", new(false, []), [], [], iv) { FollowUpQuestions = ["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"] };
         }
 
-        if (AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()) || AiKeywordMatchers.LooksLikeCourseQuestion(request.Message))
+        if (AiKeywordMatchers.LooksLikePaymentQuery(request.Message) || AiKeywordMatchers.LooksLikeCourseQuestion(request.Message))
         {
             st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            bool isPmt = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant());
+            bool isPmt = AiKeywordMatchers.LooksLikePaymentQuery(request.Message);
             return new AiHandlerResult(request.Message, isPmt ? "PAYMENT" : "GENERAL", new(false, []), [], [],
                 FasConfirmationService.ToInterviewState(st, null))
             {
@@ -154,7 +154,7 @@ public sealed class FasInterviewHandler(
             return new(pt, "GENERAL", new(false, []), [], [], iv) { FollowUpQuestions = ["Resume FAS check.", "What is PCI?", "Show my Education Account balance."] };
         }
 
-        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message.ToUpperInvariant()))
+        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message))
         {
             st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
@@ -198,7 +198,7 @@ public sealed class FasInterviewHandler(
     {
         var schemes = st.RecommendationMatches.Count > 0 ? st.RecommendationMatches.ToArray() : st.IsWelfareHomeResident == true ? FasEligibilityService.WelfareHomeRecommendationMatches(st) : [];
         var iv = FasConfirmationService.ToInterviewState(st, null, schemes);
-        bool asks = IsLiveSchemeEligibilityRequest(req.Message.ToUpperInvariant()) || AiKeywordMatchers.IsSchemeKbRequest(req.Message);
+        bool asks = IsLiveSchemeEligibilityRequest(req.Message) || AiKeywordMatchers.IsSchemeKbRequest(req.Message);
         string txt = asks && schemes.Length > 0 ? $"Your confirmed FAS check currently has {schemes.Length} eligible option{(schemes.Length == 1 ? "" : "s")}: {string.Join(", ", schemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).Take(5))}. Use 'Apply answers to form' to copy the selected actionable schemes, then review the application before submitting."
             : st.IsWelfareHomeResident == true ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
             : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
@@ -226,7 +226,7 @@ public sealed class FasInterviewHandler(
             return new("I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance.", "GENERAL", new(false, []), [], [], FasConfirmationService.ToInterviewState(st, null)) { FollowUpQuestions = isCanc ? ["Restart FAS check.", "What can you help me with?", "Show my Education Account balance."] : ["Resume FAS check.", "What can you help me with?", "Show my Education Account balance."] };
         }
 
-        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message.ToUpperInvariant()) || AiKeywordMatchers.LooksLikeCapabilityQuestion(req.Message) || AiKeywordMatchers.LooksLikeAdminCenterQuestion(req.Message))
+        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message) || AiKeywordMatchers.LooksLikeCapabilityQuestion(req.Message) || AiKeywordMatchers.LooksLikeAdminCenterQuestion(req.Message))
         {
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
             return new AiHandlerResult(req.Message, "GENERAL", new(false, []), [], [],
@@ -239,7 +239,7 @@ public sealed class FasInterviewHandler(
             };
         }
 
-        if (AiKeywordMatchers.LooksLikePaymentQuery(req.Message.ToUpperInvariant()))
+        if (AiKeywordMatchers.LooksLikePaymentQuery(req.Message))
         {
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
             return new AiHandlerResult(req.Message, "PAYMENT", new(false, []), [], [],

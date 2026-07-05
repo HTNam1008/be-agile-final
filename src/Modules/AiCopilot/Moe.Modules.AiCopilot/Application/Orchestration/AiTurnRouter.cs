@@ -42,7 +42,7 @@ public sealed class AiTurnRouter(
             // let knowledge questions, capability queries, and admin center questions fall through
             // to the agentic/deterministic path so they can interrupt the FAS session.
             if (c.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
-                && !AiKeywordMatchers.IsFasKnowledgeInterrupt(sanitized.Message.ToUpperInvariant())
+                && !AiKeywordMatchers.IsFasKnowledgeInterrupt(sanitized.Message)
                 && !AiKeywordMatchers.LooksLikeCapabilityQuestion(sanitized.Message)
                 && !AiKeywordMatchers.LooksLikeAdminCenterQuestion(sanitized.Message))
             {
