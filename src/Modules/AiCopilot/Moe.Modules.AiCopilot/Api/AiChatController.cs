@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Asp.Versioning;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
@@ -25,8 +24,6 @@ public sealed class AiChatController(
     SensitiveDataRedactor redactor,
     ILogger<AiChatController> logger) : ControllerBase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     [HttpPost("chat")]
     public async Task<IActionResult> Chat([FromBody] AiChatRequest request, CancellationToken ct)
     {
@@ -40,24 +37,6 @@ public sealed class AiChatController(
             HttpContext.Response.Headers.RetryAfter = "1";
             return Conflict(new { error = "AI.CONCURRENCY_CONFLICT", message = "This FAS session was modified by another request. Please retry.", retryAfter = "1" });
         }
-    }
-
-    [HttpGet("conversations/{id:guid}")]
-    public async Task<AiConversationResponse> Conversation(Guid id, CancellationToken ct)
-    {
-        long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException();
-        var conversation = await db.Set<AiConversation>().AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == id && x.PersonId == personId, ct)
-            ?? throw new KeyNotFoundException("AI.CONVERSATION_NOT_FOUND");
-        var rawMessages = await db.Set<AiMessage>().AsNoTracking().Where(x => x.ConversationId == id)
-            .OrderBy(x => x.CreatedAtUtc)
-            .Select(x => new { x.Id, x.RoleCode, x.Content, x.CreatedAtUtc, x.ResponseJson })
-            .ToArrayAsync(ct);
-        var messages = rawMessages.Select(x => new AiConversationMessageResponse(x.Id, x.RoleCode, x.Content, x.CreatedAtUtc,
-            x.ResponseJson == null ? null : JsonSerializer.Deserialize<object>(x.ResponseJson, JsonOptions)))
-            .ToArray();
-        return new(conversation.Id, conversation.ModeCode, conversation.StatusCode, messages,
-            DeserializeInterviewState(conversation.FasSession?.CollectedFactsJson));
     }
 
     [HttpPost("admin-center-cases")]
@@ -76,13 +55,14 @@ public sealed class AiChatController(
     [HttpPost("chat/stream")]
     public async Task Stream([FromBody] AiChatRequest request, CancellationToken ct)
     {
-        long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
+        _ = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
 
         var sanitized = new AiChatRequest
         {
             ConversationId = request.ConversationId ?? Guid.NewGuid(),
             Message = request.Message,
-            PageContext = AiRouterHelpers.SanitizePageContext(request.PageContext)
+            PageContext = AiRouterHelpers.SanitizePageContext(request.PageContext),
+            FasState = request.FasState
         };
 
         HttpContext.Response.ContentType = "text/event-stream";
@@ -117,10 +97,4 @@ public sealed class AiChatController(
         }
     }
 
-    private static AiInterviewState? DeserializeInterviewState(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return null;
-        var state = JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions);
-        return state is null ? null : new AiInterviewState(state.Status, null, [], [], null);
-    }
 }

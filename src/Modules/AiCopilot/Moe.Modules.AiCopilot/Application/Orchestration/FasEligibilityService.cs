@@ -8,7 +8,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class FasEligibilityService(StudentFasApplicationService fas, ILogger<FasEligibilityService> logger)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     public async Task<(string Text, FasInterviewData State, FasRecommendationMatch[] Schemes, object? Recommendation)> ComputeEligibility(FasInterviewData state, CancellationToken ct)
     {

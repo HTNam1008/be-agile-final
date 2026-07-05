@@ -1,20 +1,15 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moe.Application.Abstractions.Security;
 using Moe.Modules.AiCopilot.Api;
-using Moe.Modules.AiCopilot.Application.Security;
 using Moe.Modules.AiCopilot.Domain;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class AiTurnRouter(
-    MoeDbContext db,
     ICurrentUser currentUser,
-    SensitiveDataRedactor redactor,
     AiTurnPlannerService turnPlanner,
     FallbackHandler fallbackHandler,
     PaymentQueryHandler paymentHandler,
@@ -24,28 +19,37 @@ public sealed class AiTurnRouter(
     IConfiguration configuration,
     AiAgenticTurnService? agenticService = null)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
     private readonly bool _fasEnabled = configuration.GetValue("AiCopilot:FasEnabled", true);
 
     public async Task<AiChatResponse> ChatAsync(AiChatRequest request, CancellationToken ct)
     {
         long personId = currentUser.PersonId ?? throw new UnauthorizedAccessException("AI.AUTHENTICATION_REQUIRED");
         DateTime now = DateTime.UtcNow;
-        var sanitized = new AiChatRequest { ConversationId = request.ConversationId, Message = request.Message.Trim(), PageContext = AiRouterHelpers.SanitizePageContext(request.PageContext) };
-        var c = await GetOrCreateConversation(sanitized.ConversationId, personId, now, ct);
-        string pj = sanitized.PageContext is null ? null! : JsonSerializer.Serialize(sanitized.PageContext, JsonOptions);
-        db.Add(AiMessage.Create(c.Id, "USER", redactor.Redact(sanitized.Message), now));
+        var sanitized = new AiChatRequest { ConversationId = request.ConversationId, Message = request.Message.Trim(), PageContext = AiRouterHelpers.SanitizePageContext(request.PageContext), FasState = request.FasState };
+        var c = CreateConversation(sanitized.ConversationId, personId, now, sanitized.FasState);
+        string? pj = sanitized.PageContext is null ? null : JsonSerializer.Serialize(sanitized.PageContext, JsonOptions);
         var sw = Stopwatch.StartNew();
 
         try
         {
-            // Active FAS session — route through FasInterviewHandler for interview turns;
-            // let knowledge questions, capability queries, and admin center questions fall through
-            // to the agentic/deterministic path so they can interrupt the FAS session.
-            if (_fasEnabled && c.FasSession?.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING"
+            // FAS fast-path gate — captures active sessions AND PAUSED/CANCELLED recovery
+            // so the agentic path doesn't steal FAS turns.
+            bool hasFasSession = _fasEnabled && c.FasSession is not null;
+            bool isActiveFas = hasFasSession && c.FasSession!.StatusCode is
+                "COLLECTING" or "CONFIRMING" or "CLARIFYING";
+            bool isStoppedFasWithIntent = hasFasSession
+                && c.FasSession!.StatusCode is "PAUSED" or "CANCELLED"
+                && (FasInterviewHandler.LooksLikeExplicitFasRestart(sanitized.Message)
+                    || FasInterviewHandler.LooksLikeContextualResume(sanitized.Message)
+                    || AiKeywordMatchers.LooksLikeCancelFas(sanitized.Message));
+
+            bool routeToFas = (isActiveFas || isStoppedFasWithIntent)
                 && !AiKeywordMatchers.IsFasKnowledgeInterrupt(sanitized.Message)
                 && !AiKeywordMatchers.LooksLikeCapabilityQuestion(sanitized.Message)
-                && !AiKeywordMatchers.LooksLikeAdminCenterQuestion(sanitized.Message))
+                && !AiKeywordMatchers.LooksLikeAdminCenterQuestion(sanitized.Message);
+
+            if (routeToFas)
             {
                 var fasPlan = new AiTurnPlan(AiPlannerIntent.ContinueFas, "collecting", null, 1.0m, "ROUTER");
                 var fasResult = await fasHandler.HandleAsync(c, sanitized, fasPlan, ct);
@@ -56,20 +60,27 @@ public sealed class AiTurnRouter(
                         Guid rid = await fallbackHandler.CreateReviewAsync(c, c.PersonId, fasResult.TurnIntent ?? "FAS_MANUAL_FALLBACK", sanitized.PageContext, sanitized.Message, now, ct);
                         var fallbackResp = fallbackHandler.FallbackResponse(rid);
                         var fb = fasResult with { Mode = "FALLBACK", ReviewRecordId = rid, Actions = fallbackResp.Actions, FollowUpQuestions = fasResult.FollowUpQuestions.Count > 0 ? fasResult.FollowUpQuestions : fallbackResp.FollowUpQuestions };
-                        return await Save(c.Id, pj, now, 0, fb, c, sanitized, fasPlan, sw, ct, true);
+                        return Save(c.Id, pj, now, 0, fb, c, sanitized, fasPlan, sw, ct, true);
                     }
                     var dispatched = fasResult.Signal == HandlerDispatchSignal.RedirectPayment
                         ? await paymentHandler.HandleAsync(c, sanitized, fasPlan, ct)
                         : await knowledgeHandler.HandleAsync(c, sanitized, fasPlan, ct);
                     dispatched = dispatched with { InterviewState = fasResult.InterviewState };
-                    return await Save(c.Id, pj, now, 0, dispatched, c, sanitized, fasPlan, sw, ct, true);
+                    return Save(c.Id, pj, now, 0, dispatched, c, sanitized, fasPlan, sw, ct, true);
                 }
-                return await Save(c.Id, pj, now, 0, fasResult, c, sanitized, fasPlan, sw, ct, true);
+                return Save(c.Id, pj, now, 0, fasResult, c, sanitized, fasPlan, sw, ct, true);
             }
 
-            // Agentic path — try first for all modes (FAS state machine sessions handled above)
+            // Agentic path — try first for all modes (FAS state machine sessions handled above).
+            // If the agentic response would be FAS_INTERVIEW, don't let it steal the FAS turn —
+            // fall through to the deterministic planner.
             if (agenticService is not null && configuration.GetValue("AiCopilot:AgenticEnabled", true))
-                try { var ar = await agenticService.ExecuteTurnAsync(c, sanitized, ct); if (ar is not null) return await Save(c.Id, pj, now, 0, ar, c, sanitized, new AiTurnPlan(AiPlannerIntent.Fallback, "idle", null, 0.5m, "AGENTIC"), sw, ct, true); }
+                try
+                {
+                    var ar = await agenticService.ExecuteTurnAsync(c, sanitized, ct);
+                    if (ar is not null && !(_fasEnabled && ar.Mode == "FAS_INTERVIEW"))
+                        return Save(c.Id, pj, now, 0, ar, c, sanitized, new AiTurnPlan(AiPlannerIntent.Fallback, "idle", null, 0.5m, "AGENTIC"), sw, ct, true);
+                }
                 catch (Exception ex) { logger.LogWarning(ex, "Agentic path failed for conv {Id}", c.Id); }
 
             // Fall back to deterministic path: planner + mode dispatch
@@ -78,7 +89,7 @@ public sealed class AiTurnRouter(
             if (plan.Intent == AiPlannerIntent.ClarifyFasTypo)
             {
                 c.Touch("GENERAL", pj, now);
-                return await Save(c.Id, new AiHandlerResult("Did you mean FAS? I can help check eligibility.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")])
+                return Save(c.Id, new AiHandlerResult("Did you mean FAS? I can help check eligibility.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")])
                 { FollowUpQuestions = ["Yes, help me check FAS eligibility.", "What is FAS?", "What documents do I need for FAS?"], TurnIntent = "CLARIFY_FAS_TYPO", ConversationPhase = plan.Phase }, plan, sanitized, sw, ct);
             }
 
@@ -92,7 +103,7 @@ public sealed class AiTurnRouter(
                 "FAS_INTERVIEW" => await fasHandler.HandleAsync(c, sanitized, plan, ct),
                 _ => await knowledgeHandler.HandleAsync(c, sanitized, plan, ct)
             };
-            return await Save(c.Id, pj, now, 0, result, c, sanitized, plan, sw, ct, true);
+            return Save(c.Id, pj, now, 0, result, c, sanitized, plan, sw, ct, true);
         }
         catch (ConcurrencyConflictException) { throw; }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -135,59 +146,33 @@ public sealed class AiTurnRouter(
                 fbr = FasInterviewHandler.AttachDormantFasState(fbr, c.FasSession);
             }
 
-            long fbmId = 0;
-            try
-            {
-                var fbm = AiMessage.Create(c.Id, "ASSISTANT",
-                    redactor.Redact(fbr.Text), now,
-                    latencyMs: (int)sw.ElapsedMilliseconds,
-                    responseJson: redactor.Redact(AiResponseBuilder.SerializeResponse(fbr)));
-                db.Add(fbm);
-                await db.SaveChangesAsync(ct);
-                fbmId = fbm.Id;
-            }
-            catch (Exception saveEx)
-            {
-                logger.LogError(saveEx, "Fallback persistence failed for conv {Id}", c.Id);
-            }
-
-            return fbr with { MessageId = fbmId };
+            return fbr;
         }
     }
 
-    private async Task<AiChatResponse> Save(Guid cid, AiHandlerResult result, AiTurnPlan plan, AiChatRequest req, Stopwatch sw, CancellationToken ct, bool withFasState = false) =>
-        await Save(cid, null, DateTime.UtcNow, 0, result, null, req, plan, sw, ct, withFasState);
+    private AiChatResponse Save(Guid cid, AiHandlerResult result, AiTurnPlan plan, AiChatRequest req, Stopwatch sw, CancellationToken ct, bool withFasState = false) =>
+        Save(cid, null, DateTime.UtcNow, 0, result, null, req, plan, sw, ct, withFasState);
 
-    private async Task<AiChatResponse> Save(Guid cid, string? pageJson, DateTime now, long mid, AiHandlerResult result, AiConversation? c, AiChatRequest req, AiTurnPlan plan, Stopwatch sw, CancellationToken ct, bool withFasState = false)
+    private AiChatResponse Save(Guid cid, string? pageJson, DateTime now, long mid, AiHandlerResult result, AiConversation? c, AiChatRequest req, AiTurnPlan plan, Stopwatch sw, CancellationToken ct, bool withFasState = false)
     {
         var r = ToChatResponse(cid, mid, result);
         if (_fasEnabled && withFasState && c is not null) r = FasInterviewHandler.AttachDormantFasState(r, c.FasSession);
         r = AiResponseBuilder.AttachV2Metadata(r, plan);
         r = AiResponseBuilder.AttachFollowUps(r, req);
         if (c is not null && pageJson is not null) c.Touch(r.Mode, pageJson, now);
-        var msg = AiMessage.Create(cid, "ASSISTANT", redactor.Redact(r.Text), DateTime.UtcNow, JsonSerializer.Serialize(r.Grounding.Citations, JsonOptions), JsonSerializer.Serialize(r.Cards.Select(x => x.Type), JsonOptions), (int)sw.ElapsedMilliseconds, redactor.Redact(AiResponseBuilder.SerializeResponse(r)));
-        db.Add(msg);
-        try { await db.SaveChangesAsync(ct); }
-        catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyConflictException("FAS session modified by concurrent request", ex); }
         logger.LogInformation("AI conv {Id} mode {Mode} completed {Elapsed} ms", cid, r.Mode, sw.ElapsedMilliseconds);
-        return r with { MessageId = msg.Id };
+        return r;
     }
 
-    private async Task<AiConversation> GetOrCreateConversation(Guid? id, long personId, DateTime now, CancellationToken ct)
+    private static AiConversation CreateConversation(Guid? id, long personId, DateTime now, FasInterviewData? fasState)
     {
-        if (id.HasValue)
+        var conversation = AiConversation.Start(id ?? Guid.NewGuid(), personId, now);
+        if (fasState is not null)
         {
-            IQueryable<AiConversation> query = db.Set<AiConversation>();
-            if (_fasEnabled)
-            {
-                query = query.Include(x => x.FasSession);
-            }
-            var existing = await query.SingleOrDefaultAsync(x => x.Id == id.Value, ct);
-            if (existing is not null && existing.PersonId != personId) throw new UnauthorizedAccessException("AI.CONVERSATION_FORBIDDEN");
-            if (existing is not null) return existing;
+            conversation.FasSession = AiFasSession.Create(conversation.Id, now);
+            FasInterviewHandler.SaveFasState(conversation, fasState, now);
         }
-        var created = AiConversation.Start(id ?? Guid.NewGuid(), personId, now);
-        db.Add(created); return created;
+        return conversation;
     }
 
     private static AiChatResponse ToChatResponse(Guid cid, long mid, AiHandlerResult r) => new(cid, mid, r.Text, r.Mode, r.Grounding, r.Cards, r.Actions, r.InterviewState, r.ReviewRecordId)

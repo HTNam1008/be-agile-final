@@ -13,6 +13,7 @@ namespace Moe.StudentFinance.IntegrationTests;
 public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory factory) : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
+    private readonly Dictionary<Guid, JsonElement> _fasStates = [];
 
     [Fact]
     public async Task Fas_interview_clarifies_ambiguous_amounts_instead_of_confirming_them()
@@ -430,16 +431,27 @@ public sealed class AiCopilotFasInterviewTests(CustomWebApplicationFactory facto
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
         request.Headers.Add("X-Test-PersonId", "2101");
+        JsonElement? fasState = conversationId.HasValue && _fasStates.TryGetValue(conversationId.Value, out JsonElement state) ? state : null;
         request.Content = JsonContent.Create(new
         {
             conversationId,
             message,
-            pageContext = new { domain = "FAS", surface = "FAS", path = "/portal/fas" }
+            pageContext = new { domain = "FAS", surface = "FAS", path = "/portal/fas" },
+            fasState
         });
 
         using HttpResponseMessage response = await _client.SendAsync(request);
         await AssertStatus(HttpStatusCode.OK, response);
-        return await ReadData(response);
+        JsonElement data = await ReadData(response);
+        RememberFasState(data);
+        return data;
+    }
+
+    private void RememberFasState(JsonElement response)
+    {
+        if (!response.TryGetProperty("conversationId", out JsonElement cidElement) || cidElement.ValueKind != JsonValueKind.String) return;
+        if (!response.TryGetProperty("fasState", out JsonElement state) || state.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return;
+        _fasStates[cidElement.GetGuid()] = state.Clone();
     }
 
     private async Task AssertEligibilityHasMatches(string expectedSchemeName)

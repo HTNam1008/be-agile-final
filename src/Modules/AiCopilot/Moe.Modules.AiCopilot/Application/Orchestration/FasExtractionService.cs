@@ -11,23 +11,34 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionService> logger)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     private const string AllExtractionSchema = """
     {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "monthlyHouseholdIncome": { "type": ["number", "null"] },
-        "householdMemberCount": { "type": ["integer", "null"] },
-        "isWelfareHomeResident": { "type": ["boolean", "null"] },
-        "parentNationalities": { "type": ["array", "null"], "items": { "type": "string" } },
-        "employmentStatusCode": { "type": ["string", "null"], "enum": ["EMPLOYED", "SELF_EMPLOYED", "UNEMPLOYED"] },
-        "otherMonthlyIncome": { "type": ["number", "null"] },
-        "email": { "type": ["string", "null"] },
+        "monthlyHouseholdIncome": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+        "householdMemberCount": { "anyOf": [{ "type": "integer" }, { "type": "null" }] },
+        "isWelfareHomeResident": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+        "parentNationalities": {
+          "anyOf": [
+            { "type": "array", "items": { "type": "string" } },
+            { "type": "null" }
+          ]
+        },
+        "employmentStatusCode": {
+          "anyOf": [
+            { "type": "string", "enum": ["EMPLOYED", "SELF_EMPLOYED", "UNEMPLOYED"] },
+            { "type": "null" }
+          ]
+        },
+        "otherMonthlyIncome": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+        "email": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
         "ambiguous": { "type": "boolean" },
-        "ambiguityReason": { "type": ["string", "null"] }
+        "ambiguityReason": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
       },
-      "required": ["ambiguous"]
+      "required": ["ambiguous", "monthlyHouseholdIncome", "householdMemberCount", "isWelfareHomeResident", "parentNationalities", "employmentStatusCode", "otherMonthlyIncome", "email", "ambiguityReason"]
     }
     """;
 
@@ -112,6 +123,16 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
         @"\b(not sure|don't know|do not know|idk|still not sure|unsure|uncertain)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Detects range expressions like "between X and Y", "X to Y", "X - Y" for income
+    private static readonly Regex IncomeRangePattern = new(
+        @"\b(?:between|from)\s+[\d,k]+(?:\s+(?:and|to|-)\s+[\d,k]+|\s*[-–]\s*[\d,k]+)|\b[\d,k]+\s*(?:to|-)\s*[\d,k]+\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // Detects multi-person income narrative patterns like "father earns X, mother earns Y"
+    private static readonly Regex IncomeMultiPersonPattern = new(
+        @"\b(?:earn|earns|makes|make|salary|income|gets|paid)\b.{0,40}\b(?:earn|earns|makes|make|salary|income|gets|paid)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex WelfareCorrectionPattern = new(
         @"\b(welfare|approved home|approved welfare|residing in one|live in one|have it|do have)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -125,15 +146,16 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
         using var doc = JsonDocument.Parse(AllExtractionSchema);
         AllExtractionSchemaElement = doc.RootElement.Clone();
         IncomeFieldSchemaElement = JsonDocument.Parse("""
-        {"type":"object","properties":{"value":{"type":["number","null"]},"field":{"type":"string","enum":["monthlyHouseholdIncome"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
+        {"type":"object","additionalProperties":false,"properties":{"value":{"anyOf":[{"type":"number"},{"type":"null"}]},"field":{"type":"string","enum":["monthlyHouseholdIncome"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
         """).RootElement.Clone();
         HouseholdCountFieldSchemaElement = JsonDocument.Parse("""
-        {"type":"object","properties":{"value":{"type":["number","null"]},"field":{"type":"string","enum":["householdMemberCount"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
+        {"type":"object","additionalProperties":false,"properties":{"value":{"anyOf":[{"type":"integer"},{"type":"null"}]},"field":{"type":"string","enum":["householdMemberCount"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
         """).RootElement.Clone();
         OtherIncomeFieldSchemaElement = JsonDocument.Parse("""
-        {"type":"object","properties":{"value":{"type":["number","null"]},"field":{"type":"string","enum":["otherMonthlyIncome"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
+        {"type":"object","additionalProperties":false,"properties":{"value":{"anyOf":[{"type":"number"},{"type":"null"}]},"field":{"type":"string","enum":["otherMonthlyIncome"]},"ambiguous":{"type":"boolean"}},"required":["value","field","ambiguous"]}
         """).RootElement.Clone();
     }
+
 
     private static PromptExecutionSettings CreateJsonSchemaExecutionSettings(JsonElement schemaElement, string schemaName, bool strict = true)
     {
@@ -381,7 +403,7 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
                 "otherMonthlyIncome" => OtherIncomeFieldSchemaElement,
                 _ => throw new InvalidOperationException($"Unexpected field: {field}")
             };
-            var settings = CreateJsonSchemaExecutionSettings(schemaEl, "fas_field_extraction", strict: false);
+            var settings = CreateJsonSchemaExecutionSettings(schemaEl, "fas_field_extraction", strict: true);
 
             var history = new ChatHistory($$"""
 You extract student FAS application data from a Singapore user message.
@@ -582,10 +604,39 @@ Rules:
     {
         decimal[] numbers = ExtractNumbers(message).ToArray();
         if (numbers.Length == 0) return FasExtractionResult.Clarify("Please provide your total monthly household income as an SGD amount, for example 3200.");
-        decimal income = numbers.Sum();
-        if (income < 0) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
-        if (income > 100_000) return FasExtractionResult.Clarify($"${income:N0} seems high for a monthly figure. If that is your annual income, the monthly amount would be ${income / 12:N0}. Could you confirm the monthly household income?");
-        return FasExtractionResult.Accepted(decimal.Round(income, 2));
+
+        // Single number — unambiguous
+        if (numbers.Length == 1)
+        {
+            decimal income = numbers[0];
+            if (income < 0) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+            if (income > 100_000) return FasExtractionResult.Clarify($"${income:N0} seems high for a monthly figure. If that is your annual income, the monthly amount would be ${income / 12:N0}. Could you confirm the monthly household income?");
+            return FasExtractionResult.Accepted(decimal.Round(income, 2));
+        }
+
+        // Range pattern ("between 3000 and 4000", "3k to 4k") — take lower bound, not sum
+        if (IncomeRangePattern.IsMatch(message))
+        {
+            decimal lower = numbers.Min();
+            if (lower < 0) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+            if (lower > 100_000) return FasExtractionResult.Clarify($"${lower:N0} seems high for a monthly figure. Could you confirm the monthly household income?");
+            return FasExtractionResult.Accepted(decimal.Round(lower, 2));
+        }
+
+        // Multi-person income narrative — sum is correct ("father earns 2000, mother earns 1500")
+        if (IncomeMultiPersonPattern.IsMatch(message))
+        {
+            decimal income = numbers.Sum();
+            if (income < 0) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+            if (income > 100_000) return FasExtractionResult.Clarify($"${income:N0} seems high for a monthly figure. Could you confirm the total monthly household income?");
+            return FasExtractionResult.Accepted(decimal.Round(income, 2));
+        }
+
+        // Multiple numbers without clear range pattern — sum them (consistent with LLM rule: "multiple numbers → add together")
+        decimal summedIncome = numbers.Sum();
+        if (summedIncome < 0) return FasExtractionResult.Clarify("Please provide a valid non-negative monthly household income in SGD.");
+        if (summedIncome > 100_000) return FasExtractionResult.Clarify($"${summedIncome:N0} seems high for a monthly figure. If that is your annual income, the monthly amount would be ${summedIncome / 12:N0}. Could you confirm the monthly household income?");
+        return FasExtractionResult.Accepted(decimal.Round(summedIncome, 2));
     }
 
     internal static FasExtractionResult ExtractHouseholdMemberCount(string message)
@@ -597,13 +648,7 @@ Rules:
         if (wholeNumbers.Length == 0)
             return FasExtractionResult.Clarify("Please reply with one whole number for household members.");
 
-        decimal count = wholeNumbers.OrderBy(n => n).First();
-        if (wholeNumbers.Length > 1)
-        {
-            decimal second = wholeNumbers.OrderBy(n => n).Skip(1).First();
-            if (second / count < 10)
-                return FasExtractionResult.Clarify("Please reply with just the number of people in your household, for example 4.");
-        }
+        decimal count = wholeNumbers.OrderByDescending(n => n).First();
 
         return FasExtractionResult.Accepted((int)count);
     }

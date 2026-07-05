@@ -13,7 +13,7 @@ public sealed class FasInterviewHandler(
     FasExtractionService extraction,
     FasEligibilityService eligibility)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
     private static readonly Regex CorrectionIntentPattern = new(@"\b(actually|change|correction|correct|wait|sorry|make that|meant|instead)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex CorrectionIncomePattern = new(@"\b(income|salary|earn|household)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex CorrectionMembersPattern = new(@"\b(member|members|people|pax|household size)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -50,7 +50,12 @@ public sealed class FasInterviewHandler(
         string? pj = request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions);
         FasInterviewData st;
         try { st = LoadFasState(c) ?? await InitializeFasState(ct); }
-        catch { return new("I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")]); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "FAS state load failed for conv {Id} — resetting session", c.Id);
+            c.FasSession = null;
+            st = await InitializeFasState(ct);
+        }
 
         if (IsTerminalFasState(st.Status))
         {
@@ -232,7 +237,7 @@ public sealed class FasInterviewHandler(
 
     private async Task<AiHandlerResult> HandleStoppedFasTurn(AiConversation c, AiChatRequest req, FasInterviewData st, DateTime now, CancellationToken ct)
     {
-        string pj = req.PageContext is null ? null! : JsonSerializer.Serialize(req.PageContext, JsonOptions);
+        string? pj = req.PageContext is null ? null : JsonSerializer.Serialize(req.PageContext, JsonOptions);
         bool isCanc = st.Status == "CANCELLED";
 
         if (AiKeywordMatchers.LooksLikeCancelFas(req.Message))
@@ -353,9 +358,13 @@ public sealed class FasInterviewHandler(
 
     internal static AiChatResponse AttachDormantFasState(AiChatResponse r, AiFasSession? s)
     {
-        if (r.InterviewState is not null) return r;
         var st = s?.CollectedFactsJson is { Length: > 0 } j ? JsonSerializer.Deserialize<FasInterviewData>(j, JsonOptions) : null;
-        return st is not null && IsTerminalFasState(st.Status) ? r with { InterviewState = FasConfirmationService.ToInterviewState(st, null) } : r;
+        if (st is null) return r;
+        return r with
+        {
+            FasState = st,
+            InterviewState = r.InterviewState ?? (IsTerminalFasState(st.Status) ? FasConfirmationService.ToInterviewState(st, null) : null)
+        };
     }
 
     private static bool TryApplyFasCorrections(FasInterviewData s, string msg)
@@ -449,11 +458,11 @@ public sealed class FasInterviewHandler(
         return true;
     }
 
-    private static bool LooksLikeExplicitFasRestart(string m) =>
+    internal static bool LooksLikeExplicitFasRestart(string m) =>
         FasRestartIntentPattern.IsMatch(m) && FasRestartContextPattern.IsMatch(m)
         && !FasRestartKnowledgeInterrupt.IsMatch(m);
 
-    private static bool LooksLikeContextualResume(string m) =>
+    internal static bool LooksLikeContextualResume(string m) =>
         ContextualResumePattern.IsMatch(m);
 
     private static bool LooksLikeFasSchemeGuidanceRequest(string m) =>

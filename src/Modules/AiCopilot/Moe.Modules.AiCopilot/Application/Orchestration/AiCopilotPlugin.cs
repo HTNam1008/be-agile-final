@@ -10,7 +10,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class AiCopilotPlugin
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     private readonly AiFinanceReader _finance;
     private readonly StudentFasApplicationService _fas;

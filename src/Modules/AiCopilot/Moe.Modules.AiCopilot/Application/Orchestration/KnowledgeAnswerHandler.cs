@@ -17,7 +17,7 @@ public sealed class KnowledgeAnswerHandler(
     Kernel kernel,
     FallbackHandler fallback)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     public async Task<AiHandlerResult> HandleAsync(AiConversation conversation, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
     {

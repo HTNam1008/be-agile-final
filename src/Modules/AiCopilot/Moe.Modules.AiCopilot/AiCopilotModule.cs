@@ -58,17 +58,10 @@ public sealed class AiCopilotModule : IModule
         services.AddScoped<AiStreamingService>();
         services.AddSingleton<IModelConfigurationContributor, AiModelConfiguration>();
         services.AddScoped<AiReviewService>();
-        if (IsBackgroundJobEnabled(configuration, "AiCopilot:Retention"))
-        {
-            services.AddHostedService<AiRetentionService>();
-        }
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
     }
 
-    private static bool IsBackgroundJobEnabled(IConfiguration configuration, string key)
-        => configuration.GetValue("BackgroundJobs:Enabled", true)
-           && configuration.GetValue($"BackgroundJobs:{key}", true);
 }

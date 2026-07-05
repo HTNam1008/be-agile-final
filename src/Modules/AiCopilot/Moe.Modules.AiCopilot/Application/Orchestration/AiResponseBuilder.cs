@@ -7,7 +7,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 internal static class AiResponseBuilder
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     public static AiChatResponse AttachV2Metadata(AiChatResponse response, AiTurnPlan plan)
     {

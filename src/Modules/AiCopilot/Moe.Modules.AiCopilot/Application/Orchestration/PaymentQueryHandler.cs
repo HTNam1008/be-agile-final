@@ -12,7 +12,7 @@ public sealed class PaymentQueryHandler(
     AiFinanceReader finance,
     IKnowledgeRetriever knowledge)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     public async Task<AiHandlerResult> HandleAsync(AiConversation conversation, AiChatRequest request, AiTurnPlan plan, CancellationToken ct)
     {

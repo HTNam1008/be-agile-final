@@ -12,7 +12,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class AiAgenticTurnService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     private readonly Kernel _singletonKernel;
     private readonly AiFinanceReader _finance;
