@@ -60,7 +60,7 @@ public sealed class PaymentNotificationEmailServiceTests
         await service.SendPaymentSucceededAsync(payment, Now, CancellationToken.None);
 
         EmailNotificationJob job = mailQueue.Jobs.Should().ContainSingle().Subject;
-        job.PlainTextBody.Should().Contain("View MOE Receipt: http://localhost:5173/portal/payments?receiptId=");
+        job.PlainTextBody.Should().Contain("View MOE Receipt: https://portal.example.test/portal/payments?receiptId=");
         job.PlainTextBody.Should().Contain("Stripe online payment evidence: https://stripe.test/invoices/in_123");
         job.HtmlBody.Should().Contain("View MOE Receipt");
         job.HtmlBody.Should().Contain("View Stripe Evidence");

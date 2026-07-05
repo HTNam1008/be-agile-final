@@ -115,12 +115,15 @@ public sealed class AdminStudentEnrolledCourseReaderTests : IAsyncLifetime
             utcNow: new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc));
 
     private static CourseEnrollment CreateEnrollment(long personId, long courseId, DateTime enrolledAtUtc)
-        => CourseEnrollment.EnrollByAdmin(
+    {
+        var enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
             personId: personId,
             courseId: courseId,
-            coursePaymentPlanId: 100,
             adminLoginAccountId: 42,
             enrolledAtUtc: enrolledAtUtc,
             beforeStartRefundPercentage: CourseRefundPolicyDefaults.BeforeStartPercentage,
             afterStartRefundPercentage: CourseRefundPolicyDefaults.AfterStartPercentage).Value;
+        enrollment.ChangePaymentPlan(coursePaymentPlanId: 100, installment: false);
+        return enrollment;
+    }
 }

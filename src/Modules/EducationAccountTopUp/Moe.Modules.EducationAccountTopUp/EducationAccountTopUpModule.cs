@@ -29,6 +29,7 @@ using Moe.Modules.EducationAccountTopUp.Application.SettlementPreferences;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.AccountSelection;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.ChangeCampaignStatus;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.CreateCampaign;
+using Moe.Modules.EducationAccountTopUp.Application.TopUps.DeleteCampaign;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetAccountTaxonomy;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaignRules;
 using Moe.Modules.EducationAccountTopUp.Application.TopUps.GetCampaigns;
@@ -84,6 +85,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ISettlementPreferenceRepository, SettlementPreferenceRepository>();
         services.AddScoped<ITopUpCampaignRepository, TopUpCampaignRepository>();
         services.AddScoped<ITopUpCampaignRuleGroupRepository, TopUpCampaignRepository>();
+        services.AddScoped<ITopUpCampaignDeletionRepository, TopUpCampaignRepository>();
         services.AddScoped<IDynamicTopUpContractRepository, DynamicTopUpContractRepository>();
         services.AddScoped<ITopUpRunRepository, TopUpRunRepository>();
         services.AddScoped<IEducationAccountLifecycleRunRepository, EducationAccountLifecycleRunRepository>();
@@ -159,6 +161,7 @@ public sealed class EducationAccountTopUpModule : IModule
         services.AddScoped<ICommandHandler<CreateCampaignCommand, long>, CreateCampaignCommandHandler>();
         services.AddScoped<ICommandHandler<UpdateCampaignCommand>, UpdateCampaignCommandHandler>();
         services.AddScoped<ICommandHandler<ChangeCampaignStatusCommand>, ChangeCampaignStatusCommandHandler>();
+        services.AddScoped<ICommandHandler<DeleteCampaignCommand>, DeleteCampaignCommandHandler>();
         services.AddScoped<ICommandHandler<UpsertFixedRecipientsCommand, UpsertFixedRecipientsResponse>, UpsertFixedRecipientsCommandHandler>();
         services.AddScoped<ICommandHandler<UpsertCampaignRulesCommand>, UpsertCampaignRulesCommandHandler>();
         services.AddScoped<ICommandHandler<RequestManualRunCommand, RequestManualRunResponse>, RequestManualRunCommandHandler>();

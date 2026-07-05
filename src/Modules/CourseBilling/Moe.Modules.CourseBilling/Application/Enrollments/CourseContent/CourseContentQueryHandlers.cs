@@ -61,7 +61,7 @@ internal sealed class GetStudentCourseContentHandler(
         Result access = CourseContentAccessPolicy.Check(
             snapshot.Enrollment,
             snapshot.Course,
-            DateOnly.FromDateTime(clock.UtcNow.UtcDateTime));
+            clock.TodayInSingapore());
         return access.IsFailure
             ? Result<StudentCourseContentSnapshot>.Failure(access.Error)
             : Result<StudentCourseContentSnapshot>.Success(snapshot);
@@ -255,7 +255,7 @@ internal sealed class GetStudentCourseMaterialOfficePreviewHandler(
             .SingleOrDefault(item => item.Id == query.CourseMaterialId);
         if (material is null)
             return Result<StudentCourseMaterialOfficePreviewResponse>.Failure(CourseErrors.MaterialNotFound);
-        if (!IsOfficeWebPowerPointMaterial(material))
+        if (!IsOfficeWebMaterial(material))
             return Result<StudentCourseMaterialOfficePreviewResponse>.Failure(CourseErrors.MaterialPreviewUnavailable);
 
         DateTimeOffset expiresAtUtc = clock.UtcNow.Add(PreviewLifetime);
@@ -272,10 +272,9 @@ internal sealed class GetStudentCourseMaterialOfficePreviewHandler(
             expiresAtUtc));
     }
 
-    private static bool IsOfficeWebPowerPointMaterial(CourseMaterial material)
+    private static bool IsOfficeWebMaterial(CourseMaterial material)
     {
         string extension = Path.GetExtension(material.OriginalFileName).ToLowerInvariant();
-        return extension is ".pptx" or ".ppsx"
-               || material.ContentType.Contains("presentationml", StringComparison.OrdinalIgnoreCase);
+        return extension is ".docx" or ".pptx";
     }
 }

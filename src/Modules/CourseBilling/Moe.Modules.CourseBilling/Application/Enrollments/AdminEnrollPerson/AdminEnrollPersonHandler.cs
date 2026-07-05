@@ -61,7 +61,7 @@ internal sealed class AdminEnrollPersonHandler(
             return Result<CourseEnrollmentResponse>.Failure(CourseBillingErrors.CourseOrganizationForbidden);
         }
 
-        DateOnly today = DateOnly.FromDateTime(utcNow);
+        DateOnly today = clock.TodayInSingapore();
         long? personId = await enrollments.FindActiveStudentPersonIdAsync(
             command.StudentNumber,
             course.OrganizationId,

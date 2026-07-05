@@ -46,7 +46,7 @@ public sealed class SelfJoinCourseHandlerEmailTests
             new PaymentPlanGatewayDouble(new CourseBillingPlan(
                 CoursePaymentPlanId: 300,
                 CourseId: course.Id,
-                PlanTypeCode: "INSTALLMENT",
+                PlanTypeCode: CoursePaymentPlanTypeCodes.Installment,
                 InstallmentCount: 3,
                 IntervalMonths: 1,
                 IsActive: true)),
@@ -93,7 +93,7 @@ public sealed class SelfJoinCourseHandlerEmailTests
             new PaymentPlanGatewayDouble(new CourseBillingPlan(
                 CoursePaymentPlanId: 300,
                 CourseId: course.Id,
-                PlanTypeCode: "INSTALLMENT",
+                PlanTypeCode: CoursePaymentPlanTypeCodes.Installment,
                 InstallmentCount: 3,
                 IntervalMonths: 1,
                 IsActive: true)),

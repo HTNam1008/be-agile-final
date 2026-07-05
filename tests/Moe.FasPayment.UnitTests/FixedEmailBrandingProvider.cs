@@ -6,11 +6,11 @@ internal sealed class FixedEmailBrandingProvider(string appName = "Ministry of E
 {
     public string AppName { get; } = appName;
 
-    public string PaymentDashboardUrl => "http://localhost:5173/portal/payments";
+    public string PaymentDashboardUrl => "https://portal.example.test/portal/payments";
 
-    public string FasPortalUrl => "http://localhost:5173/portal/fas";
+    public string FasPortalUrl => "https://portal.example.test/portal/fas";
 
-    public string AccountPortalUrl => "http://localhost:5173/portal/account";
+    public string AccountPortalUrl => "https://portal.example.test/portal/account";
 
-    public string CourseDetailUrl(long courseId) => $"http://localhost:5173/portal/courses/{courseId}";
+    public string CourseDetailUrl(long courseId) => $"https://portal.example.test/portal/courses/{courseId}";
 }

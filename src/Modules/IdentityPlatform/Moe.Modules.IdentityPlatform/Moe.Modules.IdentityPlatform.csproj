@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\..\Shared\Moe.SharedKernel\Moe.SharedKernel.csproj" />
     <ProjectReference Include="..\..\..\Database\Moe.StudentFinance.Persistence\Moe.StudentFinance.Persistence.csproj" />
     <ProjectReference Include="..\..\MailDelivery\Moe.Modules.MailDelivery\Moe.Modules.MailDelivery.csproj" />
+    <ProjectReference Include="..\..\Mfa\Moe.Modules.Mfa\Moe.Modules.Mfa.csproj" />
 
   </ItemGroup>
   <ItemGroup>

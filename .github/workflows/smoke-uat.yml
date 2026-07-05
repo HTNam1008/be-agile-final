@@ -1,0 +1,60 @@
+name: uat-smoke-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Override API base URL
+        required: false
+        type: string
+      frontend_base_url:
+        description: Override frontend base URL
+        required: false
+        type: string
+      require_swagger:
+        description: Require Swagger UI to be available
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: backend-uat-smoke-test
+  cancel-in-progress: true
+
+jobs:
+  smoke-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve UAT URLs
+        shell: pwsh
+        run: |
+          $apiBaseUrl = "${{ inputs.api_base_url }}"
+          if ([string]::IsNullOrWhiteSpace($apiBaseUrl)) {
+            $apiBaseUrl = "${{ vars.UAT_API_BASE_URL }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($apiBaseUrl)) {
+            throw "Provide input api_base_url or repository variable UAT_API_BASE_URL."
+          }
+
+          $frontendBaseUrl = "${{ inputs.frontend_base_url }}"
+          if ([string]::IsNullOrWhiteSpace($frontendBaseUrl)) {
+            $frontendBaseUrl = "${{ vars.UAT_FRONTEND_BASE_URL }}"
+          }
+
+          "UAT_API_BASE_URL=$apiBaseUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "UAT_FRONTEND_BASE_URL=$frontendBaseUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run smoke checks
+        shell: pwsh
+        run: |
+          $arguments = @("-ApiBaseUrl", $env:UAT_API_BASE_URL)
+          if (-not [string]::IsNullOrWhiteSpace($env:UAT_FRONTEND_BASE_URL)) {
+            $arguments += @("-FrontendBaseUrl", $env:UAT_FRONTEND_BASE_URL)
+          }
+          if ("${{ inputs.require_swagger }}" -eq "true") {
+            $arguments += "-RequireSwagger"
+          }
+
+          & .\scripts\azure\test-uat.ps1 @arguments

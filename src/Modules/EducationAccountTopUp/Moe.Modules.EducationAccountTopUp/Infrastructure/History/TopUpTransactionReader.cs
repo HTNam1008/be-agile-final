@@ -45,7 +45,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 txn.CompletedAtUtc,
                 RunDateUtc = run.ScheduledForUtc,
                 campaign.CampaignCode,
-                campaign.CampaignName
+                campaign.CampaignName,
+                CampaignReason = campaign.Reason
             };
 
         long totalCount = await query.LongCountAsync(cancellationToken);
@@ -65,7 +66,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 x.CompletedAtUtc,
                 x.RunDateUtc,
                 x.CampaignCode,
-                x.CampaignName))
+                x.CampaignName,
+                x.CampaignReason))
             .ToArrayAsync(cancellationToken);
 
         return new TransactionHistoryPage(items, totalCount);
@@ -106,7 +108,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 txn.CompletedAtUtc,
                 RunDateUtc = run.ScheduledForUtc,
                 campaign.CampaignCode,
-                campaign.CampaignName
+                campaign.CampaignName,
+                CampaignReason = campaign.Reason
             };
 
         long totalCount = await query.LongCountAsync(cancellationToken);
@@ -126,7 +129,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 x.CompletedAtUtc,
                 x.RunDateUtc,
                 x.CampaignCode,
-                x.CampaignName))
+                x.CampaignName,
+                x.CampaignReason))
             .ToArrayAsync(cancellationToken);
 
         return new TransactionHistoryPage(items, totalCount);
@@ -167,7 +171,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 txn.CompletedAtUtc,
                 RunDateUtc = run.ScheduledForUtc,
                 campaign.CampaignCode,
-                campaign.CampaignName
+                campaign.CampaignName,
+                CampaignReason = campaign.Reason
             };
 
         if (!string.IsNullOrWhiteSpace(filter.CampaignSearch))
@@ -218,7 +223,8 @@ internal sealed class TopUpTransactionReader(MoeDbContext dbContext) : ITopUpTra
                 x.CompletedAtUtc,
                 x.RunDateUtc,
                 x.CampaignCode,
-                x.CampaignName))
+                x.CampaignName,
+                x.CampaignReason))
             .ToArrayAsync(cancellationToken);
 
         return new TransactionHistoryPage(items, totalCount);

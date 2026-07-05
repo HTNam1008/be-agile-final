@@ -37,6 +37,7 @@ internal sealed class AdminStudentEnrolledCourseReader(MoeDbContext dbContext) :
                     .DefaultIfEmpty()
                 orderby enrollment.EnrolledAtUtc descending, enrollment.Id descending
                 select new AdminStudentEnrolledCourseProjection(
+                    enrollment.Id,
                     course.Id,
                     course.CourseName,
                     enrollment.EnrollmentStatusCode,

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Moe.Infrastructure.Shared.Security;
 
 namespace Moe.Infrastructure.Shared.Middleware;
 
@@ -18,10 +19,11 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
     public async Task InvokeAsync(HttpContext context)
     {
         logger.LogInformation(
-            "Request started {Method} {Path}{Query}",
+            "Request started {Method} {Path}{Query}. TraceId={TraceId}",
             context.Request.Method,
             context.Request.Path,
-            context.Request.QueryString);
+            context.Request.QueryString,
+            context.TraceIdentifier);
 
         foreach (var header in context.Request.Headers)
         {
@@ -39,12 +41,16 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
         {
             stopwatch.Stop();
             logger.LogInformation(
-                "HTTP {Method} {Path} => {StatusCode} in {ElapsedMs} ms. TraceId={TraceId}",
+                "HTTP {Method} {Path} => {StatusCode} in {ElapsedMs} ms. TraceId={TraceId}; Route={Route}; UserAccountId={UserAccountId}; Portal={Portal}; Roles={Roles}",
                 context.Request.Method,
                 context.Request.Path,
                 context.Response.StatusCode,
                 stopwatch.ElapsedMilliseconds,
-                context.TraceIdentifier);
+                context.TraceIdentifier,
+                context.GetEndpoint()?.DisplayName ?? string.Empty,
+                context.User.FindFirst(ClaimNames.UserAccountId)?.Value ?? string.Empty,
+                context.User.FindFirst(ClaimNames.Portal)?.Value ?? string.Empty,
+                string.Join(",", context.User.FindAll(ClaimNames.Role).Select(claim => claim.Value).Distinct()));
         }
     }
 }

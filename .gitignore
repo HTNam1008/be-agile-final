@@ -14,12 +14,20 @@ artifacts/
 .codex-runlogs/
 .manual-test-logs/
 api-swagger.*.log
+**/Properties/ServiceDependencies/
+**/Properties/serviceDependencies.*.json
 
-
-
+**/Properties/serviceDependencies.json
 localdev.db*
 appsettings.Development.json
 test_*.ps1
 
 .verification
 src/Hosts/Moe.StudentFinance.Api/appsettings.json
+
+# UAT deploy local files and downloaded Azure secrets
+uat-app-service-settings.local.json
+*.PublishSettings
+*.publishsettings
+*.pubxml
+*.pubxml.user

@@ -2,6 +2,12 @@ using Moe.SharedKernel.Results;
 
 namespace Moe.Modules.CourseBilling.IGateway.Payments;
 
+public static class CoursePaymentPlanTypeCodes
+{
+    public const string FullPayment = "FULL_PAYMENT";
+    public const string Installment = "INSTALLMENT";
+}
+
 public sealed record PayableCourseBill(
     long BillId,
     long CourseEnrollmentId,

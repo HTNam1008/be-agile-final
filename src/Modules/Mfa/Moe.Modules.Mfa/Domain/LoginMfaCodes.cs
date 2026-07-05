@@ -18,6 +18,7 @@ internal static class MfaChallengePurposeCodes
     public const string Login = "LOGIN";
     public const string Setup = "SETUP";
     public const string Verify = "VERIFY";
+    public const string Recovery = "RECOVERY";
 }
 
 internal static class MfaChallengeStatusCodes
@@ -37,4 +38,6 @@ internal static class MfaAuditEventCodes
     public const string PinChanged = "MFA_PIN_CHANGED";
     public const string PinResetRequired = "MFA_PIN_RESET_REQUIRED";
     public const string Locked = "MFA_LOCKED";
+    public const string RecoveryRequested = "MFA_RECOVERY_REQUESTED";
+    public const string RecoveryCompleted = "MFA_RECOVERY_COMPLETED";
 }

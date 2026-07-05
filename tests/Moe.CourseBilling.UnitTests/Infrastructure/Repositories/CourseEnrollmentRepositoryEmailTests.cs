@@ -47,7 +47,7 @@ public sealed class CourseEnrollmentRepositoryEmailTests
         job.PlainTextBody.Should().Contain("you have been enrolled in Admin Course 101 by your school administrator");
         job.PlainTextBody.Should().Contain("Fee Payable: To be confirmed after payment plan selection");
         job.PlainTextBody.Should().Contain("Go to Payment Dashboard");
-        job.HtmlBody.Should().Contain("#ef3340");
+        job.HtmlBody.Should().ContainEquivalentOf("#ef3340");
     }
 
     [Fact]
@@ -56,14 +56,14 @@ public sealed class CourseEnrollmentRepositoryEmailTests
         using MoeDbContext dbContext = CreateDbContext();
         TestDoubles.RecordingEmailNotificationQueue mailQueue = new();
         (Person person, Course course) = await SeedPersonAndCourseAsync(dbContext);
-        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdmin(
+        CourseEnrollment enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(
             person.Id,
             course.Id,
-            coursePaymentPlanId: 10,
             adminLoginAccountId: 9001,
             Now,
             100m,
             50m).Value;
+        enrollment.ChangePaymentPlan(coursePaymentPlanId: 10, installment: false);
         CourseEnrollmentRepository repository = CreateRepository(dbContext, mailQueue);
 
         await repository.AddEnrollmentAndIssueBillsAsync(

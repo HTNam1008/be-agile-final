@@ -202,6 +202,25 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         }
 
         DateTime targetDate = campaign.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        if (string.Equals(campaign.FrequencyCode, FrequencyCode.Weekly.ToString(), StringComparison.OrdinalIgnoreCase)
+            && campaign.WeeklyDayOfWeek.HasValue)
+        {
+            int delta = (campaign.WeeklyDayOfWeek.Value - (int)targetDate.DayOfWeek + 7) % 7;
+            targetDate = targetDate.AddDays(delta);
+        }
+        else if (string.Equals(campaign.FrequencyCode, FrequencyCode.Monthly.ToString(), StringComparison.OrdinalIgnoreCase)
+            && campaign.MonthlyDay.HasValue)
+        {
+            int day = Math.Min(campaign.MonthlyDay.Value, DateTime.DaysInMonth(targetDate.Year, targetDate.Month));
+            targetDate = new DateTime(targetDate.Year, targetDate.Month, day, 0, 0, 0, DateTimeKind.Utc);
+            if (targetDate < campaign.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))
+            {
+                DateTime nextMonth = targetDate.AddMonths(1);
+                day = Math.Min(campaign.MonthlyDay.Value, DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month));
+                targetDate = new DateTime(nextMonth.Year, nextMonth.Month, day, 0, 0, 0, DateTimeKind.Utc);
+            }
+        }
+
         campaign.SetNextRunAt(targetDate < utcNow ? utcNow : targetDate);
     }
 
@@ -236,7 +255,9 @@ internal sealed class ChangeCampaignStatusCommandHandler(
         long userAccountId,
         CancellationToken cancellationToken)
     {
-        string nextRunAt = campaign.NextRunAtUtc?.ToString("yyyy-MM-dd HH:mm") ?? "TBD";
+        string nextRunAt = campaign.NextRunAtUtc.HasValue
+            ? FormatSingaporeDateTime(campaign.NextRunAtUtc.Value)
+            : "TBD";
 
         logger.LogInformation(
             "Creating RECURRING_ALERT notification for campaign {TopUpCampaignId} and user account {UserAccountId}. NextRunAt={NextRunAt}, FrequencyCode={FrequencyCode}",
@@ -279,4 +300,7 @@ internal sealed class ChangeCampaignStatusCommandHandler(
             campaign.RecipientModeCode,
             RecipientModeCode.DynamicRules.ToString(),
             StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatSingaporeDateTime(DateTime utc)
+        => utc.AddHours(8).ToString("dd/MM/yyyy, HH:mm");
 }

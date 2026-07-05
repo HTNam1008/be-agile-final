@@ -54,7 +54,7 @@ internal sealed class MonthlyBillNotificationWorker(
     internal async Task RunIfDueAsync(CancellationToken cancellationToken)
     {
         DateTime utcNow = clock.UtcNow.UtcDateTime;
-        DateOnly today = DateOnly.FromDateTime(utcNow);
+        DateOnly today = clock.TodayInSingapore();
         if (today.Day != 1)
         {
             return;

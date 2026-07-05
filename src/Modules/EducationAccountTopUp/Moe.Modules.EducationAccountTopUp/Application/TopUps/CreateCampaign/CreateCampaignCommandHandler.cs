@@ -37,6 +37,8 @@ internal sealed class CreateCampaignCommandHandler(
 
         string? frequencyCode = null;
         int? frequencyInterval = null;
+        int? weeklyDayOfWeek = null;
+        int? monthlyDay = null;
         DateOnly? endDate = null;
 
         if (scheduleTypeCode == ScheduleTypeCode.Recurring ||
@@ -45,6 +47,8 @@ internal sealed class CreateCampaignCommandHandler(
         {
             frequencyCode = request.FrequencyCode;
             frequencyInterval = request.FrequencyInterval;
+            weeklyDayOfWeek = request.WeeklyDayOfWeek;
+            monthlyDay = request.MonthlyDay;
             endDate = request.EndDate;
         }
 
@@ -64,7 +68,9 @@ internal sealed class CreateCampaignCommandHandler(
             deliveryTypeCode: request.DeliveryTypeCode,
             maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
-            nowUtc: clock.UtcNow.UtcDateTime);
+            nowUtc: clock.UtcNow.UtcDateTime,
+            weeklyDayOfWeek: weeklyDayOfWeek,
+            monthlyDay: monthlyDay);
 
         await campaigns.AddAsync(campaign, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
