@@ -2117,6 +2117,9 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<int?>("MonthlyDay")
                         .HasColumnType("int");
 
+                    b.Property<int?>("WeeklyDayOfWeek")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("MaxTotalAmount")
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
