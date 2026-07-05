@@ -48,16 +48,16 @@ public sealed class AiTurnRouter(
             {
                 var fasPlan = new AiTurnPlan(AiPlannerIntent.ContinueFas, "collecting", null, 1.0m, "ROUTER");
                 var fasResult = await fasHandler.HandleAsync(c, sanitized, fasPlan, ct);
-                if (fasResult.Mode is "REDIRECT_PAYMENT" or "REDIRECT_KNOWLEDGE" or "REDIRECT_FALLBACK")
+                if (fasResult.Signal != HandlerDispatchSignal.None)
                 {
-                    if (fasResult.Mode == "REDIRECT_FALLBACK")
+                    if (fasResult.Signal == HandlerDispatchSignal.RedirectFallback)
                     {
                         Guid rid = await fallbackHandler.CreateReviewAsync(c, c.PersonId, fasResult.TurnIntent ?? "FAS_MANUAL_FALLBACK", sanitized.PageContext, sanitized.Message, now, ct);
                         var fallbackResp = fallbackHandler.FallbackResponse(rid);
                         var fb = fasResult with { Mode = "FALLBACK", ReviewRecordId = rid, Actions = fallbackResp.Actions, FollowUpQuestions = fasResult.FollowUpQuestions.Count > 0 ? fasResult.FollowUpQuestions : fallbackResp.FollowUpQuestions };
                         return await Save(c.Id, pj, now, 0, fb, c, sanitized, fasPlan, sw, ct, true);
                     }
-                    var dispatched = fasResult.Mode == "REDIRECT_PAYMENT"
+                    var dispatched = fasResult.Signal == HandlerDispatchSignal.RedirectPayment
                         ? await paymentHandler.HandleAsync(c, sanitized, fasPlan, ct)
                         : await knowledgeHandler.HandleAsync(c, sanitized, fasPlan, ct);
                     dispatched = dispatched with { InterviewState = fasResult.InterviewState };
