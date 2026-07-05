@@ -66,10 +66,11 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            string redirectMode = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()) ? "REDIRECT_PAYMENT" : "REDIRECT_KNOWLEDGE";
-            return new AiHandlerResult(request.Message, redirectMode, new(false, []), [], [],
+            bool isPmt = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant());
+            return new AiHandlerResult(request.Message, isPmt ? "PAYMENT" : "GENERAL", new(false, []), [], [],
                 FasConfirmationService.ToInterviewState(st, null))
             {
+                Signal = isPmt ? HandlerDispatchSignal.RedirectPayment : HandlerDispatchSignal.RedirectKnowledge,
                 FollowUpQuestions = FilterCurrentQuestion(["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"], request.Message)
             };
         }
@@ -85,7 +86,7 @@ public sealed class FasInterviewHandler(
             st.Status = "MANUAL_FALLBACK";
             var miv = FasConfirmationService.ToInterviewState(st, null);
             c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
-            return new AiHandlerResult(ext.Message!, "REDIRECT_FALLBACK", new(false, []), [], [], miv) { TurnIntent = "FAS_MANUAL_FALLBACK" };
+            return new AiHandlerResult(ext.Message!, "FALLBACK", new(false, []), [], [], miv) { TurnIntent = "FAS_MANUAL_FALLBACK", Signal = HandlerDispatchSignal.RedirectFallback };
         }
 
         if (ext.Status == "CLARIFY")
@@ -123,7 +124,7 @@ public sealed class FasInterviewHandler(
         if (st.Status == "MANUAL_FALLBACK")
         {
             c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
-            return new AiHandlerResult(text, "REDIRECT_FALLBACK", new(false, []), [], [], ivw) { TurnIntent = "FAS_MANUAL_FALLBACK" };
+            return new AiHandlerResult(text, "FALLBACK", new(false, []), [], [], ivw) { TurnIntent = "FAS_MANUAL_FALLBACK", Signal = HandlerDispatchSignal.RedirectFallback };
         }
         string em = st.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
         c.Touch(em, pj, now); SaveFasState(c, st, now);
@@ -157,9 +158,10 @@ public sealed class FasInterviewHandler(
         {
             st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            return new AiHandlerResult(req.Message, "REDIRECT_KNOWLEDGE", new(false, []), [], [],
+            return new AiHandlerResult(req.Message, "GENERAL", new(false, []), [], [],
                 FasConfirmationService.ToInterviewState(st, null))
             {
+                Signal = HandlerDispatchSignal.RedirectKnowledge,
                 FollowUpQuestions = ["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."]
             };
         }
@@ -184,7 +186,7 @@ public sealed class FasInterviewHandler(
             st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
             var iv = FasConfirmationService.ToInterviewState(st, null);
             c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
-            return new AiHandlerResult("No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "REDIRECT_FALLBACK", new(false, []), [], [], iv) { TurnIntent = "FAS_CONFIRMATION_REJECTED", FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."] };
+            return new AiHandlerResult("No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "FALLBACK", new(false, []), [], [], iv) { TurnIntent = "FAS_CONFIRMATION_REJECTED", Signal = HandlerDispatchSignal.RedirectFallback, FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."] };
         }
 
         st.Status = "COLLECTING_CONFIRMED";
@@ -227,9 +229,10 @@ public sealed class FasInterviewHandler(
         if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message.ToUpperInvariant()) || AiKeywordMatchers.LooksLikeCapabilityQuestion(req.Message) || AiKeywordMatchers.LooksLikeAdminCenterQuestion(req.Message))
         {
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            return new AiHandlerResult(req.Message, "REDIRECT_KNOWLEDGE", new(false, []), [], [],
+            return new AiHandlerResult(req.Message, "GENERAL", new(false, []), [], [],
                 FasConfirmationService.ToInterviewState(st, null))
             {
+                Signal = HandlerDispatchSignal.RedirectKnowledge,
                 FollowUpQuestions = isCanc
                     ? FilterCurrentQuestion(["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message)
                     : FilterCurrentQuestion(["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message)
@@ -239,8 +242,9 @@ public sealed class FasInterviewHandler(
         if (AiKeywordMatchers.LooksLikePaymentQuery(req.Message.ToUpperInvariant()))
         {
             c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
-            return new AiHandlerResult(req.Message, "REDIRECT_PAYMENT", new(false, []), [], [],
-                FasConfirmationService.ToInterviewState(st, null));
+            return new AiHandlerResult(req.Message, "PAYMENT", new(false, []), [], [],
+                FasConfirmationService.ToInterviewState(st, null))
+            { Signal = HandlerDispatchSignal.RedirectPayment };
         }
 
         if (FasExtractionService.ExtractConfirmation(req.Message).Value is bool)
