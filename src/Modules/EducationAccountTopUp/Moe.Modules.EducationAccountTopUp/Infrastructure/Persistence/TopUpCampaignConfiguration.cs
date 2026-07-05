@@ -24,6 +24,8 @@ internal sealed class TopUpCampaignConfiguration : IEntityTypeConfiguration<TopU
         builder.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
         builder.Property(x => x.ScheduleTypeCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.FrequencyCode).HasMaxLength(30).IsUnicode(false);
+        builder.Property(x => x.WeeklyDayOfWeek);
+        builder.Property(x => x.MonthlyDay);
         builder.Property(x => x.NextRunAtUtc).HasColumnName("NextRunAt");
         builder.Property(x => x.CampaignStatusCode).HasMaxLength(30).IsUnicode(false).IsRequired();
         builder.Property(x => x.CampaignVersion).IsConcurrencyToken();

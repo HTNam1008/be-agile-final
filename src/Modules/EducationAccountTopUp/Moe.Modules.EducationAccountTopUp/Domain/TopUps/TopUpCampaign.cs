@@ -45,6 +45,8 @@ public sealed class TopUpCampaign : Entity<long>
     public DateOnly? EndDate { get; private set; }
     public string? FrequencyCode { get; private set; }
     public int? FrequencyInterval { get; private set; }
+    public int? WeeklyDayOfWeek { get; private set; }
+    public int? MonthlyDay { get; private set; }
     public DateTime? NextRunAtUtc { get; private set; }
     public string CampaignStatusCode { get; private set; } = string.Empty;
     public int CampaignVersion { get; private set; }
@@ -76,7 +78,9 @@ public sealed class TopUpCampaign : Entity<long>
         string deliveryTypeCode,
         decimal maxTotalAmount,
         long currentUserId,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        int? weeklyDayOfWeek = null,
+        int? monthlyDay = null)
     {
         return new TopUpCampaign
         {
@@ -92,6 +96,8 @@ public sealed class TopUpCampaign : Entity<long>
             EndDate = endDate,
             FrequencyCode = frequencyCode,
             FrequencyInterval = frequencyInterval,
+            WeeklyDayOfWeek = weeklyDayOfWeek,
+            MonthlyDay = monthlyDay,
             DeliveryTypeCode = deliveryTypeCode,
             MaxTotalAmount = maxTotalAmount,
             CampaignStatusCode = TopUpCampaignStatusCodes.Draft,
@@ -131,7 +137,9 @@ public sealed class TopUpCampaign : Entity<long>
         string deliveryTypeCode,
         decimal maxTotalAmount,
         long currentUserId,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        int? weeklyDayOfWeek = null,
+        int? monthlyDay = null)
     {
         if (CampaignStatusCode != TopUpCampaignStatusCodes.Draft)
         {
@@ -150,6 +158,8 @@ public sealed class TopUpCampaign : Entity<long>
         EndDate = endDate;
         FrequencyCode = frequencyCode;
         FrequencyInterval = frequencyInterval;
+        WeeklyDayOfWeek = weeklyDayOfWeek;
+        MonthlyDay = monthlyDay;
         DeliveryTypeCode = deliveryTypeCode;
         MaxTotalAmount = maxTotalAmount;
         UpdatedByLoginAccountId = currentUserId;

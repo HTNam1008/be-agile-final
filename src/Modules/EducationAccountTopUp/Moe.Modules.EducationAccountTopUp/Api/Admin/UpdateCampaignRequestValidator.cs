@@ -46,6 +46,18 @@ public sealed class UpdateCampaignRequestValidator : AbstractValidator<UpdateCam
                     .NotEmpty()
                     .IsEnumName(typeof(FrequencyCode), caseSensitive: false);
                 RuleFor(x => x.FrequencyInterval).GreaterThan(0);
+                When(x => string.Equals(x.FrequencyCode, FrequencyCode.Weekly.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+                {
+                    RuleFor(x => x.WeeklyDayOfWeek)
+                        .NotNull().WithMessage("WeeklyDayOfWeek is required for weekly recurring campaigns.")
+                        .InclusiveBetween(0, 6);
+                });
+                When(x => string.Equals(x.FrequencyCode, FrequencyCode.Monthly.ToString(), StringComparison.OrdinalIgnoreCase), () =>
+                {
+                    RuleFor(x => x.MonthlyDay)
+                        .NotNull().WithMessage("MonthlyDay is required for monthly recurring campaigns.")
+                        .InclusiveBetween(1, 31);
+                });
                 RuleFor(x => x.EndDate)
                     .NotNull().WithMessage("EndDate is required for Recurring or Contract campaigns.")
                     .Must((request, endDate) => endDate >= request.StartDate)
