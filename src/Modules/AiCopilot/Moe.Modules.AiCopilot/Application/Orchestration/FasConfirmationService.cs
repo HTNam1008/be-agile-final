@@ -15,6 +15,14 @@ internal static class FasConfirmationService
             ? (s.IsWelfareHomeResident.Value ? "Yes" : "No")
             : "Not answered";
         facts.Add($"Welfare home: {welfareDisplay}");
+        string empDisplay = s.EmploymentStatusCode switch
+        {
+            "EMPLOYED" => "Employed",
+            "SELF_EMPLOYED" => "Self-employed",
+            "UNEMPLOYED" => "Unemployed",
+            _ => "Not provided"
+        };
+        facts.Add($"Employment status: {empDisplay}");
         if (s.IsWelfareHomeResident == false)
         {
             facts.Add($"Monthly household income: {s.MonthlyHouseholdIncome?.ToString("C", CultureInfo.GetCultureInfo("en-SG")) ?? "Not provided"}");

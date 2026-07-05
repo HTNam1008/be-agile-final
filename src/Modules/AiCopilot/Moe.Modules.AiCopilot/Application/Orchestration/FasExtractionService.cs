@@ -622,7 +622,7 @@ Rules:
         s.ClarificationAttempts.Remove(field);
     }
 
-    private static FasInterviewData Snapshot(FasInterviewData s) => new()
+    internal static FasInterviewData Snapshot(FasInterviewData s) => new()
     {
         Status = s.Status,
         Profile = s.Profile,
@@ -646,7 +646,7 @@ Rules:
         HelpAttempts = new Dictionary<string, int>(s.HelpAttempts),
     };
 
-    private static void Restore(FasInterviewData s, FasInterviewData snapshot)
+    internal static void Restore(FasInterviewData s, FasInterviewData snapshot)
     {
         s.Status = snapshot.Status;
         s.IsWelfareHomeResident = snapshot.IsWelfareHomeResident;
