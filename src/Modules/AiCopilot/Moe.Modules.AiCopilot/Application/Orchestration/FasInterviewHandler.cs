@@ -14,6 +14,22 @@ public sealed class FasInterviewHandler(
     FasEligibilityService eligibility)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly Regex CorrectionIntentPattern = new(@"\b(actually|change|correction|correct|wait|sorry|make that|meant|instead)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CorrectionIncomePattern = new(@"\b(income|salary|earn|household)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CorrectionMembersPattern = new(@"\b(member|members|people|pax|household size)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CorrectionOtherIncomePattern = new(@"\b(other income|other monthly|additional income)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasRestartIntentPattern = new(@"\b(restart|start over|start again|begin again|new check|resume|continue|go back|return|check|qualify|eligib)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasRestartKnowledgeInterrupt = new(@"\b(what|how|requirements?|documents?|explain|description)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasRestartContextPattern = new(@"\b(fas|financial assistance|eligibility|application)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex ContextualResumePattern = new(@"^\s*(resume|continue|resume please|continue please|i want to continue|keep going|go back)\s*[.!]?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasSchemeGuidancePattern = new(@"\b(scheme|schemes|recommend|recommendation|eligible|eligibility|qualify|apply for)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex LiveEligibWhichPattern = new(@"\b(WHICH|WHAT)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex LiveEligibWhatPattern = new(@"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex LiveEligibForPattern = new(@"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FilterNormalizePattern = new(@"\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex CorrectionPrPattern = new(@"\bPR\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CorrectionForeignerPattern = new(@"\bforeigner\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CorrectionSingaporePattern = new(@"\bsingapore(?: citizen|an)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static FasInterviewData? LoadFasState(AiConversation c) =>
         c.FasSession?.CollectedFactsJson is { Length: > 0 } json ? JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions) : null;
@@ -38,13 +54,19 @@ public sealed class FasInterviewHandler(
 
         if (IsTerminalFasState(st.Status))
         {
+            if (st.Status == "COMPLETE") return await HandleCompletedFas(c, request, st, pj, now, ct);
             if (st.Status == "CANCELLED" && LooksLikeExplicitFasRestart(request.Message)) { st = await InitializeFasState(ct); isNew = true; }
-            else if (LooksLikeExplicitFasRestart(request.Message) || LooksLikeContextualResume(request.Message)) { st.Status = ResolveTargetField(st, fk) is null ? "CONFIRMING" : "COLLECTING"; st.ValidationMessage = null; st.ClarificationAttempts.Clear(); }
+            else if (LooksLikeExplicitFasRestart(request.Message) || LooksLikeContextualResume(request.Message))
+            {
+                st.Status = ResolveTargetField(st, fk) is null ? "CONFIRMING" : "COLLECTING";
+                st.ValidationMessage = null;
+                string? currentField = ResolveTargetField(st, fk);
+                if (currentField is not null) st.ClarificationAttempts.Remove(currentField);
+            }
             else return await HandleStoppedFasTurn(c, request, st, now, ct);
         }
 
         if (st.Status == "CONFIRMING") { var cr = await HandleConfirmingGate(c, request, st, now, ct); if (cr is not null) return cr; }
-        if (!isNew && st.Status == "COMPLETE") return await HandleCompletedFas(c, request, st, pj, now, ct);
 
         if (AiKeywordMatchers.LooksLikeCancelFas(request.Message))
         {
@@ -317,7 +339,7 @@ public sealed class FasInterviewHandler(
     private static bool IncomeFactsRequired(FasInterviewData s) => CriteriaPlanUnknown(s) || s.RequiredCriteriaTypes.Any(c => c is "GDP" or "GHI" or "PCI") || s.ApplicableSchemes.Count > 0;
     private static bool ParentNationalityRequired(FasInterviewData _) => true;
     private static bool CriteriaPlanUnknown(FasInterviewData s) => s.RequiredCriteriaTypes.Count == 0 && s.ApplicableSchemeNames.Count == 0;
-    internal static bool IsTerminalFasState(string status) => status is "CANCELLED" or "PAUSED" or "MANUAL_FALLBACK";
+    internal static bool IsTerminalFasState(string status) => status is "CANCELLED" or "PAUSED" or "MANUAL_FALLBACK" or "COMPLETE";
 
     internal static AiChatResponse AttachDormantFasState(AiChatResponse r, AiFasSession? s)
     {
@@ -328,46 +350,98 @@ public sealed class FasInterviewHandler(
 
     private static bool TryApplyFasCorrections(FasInterviewData s, string msg)
     {
-        if (!Regex.IsMatch(msg, @"\b(actually|change|correction|correct|wait|sorry|make that|meant|instead)\b", RegexOptions.IgnoreCase)) return false;
-        bool ch = false; string lo = msg.ToLowerInvariant();
+        if (!CorrectionIntentPattern.IsMatch(msg)) return false;
+
+        var snapshot = FasExtractionService.Snapshot(s);
+        string lo = msg.ToLowerInvariant();
         var nums = FasExtractionService.ExtractNumbers(msg).ToArray();
-        bool mem = Regex.IsMatch(lo, @"\b(member|members|people|pax|household size)\b");
-        bool oth = Regex.IsMatch(lo, @"\b(other income|other monthly|additional income)\b");
-        if (lo.Contains("welfare")) { var w = FasExtractionService.ExtractWelfareHome(msg); if (w.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "isWelfareHomeResident", w.Value); ch = true; } }
-        if (Regex.IsMatch(lo, @"\b(income|salary|earn|household)\b") && !mem && !oth) { var i = FasExtractionService.ExtractIncome(msg); if (i.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "monthlyHouseholdIncome", i.Value); ch = true; } }
-        else if (!mem && !oth && nums.Length == 1 && s.MonthlyHouseholdIncome.HasValue) { var v = nums[0]; if (v is >= 0 and <= 1_000_000) { FasExtractionService.ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(v, 2)); ch = true; } }
-        if (mem) { var m = FasExtractionService.ExtractHouseholdMemberCount(msg); if (m.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "householdMemberCount", m.Value); ch = true; } }
-        if (oth) { var o = FasExtractionService.ExtractOtherIncome(msg); if (o.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "otherMonthlyIncome", o.Value); ch = true; } }
+        bool hasWelfare = lo.Contains("welfare");
+        bool hasIncome = CorrectionIncomePattern.IsMatch(lo);
+        bool hasMembers = CorrectionMembersPattern.IsMatch(lo);
+        bool hasOther = CorrectionOtherIncomePattern.IsMatch(lo);
+
+        var changes = new List<(string Field, object? Value)>();
+
+        if (hasWelfare)
+        {
+            var w = FasExtractionService.ExtractWelfareHome(msg);
+            if (w.Status != "ACCEPTED") { FasExtractionService.Restore(s, snapshot); return false; }
+            changes.Add(("isWelfareHomeResident", w.Value));
+        }
+
+        if (hasIncome && !hasMembers && !hasOther)
+        {
+            var i = FasExtractionService.ExtractIncome(msg);
+            if (i.Status == "ACCEPTED")
+                changes.Add(("monthlyHouseholdIncome", i.Value));
+            else if (nums.Length == 1 && snapshot.MonthlyHouseholdIncome.HasValue && nums[0] is >= 0 and <= 1_000_000)
+                changes.Add(("monthlyHouseholdIncome", decimal.Round(nums[0], 2)));
+            else { FasExtractionService.Restore(s, snapshot); return false; }
+        }
+        else if (!hasMembers && !hasOther && nums.Length == 1 && snapshot.MonthlyHouseholdIncome.HasValue)
+        {
+            if (nums[0] is >= 0 and <= 1_000_000)
+                changes.Add(("monthlyHouseholdIncome", decimal.Round(nums[0], 2)));
+            else { FasExtractionService.Restore(s, snapshot); return false; }
+        }
+
+        if (hasMembers)
+        {
+            var m = FasExtractionService.ExtractHouseholdMemberCount(msg);
+            if (m.Status != "ACCEPTED") { FasExtractionService.Restore(s, snapshot); return false; }
+            changes.Add(("householdMemberCount", m.Value));
+        }
+
+        if (hasOther)
+        {
+            var o = FasExtractionService.ExtractOtherIncome(msg);
+            if (o.Status != "ACCEPTED") { FasExtractionService.Restore(s, snapshot); return false; }
+            changes.Add(("otherMonthlyIncome", o.Value));
+        }
+
+        if (changes.Count == 0 && !hasWelfare) { FasExtractionService.Restore(s, snapshot); return false; }
+
         var nat = FasExtractionService.ExtractParentNationalities(msg);
         if (nat.Status != "ACCEPTED")
         {
             string? nn = FasExtractionService.TryNormalizeParentNationality(msg);
-            if (nn is null && Regex.IsMatch(msg, @"\bPR\b", RegexOptions.IgnoreCase)) nn = "Permanent Resident";
-            if (nn is null && Regex.IsMatch(msg, @"\bforeigner\b", RegexOptions.IgnoreCase)) nn = "Foreigner";
-            if (nn is null && Regex.IsMatch(msg, @"\bsingapore(?: citizen|an)?\b", RegexOptions.IgnoreCase)) nn = "Singapore Citizen";
+            if (nn is null && CorrectionPrPattern.IsMatch(msg)) nn = "Permanent Resident";
+            if (nn is null && CorrectionForeignerPattern.IsMatch(msg)) nn = "Foreigner";
+            if (nn is null && CorrectionSingaporePattern.IsMatch(msg)) nn = "Singapore Citizen";
             if (nn is not null) nat = FasExtractionResult.Accepted(new[] { nn });
         }
-        if (nat.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "parentNationalities", nat.Value); ch = true; }
-        if (ch) { s.Status = "CONFIRMING"; s.ClarificationField = null; s.ValidationMessage = null; }
-        return ch;
+        if (nat.Status == "ACCEPTED") changes.Add(("parentNationalities", nat.Value));
+
+        if (changes.Count == 0) { FasExtractionService.Restore(s, snapshot); return false; }
+
+        // Apply all changes atomically
+        foreach (var (field, value) in changes)
+            FasExtractionService.ApplyAcceptedValue(s, field, value);
+        s.Status = "CONFIRMING";
+        s.ClarificationField = null;
+        s.ValidationMessage = null;
+        // Clear clarification attempts only for successfully applied fields
+        foreach (var (field, _) in changes)
+            s.ClarificationAttempts.Remove(field);
+        return true;
     }
 
     private static bool LooksLikeExplicitFasRestart(string m) =>
-        Regex.IsMatch(m, @"\b(restart|start over|start again|resume|continue|go back|return|check|qualify|eligib)\b", RegexOptions.IgnoreCase) && Regex.IsMatch(m, @"\b(fas|financial assistance|eligibility|check|application)\b", RegexOptions.IgnoreCase);
+        FasRestartIntentPattern.IsMatch(m) && FasRestartContextPattern.IsMatch(m)
+        && !FasRestartKnowledgeInterrupt.IsMatch(m);
 
     private static bool LooksLikeContextualResume(string m) =>
-        Regex.IsMatch(m, @"^\s*(resume|continue|resume please|continue please|i want to continue|keep going|go back)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
+        ContextualResumePattern.IsMatch(m);
 
     private static bool LooksLikeFasSchemeGuidanceRequest(string m) =>
-        Regex.IsMatch(m, @"\b(scheme|schemes|recommend|recommendation|eligible|eligibility|qualify|apply for)\b", RegexOptions.IgnoreCase);
+        FasSchemeGuidancePattern.IsMatch(m);
 
     private static bool IsLiveSchemeEligibilityRequest(string v) =>
-        Regex.IsMatch(v, @"\b(WHICH|WHAT)\b", RegexOptions.IgnoreCase) && Regex.IsMatch(v, @"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b", RegexOptions.IgnoreCase) &&
-        Regex.IsMatch(v, @"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b", RegexOptions.IgnoreCase);
+        LiveEligibWhichPattern.IsMatch(v) && LiveEligibWhatPattern.IsMatch(v) && LiveEligibForPattern.IsMatch(v);
 
     private static string[] FilterCurrentQuestion(IEnumerable<string> fps, string msg)
     {
-        string cq = Regex.Replace(msg.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant);
-        return fps.Where(x => !string.IsNullOrWhiteSpace(x)).Where(x => !string.Equals(Regex.Replace(x.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant), cq, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray();
+        string cq = FilterNormalizePattern.Replace(msg.Trim().TrimEnd('.', '?', '!'), " ");
+        return fps.Where(x => !string.IsNullOrWhiteSpace(x)).Where(x => !string.Equals(FilterNormalizePattern.Replace(x.Trim().TrimEnd('.', '?', '!'), " "), cq, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray();
     }
 }
