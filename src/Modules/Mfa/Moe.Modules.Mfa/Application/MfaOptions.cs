@@ -19,4 +19,9 @@ public sealed class MfaOptions
     public int Pbkdf2Iterations { get; init; } = 100_000;
 
     public string Pepper { get; init; } = string.Empty;
+
+    [Range(5, 120)]
+    public int RecoveryLinkLifetimeMinutes { get; init; } = 15;
+
+    public string RecoveryPageUrl { get; init; } = "http://localhost:5173/mfa/reset";
 }
