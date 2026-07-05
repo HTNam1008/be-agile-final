@@ -39,7 +39,8 @@ public sealed class AiTurnPlannerService(
                 "The assistant is bounded to student finance, Education Account, bills, payments, refunds, courses, and FAS. " +
                 "Classify human intent and conversation control only. Do not calculate money, eligibility, validate fields, or invent facts. " +
                 "If the user stops or pauses FAS and asks a finance/course question in the same message, choose PAYMENT_QUERY or COURSE_QUERY so the assistant can answer after stopping the task. " +
-                "Short slot answers like yes, no, 3000, 4, 0, Singaporean, PR, Foreigner continue FAS only when a FAS task is active.");
+                "Short slot answers like yes, no, 3000, 4, 0, Singaporean, PR, Foreigner continue FAS only when a FAS task is active. " +
+                "When fasPhase is collecting, confirming, or clarifying, treat any affirmation, correction, or direct answer as CONTINUE_FAS unless the user explicitly switches topic or cancels.");
             history.AddUserMessage(
                 $"currentMode={conversation.ModeCode}; fasPhase={Phase(conversation)}; hasFasState={conversation.FasSession is not null}; " +
                 $"route={request.PageContext?.Path}; domain={request.PageContext?.Domain}; message={request.Message}");
@@ -154,7 +155,10 @@ public sealed class AiTurnPlannerService(
         Regex.IsMatch(value, @"\b(school fees?|course fees?|education costs?|school costs?|fees?|family|household|income|earn|afford)\b", RegexOptions.IgnoreCase);
 
     private static bool LooksLikeShortAnswer(string value) =>
-        Regex.IsMatch(value, @"^\s*(yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$", RegexOptions.IgnoreCase);
+        value.Length < 80 &&
+        (Regex.IsMatch(value, @"^\s*(yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)\s*\.?\s*$", RegexOptions.IgnoreCase) ||
+         Regex.IsMatch(value, @"\b(my|the|our|i am|i'm|its)\b.{0,40}\b(\d[\d,]*(?:\.\d+)?|singapore(?:an)?|foreigner|permanent resident|pr)\b", RegexOptions.IgnoreCase) ||
+         Regex.IsMatch(value, @"^\s*(yes please|no thanks|that's right|that is right|correct|that's correct|yep|nope|sure|confirmed)\s*\.?\s*$", RegexOptions.IgnoreCase));
 
     private static bool TryParseIntent(string value, out AiPlannerIntent intent)
     {
