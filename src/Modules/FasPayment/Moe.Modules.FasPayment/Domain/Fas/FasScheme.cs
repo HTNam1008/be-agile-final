@@ -1,6 +1,5 @@
-using Moe.SharedKernel.Domain;
-
 using Moe.Application.Abstractions.Clock;
+using Moe.SharedKernel.Domain;
 
 namespace Moe.Modules.FasPayment.Domain.Fas;
 

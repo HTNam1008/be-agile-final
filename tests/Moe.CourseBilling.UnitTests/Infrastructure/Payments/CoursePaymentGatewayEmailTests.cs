@@ -228,9 +228,16 @@ public sealed class CoursePaymentGatewayEmailTests
         dbContext.Set<Course>().Add(course);
         await dbContext.SaveChangesAsync();
 
-        CourseEnrollment enrollment = sourceCode == CourseEnrollmentSourceCodes.SelfJoin
-            ? CourseEnrollment.JoinSelf(person.Id, course.Id, 10, 1003, Now, 100m, 50m).Value
-            : CourseEnrollment.EnrollByAdmin(person.Id, course.Id, 10, 9001, Now, 100m, 50m).Value;
+        CourseEnrollment enrollment;
+        if (sourceCode == CourseEnrollmentSourceCodes.SelfJoin)
+        {
+            enrollment = CourseEnrollment.JoinSelf(person.Id, course.Id, 10, 1003, Now, 100m, 50m).Value;
+        }
+        else
+        {
+            enrollment = CourseEnrollment.EnrollByAdminPendingPlanSelection(person.Id, course.Id, 9001, Now, 100m, 50m).Value;
+            enrollment.ChangePaymentPlan(coursePaymentPlanId: 10, installment: false);
+        }
 
         dbContext.Set<CourseEnrollment>().Add(enrollment);
         await dbContext.SaveChangesAsync();

@@ -176,7 +176,7 @@ public sealed class SingaporeBusinessDayRedTests
     private sealed class InstallmentPlanGateway : ICoursePaymentPlanGateway
     {
         public Task<CourseBillingPlan?> FindPlanAsync(long coursePaymentPlanId, CancellationToken cancellationToken) =>
-            Task.FromResult<CourseBillingPlan?>(new(coursePaymentPlanId, 1, "INSTALLMENT", 3, 1, true));
+            Task.FromResult<CourseBillingPlan?>(new(coursePaymentPlanId, 1, CoursePaymentPlanTypeCodes.Installment, 3, 1, true));
     }
 
     private sealed class FakeCurrentUser : ICurrentUser
@@ -235,7 +235,7 @@ public sealed class SingaporeBusinessDayRedTests
     private sealed class FixedBrandingProvider : IEmailBrandingProvider
     {
         public string AppName => "Ministry of Education - Singapore";
-        public string PaymentDashboardUrl => "http://localhost:5173/portal/payments";
+        public string PaymentDashboardUrl => "https://portal.example.test/portal/payments";
         public string FasPortalUrl => "http://localhost:5173/portal/fas";
         public string AccountPortalUrl => "http://localhost:5173/portal/account";
         public string CourseDetailUrl(long courseId) => $"http://localhost:5173/portal/courses/{courseId}";

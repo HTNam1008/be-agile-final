@@ -104,9 +104,9 @@ internal sealed class PaymentPlanBillPreviewBuilder(
 
         DateTime now = clock.UtcNow.UtcDateTime;
         DateOnly today = clock.TodayInSingapore();
-        bool installment = plan.PlanTypeCode == "INSTALLMENT";
+        bool installment = plan.PlanTypeCode == CoursePaymentPlanTypeCodes.Installment;
         DateOnly dueDate = installment
-            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(now)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(today)
             : today;
 
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =

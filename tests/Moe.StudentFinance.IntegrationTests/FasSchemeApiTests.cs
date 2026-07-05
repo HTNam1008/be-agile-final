@@ -108,6 +108,7 @@ public sealed class FasSchemeApiTests(CustomWebApplicationFactory factory) : ICl
         await AssertStatus(HttpStatusCode.OK, detail);
         string body = await detail.Content.ReadAsStringAsync();
         Assert.Contains("PARENT_NATIONALITY", body);
+        Assert.Contains("Singapore Citizen", body);
         Assert.Contains("Foreigner", body);
         Assert.Contains("ACCOUNT_TYPE", body);
         Assert.Contains("EDUCATION_ACCOUNT", body);
