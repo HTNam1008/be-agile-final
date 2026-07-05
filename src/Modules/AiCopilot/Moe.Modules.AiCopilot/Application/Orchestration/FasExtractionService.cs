@@ -261,14 +261,22 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
         bool ambiguous = root.TryGetProperty("ambiguous", out JsonElement ambEl) && ambEl.ValueKind == JsonValueKind.True;
 
         var changes = new List<(string Field, object? Value)>();
+        string? welfareConflictMessage = null;
+        string? incomeRangeMessage = null;
+        string? countRangeMessage = null;
+        string? otherIncomeRangeMessage = null;
 
+        // Pass 1: collect ALL potential changes and ALL conflict/range messages.
+        // No early returns — we want to accumulate everything before deciding.
         if (TryGetJsonBool(root, "isWelfareHomeResident") is bool welfare)
         {
             if (s.IsWelfareHomeResident.HasValue && s.IsWelfareHomeResident.Value != welfare)
-                return (FasExtractionResult.Clarify(welfare
+            {
+                welfareConflictMessage = welfare
                     ? "You previously said you are NOT a welfare home resident. Do you want to change that to YES, you live in an approved welfare home?"
-                    : "You previously said you ARE a welfare home resident. Do you want to change that to NO, you don't live in a welfare home?"), changes);
-            if (!s.IsWelfareHomeResident.HasValue || s.IsWelfareHomeResident.Value != welfare)
+                    : "You previously said you ARE a welfare home resident. Do you want to change that to NO, you don't live in a welfare home?";
+            }
+            else if (!s.IsWelfareHomeResident.HasValue || s.IsWelfareHomeResident.Value != welfare)
             {
                 changes.Add(("isWelfareHomeResident", welfare));
             }
@@ -287,10 +295,12 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
         if (TryGetJsonDecimal(root, "monthlyHouseholdIncome") is decimal income)
         {
             if (income < 0 || income > 100_000)
-                return (ambiguous
-                    ? FasExtractionResult.Clarify($"I think the household income is around ${income:N0}, but that seems high. Could you confirm the exact monthly household income in SGD?")
-                    : FasExtractionResult.Clarify($"${income:N0} seems high for monthly household income. Could you check and provide the correct amount?"), changes);
-            if (!s.MonthlyHouseholdIncome.HasValue || s.MonthlyHouseholdIncome != income)
+            {
+                incomeRangeMessage = ambiguous
+                    ? $"I think the household income is around ${income:N0}, but that seems high. Could you confirm the exact monthly household income in SGD?"
+                    : $"${income:N0} seems high for monthly household income. Could you check and provide the correct amount?";
+            }
+            else if (!s.MonthlyHouseholdIncome.HasValue || s.MonthlyHouseholdIncome != income)
             {
                 changes.Add(("monthlyHouseholdIncome", decimal.Round(income, 2)));
             }
@@ -299,8 +309,10 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
         if (TryGetJsonInt(root, "householdMemberCount") is int count)
         {
             if (count < 1 || count > 30)
-                return (FasExtractionResult.Clarify($"A household of {count} people seems unusual. Could you confirm the number of household members?"), changes);
-            if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount != count)
+            {
+                countRangeMessage = $"A household of {count} people seems unusual. Could you confirm the number of household members?";
+            }
+            else if (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount != count)
             {
                 changes.Add(("householdMemberCount", count));
             }
@@ -309,8 +321,10 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
         if (TryGetJsonDecimal(root, "otherMonthlyIncome") is decimal otherInc)
         {
             if (otherInc < 0 || otherInc > 100_000)
-                return (FasExtractionResult.Clarify($"The other monthly income of ${otherInc:N0} seems high. Could you confirm?"), changes);
-            if (!s.OtherMonthlyIncome.HasValue || s.OtherMonthlyIncome != otherInc)
+            {
+                otherIncomeRangeMessage = $"The other monthly income of ${otherInc:N0} seems high. Could you confirm?";
+            }
+            else if (!s.OtherMonthlyIncome.HasValue || s.OtherMonthlyIncome != otherInc)
             {
                 changes.Add(("otherMonthlyIncome", decimal.Round(otherInc, 2)));
             }
@@ -334,15 +348,45 @@ CRITICAL: Set ambiguous=true ONLY when the user explicitly says they don't know 
             }
         }
 
+        // Pass 2: return conflict/range clarification if any —
+        // apply non-conflicting changes first so they're not discarded
+        if (welfareConflictMessage is not null)
+        {
+            foreach (var (field, value) in changes)
+                ApplyAcceptedValue(s, field, value);
+            return (FasExtractionResult.Clarify(welfareConflictMessage), []);
+        }
+
+        if (incomeRangeMessage is not null)
+        {
+            foreach (var (field, value) in changes)
+                ApplyAcceptedValue(s, field, value);
+            return (FasExtractionResult.Clarify(incomeRangeMessage), []);
+        }
+
+        if (countRangeMessage is not null)
+        {
+            foreach (var (field, value) in changes)
+                ApplyAcceptedValue(s, field, value);
+            return (FasExtractionResult.Clarify(countRangeMessage), []);
+        }
+
+        if (otherIncomeRangeMessage is not null)
+        {
+            foreach (var (field, value) in changes)
+                ApplyAcceptedValue(s, field, value);
+            return (FasExtractionResult.Clarify(otherIncomeRangeMessage), []);
+        }
+
         if (changes.Count == 0 && ambiguous)
             return (FasExtractionResult.Clarify(root.TryGetProperty("ambiguityReason", out JsonElement reason2El)
                 ? reason2El.GetString() ?? "Could you clarify your answer for the FAS application?"
-                : "Could you clarify your answer for the FAS application?"), changes);
+                : "Could you clarify your answer for the FAS application?"), []);
 
         if (changes.Count > 0)
             return (FasExtractionResult.Accepted(), changes);
 
-        return (FasExtractionResult.Clarify("Let me check — could you tell me more so I can fill in the next field for the FAS application?"), changes);
+        return (FasExtractionResult.Clarify("Let me check — could you tell me more so I can fill in the next field for the FAS application?"), []);
     }
 
     private static IEnumerable<string> NextAllMissingFields(FasInterviewData s)
