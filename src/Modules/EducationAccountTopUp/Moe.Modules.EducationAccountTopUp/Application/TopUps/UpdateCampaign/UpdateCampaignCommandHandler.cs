@@ -51,6 +51,8 @@ internal sealed class UpdateCampaignCommandHandler(
 
         string? frequencyCode = null;
         int? frequencyInterval = null;
+        int? weeklyDayOfWeek = null;
+        int? monthlyDay = null;
         DateOnly? endDate = null;
 
         if (scheduleTypeCode == ScheduleTypeCode.Recurring ||
@@ -59,6 +61,8 @@ internal sealed class UpdateCampaignCommandHandler(
         {
             frequencyCode = request.FrequencyCode;
             frequencyInterval = request.FrequencyInterval;
+            weeklyDayOfWeek = request.WeeklyDayOfWeek;
+            monthlyDay = request.MonthlyDay;
             endDate = request.EndDate;
         }
 
@@ -75,7 +79,9 @@ internal sealed class UpdateCampaignCommandHandler(
             deliveryTypeCode: request.DeliveryTypeCode,
             maxTotalAmount: request.MaxTotalAmount,
             currentUserId: currentUser.UserAccountId ?? 0,
-            nowUtc: clock.UtcNow.UtcDateTime);
+            nowUtc: clock.UtcNow.UtcDateTime,
+            weeklyDayOfWeek: weeklyDayOfWeek,
+            monthlyDay: monthlyDay);
 
         if (updateResult.IsFailure)
             return updateResult;

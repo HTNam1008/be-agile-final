@@ -18,13 +18,24 @@ public class FasApplicationTests
     }
 
     [Fact]
+    public void SubmitDraft_ShouldUseSingaporeBusinessDateForSubmittedDate()
+    {
+        DateTime utcNow = new(2026, 6, 30, 16, 30, 0, DateTimeKind.Utc);
+        var application = DraftApplication(utcNow);
+
+        application.SubmitDraft(1, utcNow);
+
+        application.SubmittedDate.Should().Be(new DateOnly(2026, 7, 1));
+    }
+
+    [Fact]
     public void Approve_WhenSubmitted_ShouldSetStatusToApproved()
     {
         // Arrange
         var application = SubmittedApplication();
 
         // Act
-        application.Approve();
+        application.Approve(1, DateTime.UtcNow);
 
         // Assert
         application.StatusCode.Should().Be("APPROVED");
@@ -38,7 +49,7 @@ public class FasApplicationTests
         var application = SubmittedApplication();
 
         // Act
-        application.Reject();
+        application.Reject(1, DateTime.UtcNow);
 
         // Assert
         application.StatusCode.Should().Be("REJECTED");
@@ -50,10 +61,10 @@ public class FasApplicationTests
     {
         // Arrange
         var application = SubmittedApplication();
-        application.Approve();
+        application.Approve(1, DateTime.UtcNow);
 
         // Act
-        Action act = () => application.Approve();
+        Action act = () => application.Approve(1, DateTime.UtcNow);
 
         // Assert
         act.Should().Throw<DomainException>();
@@ -64,10 +75,10 @@ public class FasApplicationTests
     {
         // Arrange
         var application = SubmittedApplication();
-        application.Approve();
+        application.Approve(1, DateTime.UtcNow);
 
         // Act
-        Action act = () => application.Reject();
+        Action act = () => application.Reject(1, DateTime.UtcNow);
 
         // Assert
         act.Should().Throw<DomainException>();
@@ -78,10 +89,10 @@ public class FasApplicationTests
     {
         // Arrange
         var application = SubmittedApplication();
-        application.Reject();
+        application.Reject(1, DateTime.UtcNow);
 
         // Act
-        Action act = () => application.Reject();
+        Action act = () => application.Reject(1, DateTime.UtcNow);
 
         // Assert
         act.Should().Throw<DomainException>();
@@ -92,10 +103,10 @@ public class FasApplicationTests
     {
         // Arrange
         var application = SubmittedApplication();
-        application.Reject();
+        application.Reject(1, DateTime.UtcNow);
 
         // Act
-        Action act = () => application.Approve();
+        Action act = () => application.Approve(1, DateTime.UtcNow);
 
         // Assert
         act.Should().Throw<DomainException>();
@@ -118,6 +129,14 @@ public class FasApplicationTests
     private static FasApplication SubmittedApplication()
     {
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var application = DraftApplication(now);
+
+        application.SubmitDraft(1, now);
+        return application;
+    }
+
+    private static FasApplication DraftApplication(DateTime now)
+    {
         var application = FasApplication.CreateDraft(
             "APP-001",
             1,
@@ -136,7 +155,6 @@ public class FasApplicationTests
             1,
             now);
 
-        application.SubmitDraft(1, now);
         return application;
     }
 }

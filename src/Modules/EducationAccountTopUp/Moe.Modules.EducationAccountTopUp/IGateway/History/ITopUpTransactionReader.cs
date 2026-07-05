@@ -42,4 +42,5 @@ internal sealed record TransactionHistoryProjection(
     DateTime? CompletedAtUtc,
     DateTime RunDateUtc,
     string CampaignCode,
-    string CampaignName);
+    string CampaignName,
+    string? CampaignReason);

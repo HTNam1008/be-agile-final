@@ -25,6 +25,7 @@ public sealed class GetStudentEnrolledCoursesHandlerTests
             [
                 new AdminStudentEnrolledCourseProjection(
                     10,
+                    1010,
                     "Robotics",
                     CourseEnrollmentStatusCodes.PendingPayment,
                     new DateTime(2026, 6, 20, 8, 0, 0, DateTimeKind.Utc),
@@ -34,6 +35,7 @@ public sealed class GetStudentEnrolledCoursesHandlerTests
                     65m),
                 new AdminStudentEnrolledCourseProjection(
                     11,
+                    1011,
                     "Ceramics",
                     CourseEnrollmentStatusCodes.Exited,
                     new DateTime(2026, 6, 18, 8, 0, 0, DateTimeKind.Utc),
@@ -43,6 +45,7 @@ public sealed class GetStudentEnrolledCoursesHandlerTests
                     50m),
                 new AdminStudentEnrolledCourseProjection(
                     12,
+                    1012,
                     "Unknown",
                     "WAITLISTED",
                     new DateTime(2026, 6, 17, 8, 0, 0, DateTimeKind.Utc),
@@ -77,6 +80,7 @@ public sealed class GetStudentEnrolledCoursesHandlerTests
             [
                 new AdminStudentEnrolledCourseProjection(
                     20,
+                    1020,
                     "Science",
                     CourseEnrollmentStatusCodes.Completed,
                     new DateTime(2026, 6, 19, 8, 0, 0, DateTimeKind.Utc),

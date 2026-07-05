@@ -148,8 +148,9 @@ public sealed class FasInAppNotificationService(
             return;
         }
 
+        DateTime completedAtUtc = payment.CompletedAtUtc ?? payment.UpdatedAtUtc;
         string body = notificationTypeCode == NotificationTypeCode.PaymentSuccess
-            ? $"Successful Amount: {payment.SuccessfulAmount:N2}. Your payment was completed at {payment.CompletedAtUtc:yyyy-MM-dd HH:mm}."
+            ? $"Successful Amount: {payment.SuccessfulAmount:N2}. Your payment was completed at {FormatSingaporeDateTime(completedAtUtc)}."
             : "Your payment could not be completed. Please try again later.";
         string title = payment.ReceiptNumber is not null && notificationTypeCode == NotificationTypeCode.PaymentSuccess
             ? $"Payment Receipt: {payment.ReceiptNumber}"
@@ -157,6 +158,9 @@ public sealed class FasInAppNotificationService(
 
         await CreateAsync(userAccountId.Value, notificationTypeCode, title, body, cancellationToken);
     }
+
+    private static string FormatSingaporeDateTime(DateTime utc)
+        => utc.AddHours(8).ToString("dd/MM/yyyy, HH:mm");
 
     private async Task CreateAsync(
         long userAccountId,

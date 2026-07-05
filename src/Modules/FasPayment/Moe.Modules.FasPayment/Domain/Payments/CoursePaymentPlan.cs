@@ -1,3 +1,4 @@
+using Moe.Modules.CourseBilling.IGateway.Payments;
 using Moe.SharedKernel.Domain;
 using Moe.SharedKernel.Results;
 
@@ -53,7 +54,7 @@ internal sealed class CoursePaymentPlan : Entity<long>
         bool installment = planTypeCode == PaymentPlanTypeCodes.Installment;
         if ((!fullPayment && !installment) ||
             (fullPayment && installmentCount != 1) ||
-            (installment && installmentCount is not (3 or 6)))
+            (installment && !CoursePaymentPlanPolicy.IsAllowedInstallmentCount(installmentCount)))
         {
             return Result<CoursePaymentPlan>.Failure(PaymentDomainErrors.InvalidPaymentPlan);
         }
@@ -76,6 +77,6 @@ internal sealed class CoursePaymentPlan : Entity<long>
 
 public static class PaymentPlanTypeCodes
 {
-    public const string FullPayment = "FULL_PAYMENT";
-    public const string Installment = "INSTALLMENT";
+    public const string FullPayment = CoursePaymentPlanTypeCodes.FullPayment;
+    public const string Installment = CoursePaymentPlanTypeCodes.Installment;
 }

@@ -118,7 +118,9 @@ public sealed class TopUpSchedulerWorker(
                     campaign.FrequencyCode ?? "",
                     campaign.FrequencyInterval ?? 1,
                     scheduledFor,
-                    campaign.EndDate);
+                    campaign.EndDate,
+                    campaign.WeeklyDayOfWeek,
+                    campaign.MonthlyDay);
 
                 campaign.SetNextRunAt(nextRun);
 

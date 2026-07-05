@@ -28,6 +28,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.EndDate,
                 c.FrequencyCode,
                 c.FrequencyInterval,
+                c.WeeklyDayOfWeek,
+                c.MonthlyDay,
                 c.NextRunAtUtc,
                 c.CampaignStatusCode,
                 c.CampaignVersion,
@@ -37,6 +39,12 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc,
+                dbContext.Set<TopUpRun>()
+                    .Where(r => r.TopUpCampaignId == c.Id)
+                    .OrderByDescending(r => r.ScheduledForUtc)
+                    .ThenByDescending(r => r.Id)
+                    .Select(r => (long?)r.Id)
+                    .FirstOrDefault(),
                 dbContext.Set<TopUpRun>()
                     .Where(r => r.TopUpCampaignId == c.Id)
                     .SelectMany(r => dbContext.Set<TopUpTransaction>().Where(t => t.TopUpRunId == r.Id && t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed))
@@ -98,6 +106,8 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.EndDate,
                 c.FrequencyCode,
                 c.FrequencyInterval,
+                c.WeeklyDayOfWeek,
+                c.MonthlyDay,
                 c.NextRunAtUtc,
                 c.CampaignStatusCode,
                 c.CampaignVersion,
@@ -107,6 +117,12 @@ internal sealed class TopUpCampaignReader(MoeDbContext dbContext) : ITopUpCampai
                 c.UpdatedByLoginAccountId,
                 c.CreatedAtUtc,
                 c.UpdatedAtUtc,
+                dbContext.Set<TopUpRun>()
+                    .Where(r => r.TopUpCampaignId == c.Id)
+                    .OrderByDescending(r => r.ScheduledForUtc)
+                    .ThenByDescending(r => r.Id)
+                    .Select(r => (long?)r.Id)
+                    .FirstOrDefault(),
                 dbContext.Set<TopUpRun>()
                     .Where(r => r.TopUpCampaignId == c.Id)
                     .SelectMany(r => dbContext.Set<TopUpTransaction>().Where(t => t.TopUpRunId == r.Id && t.TransactionStatusCode == TopUpTransactionStatusCodes.Completed))

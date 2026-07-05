@@ -282,7 +282,7 @@ internal sealed class PublishCourseCommandHandler(
             command.CourseId,
             $"BILL-{utcNow:yyyyMMdd}",
             utcNow,
-            DateOnly.FromDateTime(utcNow).AddDays(30),
+            access.TodayInSingapore().AddDays(30),
             cancellationToken);
 
         await audit.RecordSchoolActionAsync(
@@ -331,12 +331,15 @@ internal sealed class PublishCourseCommandHandler(
                     userAccountId,
                     NotificationTypeCode.EnrollOpen,
                     $"Course Enrollment Open: {course.CourseCode}",
-                    $"Registration for {course.CourseName} is open until {course.EnrollmentCloseAtUtc:yyyy-MM-dd HH:mm}."),
+                    $"Registration for {course.CourseName} is open until {FormatSingaporeDateTime(course.EnrollmentCloseAtUtc)}."),
                 logger,
                 "Course publish enrollment open",
                 cancellationToken);
         }
     }
+
+    private static string FormatSingaporeDateTime(DateTime utc)
+        => utc.AddHours(8).ToString("dd/MM/yyyy, HH:mm");
 }
 
 internal sealed class DisableCourseCommandHandler(

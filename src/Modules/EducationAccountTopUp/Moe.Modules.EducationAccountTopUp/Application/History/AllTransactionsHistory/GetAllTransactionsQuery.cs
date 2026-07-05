@@ -16,6 +16,7 @@ public sealed record AllTransactionsItem(
     long EducationAccountId,
     string CampaignCode,
     string CampaignName,
+    string AccountNumber,
     string MaskedAccountNumber,
     string? MaskedStudentNumber,
     string StudentDisplayName,
@@ -23,5 +24,6 @@ public sealed record AllTransactionsItem(
     string CurrencyCode,
     string Status,
     string? FailureReason,
+    string? Reason,
     DateTime? ProcessedAtUtc,
     DateTime RunDateUtc);

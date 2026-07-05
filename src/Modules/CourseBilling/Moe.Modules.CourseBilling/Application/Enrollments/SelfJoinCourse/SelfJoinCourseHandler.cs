@@ -109,13 +109,13 @@ internal sealed class SelfJoinCourseHandler(
             return Result<CourseEnrollmentResponse>.Failure(enrollmentResult.Error);
         }
 
-        bool installment = plan.PlanTypeCode == "INSTALLMENT";
+        bool installment = plan.PlanTypeCode == CoursePaymentPlanTypeCodes.Installment;
         if (installment)
             enrollmentResult.Value.ActivateInstallmentEnrollment();
 
         DateOnly enrolledDate = clock.TodayInSingapore();
         DateOnly firstDueDate = installment
-            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(utcNow)
+            ? InstallmentBillingSchedule.FirstDueDateForNextMonthlyStatement(enrolledDate)
             : enrolledDate;
         IReadOnlyCollection<CourseFasSubsidy> selectedFasSubsidies =
             await fasSubsidies.ListEligibleSubsidiesAsync(

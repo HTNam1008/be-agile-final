@@ -314,4 +314,24 @@ public sealed class TopUpDomainTests
         emptyResult.IsFailure.Should().BeTrue();
         emptyResult.Error.Code.Should().Be("TopUp.CampaignCodeCannotBeEmpty");
     }
+
+    [Fact]
+    public void RecurrenceCalculator_UsesConfiguredWeeklyAndMonthlyDays()
+    {
+        RecurrenceCalculator.CalculateNextRun(
+                "WEEKLY",
+                1,
+                new DateTime(2026, 7, 6, 0, 0, 0, DateTimeKind.Utc),
+                null,
+                weeklyDayOfWeek: (int)DayOfWeek.Friday)
+            .Should().Be(new DateTime(2026, 7, 17, 0, 0, 0, DateTimeKind.Utc));
+
+        RecurrenceCalculator.CalculateNextRun(
+                "MONTHLY",
+                1,
+                new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc),
+                null,
+                monthlyDay: 31)
+            .Should().Be(new DateTime(2026, 2, 28, 0, 0, 0, DateTimeKind.Utc));
+    }
 }

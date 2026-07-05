@@ -717,7 +717,8 @@ internal sealed class CoursePaymentGateway(
 
         string studentName = string.IsNullOrWhiteSpace(row.OfficialFullName) ? "Student" : row.OfficialFullName.Trim();
         string title = $"Payment Completed: {row.CourseCode}";
-        string studentBody = $"Payment of {paidAmount:N2} for {row.CourseName} was completed at {paidAtUtc:yyyy-MM-dd HH:mm}.";
+        string paidAt = FormatSingaporeDateTime(paidAtUtc);
+        string studentBody = $"Payment of {paidAmount:N2} for {row.CourseName} was completed at {paidAt}.";
 
         if (studentUserAccountId is not null)
         {
@@ -739,10 +740,13 @@ internal sealed class CoursePaymentGateway(
                     schoolAdminUserAccountId,
                     NotificationTypeCode.PaymentSuccess,
                     title,
-                    $"Student {studentName} completed payment of {paidAmount:N2} for {row.CourseName} at {paidAtUtc:yyyy-MM-dd HH:mm}."),
+                    $"Student {studentName} completed payment of {paidAmount:N2} for {row.CourseName} at {paidAt}."),
                 logger,
                 "Course payment completed school admin notification",
                 cancellationToken);
         }
     }
+
+    private static string FormatSingaporeDateTime(DateTime utc)
+        => utc.AddHours(8).ToString("dd/MM/yyyy, HH:mm");
 }

@@ -8,11 +8,11 @@ namespace Moe.Modules.FasPayment.Application.AdminFasSchemes;
 
 internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<CreateFasSchemeRequest>, IValidationFailureStatusCodeProvider
 {
-    private readonly IClock? _clock;
+    private readonly IClock _clock;
 
     public int ValidationFailureStatusCode => ApiResponseCodes.UnprocessableEntity;
 
-    public CreateFasSchemeRequestValidator(IClock? clock = null)
+    public CreateFasSchemeRequestValidator(IClock clock)
     {
         _clock = clock;
         RuleFor(x => x.SchemeCode).NotEmpty().MaximumLength(50).Must(BeTrimmed).WithMessage("Scheme code cannot contain leading or trailing spaces.");
@@ -181,7 +181,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
 
     private static void ValidateRequiredCriteria(IReadOnlyList<FasCriteriaTemplateItem> template, ValidationContext<CreateFasSchemeRequest> context)
     {
-        string[] requiredCriteria = ["GHI", "PCI"];
+        string[] requiredCriteria = ["PCI"];
         string[] missing = requiredCriteria
             .Where(required => template.All(item => item.CriteriaType != required))
             .ToArray();
@@ -192,7 +192,7 @@ internal sealed class CreateFasSchemeRequestValidator : AbstractValidator<Create
         }
     }
 
-    private DateOnly Today() => _clock?.TodayInSingapore() ?? SingaporeBusinessDay.FromUtc(DateTime.UtcNow);
+    private DateOnly Today() => _clock.TodayInSingapore();
     private static bool BeTrimmed(string? value) => value is not null && value == value.Trim();
     private static bool BeTrimmedOrEmpty(string? value) => value is null || value == value.Trim();
 }

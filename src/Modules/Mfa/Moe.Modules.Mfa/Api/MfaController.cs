@@ -12,6 +12,7 @@ using Moe.Modules.Mfa.Application.GetMfaStatus;
 using Moe.Modules.Mfa.Application.SetupPin;
 using Moe.Modules.Mfa.Application.StartChallenge;
 using Moe.Modules.Mfa.Application.VerifyPin;
+using Moe.Modules.Mfa.Application.RecoverPin;
 
 namespace Moe.Modules.Mfa.Api;
 
@@ -97,6 +98,30 @@ public sealed class MfaController(
 
         var result = await commands.Send(new ChangeMfaPinCommand(request.OldPin, request.NewPin), cancellationToken);
         return result.ToApiResponse(this, ApiResponseCodes.Unauthorized);
+    }
+
+    [HttpPost("pin/recovery")]
+    public async Task<IActionResult> RequestRecovery(CancellationToken cancellationToken)
+    {
+        if (!TrySelectAuthDomain()) return Unauthorized();
+        var result = await commands.Send(new RequestMfaPinRecoveryCommand(), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.BadRequest);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("pin/recovery/validate")]
+    public async Task<IActionResult> ValidateRecovery([FromQuery] string? token, CancellationToken cancellationToken)
+    {
+        var result = await queries.Send(new ValidateMfaPinRecoveryQuery(token ?? string.Empty), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.BadRequest);
+    }
+
+    [AllowAnonymous]
+    [HttpPost("pin/recovery/complete")]
+    public async Task<IActionResult> CompleteRecovery([FromBody] CompleteMfaPinRecoveryRequest request, CancellationToken cancellationToken)
+    {
+        var result = await commands.Send(new CompleteMfaPinRecoveryCommand(request.Token, request.Pin), cancellationToken);
+        return result.ToApiResponse(this, ApiResponseCodes.BadRequest);
     }
 
     private bool TrySelectAuthDomain()

@@ -36,3 +36,8 @@ internal interface ITopUpCampaignRuleGroupRepository
     Task DeleteRuleGroupsByCampaignIdAsync(long campaignId, CancellationToken cancellationToken = default);
     Task AddRuleGroupAsync(TopUpRuleGroup group, CancellationToken cancellationToken = default);
 }
+
+internal interface ITopUpCampaignDeletionRepository
+{
+    Task DeleteDraftAsync(TopUpCampaign campaign, CancellationToken cancellationToken = default);
+}
