@@ -37,7 +37,8 @@ public sealed class AiTurnRouter(
             // so the agentic path doesn't steal FAS turns.
             bool hasFasSession = _fasEnabled && c.FasSession is not null;
             bool isActiveFas = hasFasSession && c.FasSession!.StatusCode is
-                "COLLECTING" or "CONFIRMING" or "CLARIFYING";
+                "COLLECTING" or "CONFIRMING" or "CLARIFYING"
+                or "COLLECTING_CONFIRMED" or "MANUAL_FALLBACK";
             bool isStoppedFasWithIntent = hasFasSession
                 && c.FasSession!.StatusCode is "PAUSED" or "CANCELLED"
                 && (FasInterviewHandler.LooksLikeExplicitFasRestart(sanitized.Message)
