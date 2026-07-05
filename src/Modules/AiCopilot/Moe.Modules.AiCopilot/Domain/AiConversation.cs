@@ -33,33 +33,6 @@ public sealed class AiConversation
     }
 }
 
-internal sealed class AiMessage
-{
-    private AiMessage() { }
-    public long Id { get; private set; }
-    public Guid ConversationId { get; private set; }
-    public string RoleCode { get; private set; } = string.Empty;
-    public string Content { get; private set; } = string.Empty;
-    public string? CitationsJson { get; private set; }
-    public string? ToolSummaryJson { get; private set; }
-    public string? ResponseJson { get; private set; }
-    public int? LatencyMs { get; private set; }
-    public DateTime CreatedAtUtc { get; private set; }
-
-    public static AiMessage Create(Guid conversationId, string role, string content, DateTime now,
-        string? citationsJson = null, string? toolSummaryJson = null, int? latencyMs = null, string? responseJson = null) => new()
-        {
-            ConversationId = conversationId,
-            RoleCode = role,
-            Content = content,
-            CitationsJson = citationsJson,
-            ToolSummaryJson = toolSummaryJson,
-            ResponseJson = responseJson,
-            LatencyMs = latencyMs,
-            CreatedAtUtc = now
-        };
-}
-
 internal sealed class AiReviewRecord
 {
     private AiReviewRecord() { }

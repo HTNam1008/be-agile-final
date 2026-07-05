@@ -6,7 +6,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 internal static class FasConfirmationService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
     internal static string ConfirmationPrompt(FasInterviewData s)
     {

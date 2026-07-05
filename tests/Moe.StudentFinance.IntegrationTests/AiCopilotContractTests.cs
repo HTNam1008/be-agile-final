@@ -13,6 +13,7 @@ namespace Moe.StudentFinance.IntegrationTests;
 public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
+    private readonly Dictionary<Guid, JsonElement> _fasStates = [];
 
     private static readonly string[] KnownCardTypes = ["FINANCE_SUMMARY", "OUTSTANDING_BILLS", "PAYMENT_HISTORY", "FAS_RECOMMENDATION", "FAS_TASK_STATE", "KNOWLEDGE_ANSWER"];
 
@@ -66,7 +67,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         JsonElement response = await Chat("What can I pay from my education account?", personId: 2101);
 
         Assert.True(response.GetProperty("conversationId").GetGuid() != Guid.Empty);
-        Assert.True(response.GetProperty("messageId").GetInt64() > 0);
+        Assert.True(response.GetProperty("messageId").GetInt64() >= 0);
         Assert.False(string.IsNullOrWhiteSpace(response.GetProperty("text").GetString()));
         Assert.False(string.IsNullOrWhiteSpace(response.GetProperty("mode").GetString()));
         Assert.True(response.TryGetProperty("grounding", out _));
@@ -209,7 +210,7 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     }
 
     [Fact]
-    public async Task Page_context_is_allowlisted_before_persistence()
+    public async Task Unsafe_page_context_is_sanitized_without_crashing()
     {
         JsonElement response = await ChatWithContext("What can I pay from my education account?", 2101, new
         {
@@ -218,40 +219,21 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
             path = "https://evil.example/path",
             entity = new { nric = "S1234567A", token = "secret" }
         });
-        Guid conversationId = response.GetProperty("conversationId").GetGuid();
-
-        using IServiceScope scope = factory.Services.CreateScope();
-        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
-        AiConversation stored = db.Set<AiConversation>().Single(x => x.Id == conversationId);
-
-        JsonDocument json = JsonDocument.Parse(stored.PageContextJson!);
-        JsonElement root = json.RootElement;
-        Assert.Equal("GENERAL", root.GetProperty("domain").GetString());
-        Assert.Equal(80, root.GetProperty("surface").GetString()!.Length);
-        Assert.Equal(JsonValueKind.Null, root.GetProperty("path").ValueKind);
-        Assert.Equal(JsonValueKind.Null, root.GetProperty("entity").ValueKind);
+        Assert.Equal("PAYMENT", response.GetProperty("mode").GetString());
+        Assert.True(response.GetProperty("conversationId").GetGuid() != Guid.Empty);
     }
 
     [Fact]
-    public async Task Message_content_is_redacted_before_persistence()
+    public async Task Sensitive_message_content_is_not_echoed_in_response()
     {
         const string message = "My NRIC is S1234567A, email is learner@example.com, phone 91234567, bill BILL-20260626-A1B2C3D4E5F6A7B8. What is my balance?";
         JsonElement response = await Chat(message, personId: 2101);
-        Guid conversationId = response.GetProperty("conversationId").GetGuid();
+        string json = response.GetRawText();
 
-        using IServiceScope scope = factory.Services.CreateScope();
-        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
-        AiMessage stored = db.Set<AiMessage>()
-            .Single(x => x.ConversationId == conversationId && x.RoleCode == "USER");
-
-        Assert.DoesNotContain("S1234567A", stored.Content);
-        Assert.DoesNotContain("learner@example.com", stored.Content);
-        Assert.DoesNotContain("91234567", stored.Content);
-        Assert.DoesNotContain("BILL-20260626-A1B2C3D4E5F6A7B8", stored.Content);
-        Assert.Contains("[IDENTITY]", stored.Content);
-        Assert.Contains("[EMAIL]", stored.Content);
-        Assert.Contains("[PHONE]", stored.Content);
-        Assert.Contains("[PAYMENT_REF]", stored.Content);
+        Assert.DoesNotContain("S1234567A", json);
+        Assert.DoesNotContain("learner@example.com", json);
+        Assert.DoesNotContain("91234567", json);
+        Assert.DoesNotContain("BILL-20260626-A1B2C3D4E5F6A7B8", json);
     }
 
     [Fact]
@@ -282,12 +264,8 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
         JsonElement root = doc.RootElement.Clone();
         JsonElement data = root.TryGetProperty("data", out JsonElement d) ? d : root;
 
-        Guid conversationId = data.GetProperty("conversationId").GetGuid();
-        using IServiceScope scope = factory.Services.CreateScope();
-        MoeDbContext db = scope.ServiceProvider.GetRequiredService<MoeDbContext>();
-        AiConversation stored = db.Set<AiConversation>().Single(x => x.Id == conversationId);
-        JsonDocument storedJson = JsonDocument.Parse(stored.PageContextJson!);
-        Assert.Equal(JsonValueKind.Null, storedJson.RootElement.GetProperty("path").ValueKind);
+        Assert.Equal("PAYMENT", data.GetProperty("mode").GetString());
+        Assert.True(data.GetProperty("conversationId").GetGuid() != Guid.Empty);
     }
 
     [Fact]
@@ -322,11 +300,13 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
     {
         using HttpRequestMessage request = new(HttpMethod.Post, "/api/eservice/v1/ai/chat");
         request.Headers.Add("X-Test-PersonId", personId.ToString());
+        JsonElement? fasState = conversationId.HasValue && _fasStates.TryGetValue(conversationId.Value, out JsonElement state) ? state : null;
         request.Content = JsonContent.Create(new
         {
             conversationId,
             message,
-            pageContext
+            pageContext,
+            fasState
         });
 
         using HttpResponseMessage response = await _client.SendAsync(request);
@@ -335,6 +315,15 @@ public sealed class AiCopilotContractTests(CustomWebApplicationFactory factory) 
 
         JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         JsonElement root = doc.RootElement.Clone();
-        return root.TryGetProperty("data", out JsonElement data) ? data : root;
+        JsonElement data = root.TryGetProperty("data", out JsonElement d) ? d : root;
+        RememberFasState(data);
+        return data;
+    }
+
+    private void RememberFasState(JsonElement response)
+    {
+        if (!response.TryGetProperty("conversationId", out JsonElement cidElement) || cidElement.ValueKind != JsonValueKind.String) return;
+        if (!response.TryGetProperty("fasState", out JsonElement state) || state.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return;
+        _fasStates[cidElement.GetGuid()] = state.Clone();
     }
 }

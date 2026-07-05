@@ -7,7 +7,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 public sealed class AiStreamingService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
     private readonly ILogger<AiStreamingService> _logger;
 
     public AiStreamingService(ILogger<AiStreamingService> logger)
@@ -33,7 +33,8 @@ public sealed class AiStreamingService
             followUpQuestions = response.FollowUpQuestions,
             turnIntent = response.TurnIntent,
             conversationPhase = response.ConversationPhase,
-            reviewRecordId = response.ReviewRecordId
+            reviewRecordId = response.ReviewRecordId,
+            fasState = response.FasState
         };
         await WriteSseEventAsync(httpContext, "done", JsonSerializer.Serialize(donePayload, JsonOptions), ct);
     }
