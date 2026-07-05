@@ -250,13 +250,16 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
 
     private static IQueryable<FasScheme> ApplyStatusFilter(IQueryable<FasScheme> query, string? status, DateOnly today)
     {
-        if (string.IsNullOrWhiteSpace(status)) return query.Where(x => x.StatusCode != FasSchemeStatusCodes.Deleted);
+        if (string.IsNullOrWhiteSpace(status)) return query;
 
         string normalized = status.Trim().ToUpperInvariant();
         return normalized switch
         {
+            "ACTIVE" => query.Where(x => x.StatusCode == FasSchemeStatusCodes.Active && x.StartDate <= today),
             "NOT_STARTED" => query.Where(x => x.StatusCode == FasSchemeStatusCodes.Active && x.StartDate > today),
-            "CLOSED" => query.Where(x => x.StatusCode == FasSchemeStatusCodes.Retired),
+            "CLOSED" => query.Where(x =>
+                x.StatusCode == FasSchemeStatusCodes.Retired ||
+                x.StatusCode == FasSchemeStatusCodes.Deleted),
             _ => query.Where(x => x.StatusCode == normalized)
         };
     }

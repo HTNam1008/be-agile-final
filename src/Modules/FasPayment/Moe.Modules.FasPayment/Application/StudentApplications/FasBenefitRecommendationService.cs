@@ -105,7 +105,8 @@ internal sealed class FasBenefitRecommendationService
         return criteria.CriteriaType switch
         {
             "AGE" => NumberInRange(facts.Age, criteria),
-            "GDP" or "GHI" => NumberInRange(facts.MonthlyHouseholdIncome, criteria),
+            "GDP" => NumberInRange(facts.MonthlyHouseholdIncome, criteria),
+            "GHI" => true,
             "PCI" => NumberInRange(facts.PerCapitaIncome, criteria),
             "NATIONALITY" => CategoricalMatches(criteria.Id, facts.Nationality, categoricalValues)
                 || string.Equals(facts.Nationality, "SG", StringComparison.OrdinalIgnoreCase)
