@@ -239,7 +239,10 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
         long[] ids = schemes.Select(x => x.Id).ToArray();
         var courses = await dbContext.Set<FasSchemeCourse>().AsNoTracking().Where(x => ids.Contains(x.FasSchemeId)).ToListAsync(cancellationToken);
         var applicationCounts = await dbContext.Set<FasApplicationScheme>().AsNoTracking()
-            .Where(x => ids.Contains(x.FasSchemeId))
+            .Where(x => ids.Contains(x.FasSchemeId) &&
+                (x.StatusCode == "PENDING" ||
+                 x.StatusCode == "APPROVED" ||
+                 x.StatusCode == "REJECTED"))
             .GroupBy(x => x.FasSchemeId)
             .Select(x => new { SchemeId = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.SchemeId, x => x.Count, cancellationToken);
@@ -305,9 +308,17 @@ internal sealed class FasSchemeRepository(MoeDbContext dbContext, ILogger<FasSch
 
     private IOrderedQueryable<FasScheme> SortByApplicationCount(IQueryable<FasScheme> query, bool descending)
         => descending
-            ? query.OrderByDescending(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+            ? query.OrderByDescending(scheme => dbContext.Set<FasApplicationScheme>().Count(application =>
+                    application.FasSchemeId == scheme.Id &&
+                    (application.StatusCode == "PENDING" ||
+                     application.StatusCode == "APPROVED" ||
+                     application.StatusCode == "REJECTED")))
                 .ThenByDescending(scheme => scheme.Id)
-            : query.OrderBy(scheme => dbContext.Set<FasApplicationScheme>().Count(application => application.FasSchemeId == scheme.Id))
+            : query.OrderBy(scheme => dbContext.Set<FasApplicationScheme>().Count(application =>
+                    application.FasSchemeId == scheme.Id &&
+                    (application.StatusCode == "PENDING" ||
+                     application.StatusCode == "APPROVED" ||
+                     application.StatusCode == "REJECTED")))
                 .ThenBy(scheme => scheme.Id);
 
     private static Expression<Func<FasScheme, int>> StatusSortOrder(DateOnly today)
