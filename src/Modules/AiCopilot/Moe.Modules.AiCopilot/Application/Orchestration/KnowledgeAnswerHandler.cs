@@ -22,7 +22,7 @@ public sealed class KnowledgeAnswerHandler(
 
     public async Task<AiHandlerResult> HandleGeneralAsync(AiConversation conversation, AiChatRequest request, CancellationToken ct)
     {
-        if (AiTurnRouter.LooksLikeScopeTest(request.Message))
+        if (AiKeywordMatchers.LooksLikeScopeTest(request.Message))
         {
             return new AiHandlerResult(
                 "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance.",
@@ -37,7 +37,7 @@ public sealed class KnowledgeAnswerHandler(
             };
         }
 
-        if (AiTurnRouter.LooksLikeCapabilityQuestion(request.Message))
+        if (AiKeywordMatchers.LooksLikeCapabilityQuestion(request.Message))
         {
             const string capabilityText = "I can help with Education Account balance, outstanding bills, payment history, refunds, and FAS guidance. I can also walk you through a FAS eligibility check before you open the application form.";
             AiAction[] capabilityActions =
@@ -56,7 +56,7 @@ public sealed class KnowledgeAnswerHandler(
             };
         }
 
-        if (AiTurnRouter.LooksLikeCourseQuestion(request.Message))
+        if (AiKeywordMatchers.LooksLikeCourseQuestion(request.Message))
         {
             const string courseText = "I can help with course-related finance questions, such as outstanding course bills, payment options, and how FAS may apply to eligible course charges. For course enrolment details, open the Courses page.";
             return new AiHandlerResult(courseText, "GENERAL", new(false, []), [],
@@ -71,7 +71,7 @@ public sealed class KnowledgeAnswerHandler(
             };
         }
 
-        if (AiTurnRouter.LooksLikeAdminCenterQuestion(request.Message))
+        if (AiKeywordMatchers.LooksLikeAdminCenterQuestion(request.Message))
         {
             const string adminText = "Admin Center can review questions the copilot cannot answer safely, such as unusual FAS circumstances, disputed bills, refund issues, or application details that need staff judgement.";
             return new AiHandlerResult(adminText, "GENERAL", new(false, []), [],
@@ -86,9 +86,9 @@ public sealed class KnowledgeAnswerHandler(
             };
         }
 
-        bool isFasKnowledgeRequest = AiTurnRouter.IsSchemeKbRequest(request.Message) ||
-            AiTurnRouter.IsFasKnowledgeInterrupt(request.Message) ||
-            AiTurnRouter.LooksLikeNaturalFasAidQuestion(request.Message);
+        bool isFasKnowledgeRequest = AiKeywordMatchers.IsSchemeKbRequest(request.Message) ||
+            AiKeywordMatchers.IsFasKnowledgeInterrupt(request.Message) ||
+            AiKeywordMatchers.LooksLikeNaturalFasAidQuestion(request.Message);
         string retrievalDomain = isFasKnowledgeRequest ? "FAS" : request.PageContext?.Domain ?? "GENERAL";
         IReadOnlyList<KnowledgeResult> sources = await knowledge.RetrieveAsync(request.Message, retrievalDomain, ct: ct);
         if (sources.Count == 0)
@@ -349,7 +349,7 @@ public sealed class KnowledgeAnswerHandler(
             "PAYMENT" => PaymentFollowUps(),
             "FALLBACK" => FallbackFollowUps(),
             "GENERAL" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
-            "GENERAL" => AiTurnRouter.IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
+            "GENERAL" => AiKeywordMatchers.IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
             "FAS_INTERVIEW" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
             _ => []
         };

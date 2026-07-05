@@ -120,7 +120,7 @@ internal static class AiResponseBuilder
             "PAYMENT" => PaymentFollowUps(),
             "FALLBACK" => FallbackFollowUps(),
             "GENERAL" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
-            "GENERAL" => AiTurnRouter.IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
+            "GENERAL" => AiKeywordMatchers.IsFasQuestion(message) ? FasKnowledgeFollowUps(message) : GeneralFinanceFollowUps(),
             "FAS_INTERVIEW" when interviewState?.Status == "COMPLETE" => FasCompleteFollowUps(),
             _ => []
         };
