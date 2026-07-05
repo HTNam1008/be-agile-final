@@ -48,6 +48,7 @@ public sealed class AiCopilotModule : IModule
         services.AddScoped<KnowledgeAnswerHandler>();
         services.AddScoped<FasInterviewHandler>();
         services.AddScoped<FasExtractionService>();
+        services.AddScoped<FasEligibilityService>();
         string knowledgeStore = configuration.GetValue("AiCopilot:KnowledgeStore", "Embedded");
         if (knowledgeStore == "Database")
         {

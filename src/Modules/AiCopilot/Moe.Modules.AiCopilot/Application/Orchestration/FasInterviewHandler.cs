@@ -1,16 +1,9 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
 using Moe.Modules.AiCopilot.Api;
-using Moe.Modules.AiCopilot.Application.Knowledge;
 using Moe.Modules.AiCopilot.Domain;
 using Moe.Modules.FasPayment.Application.StudentApplications;
-using Moe.StudentFinance.Persistence;
 
 namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
@@ -20,14 +13,13 @@ public sealed class FasInterviewHandler(
     PaymentQueryHandler paymentHandler,
     KnowledgeAnswerHandler knowledgeHandler,
     ILogger<FasInterviewHandler> logger,
-    FasExtractionService extraction)
+    FasExtractionService extraction,
+    FasEligibilityService eligibility)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static FasInterviewData? LoadFasState(AiConversation c) =>
-        c.FasSession?.CollectedFactsJson is { Length: > 0 } json
-            ? JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions)
-            : null;
+        c.FasSession?.CollectedFactsJson is { Length: > 0 } json ? JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions) : null;
 
     public static void SaveFasState(AiConversation c, FasInterviewData state, DateTime now)
     {
@@ -39,474 +31,247 @@ public sealed class FasInterviewHandler(
 
     public async Task<AiHandlerResult> HandleFasAsync(AiConversation c, AiChatRequest request, DateTime now, CancellationToken ct)
     {
-        bool isNewInterview = c.FasSession is null;
-        string? fieldKey = request.PageContext?.Entity is JsonElement entity &&
-            entity.ValueKind == JsonValueKind.Object &&
-            entity.TryGetProperty("fieldKey", out JsonElement fk) &&
-            fk.ValueKind == JsonValueKind.String &&
-            fk.GetString() is string fkStr
-            ? fkStr
-            : null;
-        string? pageJson = request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions);
-        FasInterviewData state;
-        try { state = LoadFasState(c) ?? await InitializeFasState(ct); }
-        catch { return new AiHandlerResult("I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")]); }
+        bool isNew = c.FasSession is null;
+        string? fk = request.PageContext?.Entity is JsonElement e && e.ValueKind == JsonValueKind.Object && e.TryGetProperty("fieldKey", out JsonElement fke) && fke.ValueKind == JsonValueKind.String && fke.GetString() is string fks ? fks : null;
+        string? pj = request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions);
+        FasInterviewData st;
+        try { st = LoadFasState(c) ?? await InitializeFasState(ct); }
+        catch { return new("I couldn't read enough profile information from Singpass to help with FAS. You can still use the FAS form directly, or contact Admin Center for assistance.", "FALLBACK", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")]); }
 
-        if (IsTerminalFasState(state.Status))
+        if (IsTerminalFasState(st.Status))
         {
-            if (state.Status == "CANCELLED" && LooksLikeExplicitFasRestart(request.Message))
-            {
-                state = await InitializeFasState(ct);
-                isNewInterview = true;
-            }
-            else if (LooksLikeExplicitFasRestart(request.Message) || LooksLikeContextualResume(request.Message))
-            {
-                state.Status = ResolveTargetField(state, fieldKey) is null ? "CONFIRMING" : "COLLECTING";
-                state.ValidationMessage = null;
-                state.ClarificationAttempts.Clear();
-            }
-            else
-            {
-                return await HandleStoppedFasTurn(c, request, state, now, ct);
-            }
+            if (st.Status == "CANCELLED" && LooksLikeExplicitFasRestart(request.Message)) { st = await InitializeFasState(ct); isNew = true; }
+            else if (LooksLikeExplicitFasRestart(request.Message) || LooksLikeContextualResume(request.Message)) { st.Status = ResolveTargetField(st, fk) is null ? "CONFIRMING" : "COLLECTING"; st.ValidationMessage = null; st.ClarificationAttempts.Clear(); }
+            else return await HandleStoppedFasTurn(c, request, st, now, ct);
         }
 
-        // CONFIRMING gate
-        if (state.Status == "CONFIRMING")
-        {
-            AiHandlerResult? confirmingResult = await HandleConfirmingGate(c, request, state, now, ct);
-            if (confirmingResult is not null)
-                return confirmingResult;
-        }
-
-        // COMPLETE state after CONFIRMING moves to COLLECTING_CONFIRMED → eligibility computation
-        if (!isNewInterview && state.Status == "COMPLETE")
-        {
-            return await HandleCompletedFas(c, request, state, pageJson, now, ct);
-        }
+        if (st.Status == "CONFIRMING") { var cr = await HandleConfirmingGate(c, request, st, now, ct); if (cr is not null) return cr; }
+        if (!isNew && st.Status == "COMPLETE") return await HandleCompletedFas(c, request, st, pj, now, ct);
 
         if (AiKeywordMatchers.LooksLikeCancelFas(request.Message))
         {
-            state.Status = "CANCELLED";
-            state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            AiInterviewState cancelledInterview = ToInterviewState(state, null);
-            SaveFasState(c, state, now);
-            return new AiHandlerResult("Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], cancelledInterview)
-            {
-                FollowUpQuestions = ["Show my outstanding course bills.", "Restart FAS check.", "What can you help me with?"]
-            };
+            st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
+            var iv = FasConfirmationService.ToInterviewState(st, null); SaveFasState(c, st, now);
+            return new("Got it. I stopped this FAS check and will not calculate eligibility from those answers. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], iv) { FollowUpQuestions = ["Show my outstanding course bills.", "Restart FAS check.", "What can you help me with?"] };
         }
 
         if (AiKeywordMatchers.LooksLikeSwitchTopic(request.Message) || AiKeywordMatchers.LooksLikeScopeTest(request.Message))
         {
-            state.Status = "PAUSED";
-            state.ValidationMessage = "FAS check paused before eligibility calculation.";
-            AiInterviewState pausedInterview = ToInterviewState(state, null);
-            string pausedText = AiKeywordMatchers.LooksLikeScopeTest(request.Message)
-                ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance."
-                : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.";
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult(pausedText, "GENERAL", new(false, []), [], [], pausedInterview)
-            {
-                FollowUpQuestions = ["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"]
-            };
+            st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused before eligibility calculation.";
+            var iv = FasConfirmationService.ToInterviewState(st, null);
+            string pt = AiKeywordMatchers.LooksLikeScopeTest(request.Message) ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance." : "No problem. I paused this FAS check. Ask me about bills, payments, Education Account, FAS policy, or say \"resume FAS check\" when you want to continue.";
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            return new(pt, "GENERAL", new(false, []), [], [], iv) { FollowUpQuestions = ["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"] };
         }
 
-        // Side queries during active FAS interview
         if (AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()) || AiKeywordMatchers.LooksLikeCourseQuestion(request.Message))
         {
-            state.Status = "PAUSED";
-            state.ValidationMessage = "FAS check paused while answering a side question.";
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            AiHandlerResult sideResult = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant())
-                ? await paymentHandler.HandlePaymentAsync(request, ct)
-                : await knowledgeHandler.HandleGeneralAsync(c, request, ct);
-            return sideResult with
-            {
-                InterviewState = ToInterviewState(state, null),
-                FollowUpQuestions = FilterCurrentQuestion(["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"], request.Message)
-            };
+            st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            var sr = AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()) ? await paymentHandler.HandlePaymentAsync(request, ct) : await knowledgeHandler.HandleGeneralAsync(c, request, ct);
+            return sr with { InterviewState = FasConfirmationService.ToInterviewState(st, null), FollowUpQuestions = FilterCurrentQuestion(["Resume FAS check.", "Show my outstanding course bills.", "What is PCI?"], request.Message) };
         }
 
-        bool isGuidanceTurn = fieldKey is null && LooksLikeFasSchemeGuidanceRequest(request.Message);
-        bool isFieldHelpTurn = fieldKey is not null && FasExtractionService.LooksLikeFieldHelpRequest(request.Message);
-        bool shouldAskNextQuestion = (isNewInterview && fieldKey is null) || isGuidanceTurn || isFieldHelpTurn;
-        string? answeredField = shouldAskNextQuestion ? null : ResolveTargetField(state, fieldKey);
-        FasExtractionResult extResult = shouldAskNextQuestion ? FasExtractionResult.Accepted() : await extraction.ApplyFasAnswerWithLlmAsync(state, request.Message, pref => ResolveTargetField(state, pref), fieldKey, ct);
+        bool isGuide = fk is null && LooksLikeFasSchemeGuidanceRequest(request.Message);
+        bool isFieldHelp = fk is not null && FasExtractionService.LooksLikeFieldHelpRequest(request.Message);
+        bool shouldAsk = (isNew && fk is null) || isGuide || isFieldHelp;
+        string? answered = shouldAsk ? null : ResolveTargetField(st, fk);
+        var ext = shouldAsk ? FasExtractionResult.Accepted() : await extraction.ApplyFasAnswerWithLlmAsync(st, request.Message, pref => ResolveTargetField(st, pref), fk, ct);
 
-        if (extResult.Status == "MANUAL_FALLBACK")
+        if (ext.Status == "MANUAL_FALLBACK")
         {
-            state.Status = "MANUAL_FALLBACK";
-            AiInterviewState manualInterview = ToInterviewState(state, null);
-            Guid review = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
-            c.Touch("FAS_INTERVIEW", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult(extResult.Message!, "FAS_INTERVIEW", new(false, []), [],
-                [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = review })],
-                manualInterview, review);
+            st.Status = "MANUAL_FALLBACK";
+            var miv = FasConfirmationService.ToInterviewState(st, null);
+            Guid r = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
+            c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
+            return new(ext.Message!, "FAS_INTERVIEW", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas"), new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = r })], miv, r);
         }
 
-        if (extResult.Status == "CLARIFY")
+        if (ext.Status == "CLARIFY")
         {
-            state.Status = "CLARIFYING";
-            AiInterviewState clarificationInterview = ToInterviewState(state, extResult.Message);
-            c.Touch("FAS_INTERVIEW", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult(extResult.Message!, "FAS_INTERVIEW", new(false, []), [], [], clarificationInterview);
+            st.Status = "CLARIFYING";
+            var civ = FasConfirmationService.ToInterviewState(st, ext.Message);
+            c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
+            return new(ext.Message!, "FAS_INTERVIEW", new(false, []), [], [], civ);
         }
 
-        string? nextField = ResolveTargetField(state, fieldKey);
-        string? next = NextQuestion(state, fieldKey);
-        if (next is not null)
-            state.ClarificationField = nextField;
-        if (next is not null && state.Status == "COLLECTING_CONFIRMED")
-            state.Status = "COLLECTING";
+        string? nf = ResolveTargetField(st, fk);
+        string? next = NextQuestion(st, fk);
+        if (next is not null) st.ClarificationField = nf;
+        if (next is not null && st.Status == "COLLECTING_CONFIRMED") st.Status = "COLLECTING";
 
-        object? recommendation = null;
-        FasRecommendationMatch[] recommendedSchemes = [];
+        object? rec = null;
+        FasRecommendationMatch[] schemes = [];
         string text;
 
-        if (next is null && !IsReadyForEligibilityComputation(state))
-        {
-            state.Status = "CONFIRMING";
-            text = ConfirmationPrompt(state);
-        }
-        else if (next is null && state.IsWelfareHomeResident == false)
-        {
-            (text, state, recommendedSchemes, recommendation) = await ComputeEligibility(state, ct);
-        }
+        if (next is null && !IsReadyForEligibilityComputation(st)) { st.Status = "CONFIRMING"; text = FasConfirmationService.ConfirmationPrompt(st); }
+        else if (next is null && st.IsWelfareHomeResident == false) (text, st, schemes, rec) = await eligibility.ComputeEligibility(st, ct);
         else if (next is null)
         {
-            state.Status = "COMPLETE";
-            recommendedSchemes = WelfareHomeRecommendationMatches(state);
-            state.RecommendationMatches = recommendedSchemes.ToList();
-            text = recommendedSchemes.Length > 0
-                ? $"I have your welfare-home status and parent or guardian nationality. I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school and prepared them for the form. Use 'Apply answers to form', then review before submitting."
-                : "I have your welfare-home status and parent or guardian nationality. The FAS form will skip household income and household-size questions. I could not auto-select a scheme, so choose the scheme manually before submitting.";
+            st.Status = "COMPLETE"; schemes = FasEligibilityService.WelfareHomeRecommendationMatches(st); st.RecommendationMatches = schemes.ToList();
+            text = schemes.Length > 0 ? $"I have your welfare-home status and parent or guardian nationality. I found {schemes.Length} open FAS scheme{(schemes.Length == 1 ? "" : "s")} for your school and prepared them for the form. Use 'Apply answers to form', then review before submitting." : "I have your welfare-home status and parent or guardian nationality. The FAS form will skip household income and household-size questions. I could not auto-select a scheme, so choose the scheme manually before submitting.";
         }
         else
         {
-            state.Status = "COLLECTING";
-            string? acknowledgement = extResult.Status == "ACCEPTED" ? FasExtractionService.AcceptedFieldAcknowledgement(answeredField, state) : null;
-            text = isFieldHelpTurn
-                ? next
-                : shouldAskNextQuestion
-                    ? $"{FasExtractionService.ProfileFactsIntro(state)}\n\n{next}"
-                    : acknowledgement is null ? next : $"{acknowledgement}\n\n{next}";
+            st.Status = "COLLECTING";
+            string? ack = ext.Status == "ACCEPTED" ? FasExtractionService.AcceptedFieldAcknowledgement(answered, st) : null;
+            text = isFieldHelp ? next : shouldAsk ? $"{FasExtractionService.ProfileFactsIntro(st)}\n\n{next}" : ack is null ? next : $"{ack}\n\n{next}";
         }
 
-        AiInterviewState interview = ToInterviewState(state, next, recommendedSchemes);
-        string endMode = state.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
-        c.Touch(endMode, pageJson, now); SaveFasState(c, state, now);
-        List<AiCard> cards = recommendation is null ? [] : [new("FAS_RECOMMENDATION", recommendation)];
-        Guid? fallbackReview = null;
-        if (state.Status == "MANUAL_FALLBACK")
-            fallbackReview = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
-        List<AiAction> actions = state.Status == "COMPLETE"
-            ? [new("NAVIGATE", "Open FAS application", "/portal/fas", interview.FormPatch)]
-            : state.Status == "MANUAL_FALLBACK"
-                ? [new("NAVIGATE", "Open FAS application", "/portal/fas")]
-                : [];
-        if (fallbackReview.HasValue) actions.Add(new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = fallbackReview.Value }));
-        if (state.Status == "COMPLETE") actions.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: interview.FormPatch));
-        string mode = state.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
-        return new AiHandlerResult(text, mode, new(false, []), cards, actions, interview, fallbackReview);
+        var ivw = FasConfirmationService.ToInterviewState(st, next, schemes);
+        string em = st.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW";
+        c.Touch(em, pj, now); SaveFasState(c, st, now);
+        List<AiCard> cards = rec is null ? [] : [new("FAS_RECOMMENDATION", rec)];
+        Guid? fr = null;
+        if (st.Status == "MANUAL_FALLBACK") fr = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_MANUAL_FALLBACK", request.PageContext, request.Message, now, ct);
+        List<AiAction> acts = st.Status == "COMPLETE" ? [new("NAVIGATE", "Open FAS application", "/portal/fas", ivw.FormPatch)] : st.Status == "MANUAL_FALLBACK" ? [new("NAVIGATE", "Open FAS application", "/portal/fas")] : [];
+        if (fr.HasValue) acts.Add(new("CONTACT_ADMIN_CENTER", "Contact Admin Center", Payload: new { reviewRecordId = fr.Value }));
+        if (st.Status == "COMPLETE") acts.Add(new("APPLY_FAS_PATCH", "Apply answers to form", Payload: ivw.FormPatch));
+        return new(text, st.Status == "COMPLETE" ? "GENERAL" : "FAS_INTERVIEW", new(false, []), cards, acts, ivw, fr);
     }
 
-    private async Task<AiHandlerResult?> HandleConfirmingGate(AiConversation c, AiChatRequest request, FasInterviewData state, DateTime now, CancellationToken ct)
+    private async Task<AiHandlerResult?> HandleConfirmingGate(AiConversation c, AiChatRequest req, FasInterviewData st, DateTime now, CancellationToken ct)
     {
-        string? pageJson = request.PageContext is null ? null : JsonSerializer.Serialize(request.PageContext, JsonOptions);
+        string? pj = req.PageContext is null ? null : JsonSerializer.Serialize(req.PageContext, JsonOptions);
 
-        if (AiKeywordMatchers.LooksLikeCancelFas(request.Message))
+        if (AiKeywordMatchers.LooksLikeCancelFas(req.Message))
         {
-            state.Status = "CANCELLED";
-            state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            AiInterviewState cancelledInterview = ToInterviewState(state, null);
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult("Got it. I stopped this FAS check and will not calculate eligibility from those answers. You can restart the FAS check later or open the form manually.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], cancelledInterview)
-            {
-                FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."]
-            };
+            st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
+            var iv = FasConfirmationService.ToInterviewState(st, null); c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            return new("Got it. I stopped this FAS check and will not calculate eligibility from those answers. You can restart the FAS check later or open the form manually.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], iv) { FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."] };
         }
 
-        if (AiKeywordMatchers.LooksLikeScopeTest(request.Message) || AiKeywordMatchers.LooksLikeSwitchTopic(request.Message))
+        if (AiKeywordMatchers.LooksLikeScopeTest(req.Message) || AiKeywordMatchers.LooksLikeSwitchTopic(req.Message))
         {
-            state.Status = "PAUSED";
-            state.ValidationMessage = "FAS check paused before eligibility calculation.";
-            AiInterviewState pausedInterview = ToInterviewState(state, null);
-            string pausedText = AiKeywordMatchers.LooksLikeScopeTest(request.Message)
-                ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance."
-                : "No problem. I paused this FAS check. Ask me about FAS, your Education Account, bills, payments, refunds, or say \"resume FAS check\" when you want to continue.";
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult(pausedText, "GENERAL", new(false, []), [], [], pausedInterview)
-            {
-                FollowUpQuestions = ["Resume FAS check.", "What is PCI?", "Show my Education Account balance."]
-            };
+            st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused before eligibility calculation.";
+            var iv = FasConfirmationService.ToInterviewState(st, null);
+            string pt = AiKeywordMatchers.LooksLikeScopeTest(req.Message) ? "I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance." : "No problem. I paused this FAS check. Ask me about FAS, your Education Account, bills, payments, refunds, or say \"resume FAS check\" when you want to continue.";
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            return new(pt, "GENERAL", new(false, []), [], [], iv) { FollowUpQuestions = ["Resume FAS check.", "What is PCI?", "Show my Education Account balance."] };
         }
 
-        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(request.Message.ToUpperInvariant()))
+        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message.ToUpperInvariant()))
         {
-            state.Status = "PAUSED";
-            state.ValidationMessage = "FAS check paused while answering a side question.";
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            AiHandlerResult knowledgeResponse = await knowledgeHandler.HandleGeneralAsync(c, request, ct);
-            return knowledgeResponse with
-            {
-                InterviewState = ToInterviewState(state, null),
-                FollowUpQuestions = ["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."]
-            };
+            st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused while answering a side question.";
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            var kr = await knowledgeHandler.HandleGeneralAsync(c, req, ct);
+            return kr with { InterviewState = FasConfirmationService.ToInterviewState(st, null), FollowUpQuestions = ["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."] };
         }
 
-        if (TryApplyFasCorrections(state, request.Message))
+        if (TryApplyFasCorrections(st, req.Message))
         {
-            state.Status = "CONFIRMING";
-            AiInterviewState correctedInterview = ToInterviewState(state, ConfirmationPrompt(state));
-            c.Touch("FAS_INTERVIEW", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult($"I updated the FAS details.\n\n{ConfirmationPrompt(state)}", "FAS_INTERVIEW", new(false, []), [], [], correctedInterview);
+            st.Status = "CONFIRMING"; var civ = FasConfirmationService.ToInterviewState(st, FasConfirmationService.ConfirmationPrompt(st));
+            c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
+            return new($"I updated the FAS details.\n\n{FasConfirmationService.ConfirmationPrompt(st)}", "FAS_INTERVIEW", new(false, []), [], [], civ);
         }
 
-        FasExtractionResult confirmation = FasExtractionService.ExtractConfirmation(request.Message);
-        if (confirmation.Status == "CLARIFY")
+        var cr = FasExtractionService.ExtractConfirmation(req.Message);
+        if (cr.Status == "CLARIFY")
         {
-            AiInterviewState confirmInterview = ToInterviewState(state, ConfirmationPrompt(state));
-            c.Touch("FAS_INTERVIEW", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult(confirmation.Message!, "FAS_INTERVIEW", new(false, []), [], [], confirmInterview);
+            var civ = FasConfirmationService.ToInterviewState(st, FasConfirmationService.ConfirmationPrompt(st));
+            c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
+            return new(cr.Message!, "FAS_INTERVIEW", new(false, []), [], [], civ);
         }
 
-        if (confirmation.Value is bool confirmed && !confirmed)
+        if (cr.Value is bool cnf && !cnf)
         {
-            state.Status = "CANCELLED";
-            state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            AiInterviewState manualInterview = ToInterviewState(state, null);
-            Guid review = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_CONFIRMATION_REJECTED", request.PageContext, request.Message, now, ct);
-            c.Touch("FAS_INTERVIEW", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult("No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], manualInterview, review)
-            {
-                FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."]
-            };
+            st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
+            var iv = FasConfirmationService.ToInterviewState(st, null);
+            Guid r = await fallback.CreateReviewAsync(c, c.PersonId, "FAS_CONFIRMATION_REJECTED", req.PageContext, req.Message, now, ct);
+            c.Touch("FAS_INTERVIEW", pj, now); SaveFasState(c, st, now);
+            return new("No problem. I will not calculate eligibility from these answers. I stopped this FAS check; restart it if you want me to collect and confirm the details again.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], iv, r) { FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Open FAS application."] };
         }
 
-        // Confirmed = true — move to COLLECTING_CONFIRMED to trigger eligibility
-        state.Status = "COLLECTING_CONFIRMED";
-        logger.LogInformation("FAS attestation: conversation {Id} confirmed all collected fields via CONFIRMING gate at {Time}. Snapshot: {Snapshot}",
-            c.Id, now.ToString("O"), JsonSerializer.Serialize(state, JsonOptions));
-        return null; // Signal to continue in HandleFasAsync main flow
+        st.Status = "COLLECTING_CONFIRMED";
+        logger.LogInformation("FAS attestation: conversation {Id} confirmed all collected fields via CONFIRMING gate at {Time}. Snapshot: {Snapshot}", c.Id, now.ToString("O"), JsonSerializer.Serialize(st, JsonOptions));
+        return null;
     }
 
-    private async Task<AiHandlerResult> HandleCompletedFas(AiConversation c, AiChatRequest request, FasInterviewData state, string? pageJson, DateTime now, CancellationToken ct)
+    private async Task<AiHandlerResult> HandleCompletedFas(AiConversation c, AiChatRequest req, FasInterviewData st, string? pj, DateTime now, CancellationToken ct)
     {
-        FasRecommendationMatch[] completedSchemes = state.RecommendationMatches.Count > 0
-            ? state.RecommendationMatches.ToArray()
-            : state.IsWelfareHomeResident == true ? WelfareHomeRecommendationMatches(state) : [];
-        AiInterviewState completedInterview = ToInterviewState(state, null, completedSchemes);
-        bool asksForSchemes = IsLiveSchemeEligibilityRequest(request.Message.ToUpperInvariant()) || AiKeywordMatchers.IsSchemeKbRequest(request.Message);
-        string completedText = asksForSchemes && completedSchemes.Length > 0
-            ? $"Your confirmed FAS check currently has {completedSchemes.Length} eligible option{(completedSchemes.Length == 1 ? "" : "s")}: {string.Join(", ", completedSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).Take(5))}. Use 'Apply answers to form' to copy the selected actionable schemes, then review the application before submitting."
-            : state.IsWelfareHomeResident == true
-            ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
+        var schemes = st.RecommendationMatches.Count > 0 ? st.RecommendationMatches.ToArray() : st.IsWelfareHomeResident == true ? FasEligibilityService.WelfareHomeRecommendationMatches(st) : [];
+        var iv = FasConfirmationService.ToInterviewState(st, null, schemes);
+        bool asks = IsLiveSchemeEligibilityRequest(req.Message.ToUpperInvariant()) || AiKeywordMatchers.IsSchemeKbRequest(req.Message);
+        string txt = asks && schemes.Length > 0 ? $"Your confirmed FAS check currently has {schemes.Length} eligible option{(schemes.Length == 1 ? "" : "s")}: {string.Join(", ", schemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).Take(5))}. Use 'Apply answers to form' to copy the selected actionable schemes, then review the application before submitting."
+            : st.IsWelfareHomeResident == true ? "You are marked as living in an approved welfare home. I prepared your confirmed details and open FAS scheme selection for the form. Use 'Apply answers to form', then review before submitting."
             : "I have confirmed the details for this FAS check. Use 'Apply answers to form' to copy them into the application, or edit the form manually if anything looks wrong.";
-        List<AiAction> completedActions = [new("NAVIGATE", "Open FAS application", "/portal/fas", completedInterview.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: completedInterview.FormPatch)];
-        c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-        return new AiHandlerResult(completedText, "GENERAL", new(false, []), [], completedActions, completedInterview);
+        List<AiAction> acts = [new("NAVIGATE", "Open FAS application", "/portal/fas", iv.FormPatch), new("APPLY_FAS_PATCH", "Apply answers to form", Payload: iv.FormPatch)];
+        c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+        return new(txt, "GENERAL", new(false, []), [], acts, iv);
     }
 
-    private async Task<AiHandlerResult> HandleStoppedFasTurn(AiConversation c, AiChatRequest request, FasInterviewData state, DateTime now, CancellationToken ct)
+    private async Task<AiHandlerResult> HandleStoppedFasTurn(AiConversation c, AiChatRequest req, FasInterviewData st, DateTime now, CancellationToken ct)
     {
-        string pageJson = request.PageContext is null ? null! : JsonSerializer.Serialize(request.PageContext, JsonOptions);
-        bool isCancelled = state.Status == "CANCELLED";
+        string pj = req.PageContext is null ? null! : JsonSerializer.Serialize(req.PageContext, JsonOptions);
+        bool isCanc = st.Status == "CANCELLED";
 
-        if (AiKeywordMatchers.LooksLikeCancelFas(request.Message))
+        if (AiKeywordMatchers.LooksLikeCancelFas(req.Message))
         {
-            state.Status = "CANCELLED";
-            state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult("This FAS check is already stopped. I will not calculate eligibility from those answers unless you restart the check.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], ToInterviewState(state, null))
-            {
-                FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."]
-            };
+            st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            return new("This FAS check is already stopped. I will not calculate eligibility from those answers unless you restart the check.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], FasConfirmationService.ToInterviewState(st, null)) { FollowUpQuestions = ["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."] };
         }
 
-        if (AiKeywordMatchers.LooksLikeScopeTest(request.Message))
+        if (AiKeywordMatchers.LooksLikeScopeTest(req.Message))
         {
-            if (!isCancelled)
-            {
-                state.Status = "PAUSED";
-                state.ValidationMessage = "FAS check paused before eligibility calculation.";
-            }
-
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult("I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance.", "GENERAL", new(false, []), [], [], ToInterviewState(state, null))
-            {
-                FollowUpQuestions = isCancelled
-                    ? ["Restart FAS check.", "What can you help me with?", "Show my Education Account balance."]
-                    : ["Resume FAS check.", "What can you help me with?", "Show my Education Account balance."]
-            };
+            if (!isCanc) { st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused before eligibility calculation."; }
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            return new("I can't help with jokes here. I can help with FAS, Education Account balance, bills, payments, refunds, or application guidance.", "GENERAL", new(false, []), [], [], FasConfirmationService.ToInterviewState(st, null)) { FollowUpQuestions = isCanc ? ["Restart FAS check.", "What can you help me with?", "Show my Education Account balance."] : ["Resume FAS check.", "What can you help me with?", "Show my Education Account balance."] };
         }
 
-        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(request.Message.ToUpperInvariant()) ||
-            AiKeywordMatchers.LooksLikeCapabilityQuestion(request.Message) ||
-            AiKeywordMatchers.LooksLikeAdminCenterQuestion(request.Message))
+        if (AiKeywordMatchers.IsFasKnowledgeInterrupt(req.Message.ToUpperInvariant()) || AiKeywordMatchers.LooksLikeCapabilityQuestion(req.Message) || AiKeywordMatchers.LooksLikeAdminCenterQuestion(req.Message))
         {
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            AiHandlerResult response = await knowledgeHandler.HandleGeneralAsync(c, request, ct);
-            return response with
-            {
-                InterviewState = ToInterviewState(state, null),
-                FollowUpQuestions = isCancelled
-                    ? FilterCurrentQuestion(["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], request.Message)
-                    : FilterCurrentQuestion(["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], request.Message)
-            };
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            var r = await knowledgeHandler.HandleGeneralAsync(c, req, ct);
+            return r with { InterviewState = FasConfirmationService.ToInterviewState(st, null), FollowUpQuestions = isCanc ? FilterCurrentQuestion(["Restart FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message) : FilterCurrentQuestion(["Resume FAS check.", "What documents do I need for FAS?", "Show my Education Account balance."], req.Message) };
         }
 
-        if (AiKeywordMatchers.LooksLikePaymentQuery(request.Message.ToUpperInvariant()))
+        if (AiKeywordMatchers.LooksLikePaymentQuery(req.Message.ToUpperInvariant()))
         {
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            AiHandlerResult response = await paymentHandler.HandlePaymentAsync(request, ct);
-            return response with { InterviewState = ToInterviewState(state, null) };
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            var r = await paymentHandler.HandlePaymentAsync(req, ct);
+            return r with { InterviewState = FasConfirmationService.ToInterviewState(st, null) };
         }
 
-        // Confirmation answers do not apply when FAS is stopped/paused
-        if (FasExtractionService.ExtractConfirmation(request.Message).Value is bool)
+        if (FasExtractionService.ExtractConfirmation(req.Message).Value is bool)
         {
-            string text = isCancelled
-                ? "That previous FAS check was stopped, so I will not treat this as confirmation. Say \"restart FAS check\" if you want to run a new eligibility check."
-                : "The FAS check is paused. Say \"resume FAS check\" when you want to return to the confirmation step.";
-            c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-            return new AiHandlerResult(text, "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], ToInterviewState(state, null))
-            {
-                FollowUpQuestions = isCancelled
-                    ? ["Restart FAS check.", "Open FAS application.", "What documents do I need for FAS?"]
-                    : ["Resume FAS check.", "Open FAS application.", "What documents do I need for FAS?"]
-            };
+            string txt = isCanc ? "That previous FAS check was stopped, so I will not treat this as confirmation. Say \"restart FAS check\" if you want to run a new eligibility check." : "The FAS check is paused. Say \"resume FAS check\" when you want to return to the confirmation step.";
+            c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+            return new(txt, "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], FasConfirmationService.ToInterviewState(st, null)) { FollowUpQuestions = isCanc ? ["Restart FAS check.", "Open FAS application.", "What documents do I need for FAS?"] : ["Resume FAS check.", "Open FAS application.", "What documents do I need for FAS?"] };
         }
 
-        c.Touch("GENERAL", pageJson, now); SaveFasState(c, state, now);
-        return new AiHandlerResult(isCancelled
-            ? "This FAS check is stopped. Ask a student-finance question, open the FAS form, or say \"restart FAS check\" to begin again."
-            : "This FAS check is paused. Ask a student-finance question, or say \"resume FAS check\" to continue.",
-            "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], ToInterviewState(state, null))
-        {
-            FollowUpQuestions = isCancelled
-                ? ["Restart FAS check.", "What can you help me with?", "Show my Education Account balance."]
-                : ["Resume FAS check.", "What can you help me with?", "Show my Education Account balance."]
-        };
+        c.Touch("GENERAL", pj, now); SaveFasState(c, st, now);
+        return new(isCanc ? "This FAS check is stopped. Ask a student-finance question, open the FAS form, or say \"restart FAS check\" to begin again." : "This FAS check is paused. Ask a student-finance question, or say \"resume FAS check\" to continue.", "GENERAL", new(false, []), [], [new("NAVIGATE", "Open FAS application", "/portal/fas")], FasConfirmationService.ToInterviewState(st, null))
+        { FollowUpQuestions = isCanc ? ["Restart FAS check.", "What can you help me with?", "Show my Education Account balance."] : ["Resume FAS check.", "What can you help me with?", "Show my Education Account balance."] };
     }
 
-    public static void ApplyFasTaskInterruptBeforeNonFasTurn(AiConversation conversation, string message, string mode)
+    public static void ApplyFasTaskInterruptBeforeNonFasTurn(AiConversation c, string msg, string mode)
     {
-        if (mode == "FAS_INTERVIEW" || conversation.FasSession is null)
-            return;
-
-        FasInterviewData? state = LoadFasState(conversation);
-        if (state is null || state.Status is "COMPLETE" or "CANCELLED")
-            return;
-
-        if (AiKeywordMatchers.LooksLikeCancelFas(message))
-        {
-            state.Status = "CANCELLED";
-            state.ValidationMessage = "FAS check stopped by user before eligibility calculation.";
-            SaveFasState(conversation, state, DateTime.UtcNow);
-            return;
-        }
-
-        if (AiKeywordMatchers.LooksLikeSwitchTopic(message) || AiKeywordMatchers.LooksLikeScopeTest(message) || mode == "PAYMENT")
-        {
-            state.Status = "PAUSED";
-            state.ValidationMessage = "FAS check paused before eligibility calculation.";
-            SaveFasState(conversation, state, DateTime.UtcNow);
-        }
+        if (mode == "FAS_INTERVIEW" || c.FasSession is null) return;
+        var st = LoadFasState(c);
+        if (st is null || st.Status is "COMPLETE" or "CANCELLED") return;
+        if (AiKeywordMatchers.LooksLikeCancelFas(msg)) { st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user before eligibility calculation."; SaveFasState(c, st, DateTime.UtcNow); return; }
+        if (AiKeywordMatchers.LooksLikeSwitchTopic(msg) || AiKeywordMatchers.LooksLikeScopeTest(msg) || mode == "PAYMENT") { st.Status = "PAUSED"; st.ValidationMessage = "FAS check paused before eligibility calculation."; SaveFasState(c, st, DateTime.UtcNow); }
     }
-
-    // ── Eligibility Computation ─────────────────────────────────────────
-
-    private async Task<(string Text, FasInterviewData State, FasRecommendationMatch[] Schemes, object? Recommendation)> ComputeEligibility(FasInterviewData state, CancellationToken ct)
-    {
-        try
-        {
-            object rawRecommendation = await fas.CheckEligibility(new EligibilityRequest(
-                state.MonthlyHouseholdIncome ?? 0m,
-                state.HouseholdMemberCount ?? 1,
-                state.OtherMonthlyIncome ?? 0m,
-                state.ParentNationalities), ct);
-            JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
-            bool hasSchemes = root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array && schemes.GetArrayLength() > 0;
-            if (!hasSchemes && CanPrepareOpenSchemeForReview(state))
-            {
-                state.Status = "COMPLETE";
-                FasRecommendationMatch[] recommendedSchemes = ReviewRequiredSchemeMatches(state);
-                state.RecommendationMatches = recommendedSchemes.ToList();
-                AiInterviewState completeInterview = ToInterviewState(state, null, recommendedSchemes);
-                object recommendation = BuildReviewRequiredRecommendation(completeInterview, recommendedSchemes);
-                return ($"I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school. The scheme criteria are not fully configured in the demo data, so I prepared your confirmed answers and scheme selection for review. Use 'Apply answers to form', then check the form before submitting.",
-                    state, recommendedSchemes, recommendation);
-            }
-            if (!hasSchemes)
-            {
-                state.Status = "MANUAL_FALLBACK";
-                return ("Based on your details, I could not find an eligible FAS scheme. Use 'Open FAS application' to review the form, or 'Contact Admin Center' below for staff help.",
-                    state, [], null);
-            }
-
-            state.Status = "COMPLETE";
-            FasRecommendationMatch[] matchedSchemes = ExtractRecommendationMatches(root);
-            state.RecommendationMatches = matchedSchemes.ToList();
-            AiInterviewState matchedInterview = ToInterviewState(state, null, matchedSchemes);
-            object fasRecommendation = BuildFasRecommendation(root, matchedInterview);
-            return ("I have enough information to evaluate the active FAS schemes. Review the recommendation below and use 'Apply answers to form' when ready.",
-                state, matchedSchemes, fasRecommendation);
-        }
-        catch
-        {
-            if (CanPrepareOpenSchemeForReview(state))
-            {
-                state.Status = "COMPLETE";
-                FasRecommendationMatch[] recommendedSchemes = ReviewRequiredSchemeMatches(state);
-                state.RecommendationMatches = recommendedSchemes.ToList();
-                AiInterviewState catchInterview = ToInterviewState(state, null, recommendedSchemes);
-                object recommendation = BuildReviewRequiredRecommendation(catchInterview, recommendedSchemes);
-                return ($"I found {recommendedSchemes.Length} open FAS scheme{(recommendedSchemes.Length == 1 ? "" : "s")} for your school. The scheme criteria are not fully configured in the demo data, so I prepared your confirmed answers and scheme selection for review. Use 'Apply answers to form', then check the form before submitting.",
-                    state, recommendedSchemes, recommendation);
-            }
-
-            state.Status = "MANUAL_FALLBACK";
-            return ("Based on your details, I could not find an eligible FAS scheme. Use 'Open FAS application' to review the form, or 'Contact Admin Center' below for staff help.",
-                state, [], null);
-        }
-    }
-
-    // ── State initialization ─────────────────────────────────────────────
 
     private async Task<FasInterviewData> InitializeFasState(CancellationToken ct)
     {
-        JsonElement profile = JsonSerializer.SerializeToElement(await fas.Prefill(ct), JsonOptions);
-        EligibilityCriteriaPlan criteriaPlan = await fas.EligibilityCriteriaPlan(ct);
-        return new FasInterviewData
-        {
-            Profile = profile,
-            Status = "COLLECTING",
-            ApplicableSchemes = criteriaPlan.ApplicableSchemes.Select(x => new FasApplicableSchemeOption(x.Id, x.Name)).ToList(),
-            ApplicableSchemeNames = criteriaPlan.ApplicableSchemeNames.ToList(),
-            RequiredCriteriaTypes = criteriaPlan.RequiredCriteriaTypes.ToList(),
-            ProfileConfirmedFacts = criteriaPlan.ProfileConfirmedFacts.ToList(),
-            UserRequiredFacts = criteriaPlan.UserRequiredFacts.ToList()
-        };
+        var profile = JsonSerializer.SerializeToElement(await fas.Prefill(ct), JsonOptions);
+        var plan = await fas.EligibilityCriteriaPlan(ct);
+        return new FasInterviewData { Profile = profile, Status = "COLLECTING", ApplicableSchemes = plan.ApplicableSchemes.Select(x => new FasApplicableSchemeOption(x.Id, x.Name)).ToList(), ApplicableSchemeNames = plan.ApplicableSchemeNames.ToList(), RequiredCriteriaTypes = plan.RequiredCriteriaTypes.ToList(), ProfileConfirmedFacts = plan.ProfileConfirmedFacts.ToList(), UserRequiredFacts = plan.UserRequiredFacts.ToList() };
     }
 
-    // ── Interview field Q&A (stays in handler) ────────────────────────────
-
-    private static string? NextQuestion(FasInterviewData s, string? preferred = null)
+    private static string? NextQuestion(FasInterviewData s, string? preferred = null) => ResolveTargetField(s, preferred) switch
     {
-        string? field = ResolveTargetField(s, preferred);
-        return field switch
-        {
-            "isWelfareHomeResident" => "Are you currently residing in an approved welfare home? Please answer yes or no.",
-            "monthlyHouseholdIncome" => "What is your total monthly household income in SGD?",
-            "householdMemberCount" => "How many people are in your household?",
-            "otherMonthlyIncome" => "Do you have any other monthly household income in SGD? Reply 0 if there is none.",
-            "employmentStatusCode" => "What is your employment status? Choose employed, self-employed, or unemployed.",
-            "email" => "What email address should we use for this FAS application?",
-            "parentNationalities" => "Choose your parent or guardian's nationality: Singapore Citizen, Permanent Resident, or Foreigner.",
-            _ => null
-        };
-    }
+        "isWelfareHomeResident" => "Are you currently residing in an approved welfare home? Please answer yes or no.",
+        "monthlyHouseholdIncome" => "What is your total monthly household income in SGD?",
+        "householdMemberCount" => "How many people are in your household?",
+        "otherMonthlyIncome" => "Do you have any other monthly household income in SGD? Reply 0 if there is none.",
+        "employmentStatusCode" => "What is your employment status? Choose employed, self-employed, or unemployed.",
+        "email" => "What email address should we use for this FAS application?",
+        "parentNationalities" => "Choose your parent or guardian's nationality: Singapore Citizen, Permanent Resident, or Foreigner.",
+        _ => null
+    };
 
     private static string? NextMissingField(FasInterviewData s, string? preferred = null)
     {
@@ -531,380 +296,64 @@ public sealed class FasInterviewHandler(
         return null;
     }
 
-    private static string? ResolveTargetField(FasInterviewData s, string? preferred = null)
-    {
-        return preferred is null
-            ? s.ClarificationField ?? NextMissingField(s)
-            : NextMissingField(s, preferred) ?? s.ClarificationField ?? NextMissingField(s);
-    }
+    private static string? ResolveTargetField(FasInterviewData s, string? preferred = null) =>
+        preferred is null ? s.ClarificationField ?? NextMissingField(s) : NextMissingField(s, preferred) ?? s.ClarificationField ?? NextMissingField(s);
 
     private static bool IsReadyForEligibilityComputation(FasInterviewData s) => s.Status == "COLLECTING_CONFIRMED";
-
-    private static bool IncomeFactsRequired(FasInterviewData s) =>
-        CriteriaPlanUnknown(s) || s.RequiredCriteriaTypes.Any(IsIncomeCriterion) || s.ApplicableSchemes.Count > 0;
-
+    private static bool IncomeFactsRequired(FasInterviewData s) => CriteriaPlanUnknown(s) || s.RequiredCriteriaTypes.Any(c => c is "GDP" or "GHI" or "PCI") || s.ApplicableSchemes.Count > 0;
     private static bool ParentNationalityRequired(FasInterviewData _) => true;
-
     private static bool CriteriaPlanUnknown(FasInterviewData s) => s.RequiredCriteriaTypes.Count == 0 && s.ApplicableSchemeNames.Count == 0;
+    internal static bool IsTerminalFasState(string status) => status is "CANCELLED" or "PAUSED" or "MANUAL_FALLBACK";
 
-    private static bool IsIncomeCriterion(string criteriaType) => criteriaType is "GDP" or "GHI" or "PCI";
-
-    internal static bool IsTerminalFasState(string status) =>
-        status is "CANCELLED" or "PAUSED" or "MANUAL_FALLBACK";
-
-    internal static AiChatResponse AttachDormantFasState(AiChatResponse response, AiFasSession? session)
+    internal static AiChatResponse AttachDormantFasState(AiChatResponse r, AiFasSession? s)
     {
-        if (response.InterviewState is not null)
-            return response;
-
-        FasInterviewData? state = session?.CollectedFactsJson is { Length: > 0 } json
-            ? JsonSerializer.Deserialize<FasInterviewData>(json, JsonOptions)
-            : null;
-        return state is not null && IsTerminalFasState(state.Status)
-            ? response with { InterviewState = ToInterviewState(state, null) }
-            : response;
+        if (r.InterviewState is not null) return r;
+        var st = s?.CollectedFactsJson is { Length: > 0 } j ? JsonSerializer.Deserialize<FasInterviewData>(j, JsonOptions) : null;
+        return st is not null && IsTerminalFasState(st.Status) ? r with { InterviewState = FasConfirmationService.ToInterviewState(st, null) } : r;
     }
 
-    // ── Confirmation prompt ─────────────────────────────────────────────
-
-    private static string ConfirmationPrompt(FasInterviewData s)
+    private static bool TryApplyFasCorrections(FasInterviewData s, string msg)
     {
-        List<string> facts = [];
-        string welfareDisplay = s.IsWelfareHomeResident.HasValue
-            ? (s.IsWelfareHomeResident.Value ? "Yes" : "No")
-            : "Not answered";
-        facts.Add($"Welfare home: {welfareDisplay}");
-        if (s.IsWelfareHomeResident == false)
+        if (!Regex.IsMatch(msg, @"\b(actually|change|correction|correct|wait|sorry|make that|meant|instead)\b", RegexOptions.IgnoreCase)) return false;
+        bool ch = false; string lo = msg.ToLowerInvariant();
+        var nums = FasExtractionService.ExtractNumbers(msg).ToArray();
+        bool mem = Regex.IsMatch(lo, @"\b(member|members|people|pax|household size)\b");
+        bool oth = Regex.IsMatch(lo, @"\b(other income|other monthly|additional income)\b");
+        if (lo.Contains("welfare")) { var w = FasExtractionService.ExtractWelfareHome(msg); if (w.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "isWelfareHomeResident", w.Value); ch = true; } }
+        if (Regex.IsMatch(lo, @"\b(income|salary|earn|household)\b") && !mem && !oth) { var i = FasExtractionService.ExtractIncome(msg); if (i.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "monthlyHouseholdIncome", i.Value); ch = true; } }
+        else if (!mem && !oth && nums.Length == 1 && s.MonthlyHouseholdIncome.HasValue) { var v = nums[0]; if (v is >= 0 and <= 1_000_000) { FasExtractionService.ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(v, 2)); ch = true; } }
+        if (mem) { var m = FasExtractionService.ExtractHouseholdMemberCount(msg); if (m.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "householdMemberCount", m.Value); ch = true; } }
+        if (oth) { var o = FasExtractionService.ExtractOtherIncome(msg); if (o.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "otherMonthlyIncome", o.Value); ch = true; } }
+        var nat = FasExtractionService.ExtractParentNationalities(msg);
+        if (nat.Status != "ACCEPTED")
         {
-            facts.Add($"Monthly household income: {s.MonthlyHouseholdIncome?.ToString("C", CultureInfo.GetCultureInfo("en-SG")) ?? "Not provided"}");
-            facts.Add($"Household members: {s.HouseholdMemberCount?.ToString(CultureInfo.InvariantCulture) ?? "Not provided"}");
-            facts.Add($"Other monthly income: {s.OtherMonthlyIncome?.ToString("C", CultureInfo.GetCultureInfo("en-SG")) ?? "Not provided"}");
+            string? nn = FasExtractionService.TryNormalizeParentNationality(msg);
+            if (nn is null && Regex.IsMatch(msg, @"\bPR\b", RegexOptions.IgnoreCase)) nn = "Permanent Resident";
+            if (nn is null && Regex.IsMatch(msg, @"\bforeigner\b", RegexOptions.IgnoreCase)) nn = "Foreigner";
+            if (nn is null && Regex.IsMatch(msg, @"\bsingapore(?: citizen|an)?\b", RegexOptions.IgnoreCase)) nn = "Singapore Citizen";
+            if (nn is not null) nat = FasExtractionResult.Accepted(new[] { nn });
         }
-        facts.Add($"Parent or guardian nationality: {(s.ParentNationalities.Count == 0 ? "Not provided" : string.Join(", ", s.ParentNationalities))}");
-
-        return $"Before I calculate FAS eligibility, please confirm these details are correct:\n\n{string.Join("\n", facts.Select(x => $"- {x}"))}\n\nReply yes to calculate eligibility, or no to stop and edit the form manually.";
+        if (nat.Status == "ACCEPTED") { FasExtractionService.ApplyAcceptedValue(s, "parentNationalities", nat.Value); ch = true; }
+        if (ch) { s.Status = "CONFIRMING"; s.ClarificationField = null; s.ValidationMessage = null; }
+        return ch;
     }
 
-    // ── Interview state ────────────────────────────────────────────────
+    private static bool LooksLikeExplicitFasRestart(string m) =>
+        Regex.IsMatch(m, @"\b(restart|start over|start again|resume|continue|go back|return|check|qualify|eligib)\b", RegexOptions.IgnoreCase) && Regex.IsMatch(m, @"\b(fas|financial assistance|eligibility|check|application)\b", RegexOptions.IgnoreCase);
 
-    private static AiInterviewState ToInterviewState(FasInterviewData s, string? next, IReadOnlyCollection<FasRecommendationMatch>? recommendedSchemes = null)
+    private static bool LooksLikeContextualResume(string m) =>
+        Regex.IsMatch(m, @"^\s*(resume|continue|resume please|continue please|i want to continue|keep going|go back)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
+
+    private static bool LooksLikeFasSchemeGuidanceRequest(string m) =>
+        Regex.IsMatch(m, @"\b(scheme|schemes|recommend|recommendation|eligible|eligibility|qualify|apply for)\b", RegexOptions.IgnoreCase);
+
+    private static bool IsLiveSchemeEligibilityRequest(string v) =>
+        Regex.IsMatch(v, @"\b(WHICH|WHAT)\b", RegexOptions.IgnoreCase) && Regex.IsMatch(v, @"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b", RegexOptions.IgnoreCase) &&
+        Regex.IsMatch(v, @"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b", RegexOptions.IgnoreCase);
+
+    private static string[] FilterCurrentQuestion(IEnumerable<string> fps, string msg)
     {
-        List<AiInterviewField> fields =
-        [
-            new("isWelfareHomeResident", s.IsWelfareHomeResident, s.IsWelfareHomeResident.HasValue ? "AI_CONFIRMED" : "UNMAPPED", s.IsWelfareHomeResident.HasValue),
-            new("email", s.Email ?? TryGetString(s.Profile, "email"), s.Email is not null ? "AI_CONFIRMED" : TryGetString(s.Profile, "email") is not null ? "PROFILE" : "UNMAPPED", s.Email is not null || TryGetString(s.Profile, "email") is not null),
-            new("employmentStatusCode", s.EmploymentStatusCode ?? TryGetString(s.Profile, "employmentStatusCode"), s.EmploymentStatusCode is not null ? "AI_CONFIRMED" : TryGetString(s.Profile, "employmentStatusCode") is not null ? "PROFILE" : "UNMAPPED", s.EmploymentStatusCode is not null || TryGetString(s.Profile, "employmentStatusCode") is not null),
-            new("monthlyHouseholdIncome", s.MonthlyHouseholdIncome, s.MonthlyHouseholdIncome.HasValue ? "AI_CONFIRMED" : "UNMAPPED", s.MonthlyHouseholdIncome.HasValue),
-            new("householdMemberCount", s.HouseholdMemberCount, s.HouseholdMemberCount.HasValue ? "AI_CONFIRMED" : "UNMAPPED", s.HouseholdMemberCount.HasValue),
-            new("otherMonthlyIncome", s.OtherMonthlyIncome, s.OtherMonthlyIncome.HasValue ? "AI_CONFIRMED" : "UNMAPPED", s.OtherMonthlyIncome.HasValue),
-            new("parentNationalities", s.ParentNationalities, s.ParentNationalities.Count > 0 ? "AI_CONFIRMED" : "UNMAPPED", s.ParentNationalities.Count > 0)
-        ];
-        string[] missing = fields.Where(x => FieldCountsAsMissing(s, x.Name, x.Confirmed))
-            .Select(x => x.Name).ToArray();
-        object? patch = s.Status == "MANUAL_FALLBACK" ? null : BuildFasFormPatch(s, recommendedSchemes);
-        return new(s.Status, next, fields, missing, patch);
-    }
-
-    private static FasFormPatch BuildFasFormPatch(FasInterviewData s, IReadOnlyCollection<FasRecommendationMatch>? recommendedSchemes = null)
-    {
-        var particulars = new FasPatchParticulars(
-            Email: s.Email ?? TryGetString(s.Profile, "email"),
-            ParentNationalities: s.ParentNationalities.Count > 0 ? s.ParentNationalities.ToArray() : null);
-        var income = new FasPatchIncome(
-            s.IsWelfareHomeResident,
-            s.EmploymentStatusCode ?? TryGetString(s.Profile, "employmentStatusCode") ?? "EMPLOYED",
-            s.MonthlyHouseholdIncome,
-            s.HouseholdMemberCount,
-            s.OtherMonthlyIncome);
-        var meta = new Dictionary<string, FasPatchMetaField>();
-        void AddMeta(string name, object? value, string provenance, string? explanation = null)
-        {
-            string conf = value switch
-            {
-                null => "LOW",
-                _ when s.ClarificationAttempts.GetValueOrDefault(name) >= 1 => "MEDIUM",
-                _ => "HIGH"
-            };
-            meta[name] = new FasPatchMetaField(conf, provenance, explanation);
-        }
-        bool skipIncome = s.IsWelfareHomeResident == true;
-        AddMeta("isWelfareHomeResident", s.IsWelfareHomeResident, s.IsWelfareHomeResident.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
-            s.IsWelfareHomeResident.HasValue ? (s.IsWelfareHomeResident.Value ? "Confirmed welfare home resident." : "Confirmed not a welfare home resident.") : null);
-        if (!skipIncome)
-        {
-            AddMeta("email", s.Email ?? TryGetString(s.Profile, "email"), s.Email is null ? "PROFILE" : "AI_CONFIRMED", s.Email is null ? "From your profile." : "Confirmed in chat.");
-            AddMeta("employmentStatusCode", s.EmploymentStatusCode ?? TryGetString(s.Profile, "employmentStatusCode"), s.EmploymentStatusCode is null ? "PROFILE" : "AI_CONFIRMED", s.EmploymentStatusCode is null ? "From your profile." : "Confirmed in chat.");
-            AddMeta("monthlyHouseholdIncome", s.MonthlyHouseholdIncome, s.MonthlyHouseholdIncome.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
-                s.MonthlyHouseholdIncome.HasValue ? $"You said your household income is ${s.MonthlyHouseholdIncome.Value:N0}." : null);
-            AddMeta("householdMemberCount", s.HouseholdMemberCount, s.HouseholdMemberCount.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
-                s.HouseholdMemberCount.HasValue ? $"You said there are {s.HouseholdMemberCount.Value} household members." : null);
-            AddMeta("otherMonthlyIncome", s.OtherMonthlyIncome, s.OtherMonthlyIncome.HasValue ? "AI_CONFIRMED" : "UNMAPPED",
-                s.OtherMonthlyIncome.HasValue ? $"You said other monthly income is ${s.OtherMonthlyIncome.Value:N0}." : null);
-        }
-        AddMeta("parentNationalities", s.ParentNationalities.Count > 0 ? s.ParentNationalities : null,
-            s.ParentNationalities.Count > 0 ? "AI_CONFIRMED" : "UNMAPPED",
-            s.ParentNationalities.Count > 0 ? $"Nationalit{(s.ParentNationalities.Count == 1 ? "y" : "ies")}: {string.Join(", ", s.ParentNationalities)}." : null);
-        FasRecommendationMatch[] actionableSchemes = recommendedSchemes?
-            .Where(x => x.CanApply && !x.HasPendingApplication)
-            .GroupBy(x => x.SchemeId)
-            .Select(x => x.First())
-            .ToArray() ?? [];
-        FasPatchSchemes? schemes = actionableSchemes.Length > 0
-            ? new FasPatchSchemes(actionableSchemes.Select(x => x.SchemeId).ToArray(),
-                actionableSchemes.Select(x => x.SchemeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
-            : null;
-        AddMeta("schemeIds", schemes?.RecommendedSchemeIds, schemes is null ? "UNMAPPED" : "AI_CONFIRMED",
-            schemes is null ? null : "Recommended from open schemes for your school.");
-        return new FasFormPatch(particulars, income, schemes, meta);
-    }
-
-    private static bool FieldCountsAsMissing(FasInterviewData s, string fieldName, bool confirmed)
-    {
-        if (confirmed) return false;
-        if (s.IsWelfareHomeResident == true && fieldName is "monthlyHouseholdIncome" or "householdMemberCount" or "otherMonthlyIncome") return false;
-        if (fieldName is "monthlyHouseholdIncome" or "householdMemberCount" or "otherMonthlyIncome") return IncomeFactsRequired(s);
-        if (fieldName == "parentNationalities") return ParentNationalityRequired(s);
-        if (fieldName is "email" or "employmentStatusCode") return false;
-        return true;
-    }
-
-    // ── Correction handling ─────────────────────────────────────────────
-
-    private static bool TryApplyFasCorrections(FasInterviewData s, string message)
-    {
-        if (!Regex.IsMatch(message, @"\b(actually|change|correction|correct|wait|sorry|make that|meant|instead)\b", RegexOptions.IgnoreCase))
-            return false;
-
-        bool changed = false;
-        string lower = message.ToLowerInvariant();
-        decimal[] numbers = FasExtractionService.ExtractNumbers(message).ToArray();
-        bool mentionsMembers = Regex.IsMatch(lower, @"\b(member|members|people|pax|household size)\b");
-        bool mentionsOtherIncome = Regex.IsMatch(lower, @"\b(other income|other monthly|additional income)\b");
-        if (lower.Contains("welfare"))
-        {
-            FasExtractionResult welfare = FasExtractionService.ExtractWelfareHome(message);
-            if (welfare.Status == "ACCEPTED")
-            {
-                FasExtractionService.ApplyAcceptedValue(s, "isWelfareHomeResident", welfare.Value);
-                changed = true;
-            }
-        }
-
-        if (Regex.IsMatch(lower, @"\b(income|salary|earn|household)\b") && !mentionsMembers && !mentionsOtherIncome)
-        {
-            FasExtractionResult income = FasExtractionService.ExtractIncome(message);
-            if (income.Status == "ACCEPTED")
-            {
-                FasExtractionService.ApplyAcceptedValue(s, "monthlyHouseholdIncome", income.Value);
-                changed = true;
-            }
-        }
-        else if (!mentionsMembers && !mentionsOtherIncome && numbers.Length == 1 && s.MonthlyHouseholdIncome.HasValue)
-        {
-            decimal value = numbers[0];
-            if (value is >= 0 and <= 1_000_000)
-            {
-                FasExtractionService.ApplyAcceptedValue(s, "monthlyHouseholdIncome", decimal.Round(value, 2));
-                changed = true;
-            }
-        }
-
-        if (mentionsMembers)
-        {
-            FasExtractionResult members = FasExtractionService.ExtractHouseholdMemberCount(message);
-            if (members.Status == "ACCEPTED")
-            {
-                FasExtractionService.ApplyAcceptedValue(s, "householdMemberCount", members.Value);
-                changed = true;
-            }
-        }
-
-        if (mentionsOtherIncome)
-        {
-            FasExtractionResult other = FasExtractionService.ExtractOtherIncome(message);
-            if (other.Status == "ACCEPTED")
-            {
-                FasExtractionService.ApplyAcceptedValue(s, "otherMonthlyIncome", other.Value);
-                changed = true;
-            }
-        }
-
-        FasExtractionResult nationality = FasExtractionService.ExtractParentNationalities(message);
-        if (nationality.Status != "ACCEPTED")
-        {
-            string? normalizedNationality = FasExtractionService.TryNormalizeParentNationality(message);
-            if (normalizedNationality is null && Regex.IsMatch(message, @"\bPR\b", RegexOptions.IgnoreCase))
-                normalizedNationality = "Permanent Resident";
-            if (normalizedNationality is null && Regex.IsMatch(message, @"\bforeigner\b", RegexOptions.IgnoreCase))
-                normalizedNationality = "Foreigner";
-            if (normalizedNationality is null && Regex.IsMatch(message, @"\bsingapore(?: citizen|an)?\b", RegexOptions.IgnoreCase))
-                normalizedNationality = "Singapore Citizen";
-            if (normalizedNationality is not null)
-                nationality = FasExtractionResult.Accepted(new[] { normalizedNationality });
-        }
-        if (nationality.Status == "ACCEPTED")
-        {
-            FasExtractionService.ApplyAcceptedValue(s, "parentNationalities", nationality.Value);
-            changed = true;
-        }
-
-        if (changed)
-        {
-            s.Status = "CONFIRMING";
-            s.ClarificationField = null;
-            s.ValidationMessage = null;
-        }
-        return changed;
-    }
-
-    // ── Recommendation building ─────────────────────────────────────────
-
-    private static FasRecommendationCard BuildFasRecommendation(object rawRecommendation, AiInterviewState interview)
-    {
-        JsonElement root = JsonSerializer.SerializeToElement(rawRecommendation, JsonOptions);
-        decimal? pci = TryGetDecimal(root, "perCapitaIncome");
-        FasRecommendationMatch[] matches = ExtractRecommendationMatches(root);
-        FasRecommendationMatch? recommended = matches.FirstOrDefault();
-        bool isComparable = matches.Length == 0 || matches.All(x => x.IsComparable);
-        bool allFieldsConfirmed = interview.Fields.All(f => f.Confirmed);
-        string confidence = allFieldsConfirmed && isComparable ? "HIGH" : "REVIEW_REQUIRED";
-        bool hasPendingHigherBenefit = recommended is not null &&
-            matches.Any(x => x.HasPendingApplication && BenefitRank(x) > BenefitRank(recommended));
-        return new FasRecommendationCard(
-            pci,
-            recommended?.SchemeName,
-            recommended?.TierLabel,
-            recommended?.SubsidyType,
-            recommended?.SubsidyValue,
-            matches,
-            interview.Fields.Where(x => x.Confirmed).ToArray(),
-            interview.MissingFields,
-            "Prototype recommendation. Eligibility is calculated by application code and final approval remains subject to MOE review.",
-            confidence,
-            isComparable,
-            hasPendingHigherBenefit
-                ? "Ranked by schemes you can apply for now first, then comparable benefit strength, application closing date, and scheme name. Matched schemes with pending applications are shown after schemes you can apply for now."
-                : isComparable
-                    ? "Ranked by schemes you can apply for now first, then comparable benefit strength, application closing date, and scheme name."
-                    : "Eligible schemes use benefit types that are not directly comparable without a course fee amount; schemes you can apply for now are shown first.");
-    }
-
-    private static decimal BenefitRank(FasRecommendationMatch match)
-    {
-        string subsidyType = match.SubsidyType.ToUpperInvariant();
-        return subsidyType switch
-        {
-            "PERCENTAGE" => match.SubsidyValue * 1000m,
-            "FIXED" => match.SubsidyValue,
-            _ => 0m
-        };
-    }
-
-    private static bool CanPrepareOpenSchemeForReview(FasInterviewData state) =>
-        state.ApplicableSchemes.Count > 0 && state.RequiredCriteriaTypes.Count == 0;
-
-    private static FasRecommendationMatch[] ReviewRequiredSchemeMatches(FasInterviewData state) =>
-        state.ApplicableSchemes
-            .Select((scheme, index) => new FasRecommendationMatch(scheme.Id, scheme.Name, 0, "Review required", "Scheme selection", 0m,
-                index + 1, "Open scheme for your school. Criteria are not fully configured for automatic ranking, so staff/form review is required.", "REVIEW_REQUIRED", false))
-            .ToArray();
-
-    private static FasRecommendationCard BuildReviewRequiredRecommendation(AiInterviewState interview, IReadOnlyCollection<FasRecommendationMatch> matches)
-    {
-        FasRecommendationMatch? recommended = matches.FirstOrDefault();
-        return new FasRecommendationCard(
-            null,
-            recommended?.SchemeName,
-            recommended?.TierLabel,
-            recommended?.SubsidyType,
-            recommended?.SubsidyValue,
-            matches,
-            interview.Fields.Where(x => x.Confirmed).ToArray(),
-            interview.MissingFields,
-            "Review required. The scheme is open for your school, but the demo criteria do not include a configured tier calculation.",
-            "REVIEW_REQUIRED",
-            false,
-            "Open schemes without configured tier criteria are shown for review, not ranked as a best fit.");
-    }
-
-    private static FasRecommendationMatch[] ExtractRecommendationMatches(JsonElement root)
-    {
-        return root.TryGetProperty("matchedSchemes", out JsonElement schemes) && schemes.ValueKind == JsonValueKind.Array
-            ? schemes.EnumerateArray().Select(ToRecommendationMatch).Where(x => x is not null).Cast<FasRecommendationMatch>().ToArray()
-            : [];
-    }
-
-    private static FasRecommendationMatch? ToRecommendationMatch(JsonElement item)
-    {
-        long? schemeId = TryGetInt64(item, "schemeId");
-        long? tierId = TryGetInt64(item, "tierId");
-        string? schemeName = TryGetString(item, "schemeName");
-        string? tierLabel = TryGetString(item, "tierLabel");
-        string? subsidyType = TryGetString(item, "subsidyType");
-        decimal? subsidyValue = TryGetDecimal(item, "subsidyValue");
-        int? recommendationRank = TryGetInt32(item, "recommendationRank");
-        string? recommendationReason = TryGetString(item, "recommendationReason");
-        string? recommendationConfidence = TryGetString(item, "recommendationConfidence");
-        bool? isComparable = TryGetBoolean(item, "isComparable");
-        bool? canApply = TryGetBoolean(item, "canApply");
-        bool? hasPendingApplication = TryGetBoolean(item, "hasPendingApplication");
-        long? pendingApplicationId = TryGetInt64(item, "pendingApplicationId");
-        return schemeId.HasValue && tierId.HasValue && schemeName is not null && tierLabel is not null && subsidyType is not null && subsidyValue.HasValue
-            ? new FasRecommendationMatch(schemeId.Value, schemeName, tierId.Value, tierLabel, subsidyType, subsidyValue.Value,
-                recommendationRank ?? 0, recommendationReason, recommendationConfidence ?? "MEDIUM", isComparable ?? true,
-                canApply ?? true, hasPendingApplication ?? false, pendingApplicationId)
-            : null;
-    }
-
-    // ── Helpers ─────────────────────────────────────────────────────────
-
-    private static bool LooksLikeExplicitFasRestart(string message) =>
-        Regex.IsMatch(message, @"\b(restart|start over|start again|resume|continue|go back|return|check|qualify|eligib)\b", RegexOptions.IgnoreCase) &&
-        Regex.IsMatch(message, @"\b(fas|financial assistance|eligibility|check|application)\b", RegexOptions.IgnoreCase);
-
-    private static bool LooksLikeContextualResume(string message) =>
-        Regex.IsMatch(message, @"^\s*(resume|continue|resume please|continue please|i want to continue|keep going|go back)\s*[.!]?\s*$", RegexOptions.IgnoreCase);
-
-    private static bool LooksLikeFasSchemeGuidanceRequest(string message)
-    {
-        return Regex.IsMatch(message, @"\b(scheme|schemes|recommend|recommendation|eligible|eligibility|qualify|apply for)\b", RegexOptions.IgnoreCase);
-    }
-
-    private static bool IsLiveSchemeEligibilityRequest(string value)
-    {
-        bool asksWhichSchemes = Regex.IsMatch(value, @"\b(WHICH|WHAT)\b", RegexOptions.IgnoreCase) &&
-            Regex.IsMatch(value, @"\b(SCHEME|SCHEMES|FAS|FINANCIAL ASSISTANCE|BURSARY|SUBSIDY)\b", RegexOptions.IgnoreCase);
-        bool asksApplyOrEligibility = Regex.IsMatch(value, @"\b(CAN I APPLY|APPLY FOR|ELIGIB|QUALIF|AVAILABLE TO ME|FOR ME)\b", RegexOptions.IgnoreCase);
-        return asksWhichSchemes && asksApplyOrEligibility;
-    }
-
-    private static string? TryGetString(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    private static long? TryGetInt64(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long result) ? result : null;
-    private static int? TryGetInt32(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int result) ? result : null;
-    private static decimal? TryGetDecimal(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal result) ? result : null;
-    private static bool? TryGetBoolean(JsonElement element, string property)
-        => element.TryGetProperty(property, out JsonElement value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
-
-    private static FasRecommendationMatch[] WelfareHomeRecommendationMatches(FasInterviewData state)
-        => state.ApplicableSchemes
-            .GroupBy(x => x.Id)
-            .Select(x => x.First())
-            .Select((x, index) => new FasRecommendationMatch(x.Id, x.Name, 0, "Welfare-home route", "ASSISTANCE", 0m,
-                index + 1, "Open scheme for your school. Welfare-home applicants skip income-based ranking and must review the scheme selection in the form.", "REVIEW_REQUIRED", false))
-            .ToArray();
-
-    private static string[] FilterCurrentQuestion(IEnumerable<string> followUps, string message)
-    {
-        string currentQuestion = Regex.Replace(message.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant);
-        return followUps
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Where(x => !string.Equals(Regex.Replace(x.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant), currentQuestion, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(3)
-            .ToArray();
+        string cq = Regex.Replace(msg.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant);
+        return fps.Where(x => !string.IsNullOrWhiteSpace(x)).Where(x => !string.Equals(Regex.Replace(x.Trim().TrimEnd('.', '?', '!'), @"\s+", " ", RegexOptions.CultureInvariant), cq, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray();
     }
 }

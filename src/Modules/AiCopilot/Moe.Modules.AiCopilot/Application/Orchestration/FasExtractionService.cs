@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -10,6 +11,52 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 public sealed class FasExtractionService(IServiceProvider services)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private const string AllExtractionSchema = """
+    {
+      "type": "object",
+      "properties": {
+        "monthlyHouseholdIncome": { "type": ["number", "null"] },
+        "householdMemberCount": { "type": ["integer", "null"] },
+        "isWelfareHomeResident": { "type": ["boolean", "null"] },
+        "parentNationalities": { "type": ["array", "null"], "items": { "type": "string" } },
+        "employmentStatusCode": { "type": ["string", "null"], "enum": ["EMPLOYED", "SELF_EMPLOYED", "UNEMPLOYED"] },
+        "otherMonthlyIncome": { "type": ["number", "null"] },
+        "email": { "type": ["string", "null"] },
+        "ambiguous": { "type": "boolean" },
+        "ambiguityReason": { "type": ["string", "null"] }
+      },
+      "required": ["ambiguous"]
+    }
+    """;
+
+    private static readonly JsonElement AllExtractionSchemaElement;
+
+    static FasExtractionService()
+    {
+        using var doc = JsonDocument.Parse(AllExtractionSchema);
+        AllExtractionSchemaElement = doc.RootElement.Clone();
+    }
+
+    private static PromptExecutionSettings CreateJsonSchemaExecutionSettings(JsonElement schemaElement, string schemaName)
+    {
+        return new PromptExecutionSettings
+        {
+            ExtensionData = new Dictionary<string, object>
+            {
+                ["response_format"] = new Dictionary<string, object>
+                {
+                    ["type"] = "json_schema",
+                    ["json_schema"] = new Dictionary<string, object>
+                    {
+                        ["name"] = schemaName,
+                        ["strict"] = true,
+                        ["schema"] = schemaElement
+                    }
+                }
+            }
+        };
+    }
 
     public async Task<FasExtractionResult> ApplyFasAnswerWithLlmAsync(FasInterviewData s, string message, Func<string?, string?> resolveTargetField, string? preferredField = null, CancellationToken ct = default)
     {
@@ -56,19 +103,6 @@ The student is answering: "{{fieldContext}}"
 
 Their answer may cover one or more needed fields: {{fieldsNeeded}}
 
-Return ONLY valid JSON. Set fields to null if the answer does not mention them.
-{
-  "monthlyHouseholdIncome": number | null,
-  "householdMemberCount": integer | null,
-  "isWelfareHomeResident": boolean | null,
-  "parentNationalities": string[] | null,
-  "employmentStatusCode": "EMPLOYED" | "SELF_EMPLOYED" | "UNEMPLOYED" | null,
-  "otherMonthlyIncome": number | null,
-  "email": string | null,
-  "ambiguous": boolean,
-  "ambiguityReason": string | null
-}
-
 Rules:
 - "k"/"K" -> multiply by 1000
 - range -> lower bound, ambiguous=true
@@ -81,10 +115,10 @@ Rules:
 - employmentStatusCode: "working"->EMPLOYED, "no job"->UNEMPLOYED, "freelance"->SELF_EMPLOYED
 """);
             history.AddUserMessage(message);
-            ChatMessageContent result = await chat.GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
-            string content = result.Content?.Trim() ?? "";
-            if (!content.StartsWith('{')) return null;
 
+            var settings = CreateJsonSchemaExecutionSettings(AllExtractionSchemaElement, "fas_extraction");
+            ChatMessageContent result = await chat.GetChatMessageContentAsync(history, executionSettings: settings, kernel: kernel, cancellationToken: ct);
+            string content = result.Content?.Trim() ?? "";
             using JsonDocument doc = JsonDocument.Parse(content);
             JsonElement root = doc.RootElement;
             return ValidateAndApplyExtraction(s, root, expectedField);
@@ -248,14 +282,25 @@ Rules:
         try
         {
             IChatCompletionService chat = kernel.GetRequiredService<IChatCompletionService>();
+
+            string fieldSchema = $$"""
+            {
+              "type": "object",
+              "properties": {
+                "value": { "type": ["number", "null"] },
+                "field": { "type": "string", "enum": ["{{field}}"] },
+                "ambiguous": { "type": "boolean" }
+              },
+              "required": ["value", "field", "ambiguous"]
+            }
+            """;
+            using var schemaDoc = JsonDocument.Parse(fieldSchema);
+            var settings = CreateJsonSchemaExecutionSettings(schemaDoc.RootElement.Clone(), "fas_field_extraction");
+
             var history = new ChatHistory($$"""
 You extract student FAS application data from a Singapore user message.
-Return a JSON object with exactly this structure:
-{
-  "value": number | null,
-  "field": "{{field}}",
-  "ambiguous": false
-}
+Field to extract: "{{field}}"
+
 Rules:
 - For monthlyHouseholdIncome: if user gives a range ("3k to 4k"), use the lower bound.
 - For monthlyHouseholdIncome: if user gives multiple amounts ("mum earns 2k, dad earns 3k"), compute the total.
@@ -268,7 +313,7 @@ Rules:
 """);
             history.AddUserMessage(message);
 
-            ChatMessageContent result = await chat.GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+            ChatMessageContent result = await chat.GetChatMessageContentAsync(history, executionSettings: settings, kernel: kernel, cancellationToken: ct);
             string content = result.Content?.Trim() ?? "";
             using JsonDocument doc = JsonDocument.Parse(content);
             JsonElement root = doc.RootElement;
