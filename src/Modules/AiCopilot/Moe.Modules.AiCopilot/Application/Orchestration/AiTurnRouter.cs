@@ -87,15 +87,15 @@ public sealed class AiTurnRouter(
                 var fpPlan = new AiTurnPlan(AiPlannerIntent.AnswerKnowledge, "idle", null, 0.95m, "FAST_PATH");
                 return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
             }
-            if (AiKeywordMatchers.LooksLikeCourseQuestion(sanitized.Message))
-            {
-                var fpPlan = new AiTurnPlan(AiPlannerIntent.CourseQuery, "idle", null, 0.85m, "FAST_PATH");
-                return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
-            }
             if (AiKeywordMatchers.LooksLikePaymentQuery(sanitized.Message))
             {
                 var fpPlan = new AiTurnPlan(AiPlannerIntent.PaymentQuery, "idle", null, 0.95m, "FAST_PATH");
                 return Save(c.Id, pj, now, 0, await paymentHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
+            }
+            if (AiKeywordMatchers.LooksLikeCourseQuestion(sanitized.Message))
+            {
+                var fpPlan = new AiTurnPlan(AiPlannerIntent.CourseQuery, "idle", null, 0.85m, "FAST_PATH");
+                return Save(c.Id, pj, now, 0, await knowledgeHandler.HandleAsync(c, sanitized, fpPlan, ct), c, sanitized, fpPlan, sw, ct, true);
             }
 
             // Deterministic path: planner + mode dispatch. Hardcoded RAG stays ahead of model-led tool loops.

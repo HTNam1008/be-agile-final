@@ -15,7 +15,8 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 public sealed class KnowledgeAnswerHandler(
     IKnowledgeRetriever knowledge,
     Kernel kernel,
-    FallbackHandler fallback)
+    FallbackHandler fallback,
+    ILogger<KnowledgeAnswerHandler> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = AiJsonOptions.Default;
 
@@ -179,16 +180,25 @@ public sealed class KnowledgeAnswerHandler(
         }
 
         // LLM-synthesised answer for all grounded questions (FAS scheme info, process, eligibility facts, etc.)
-        var history = new ChatHistory(
-            "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
-            "Keep the answer under 120 words. Lead with the direct answer. Ask at most one next question.\n" +
-            "Use no more than three bullets. Do not include source IDs, bracket citations, or raw document codes in the answer text; the UI renders sources separately.\n" +
-            "Never invent personal data, policy, eligibility, amounts, status, or timelines. If the question is outside student finance or FAS, say what you can help with instead.\n" +
-            "Label prototype uncertainty in plain language only when it affects the answer.\n" +
-            $"Sources:\n{sourceText}");
-        history.AddUserMessage(request.Message);
-        ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
-        string text = string.IsNullOrWhiteSpace(answer.Content) ? "I do not have enough reliable information to answer that." : answer.Content.Trim();
+        string text;
+        try
+        {
+            var history = new ChatHistory(
+                "You are the MOE Student Finance Copilot. Answer like a calm counter officer, not a policy document.\n" +
+                "Keep the answer under 120 words. Lead with the direct answer. Ask at most one next question.\n" +
+                "Use no more than three bullets. Do not include source IDs, bracket citations, or raw document codes in the answer text; the UI renders sources separately.\n" +
+                "Never invent personal data, policy, eligibility, amounts, status, or timelines. If the question is outside student finance or FAS, say what you can help with instead.\n" +
+                "Label prototype uncertainty in plain language only when it affects the answer.\n" +
+                $"Sources:\n{sourceText}");
+            history.AddUserMessage(request.Message);
+            ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>().GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+            text = string.IsNullOrWhiteSpace(answer.Content) ? "I do not have enough reliable information to answer that." : answer.Content.Trim();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "LLM call failed in KnowledgeAnswerHandler for message {Msg}", request.Message);
+            text = "I could not process that question right now. Try rephrasing it or ask a different question about FAS, payments, or your Education Account.";
+        }
         if (sources.Any(x => x.Citation.SourceStatus == "PROTOTYPE"))
         {
             text += "\n\nSome parts of this answer are based on prototype guidance and may change. Use the actions below when you want to continue in the portal.";

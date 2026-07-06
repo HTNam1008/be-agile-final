@@ -68,11 +68,11 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex ConfirmationYesPattern = new(
-        @"\b(yes|y|correct|confirm|confirmed|looks right|that's right|that is right)\b",
+        @"\b(yes|y|yeah|yup|yep|correct|confirm|confirmed|looks right|that's right|that is right)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex ConfirmationNoPattern = new(
-        @"\b(no|n|wrong|incorrect|edit|change|not correct|not right)\b",
+        @"\b(no|n|nah|nope|wrong|incorrect|edit|change|not correct|not right)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex NonePattern = new(
@@ -141,6 +141,10 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
         @"\b(wait|actually|sorry|correction|meant)\b.{0,20}\b(yes|y|no|n)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex IncomeConversionPattern = new(
+        @"monthly amount would be (\$?\d[\d,.]*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     static FasExtractionService()
     {
         using var doc = JsonDocument.Parse(AllExtractionSchema);
@@ -182,6 +186,14 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
         string? field = resolveTargetField(preferredField);
         if (field is null) return FasExtractionResult.Accepted();
 
+        // Run Heuristics FIRST
+        FasExtractionResult heuristicResult = ApplyFasAnswer(s, message, resolveTargetField, preferredField);
+        if (heuristicResult.Status is "ACCEPTED" or "MANUAL_FALLBACK")
+        {
+            return heuristicResult;
+        }
+
+        // Conversational or ambiguous input -> fall back to LLM
         FasInterviewData preSnapshot = Snapshot(s);
         FasExtractionResult? allResult = await TryLlmExtractAllAsync(s, message, field, ct);
         if (allResult?.Status == "ACCEPTED")
@@ -197,7 +209,7 @@ public sealed class FasExtractionService(Kernel kernel, ILogger<FasExtractionSer
             return llmResult;
         }
 
-        return ApplyFasAnswer(s, message, resolveTargetField, preferredField);
+        return heuristicResult;
     }
 
     private async Task<FasExtractionResult?> TryLlmExtractAllAsync(FasInterviewData s, string message, string expectedField, CancellationToken ct)
@@ -538,6 +550,24 @@ Rules:
             }
         }
 
+        if (field == "monthlyHouseholdIncome" && s.PendingIncomeConversion.HasValue)
+        {
+            FasExtractionResult confirmConversion = ExtractConfirmation(message);
+            if (confirmConversion.Value is bool accepted)
+            {
+                decimal converted = s.PendingIncomeConversion.Value;
+                s.PendingIncomeConversion = null;
+                if (accepted)
+                {
+                    ApplyExtraction(s, field, converted);
+                    return FasExtractionResult.Accepted(converted);
+                }
+                s.ClarificationField = field;
+                s.ValidationMessage = "Please provide your total monthly household income as an SGD amount, for example 3200.";
+                return FasExtractionResult.Clarify(s.ValidationMessage);
+            }
+        }
+
         if (field != "isWelfareHomeResident" && LooksLikeWelfareHomeCorrection(message, s.IsWelfareHomeResident))
         {
             FasExtractionResult welfareCorrection = ExtractWelfareHome(message);
@@ -591,6 +621,18 @@ Rules:
             s.ClarificationField = field;
             s.ValidationMessage = $"{message.Trim().TrimEnd('?', '.', '!')} maps to {suggestedNationality} for this form. Should I record parent or guardian nationality as {suggestedNationality}?";
             return FasExtractionResult.Clarify(s.ValidationMessage);
+        }
+
+        if (field == "monthlyHouseholdIncome" && result.Status == "CLARIFY" && result.Message is not null)
+        {
+            Match conversionMatch = IncomeConversionPattern.Match(result.Message);
+            if (conversionMatch.Success && decimal.TryParse(conversionMatch.Groups[1].Value.Replace("$", "").Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal converted))
+            {
+                s.PendingIncomeConversion = decimal.Round(converted, 2);
+                s.ClarificationField = field;
+                s.ValidationMessage = result.Message;
+                return result;
+            }
         }
 
         if (result.Status == "ACCEPTED")
@@ -826,6 +868,7 @@ Rules:
         s.ClarificationField = null;
         s.ValidationMessage = null;
         s.PendingParentNationalitySuggestion = null;
+        s.PendingIncomeConversion = null;
         s.ClarificationAttempts.Remove(field);
     }
 
@@ -849,6 +892,7 @@ Rules:
         ClarificationField = s.ClarificationField,
         ValidationMessage = s.ValidationMessage,
         PendingParentNationalitySuggestion = s.PendingParentNationalitySuggestion,
+        PendingIncomeConversion = s.PendingIncomeConversion,
         ClarificationAttempts = new Dictionary<string, int>(s.ClarificationAttempts),
         HelpAttempts = new Dictionary<string, int>(s.HelpAttempts),
     };
@@ -873,6 +917,7 @@ Rules:
         s.ClarificationField = snapshot.ClarificationField;
         s.ValidationMessage = snapshot.ValidationMessage;
         s.PendingParentNationalitySuggestion = snapshot.PendingParentNationalitySuggestion;
+        s.PendingIncomeConversion = snapshot.PendingIncomeConversion;
         s.ClarificationAttempts = snapshot.ClarificationAttempts;
         s.HelpAttempts = snapshot.HelpAttempts;
     }

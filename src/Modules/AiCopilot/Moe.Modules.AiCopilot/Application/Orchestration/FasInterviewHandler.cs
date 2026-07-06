@@ -18,9 +18,9 @@ public sealed class FasInterviewHandler(
     private static readonly Regex CorrectionIncomePattern = new(@"\b(income|salary|earn|household)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex CorrectionMembersPattern = new(@"\b(member|members|people|pax|household size)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex CorrectionOtherIncomePattern = new(@"\b(other income|other monthly|additional income)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex FasRestartIntentPattern = new(@"\b(restart|start over|start again|begin again|new check|resume|continue|go back|return|check|qualify|eligib)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasRestartIntentPattern = new(@"\b(restart|start over|start again|begin again|new check|resume|continue|go back|return|check|qualify|eligib|reset|redo|bluff(?:ing|ed)?|start fresh|from scratch|fresh check)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex FasRestartKnowledgeInterrupt = new(@"\b(what|how|requirements?|documents?|explain|description)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex FasRestartContextPattern = new(@"\b(fas|financial assistance|eligibility|application)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasRestartContextPattern = new(@"\b(fas|financial assistance|eligibility|application|this)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ContextualResumePattern = new(@"^\s*(resume|continue|resume please|continue please|i want to continue|keep going|go back)\s*[.!]?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex FasSchemeGuidancePattern = new(@"\b(scheme|schemes|recommend|recommendation|eligible|eligibility|qualify|apply for)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex LiveEligibWhichPattern = new(@"\b(WHICH|WHAT)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -60,6 +60,11 @@ public sealed class FasInterviewHandler(
         if (IsTerminalFasState(st.Status))
         {
             if (st.Status == "COMPLETE") return await HandleCompletedFas(c, request, st, pj, now, ct);
+            if (AiKeywordMatchers.LooksLikeCancelFas(request.Message))
+            {
+                st.Status = "CANCELLED"; st.ValidationMessage = "FAS check stopped by user."; SaveFasState(c, st, now);
+                return new("Got it. I won't use this FAS check. Ask me about bills, payments, Education Account, or restart FAS later.", "GENERAL", new(false, []), [], []);
+            }
             if (st.Status == "CANCELLED" && LooksLikeExplicitFasRestart(request.Message)) { st = await InitializeFasState(ct); isNew = true; }
             else if (LooksLikeExplicitFasRestart(request.Message) || LooksLikeContextualResume(request.Message))
             {
@@ -240,6 +245,21 @@ public sealed class FasInterviewHandler(
 
     private async Task<AiHandlerResult> HandleCompletedFas(AiConversation c, AiChatRequest req, FasInterviewData st, string? pj, DateTime now, CancellationToken ct)
     {
+        if (LooksLikeExplicitFasRestart(req.Message))
+        {
+            st = await InitializeFasState(ct);
+            c.FasSession!.StatusCode = "COLLECTING";
+            SaveFasState(c, st, now);
+            string firstQ = NextQuestion(st) ?? "Are you currently residing in an approved welfare home? Please answer yes or no.";
+            var fresh = FasConfirmationService.ToInterviewState(st, firstQ);
+            return new(firstQ, "FAS_INTERVIEW", new(false, []), [],
+                [new("NAVIGATE", "Open FAS application", "/portal/fas")], fresh)
+            {
+                FollowUpQuestions = [],
+                TurnIntent = "FAS_RESTART"
+            };
+        }
+
         var schemes = st.RecommendationMatches.Count > 0 ? st.RecommendationMatches.ToArray() : st.IsWelfareHomeResident == true ? FasEligibilityService.WelfareHomeRecommendationMatches(st) : [];
         var iv = FasConfirmationService.ToInterviewState(st, null, schemes);
         bool asks = IsLiveSchemeEligibilityRequest(req.Message) || AiKeywordMatchers.IsSchemeKbRequest(req.Message);
@@ -350,8 +370,8 @@ public sealed class FasInterviewHandler(
         if (preferred is not null)
         {
             if (preferred.Equals("isWelfareHomeResident", StringComparison.OrdinalIgnoreCase) && !s.IsWelfareHomeResident.HasValue) return "isWelfareHomeResident";
-            if (preferred.Equals("email", StringComparison.OrdinalIgnoreCase) && s.Email is null) return "email";
-            if (preferred.Equals("employmentStatusCode", StringComparison.OrdinalIgnoreCase) && s.IsWelfareHomeResident == false && s.EmploymentStatusCode is null) return "employmentStatusCode";
+            if (preferred.Equals("email", StringComparison.OrdinalIgnoreCase) && s.Email is null && FasEligibilityService.TryGetString(s.Profile, "email") is null) return "email";
+            if (preferred.Equals("employmentStatusCode", StringComparison.OrdinalIgnoreCase) && s.IsWelfareHomeResident == false && s.EmploymentStatusCode is null && FasEligibilityService.TryGetString(s.Profile, "employmentStatusCode") is null) return "employmentStatusCode";
             if (preferred.Equals("monthlyHouseholdIncome", StringComparison.OrdinalIgnoreCase) && IncomeFactsRequired(s) && s.IsWelfareHomeResident == false && !s.MonthlyHouseholdIncome.HasValue) return "monthlyHouseholdIncome";
             if (preferred.Equals("householdMemberCount", StringComparison.OrdinalIgnoreCase) && IncomeFactsRequired(s) && s.IsWelfareHomeResident == false && (!s.HouseholdMemberCount.HasValue || s.HouseholdMemberCount <= 0)) return "householdMemberCount";
             if (preferred.Equals("otherMonthlyIncome", StringComparison.OrdinalIgnoreCase) && IncomeFactsRequired(s) && s.IsWelfareHomeResident == false && !s.OtherMonthlyIncome.HasValue) return "otherMonthlyIncome";
@@ -365,8 +385,8 @@ public sealed class FasInterviewHandler(
             if (!s.OtherMonthlyIncome.HasValue) return "otherMonthlyIncome";
         }
         if (ParentNationalityRequired(s) && s.ParentNationalities.Count == 0) return "parentNationalities";
-        if (s.Email is null) return "email";
-        if (!s.IsWelfareHomeResident.Value && s.EmploymentStatusCode is null) return "employmentStatusCode";
+        if (s.Email is null && FasEligibilityService.TryGetString(s.Profile, "email") is null) return "email";
+        if (!s.IsWelfareHomeResident.Value && s.EmploymentStatusCode is null && FasEligibilityService.TryGetString(s.Profile, "employmentStatusCode") is null) return "employmentStatusCode";
         return null;
     }
 
@@ -390,10 +410,12 @@ public sealed class FasInterviewHandler(
     {
         var st = s?.CollectedFactsJson is { Length: > 0 } j ? JsonSerializer.Deserialize<FasInterviewData>(j, JsonOptions) : null;
         if (st is null) return r;
+        bool isActive = st.Status is "COLLECTING" or "CONFIRMING" or "CLARIFYING" or "COLLECTING_CONFIRMED";
+        if (r.InterviewState is not null) return r with { FasState = isActive ? st : null };
         return r with
         {
-            FasState = st,
-            InterviewState = r.InterviewState ?? (IsTerminalFasState(st.Status) ? FasConfirmationService.ToInterviewState(st, null) : null)
+            FasState = isActive ? st : null,
+            InterviewState = isActive ? FasConfirmationService.ToInterviewState(st, null) : null
         };
     }
 

@@ -4,7 +4,7 @@ namespace Moe.Modules.AiCopilot.Application.Orchestration;
 
 internal static class AiKeywordMatchers
 {
-    private static readonly Regex PaymentPattern = new(@"\b(PAY(?:MENT|ABLE|ING|S)?|BILL(?:S|ING)?|BALANCE|OUTSTANDING|REFUND|WITHDRAW(?:AL)?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PaymentPattern = new(@"\b(PAY(?:MENT|ABLE|ING|S)?|BILL(?:S|ING)?|BALANCE(?:S)?|OUTSTANDING|REFUND(?:S)?|WITHDRAW(?:AL)?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex PaymentContextPattern = new(@"\b(USE|USED|FOR|COVER|PAY)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex CourseExactPattern = new(@"^\s*(courses?|course\?)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex CourseWordPattern = new(@"\b(course|courses|enrolment|enrollment|class|classes)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -29,7 +29,7 @@ internal static class AiKeywordMatchers
     private static readonly Regex FieldValueStartPattern = new(@"^\s*(?:yes|no|y|n|\d[\d,]*(?:\.\d+)?|none|nil|zero|singapore(?:an| citizen)?|foreigner|permanent resident|pr)[\s,;.:!?]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ContinueActionPattern = new(@"\b(CONTINUE|RESUME|GO BACK|KEEP GOING|FINISH)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ContinueContextPattern = new(@"\b(FAS|FINANCIAL ASSISTANCE|ELIGIBILITY|CHECK|APPLICATION|INTERVIEW)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex FasInterviewAsksPattern = new(@"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW|QUESTION)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FasInterviewAsksPattern = new(@"\b(APPLY|APPLICATION|CHECK|ELIGIB|QUALIF|ASSESS|START|HELP|GUIDE|WANT|DO|WALK|TELL|SHOW|LEARN|KNOW|ASSIST|HOW|QUESTION|RESET|RESTART|REDO|BLUFF)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static string? ModeFromPlan(AiTurnPlan plan) => plan.Intent switch
     {
@@ -67,7 +67,12 @@ internal static class AiKeywordMatchers
         ScopeTestPattern.IsMatch(message);
 
     public static bool LooksLikeCapabilityQuestion(string message) =>
-        !IsFasQuestion(message) && CapabilityPattern.IsMatch(message);
+        !IsFasQuestion(message) &&
+        !message.Contains("FAS", StringComparison.OrdinalIgnoreCase) &&
+        !message.Contains("financial assistance", StringComparison.OrdinalIgnoreCase) &&
+        !message.Contains("bursary", StringComparison.OrdinalIgnoreCase) &&
+        !message.Contains("subsidy", StringComparison.OrdinalIgnoreCase) &&
+        CapabilityPattern.IsMatch(message);
 
     public static bool LooksLikeAdminCenterQuestion(string message) =>
         AdminCenterPattern.IsMatch(message);
@@ -153,10 +158,8 @@ internal static class AiKeywordMatchers
         string value = string.IsNullOrEmpty(domain) ? message : $"{domain} {message}";
         string msgOnly = message;
 
-        if (string.Equals(domain, "PAYMENT", StringComparison.OrdinalIgnoreCase) || LooksLikePaymentQuery(msgOnly)) return AiTurnIntent.PaymentQuery;
-        if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message))
-            return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsLiveSchemeEligibilityRequest(msgOnly)) return AiTurnIntent.StartInterview;
+        if (IsFasInterviewRequest(value)) return AiTurnIntent.StartInterview;
         if (current != "FAS_INTERVIEW" && (IsSchemeKbRequest(msgOnly) || LooksLikeNaturalFasAidQuestion(msgOnly)))
             return AiTurnIntent.AnswerKnowledgeQuestion;
         if (IsFasKnowledgeInterrupt(msgOnly)) return AiTurnIntent.AnswerKnowledgeQuestion;
@@ -164,8 +167,11 @@ internal static class AiKeywordMatchers
             return AiTurnIntent.ContinueInterview;
         if (current == "FAS_INTERVIEW" && IsLikelyInterviewAnswer(msgOnly))
             return AiTurnIntent.SubmitInterviewAnswer;
-        if (IsFasInterviewRequest(value)) return AiTurnIntent.StartInterview;
         if (current == "FAS_INTERVIEW") return AiTurnIntent.SubmitInterviewAnswer;
+
+        if (string.Equals(domain, "PAYMENT", StringComparison.OrdinalIgnoreCase) || LooksLikePaymentQuery(msgOnly)) return AiTurnIntent.PaymentQuery;
+        if (LooksLikeCapabilityQuestion(message) || LooksLikeAdminCenterQuestion(message))
+            return AiTurnIntent.AnswerKnowledgeQuestion;
         return AiTurnIntent.Fallback;
     }
 
@@ -177,8 +183,8 @@ internal static class AiKeywordMatchers
 
     private static bool IsFasInterviewRequest(string value)
     {
-        bool mentionsFas = value.Contains("FAS") || value.Contains("FINANCIAL ASSISTANCE");
+        bool mentionsFas = value.Contains("FAS", StringComparison.OrdinalIgnoreCase) || value.Contains("FINANCIAL ASSISTANCE", StringComparison.OrdinalIgnoreCase);
         bool asksForInterview = FasInterviewAsksPattern.IsMatch(value);
-        return (value.Contains("ELIGIB") || value.Contains("QUALIF")) && mentionsFas || (mentionsFas && asksForInterview);
+        return (value.Contains("ELIGIB", StringComparison.OrdinalIgnoreCase) || value.Contains("QUALIF", StringComparison.OrdinalIgnoreCase)) && mentionsFas || (mentionsFas && asksForInterview);
     }
 }
