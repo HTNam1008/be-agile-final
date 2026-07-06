@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Moe.StudentFinance.Persistence;
 
@@ -11,9 +12,11 @@ using Moe.StudentFinance.Persistence;
 namespace Moe.StudentFinance.Migrations.Migrations
 {
     [DbContext(typeof(MoeDbContext))]
-    partial class MoeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260704064828_AddAiFasSession")]
+    partial class AddAiFasSession
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -146,92 +149,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.HasKey("ConversationId");
 
                     b.ToTable("FasSession", "ai");
-                });
-
-            modelBuilder.Entity("Moe.Modules.AiCopilot.Domain.AiKnowledgeDocument", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(100)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("AllowedIntentsJson")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)")
-                        .HasColumnName("AllowedIntents");
-
-                    b.Property<bool>("AlwaysInclude")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Domain")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<DateOnly>("EffectiveDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("EmbeddingJson")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("Embedding");
-
-                    b.Property<string>("FollowUpsJson")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)")
-                        .HasColumnName("FollowUps");
-
-                    b.Property<string>("ReviewOwner")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("Section")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<string>("SynonymsJson")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)")
-                        .HasColumnName("Synonyms");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Url")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("Version")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Domain", "Status");
-
-                    b.ToTable("KnowledgeDocument", "ai");
                 });
 
             modelBuilder.Entity("Moe.Modules.AiCopilot.Domain.AiMessage", b =>
@@ -2236,12 +2153,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<int?>("FrequencyInterval")
                         .HasColumnType("int");
 
-                    b.Property<int?>("MonthlyDay")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("WeeklyDayOfWeek")
-                        .HasColumnType("int");
-
                     b.Property<decimal>("MaxTotalAmount")
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
@@ -2284,9 +2195,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<long?>("UpdatedByLoginAccountId")
                         .HasColumnType("bigint");
 
-                    b.Property<int?>("WeeklyDayOfWeek")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
 
                     b.HasIndex("OrganizationId", "CampaignCode")
@@ -2296,11 +2204,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             t.HasCheckConstraint("CK_TopUpCampaign_Amount", "[DefaultTopUpAmount] > 0");
 
-                            t.HasCheckConstraint("CK_TopUpCampaign_MonthlyDay", "[MonthlyDay] IS NULL OR [MonthlyDay] BETWEEN 1 AND 31");
-
                             t.HasCheckConstraint("CK_TopUpCampaign_Schedule", "[ScheduleTypeCode] != 'RECURRING' OR ([FrequencyCode] IS NOT NULL AND [FrequencyInterval] IS NOT NULL AND [EndDate] IS NOT NULL AND [EndDate] >= [StartDate])");
-
-                            t.HasCheckConstraint("CK_TopUpCampaign_WeeklyDayOfWeek", "[WeeklyDayOfWeek] IS NULL OR [WeeklyDayOfWeek] BETWEEN 0 AND 6");
                         });
                 });
 

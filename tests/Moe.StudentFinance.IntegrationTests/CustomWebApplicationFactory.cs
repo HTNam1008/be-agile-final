@@ -15,6 +15,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moe.Application.Abstractions.Clock;
 using Moe.Infrastructure.Shared.Clock;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Embeddings;
+using Moe.Modules.AiCopilot.Application.Knowledge;
+using Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 using Moe.Infrastructure.Shared.Security;
 using Moe.Modules.CourseBilling.Domain.Courses;
 using Moe.Modules.CourseBilling.IGateway.Storage;
@@ -46,7 +50,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["AzureOpenAI:Endpoint"] = "https://integration-test.openai.azure.com/",
                 ["AzureOpenAI:ApiKey"] = "integration-test-api-key",
                 ["AzureOpenAI:ChatDeploymentName"] = "integration-test-chat",
-                ["AiCopilot:PlannerV2UseModel"] = "false"
+                ["AiCopilot:PlannerV2UseModel"] = "false",
+                ["AiCopilot:AgenticEnabled"] = "false"
+
             });
         });
 
@@ -55,6 +61,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // Remove the app's DbContext registration.
             services.RemoveAll(typeof(DbContextOptions<MoeDbContext>));
             services.RemoveAll(typeof(DbContextOptions));
+            services.RemoveAll<ITextEmbeddingGenerationService>();
+            services.AddSingleton<ITextEmbeddingGenerationService>(new FakeTextEmbeddingGenerationService());
 
             // Create a single shared internal service provider for all in-memory database contexts.
             var inMemoryServiceProvider = new ServiceCollection()
@@ -554,6 +562,25 @@ internal sealed class IntegrationTestDbSeeder(IServiceProvider serviceProvider) 
         entity.GetType().GetProperty(propertyName)!.SetValue(entity, value);
     }
 }
+
+#pragma warning disable SKEXP0001
+internal sealed class FakeTextEmbeddingGenerationService : ITextEmbeddingGenerationService
+{
+    private static readonly ReadOnlyMemory<float> DummyEmbedding = new float[] { 1, 0, 0, 0, 0, 0, 0, 0 };
+
+    public IReadOnlyDictionary<string, object?> Attributes { get; } = new Dictionary<string, object?>();
+
+    public Task<ReadOnlyMemory<float>> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)
+        => Task.FromResult(DummyEmbedding);
+
+    public Task<IList<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IList<string> texts, CancellationToken cancellationToken = default)
+        => Task.FromResult<IList<ReadOnlyMemory<float>>>(texts.Select(_ => DummyEmbedding).ToArray());
+
+    public Task<IList<ReadOnlyMemory<float>>> GenerateEmbeddingsAsync(IList<string> data, Kernel? kernel, CancellationToken cancellationToken = default)
+        => Task.FromResult<IList<ReadOnlyMemory<float>>>(data.Select(_ => DummyEmbedding).ToArray());
+}
+#pragma warning restore SKEXP0001
+
 
 public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {

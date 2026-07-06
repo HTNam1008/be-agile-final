@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Moe.StudentFinance.Persistence;
 
@@ -11,9 +12,11 @@ using Moe.StudentFinance.Persistence;
 namespace Moe.StudentFinance.Migrations.Migrations
 {
     [DbContext(typeof(MoeDbContext))]
-    partial class MoeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260704103131_AddAiKnowledgeDocument")]
+    partial class AddAiKnowledgeDocument
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -178,10 +181,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
 
                     b.Property<DateOnly>("EffectiveDate")
                         .HasColumnType("date");
-
-                    b.Property<string>("EmbeddingJson")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("Embedding");
 
                     b.Property<string>("FollowUpsJson")
                         .HasMaxLength(1000)
@@ -2236,12 +2235,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<int?>("FrequencyInterval")
                         .HasColumnType("int");
 
-                    b.Property<int?>("MonthlyDay")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("WeeklyDayOfWeek")
-                        .HasColumnType("int");
-
                     b.Property<decimal>("MaxTotalAmount")
                         .HasPrecision(19, 2)
                         .HasColumnType("decimal(19,2)");
@@ -2284,9 +2277,6 @@ namespace Moe.StudentFinance.Migrations.Migrations
                     b.Property<long?>("UpdatedByLoginAccountId")
                         .HasColumnType("bigint");
 
-                    b.Property<int?>("WeeklyDayOfWeek")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
 
                     b.HasIndex("OrganizationId", "CampaignCode")
@@ -2296,11 +2286,7 @@ namespace Moe.StudentFinance.Migrations.Migrations
                         {
                             t.HasCheckConstraint("CK_TopUpCampaign_Amount", "[DefaultTopUpAmount] > 0");
 
-                            t.HasCheckConstraint("CK_TopUpCampaign_MonthlyDay", "[MonthlyDay] IS NULL OR [MonthlyDay] BETWEEN 1 AND 31");
-
                             t.HasCheckConstraint("CK_TopUpCampaign_Schedule", "[ScheduleTypeCode] != 'RECURRING' OR ([FrequencyCode] IS NOT NULL AND [FrequencyInterval] IS NOT NULL AND [EndDate] IS NOT NULL AND [EndDate] >= [StartDate])");
-
-                            t.HasCheckConstraint("CK_TopUpCampaign_WeeklyDayOfWeek", "[WeeklyDayOfWeek] IS NULL OR [WeeklyDayOfWeek] BETWEEN 0 AND 6");
                         });
                 });
 

@@ -1,134 +1,124 @@
-using System.Reflection;
-using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Moe.Modules.AiCopilot.Application.Knowledge;
 
 namespace Moe.Modules.AiCopilot.Infrastructure.Knowledge;
 
 public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
 {
-    private static readonly KnowledgeDocument[] StaticDocs =
-    [
-        new("PAY-ACCOUNT-001", "Student Finance AI Scope", "Education account and outstanding charges", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "The assistant presents current Education Account balance, total outstanding charges, and net available amount. Outstanding charges are highlighted before new enrolments or withdrawals.", "/portal/account", ["education account", "balance", "available amount", "outstanding charges"], false),
-        new("PAY-METHOD-001", "Student Finance AI Scope", "Payment methods", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "Course fees and bills may use Education Account funds, online payment, or split payment when supported. Insufficient Education Account funds require another payment source for the remainder.", "/portal/bills", ["payment method", "pay bill", "course fees", "split payment"], false),
-        new("PAY-REFUND-001", "Student Finance AI Scope", "Refund guidance", "PAYMENT", "OFFICIAL", "3.0", new DateOnly(2026, 6, 24),
-            "Refund explanations must use the enrollment's snapshotted refund policy and actual refund status. The assistant must not invent eligibility, amounts, timelines, or documentation.", "/portal/courses", ["refund", "withdrawal refund", "refund status", "refund policy"], false),
-        new("PROTO-WITHDRAW-001", "Prototype Finance Guidance", "Education Account withdrawal", "PAYMENT", "PROTOTYPE", "1.0", new DateOnly(2026, 6, 24),
-            "Withdrawal policy is not represented by a live transactional tool in this prototype. Direct users to the Education Account page and Admin Center for authoritative eligibility, limits, and timelines.", "/portal/account", ["withdraw", "withdrawal", "limits", "admin center"], false),
-        new("FAS-GLOSSARY-001", "Financial Assistance Schemes", "FAS overview and terminology", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 6, 25),
-            "Financial Assistance Schemes help eligible students with school fees, bursaries, and education-related costs. Eligibility commonly uses monthly gross household income (GHI), per-capita income (PCI), student level, school, and parent or guardian nationality. The FAS page remains the source of truth for live application status and available schemes.", "/portal/fas", ["financial assistance", "fas", "scheme", "aid"], false),
-        new("FAS-JC-CI-001", "MOE FAS", "JC/CI eligibility and benefits", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 1, 1),
-            "At Junior College or Centralised Institute level, MOE FAS eligibility can be based on monthly GHI of $4,000 or less, or monthly PCI of $1,000 or less. Benefits may include subsidy of school, miscellaneous, and examination fees, plus bursary support. Students should apply through the FAS application journey and review the final form before submission.", "/portal/fas", ["jc fas", "ci fas", "moe fas", "financial assistance scheme"], false),
-        new("FAS-TIERED-SUBSIDY-001", "Tiered Fee Subsidy", "Income-tiered subsidy guidance", "FAS", "GUIDE", "1.0", new DateOnly(2026, 1, 1),
-            "The Tiered Fee Subsidy uses income bands such as GHI and PCI to determine fee support. Higher support applies to lower-income tiers. Scheme names and exact subsidy values may vary by level and school, so students should use the FAS page to check live eligible schemes and submit only after reviewing the form.", "/portal/fas", ["tiered fee subsidy", "income tier", "subsidy", "isb"], false),
-        new("FAS-BURSARY-FULLTIME-001", "Government Bursary", "Full-time higher education bursary guidance", "FAS", "OFFICIAL", "1.0", new DateOnly(2026, 8, 1),
-            "Government bursaries for full-time ITE, polytechnic, arts institution, and autonomous university students use income tiers such as GHI and PCI. Examples include Higher Education Community Bursary and Higher Education Bursary. Amounts vary by course type and tier; students should confirm live eligibility and selected schemes in the FAS application.", "/portal/fas", ["bursary", "hecb", "heb", "government bursary", "university bursary", "polytechnic bursary"], false),
-    ];
-
-    private static readonly Dictionary<string, double> StatusRank = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
+    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["OFFICIAL"] = 3.0,
-        ["GUIDE"] = 2.0,
-        ["FAQ"] = 1.0,
-        ["PROTOTYPE"] = 0.0
+        "a", "an", "and", "are", "as", "at", "be", "can", "do", "does", "for", "from", "how",
+        "i", "in", "is", "it", "me", "my", "of", "on", "or", "the", "this", "to", "what",
+        "when", "where", "which", "with", "you"
     };
 
-    private static readonly HashSet<string> AllowedIntents = new(StringComparer.OrdinalIgnoreCase)
+    private readonly IKnowledgeDocumentStore _store;
+    private readonly ILogger<LocalKnowledgeRetriever> _logger;
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
+    private KnowledgeDocument[]? _documents;
+    private DateTime _lastLoadUtc = DateTime.MinValue;
+
+    public LocalKnowledgeRetriever(IKnowledgeDocumentStore store, ILogger<LocalKnowledgeRetriever> logger)
     {
-        "AnswerKnowledgeQuestion", "ContinueInterview", "StartInterview", "SubmitInterviewAnswer", "PaymentQuery", "Fallback"
-    };
-
-    private static readonly KnowledgeDocument[] FasChunks = LoadFasChunksFromAssembly();
-
-    private readonly KnowledgeDocument[] _documents;
-
-    public LocalKnowledgeRetriever()
-    {
-        HashSet<string> packIds = [.. FasChunks.Select(x => x.Id)];
-        _documents = [.. StaticDocs.Where(x => !packIds.Contains(x.Id)), .. FasChunks];
-        ValidateKnowledgePacks(_documents);
+        _store = store;
+        _logger = logger;
     }
 
-    public IReadOnlyList<KnowledgeResult> Retrieve(string query, string? domain, int limit = 4)
+    public async Task<IReadOnlyList<KnowledgeResult>> RetrieveAsync(string query, string? domain, int limit = 4, CancellationToken ct = default)
     {
-        HashSet<string> terms = Tokenize(query);
-        string normalizedDomain = domain?.ToUpperInvariant() ?? "GENERAL";
-
-        var scored = _documents.Select(doc =>
+        try
         {
-            HashSet<string> documentTerms = Tokenize($"{doc.Title} {doc.Section} {doc.Content}");
-            foreach (string synonym in doc.Synonyms ?? [])
-            {
-                foreach (string term in Tokenize(synonym))
-                    documentTerms.Add(term);
-            }
+            await EnsureDocumentsLoadedAsync(ct);
+            string[] queryTerms = Terms(query).ToArray();
+            if (queryTerms.Length == 0) return Array.Empty<KnowledgeResult>();
 
-            double lexical = terms.Count == 0 ? 0 : terms.Count(documentTerms.Contains) / (double)terms.Count;
-            double phrase = doc.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ? 1.5 : 0;
-            double domainBoost = doc.Domain == normalizedDomain ? 1.25 : 0;
-            double synonymBoost = (doc.Synonyms ?? []).Any(s => query.Contains(s, StringComparison.OrdinalIgnoreCase)) ? 1.0 : 0;
-            double schemeBoost = SchemeSpecificBoost(doc, terms);
-            double documentBoost = DocumentSpecificBoost(doc, terms);
-            double rankWeight = StatusRank.GetValueOrDefault(doc.Status, 0);
+            var scored = _documents!
+                .Where(doc => SearchesDomain(doc, domain))
+                .Select(doc => (Doc: doc, Score: Score(doc, query, queryTerms)))
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
+                .ToList();
 
-            return (Doc: doc, Score: lexical + phrase + domainBoost + synonymBoost + schemeBoost + documentBoost + rankWeight);
-        })
-        .Where(x => x.Score > 0.25)
-        .OrderByDescending(x => x.Score)
-        .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
-        .ToList();
+            scored = DeduplicateConflicting(scored);
 
-        HashSet<string> includedIds = [.. scored.Select(x => x.Doc.Id)];
-        foreach (var doc in _documents.Where(d => d.AlwaysInclude && d.Domain == normalizedDomain && !includedIds.Contains(d.Id)))
+            return scored
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
+                .Take(Math.Clamp(limit, 1, 8))
+                .Select(MakeResult)
+                .ToArray();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            scored.Add((doc, StatusRank.GetValueOrDefault(doc.Status, 0)));
+            _logger.LogError(ex, "Knowledge retrieval failed for query: {Query}", query);
+            return Array.Empty<KnowledgeResult>();
+        }
+    }
+
+    private async Task EnsureDocumentsLoadedAsync(CancellationToken ct)
+    {
+        if (_documents is not null && DateTime.UtcNow - _lastLoadUtc < CacheDuration) return;
+        await _cacheLock.WaitAsync(ct);
+        try
+        {
+            if (_documents is not null && DateTime.UtcNow - _lastLoadUtc < CacheDuration) return;
+            _documents = (await _store.GetAllAsync(ct)).ToArray();
+            _lastLoadUtc = DateTime.UtcNow;
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    private static bool SearchesDomain(KnowledgeDocument doc, string? domain) =>
+        string.IsNullOrWhiteSpace(domain) ||
+        domain.Equals("GENERAL", StringComparison.OrdinalIgnoreCase) ||
+        doc.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase);
+
+    private static double Score(KnowledgeDocument doc, string query, string[] queryTerms)
+    {
+        string title = doc.Title.ToUpperInvariant();
+        string section = doc.Section.ToUpperInvariant();
+        string content = doc.Content.ToUpperInvariant();
+        string[] synonymTerms = (doc.Synonyms ?? []).SelectMany(Terms).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        string fullText = $"{title} {section} {content} {string.Join(' ', synonymTerms)}";
+        int hits = queryTerms.Count(term => fullText.Contains(term, StringComparison.Ordinal));
+        if (hits == 0 && !doc.AlwaysInclude) return 0;
+
+        double score = hits / (double)queryTerms.Length;
+        score += queryTerms.Count(term => title.Contains(term, StringComparison.Ordinal)) * 0.30;
+        score += queryTerms.Count(term => section.Contains(term, StringComparison.Ordinal)) * 0.25;
+        score += queryTerms.Count(term => synonymTerms.Contains(term, StringComparer.OrdinalIgnoreCase)) * 0.35;
+
+        string normalizedQuery = query.ToUpperInvariant();
+        foreach (string synonym in doc.Synonyms ?? [])
+        {
+            if (normalizedQuery.Contains(synonym.ToUpperInvariant(), StringComparison.Ordinal))
+                score += 0.70;
         }
 
-        scored = DeduplicateConflicting(scored);
-
-        return scored
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Doc.Id, StringComparer.Ordinal)
-            .Take(Math.Clamp(limit, 1, 8))
-            .Select(x => new KnowledgeResult(
-                new KnowledgeCitation(x.Doc.Id, x.Doc.Title, x.Doc.Section, x.Doc.Status,
-                    x.Doc.Version, x.Doc.EffectiveDate, x.Doc.Url),
-                x.Doc.Content,
-                x.Score,
-                x.Doc.FollowUps ?? DefaultFollowUps(x.Doc.Domain, x.Doc.Title),
-                x.Doc.AllowedIntents ?? DefaultAllowedIntents(x.Doc.Domain),
-                x.Doc.ReviewOwner))
-            .ToArray();
+        if (doc.AlwaysInclude) score += 0.10;
+        if (doc.Status.Equals("OFFICIAL", StringComparison.OrdinalIgnoreCase)) score += 0.06;
+        else if (doc.Status.Equals("GUIDE", StringComparison.OrdinalIgnoreCase)) score += 0.03;
+        return score;
     }
 
-    private static HashSet<string> Tokenize(string value) => Regex.Matches(value.ToLowerInvariant(), "[a-z0-9]+")
-        .Select(match => match.Value).Where(term => term.Length > 2).ToHashSet(StringComparer.Ordinal);
+    private static IEnumerable<string> Terms(string text) =>
+        text.ToUpperInvariant()
+            .Split([' ', '\t', '\n', '\r', ',', '.', '!', '?', ':', ';', '/', '\\', '-', '(', ')', '[', ']', '"', '\''], StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => x.Length > 1 && !StopWords.Contains(x));
 
-    private static double SchemeSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
-    {
-        string schemeText = $"{doc.Id} {doc.Title} {doc.Section} {string.Join(' ', doc.Synonyms ?? [])}";
-        HashSet<string> schemeTerms = Tokenize(schemeText);
-        string[] schemeKeywords =
-        [
-            "bursary", "hecb", "heb", "tiered", "subsidy", "isb", "jc", "ci",
-            "apply", "application", "process", "steps", "portal", "autofill", "documents"
-        ];
-
-        return queryTerms
-            .Where(term => schemeKeywords.Contains(term, StringComparer.OrdinalIgnoreCase) && schemeTerms.Contains(term))
-            .Sum(_ => 1.75);
-    }
-
-    private static double DocumentSpecificBoost(KnowledgeDocument doc, HashSet<string> queryTerms)
-    {
-        if (!queryTerms.Overlaps(new[] { "document", "documents", "proof", "income", "submitting", "submit" }))
-            return 0;
-        string text = $"{doc.Title} {doc.Section} {doc.Content} {string.Join(' ', doc.Synonyms ?? [])}";
-        if (!Regex.IsMatch(text, @"\b(supporting documents|income proof|payslips?|cpf|iras|attach documents)\b", RegexOptions.IgnoreCase))
-            return 0;
-        return 3.5;
-    }
+    private static KnowledgeResult MakeResult((KnowledgeDocument Doc, double Score) x) => new(
+        new KnowledgeCitation(x.Doc.Id, x.Doc.Title, x.Doc.Section, x.Doc.Status,
+            x.Doc.Version, x.Doc.EffectiveDate, x.Doc.Url),
+        x.Doc.Content, x.Score,
+        x.Doc.FollowUps ?? DefaultFollowUps(x.Doc.Domain, x.Doc.Title),
+        x.Doc.AllowedIntents ?? DefaultAllowedIntents(x.Doc.Domain),
+        x.Doc.ReviewOwner);
 
     private static List<(KnowledgeDocument Doc, double Score)> DeduplicateConflicting(List<(KnowledgeDocument Doc, double Score)> scored)
     {
@@ -160,91 +150,6 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         return overlapKeywords.Any(k => aText.Contains(k) && bText.Contains(k));
     }
 
-    // ── Embedded resource loader ──
-
-    private static KnowledgeDocument[] LoadFasChunksFromAssembly()
-    {
-        Assembly assembly = typeof(LocalKnowledgeRetriever).Assembly;
-        string[] resourceNames = assembly.GetManifestResourceNames()
-            .Where(n => n.Contains("FasChunks") && n.EndsWith(".md"))
-            .OrderBy(n => n)
-            .ToArray();
-
-        var chunks = new List<KnowledgeDocument>();
-        foreach (string resourceName in resourceNames)
-        {
-            using Stream stream = assembly.GetManifestResourceStream(resourceName)
-                ?? throw new InvalidOperationException($"Missing embedded resource: {resourceName}");
-            using var reader = new StreamReader(stream);
-            string raw = reader.ReadToEnd();
-            var (frontmatter, body) = SplitFrontmatter(raw);
-            var meta = ParseFrontmatter(frontmatter);
-
-            string domain = meta.GetValueOrDefault("domain", "FAS").ToUpperInvariant();
-            string chunkId = MapChunkId(Required(meta, "chunk_id", resourceName), domain);
-            string title = Required(meta, "title", resourceName);
-            string status = ResolveSourceStatus(meta);
-            string effectiveDateStr = meta.GetValueOrDefault("effective_date", meta.GetValueOrDefault("last_reviewed", ""));
-            if (!DateOnly.TryParse(effectiveDateStr, out DateOnly effectiveDate))
-            {
-                effectiveDate = DateOnly.Parse(Required(meta, "last_reviewed", resourceName));
-            }
-            bool alwaysInclude = string.Equals(meta.GetValueOrDefault("always_include", "false"), "true", StringComparison.OrdinalIgnoreCase);
-            string[] synonyms = meta.TryGetValue("synonyms", out string? synStr) ? ParseYamlList(synStr) : [];
-            string[] allowedIntents = meta.TryGetValue("allowed_intents", out string? intents) ? ParseYamlList(intents) : DefaultAllowedIntents(domain);
-            string[] followUps = meta.TryGetValue("follow_ups", out string? followUpText) ? ParseYamlList(followUpText) : DefaultFollowUps(domain, title);
-            string content = body.Trim();
-            string url = meta.GetValueOrDefault("url", domain == "PAYMENT" ? "/portal/bills" : "/portal/fas");
-
-            chunks.Add(new KnowledgeDocument(chunkId, title, title, domain, status, "1.0", effectiveDate,
-                content, url, synonyms, alwaysInclude, meta.GetValueOrDefault("review_owner", "Student Finance Product"), allowedIntents, followUps));
-        }
-        KnowledgeDocument[] docs = chunks.ToArray();
-        ValidateKnowledgePacks(docs);
-        return docs;
-    }
-
-    public static void ValidateKnowledgePacks(IEnumerable<KnowledgeDocument> docs)
-    {
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (KnowledgeDocument doc in docs)
-        {
-            if (string.IsNullOrWhiteSpace(doc.Id)) throw new InvalidOperationException("Knowledge chunk is missing chunk_id.");
-            if (!seen.Add(doc.Id)) throw new InvalidOperationException($"Duplicate knowledge chunk_id: {doc.Id}.");
-            if (string.IsNullOrWhiteSpace(doc.Domain)) throw new InvalidOperationException($"{doc.Id} is missing domain.");
-            if (string.IsNullOrWhiteSpace(doc.Title)) throw new InvalidOperationException($"{doc.Id} is missing title.");
-            if (!StatusRank.ContainsKey(doc.Status)) throw new InvalidOperationException($"{doc.Id} has invalid source_status {doc.Status}.");
-            if (doc.EffectiveDate > today.AddYears(2)) throw new InvalidOperationException($"{doc.Id} has an unrealistic effective_date.");
-            if (string.IsNullOrWhiteSpace(doc.ReviewOwner)) throw new InvalidOperationException($"{doc.Id} is missing review_owner.");
-            if (doc.Synonyms is not null && doc.Synonyms.Length == 0) throw new InvalidOperationException($"{doc.Id} has empty synonyms.");
-            if (doc.AllowedIntents is not null && doc.AllowedIntents.Length == 0) throw new InvalidOperationException($"{doc.Id} has empty allowed_intents.");
-            if (doc.FollowUps is not null && doc.FollowUps.Length == 0) throw new InvalidOperationException($"{doc.Id} has empty follow_ups.");
-            string? invalidIntent = (doc.AllowedIntents ?? DefaultAllowedIntents(doc.Domain)).FirstOrDefault(intent => !AllowedIntents.Contains(intent));
-            if (invalidIntent is not null) throw new InvalidOperationException($"{doc.Id} has invalid allowed_intent {invalidIntent}.");
-        }
-    }
-
-    private static string Required(Dictionary<string, string> meta, string key, string resourceName) =>
-        meta.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"{resourceName} is missing required metadata '{key}'.");
-
-    private static string ResolveSourceStatus(Dictionary<string, string> meta)
-    {
-        if (meta.TryGetValue("source_status", out string? status))
-        {
-            return status.ToUpperInvariant();
-        }
-        string confidence = meta.GetValueOrDefault("confidence", "medium");
-        return confidence switch
-        {
-            "high" => "OFFICIAL",
-            "medium" or "medium-verify-with-client" => "GUIDE",
-            _ => "FAQ"
-        };
-    }
-
     private static string[] DefaultAllowedIntents(string domain) =>
         domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase)
             ? ["AnswerKnowledgeQuestion", "PaymentQuery"]
@@ -266,81 +171,4 @@ public sealed class LocalKnowledgeRetriever : IKnowledgeRetriever
         }
         return ["How is PCI calculated?", "Which schemes can I apply for?", "What documents prove income?"];
     }
-
-    private static (string frontmatter, string body) SplitFrontmatter(string raw)
-    {
-        if (!raw.StartsWith("---", StringComparison.Ordinal))
-            return ("", raw);
-
-        int firstLineEnd = raw.IndexOf('\n');
-        if (firstLineEnd < 0 || raw[..firstLineEnd].Trim() != "---")
-            return ("", raw);
-
-        int endIndex = raw.IndexOf("\n---", firstLineEnd + 1, StringComparison.Ordinal);
-        if (endIndex < 0)
-            return ("", raw);
-
-        int bodyStart = raw.IndexOf('\n', endIndex + 1);
-        if (bodyStart < 0)
-            return (raw[(firstLineEnd + 1)..endIndex], "");
-
-        return (raw[(firstLineEnd + 1)..endIndex], raw[(bodyStart + 1)..]);
-    }
-
-    private static Dictionary<string, string> ParseFrontmatter(string yaml)
-    {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string line in yaml.Split('\n'))
-        {
-            var match = Regex.Match(line, @"^(\w[\w-]*):\s*(.+)$");
-            if (match.Success)
-            {
-                result[match.Groups[1].Value] = match.Groups[2].Value.Trim().Trim('"');
-            }
-        }
-        return result;
-    }
-
-    private static string[] ParseYamlList(string value)
-    {
-        value = value.Trim();
-        var match = Regex.Match(value, @"^\[(.*)\]$");
-        if (!match.Success)
-        {
-            return value.Split(',')
-                .Select(x => x.Trim().Trim('"'))
-                .Where(x => x.Length > 0)
-                .ToArray();
-        }
-        return match.Groups[1].Value.Split(',')
-            .Select(x => x.Trim().Trim('"'))
-            .Where(x => x.Length > 0)
-            .ToArray();
-    }
-
-    private static string MapChunkId(string chunkId, string domain)
-    {
-        if (domain.Equals("PAYMENT", StringComparison.OrdinalIgnoreCase))
-        {
-            return $"PAY-{chunkId.ToUpperInvariant()}";
-        }
-        return chunkId switch
-        {
-            "chunk-01-glossary" => "FAS-GLOSSARY-001",
-            "chunk-02-scope-and-fallback" => "FAS-SCOPE-001",
-            "chunk-03-jc-ci-fas" => "FAS-JC-CI-001",
-            "chunk-04-tiered-fee-subsidy" => "FAS-TIERED-SUBSIDY-001",
-            "chunk-05-bursary-fulltime" => "FAS-BURSARY-FULLTIME-001",
-            "chunk-06-bursary-parttime" => "FAS-BURSARY-PARTTIME-001",
-            "chunk-07-application-process" => "FAS-APPLICATION-001",
-            "chunk-08-faqs" => "FAS-FAQS-001",
-            _ => $"FAS-{chunkId.ToUpperInvariant()}"
-        };
-    }
-
-    public sealed record KnowledgeDocument(
-        string Id, string Title, string Section, string Domain, string Status,
-        string Version, DateOnly EffectiveDate, string Content, string? Url,
-        string[]? Synonyms, bool AlwaysInclude, string ReviewOwner = "Student Finance Product",
-        string[]? AllowedIntents = null, string[]? FollowUps = null);
 }

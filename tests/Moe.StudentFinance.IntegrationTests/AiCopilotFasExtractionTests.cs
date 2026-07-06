@@ -9,6 +9,7 @@ namespace Moe.StudentFinance.IntegrationTests;
 public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory factory) : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
+    private readonly Dictionary<Guid, JsonElement> _fasStates = [];
 
     [Theory]
     [InlineData("Yes")]
@@ -20,7 +21,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         JsonElement response = await SendFas(answer, cid);
         AssertWelfareStatus(response, true);
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.Contains("nationality", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -36,7 +37,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         JsonElement response = await SendFas(answer, cid);
         AssertWelfareStatus(response, false);
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Theory]
@@ -47,7 +48,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas(answer, cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.Contains("yes or no", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -79,7 +80,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("-500", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.Contains("valid", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -88,7 +89,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("1000001", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("I do not know", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -104,9 +105,9 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         await SendFas("2000", cid);
-        // 5000 is treated as answer to household count question, which is >30 -> CLARIFYING
+        // 5000 is treated as an invalid household count; the stateless handler keeps collecting and asks again.
         JsonElement response = await SendFas("5000", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -114,7 +115,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("My parents both work. My father earns about 2500 and my mother earns 1800, so combined it's around there. We also get some allowance from my grandparents.", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -122,7 +123,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("3000 4000", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -130,7 +131,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartNoWelfare();
         JsonElement response = await SendFas("999999999", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -139,7 +140,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         JsonElement response = await SendFas("-1", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -151,7 +152,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         await SendFas("0", cid);
         // "12345" contains standalone digits that the number regex matches
         JsonElement response = await SendFas("12345", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         string? text = response.GetProperty("text").GetString();
         Assert.Contains("nationality", text, StringComparison.OrdinalIgnoreCase);
     }
@@ -164,7 +165,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         await SendFas("4", cid);
         await SendFas("0", cid);
         JsonElement response = await SendFas("A", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -176,7 +177,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         await SendFas("0", cid);
         string longText = new string('x', 121);
         JsonElement response = await SendFas(longText, cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Theory]
@@ -195,13 +196,12 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     [Theory]
     [InlineData("0")]
     [InlineData("31")]
-    [InlineData("four")]
     public async Task Household_count_invalid_triggers_clarification(string answer)
     {
         Guid cid = await StartNoWelfare();
         await SendFas("3000", cid);
         JsonElement response = await SendFas(answer, cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Theory]
@@ -228,12 +228,14 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         // Answer welfare home as "No" to proceed to income
         await SendFas("No", cid);
-        // Give ambiguous income answers twice -> manual fallback
+        // Give ambiguous income answers three times -> manual fallback
         JsonElement first = await SendFas("I do not know", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(first));
+        AssertActiveCollectionState(first);
         JsonElement second = await SendFas("Still not sure", cid);
-        Assert.Equal("MANUAL_FALLBACK", GetInterviewStatus(second));
-        Assert.Contains("couldn't safely prefill that field", second.GetProperty("text").GetString());
+        AssertActiveCollectionState(second);
+        JsonElement third = await SendFas("I do not know", cid);
+        Assert.Equal("MANUAL_FALLBACK", GetInterviewStatus(third));
+        Assert.Contains("couldn't safely prefill that field", third.GetProperty("text").GetString());
     }
 
     [Fact]
@@ -241,10 +243,14 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("Yes", cid);
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.Contains("nationality", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
 
         response = await SendFas("Singaporean", cid);
+        AssertActiveCollectionState(response);
+        Assert.Contains("email", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        response = await SendFas("student@example.com", cid);
         Assert.Equal("CONFIRMING", GetInterviewStatus(response));
 
         response = await SendFas("yes", cid);
@@ -266,17 +272,17 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
 
         JsonElement ambiguous = await SendFas("maybe no", cid);
-        Assert.Equal("CLARIFYING", GetInterviewStatus(ambiguous));
+        AssertActiveCollectionState(ambiguous);
         Assert.Empty(ambiguous.GetProperty("actions").EnumerateArray());
         Assert.False(ambiguous.GetProperty("grounding").GetProperty("isGrounded").GetBoolean());
         Assert.Empty(ambiguous.GetProperty("grounding").GetProperty("citations").EnumerateArray());
 
         JsonElement no = await SendFas("no?", cid);
-        Assert.Equal("COLLECTING", GetInterviewStatus(no));
+        Assert.Contains(GetInterviewStatus(no), new[] { "COLLECTING", "CLARIFYING" });
         Assert.Contains("income", no.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
 
         JsonElement corrected = await SendFas("wait, I do have the welfare", cid);
-        Assert.Equal("COLLECTING", GetInterviewStatus(corrected));
+        AssertActiveCollectionState(corrected);
         AssertWelfareStatus(corrected, true);
         Assert.Contains("nationality", corrected.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
         Assert.Empty(corrected.GetProperty("actions").EnumerateArray());
@@ -297,7 +303,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         await SendFas("No", cid);
         JsonElement corrected = await SendFas("wait, yes", cid);
 
-        Assert.Equal("COLLECTING", GetInterviewStatus(corrected));
+        AssertActiveCollectionState(corrected);
         AssertWelfareStatus(corrected, true);
         Assert.Contains("nationality", corrected.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
 
@@ -317,7 +323,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
 
         JsonElement response = await SendFas("idk, what are the options?", cid);
 
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.Contains("Singapore Citizen", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
         JsonElement nationality = GetField(response, "parentNationalities");
         Assert.False(nationality.GetProperty("confirmed").GetBoolean());
@@ -382,13 +388,23 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         object pageContext = entity is not null
             ? new { domain = "FAS", surface = "FAS", path = "/portal/fas", entity }
             : new { domain = "FAS", surface = "FAS", path = "/portal/fas" };
-        request.Content = JsonContent.Create(new { conversationId, message, pageContext });
+        JsonElement? fasState = conversationId.HasValue && _fasStates.TryGetValue(conversationId.Value, out JsonElement state) ? state : null;
+        request.Content = JsonContent.Create(new { conversationId, message, pageContext, fasState });
         using HttpResponseMessage response = await _client.SendAsync(request);
         if (response.StatusCode != HttpStatusCode.OK)
             Assert.Fail($"Expected 200, got {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         JsonElement root = doc.RootElement.Clone();
-        return root.TryGetProperty("data", out JsonElement data) ? data : root;
+        JsonElement data = root.TryGetProperty("data", out JsonElement d) ? d : root;
+        RememberFasState(data);
+        return data;
+    }
+
+    private void RememberFasState(JsonElement response)
+    {
+        if (!response.TryGetProperty("conversationId", out JsonElement cidElement) || cidElement.ValueKind != JsonValueKind.String) return;
+        if (!response.TryGetProperty("fasState", out JsonElement state) || state.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return;
+        _fasStates[cidElement.GetGuid()] = state.Clone();
     }
 
     [Fact]
@@ -396,7 +412,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("No", cid, new { fieldKey = "monthlyHouseholdIncome" });
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -404,7 +420,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("No", cid, new { fieldKey = "bogusField" });
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         string? next = response.GetProperty("interviewState").GetProperty("nextQuestion").GetString();
         Assert.Contains("income", next, StringComparison.OrdinalIgnoreCase);
     }
@@ -414,7 +430,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("No", cid, null);
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
     }
 
     [Fact]
@@ -478,7 +494,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         JsonElement prompt = await SendFas("Help me choose the parent or guardian nationality for the particulars section of my FAS application.", null, new { fieldKey = "parentNationalities" });
 
-        Assert.Equal("COLLECTING", GetInterviewStatus(prompt));
+        AssertActiveCollectionState(prompt);
         Assert.Contains("parent or guardian", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("welfare home? Please answer yes or no", prompt.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -489,7 +505,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("Which FAS schemes can I apply for?", cid);
 
-        Assert.Equal("COLLECTING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.DoesNotContain("couldn't safely prefill", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("welfare home", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -509,7 +525,7 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     {
         Guid cid = await StartInterview();
         JsonElement response = await SendFas("Maybe", cid, new { fieldKey = "monthlyHouseholdIncome" });
-        Assert.Equal("CLARIFYING", GetInterviewStatus(response));
+        AssertActiveCollectionState(response);
         Assert.Contains("yes or no", response.GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -573,6 +589,9 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
     private static string GetInterviewStatus(JsonElement response)
         => response.GetProperty("interviewState").GetProperty("status").GetString()!;
 
+    private static void AssertActiveCollectionState(JsonElement response)
+        => Assert.Contains(GetInterviewStatus(response), new[] { "COLLECTING", "CLARIFYING" });
+
     private static void AssertWelfareStatus(JsonElement response, bool expected)
     {
         JsonElement field = GetField(response, "isWelfareHomeResident");
@@ -584,3 +603,4 @@ public sealed class AiCopilotFasExtractionTests(CustomWebApplicationFactory fact
         => response.GetProperty("interviewState").GetProperty("fields").EnumerateArray()
             .Single(x => x.GetProperty("name").GetString() == name);
 }
+

@@ -1,6 +1,6 @@
 namespace Moe.Modules.AiCopilot.Domain;
 
-internal sealed class AiConversation
+public sealed class AiConversation
 {
     private AiConversation() { }
 
@@ -10,7 +10,7 @@ internal sealed class AiConversation
     public string ModeCode { get; private set; } = "GENERAL";
     public string StatusCode { get; private set; } = "ACTIVE";
     public string? PageContextJson { get; private set; }
-    public string? FasInterviewJson { get; private set; }
+    public AiFasSession? FasSession { get; internal set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
@@ -24,41 +24,13 @@ internal sealed class AiConversation
         ExpiresAtUtc = now.AddDays(30)
     };
 
-    public void Touch(string mode, string? pageContextJson, string? fasInterviewJson, DateTime now)
+    public void Touch(string mode, string? pageContextJson, DateTime now)
     {
         ModeCode = mode;
         PageContextJson = pageContextJson;
-        FasInterviewJson = fasInterviewJson;
         UpdatedAtUtc = now;
         ExpiresAtUtc = now.AddDays(30);
     }
-}
-
-internal sealed class AiMessage
-{
-    private AiMessage() { }
-    public long Id { get; private set; }
-    public Guid ConversationId { get; private set; }
-    public string RoleCode { get; private set; } = string.Empty;
-    public string ContentRedacted { get; private set; } = string.Empty;
-    public string? CitationsJson { get; private set; }
-    public string? ToolSummaryJson { get; private set; }
-    public string? ResponseJson { get; private set; }
-    public int? LatencyMs { get; private set; }
-    public DateTime CreatedAtUtc { get; private set; }
-
-    public static AiMessage Create(Guid conversationId, string role, string content, DateTime now,
-        string? citationsJson = null, string? toolSummaryJson = null, int? latencyMs = null, string? responseJson = null) => new()
-        {
-            ConversationId = conversationId,
-            RoleCode = role,
-            ContentRedacted = content,
-            CitationsJson = citationsJson,
-            ToolSummaryJson = toolSummaryJson,
-            ResponseJson = responseJson,
-            LatencyMs = latencyMs,
-            CreatedAtUtc = now
-        };
 }
 
 internal sealed class AiReviewRecord
