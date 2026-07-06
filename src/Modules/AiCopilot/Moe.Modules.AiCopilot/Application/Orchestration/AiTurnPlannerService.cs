@@ -25,7 +25,7 @@ public sealed class AiTurnPlannerService(
         @"\b(tell me (a )?joke|make me laugh|sing|poem|roleplay|story|weather|recipe|movie)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex PaymentQueryPattern = new(
-        @"\b(PAY(?:MENT|ABLE|ING|S)?|BILL(?:S|ING)?|BALANCE|OUTSTANDING|REFUND|WITHDRAW(?:AL)?)\b",
+        @"\b(PAY(?:MENT|ABLE|ING|S)?|BILL(?:S|ING)?|BALANCE(?:S)?|OUTSTANDING|REFUND(?:S)?|WITHDRAW(?:AL)?)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex EducationAccountContextPattern = new(
         @"\b(USE|USED|FOR|COVER|PAY)\b",
@@ -87,6 +87,10 @@ public sealed class AiTurnPlannerService(
         if (!configuration.GetValue("AiCopilot:PlannerV2Enabled", true))
             return HeuristicPlan(request.Message, conversation);
 
+        var heuristicPlan = HeuristicPlan(request.Message, conversation);
+        if (heuristicPlan.Intent != AiPlannerIntent.Fallback && heuristicPlan.Confidence >= 0.85m)
+            return heuristicPlan;
+
         if (configuration.GetValue("AiCopilot:PlannerV2UseModel", true))
         {
             AiTurnPlan? modelPlan = await TryModelPlan(request, conversation, ct);
@@ -94,7 +98,7 @@ public sealed class AiTurnPlannerService(
                 return modelPlan;
         }
 
-        return HeuristicPlan(request.Message, conversation);
+        return heuristicPlan;
     }
 
     private async Task<AiTurnPlan?> TryModelPlan(AiChatRequest request, AiConversation conversation, CancellationToken ct)
@@ -116,7 +120,7 @@ public sealed class AiTurnPlannerService(
                 $"route={request.PageContext?.Path}; domain={request.PageContext?.Domain}; message={request.Message}");
             ChatMessageContent answer = await kernel.GetRequiredService<IChatCompletionService>()
 
-                .GetChatMessageContentAsync(history, kernel: kernel, cancellationToken: ct);
+                .GetChatMessageContentAsync(history, executionSettings: null, kernel: kernel, cancellationToken: ct);
             string json = answer.Content?.Trim() ?? "";
             Match intent = Regex.Match(json, "\"intent\"\\s*:\\s*\"(?<value>[A-Z_]+)\"", RegexOptions.IgnoreCase);
             Match phase = Regex.Match(json, "\"phase\"\\s*:\\s*\"(?<value>[a-z_]+)\"", RegexOptions.IgnoreCase);
@@ -162,8 +166,10 @@ public sealed class AiTurnPlannerService(
             return new(hasFasState ? AiPlannerIntent.ContinueFas : AiPlannerIntent.StartFas, Phase(conversation), "start or resume FAS assistance", 0.9m, "HEURISTIC");
         if ((LooksLikeFasKnowledge(value, hasFasState) || LooksLikeNaturalFasAidQuestion(value)) && !LooksLikeLiveSchemeEligibility(value))
             return new(AiPlannerIntent.AnswerKnowledge, Phase(conversation), "answer FAS knowledge question", 0.9m, "HEURISTIC");
-        if (hasFasState && LooksLikeShortAnswer(value))
-            return new(AiPlannerIntent.ContinueFas, Phase(conversation), "continue FAS fact collection", 0.8m, "HEURISTIC");
+
+        bool isActivelyInInterview = hasFasState && conversation.FasSession!.StatusCode is "COLLECTING" or "CONFIRMING" or "CLARIFYING" or "COLLECTING_CONFIRMED";
+        if (isActivelyInInterview && LooksLikeShortAnswer(value))
+            return new(AiPlannerIntent.ContinueFas, Phase(conversation), "continue FAS fact collection", 0.9m, "HEURISTIC");
 
         return new(AiPlannerIntent.Fallback, Phase(conversation), null, 0.5m, "HEURISTIC");
     }
