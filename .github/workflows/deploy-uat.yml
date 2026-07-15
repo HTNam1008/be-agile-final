@@ -55,8 +55,18 @@ jobs:
             throw "Repository secret AZURE_WEBAPP_PUBLISH_PROFILE is required."
           }
 
-      - name: Test
-        if: ${{ github.event_name == 'push' || inputs.run_tests }}
+      - name: Test unit projects
+        shell: pwsh
+        run: |
+          Get-ChildItem tests -Recurse -Filter *.UnitTests.csproj | ForEach-Object {
+            dotnet test $_.FullName --configuration $env:BUILD_CONFIGURATION --no-build --collect:"XPlat Code Coverage"
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Test full solution
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests }}
         run: dotnet test MOE.StudentFinance.sln --configuration $env:BUILD_CONFIGURATION --no-build --collect:"XPlat Code Coverage"
 
       - name: Publish API
