@@ -53,6 +53,7 @@ $highConfidenceSecretPatterns = @{
     "connection-string-password" = "password=(?!<)[A-Za-z0-9+/=]{12,}"
     "json-client-secret" = '"ClientSecret"\s*:\s*"(?!<)[^"]{12,}"'
     "json-token-signing-key" = '"LocalTokenSigningKey"\s*:\s*"(?!<)[^"]{20,}"'
+    "json-api-key" = '"ApiKey"\s*:\s*"(?!<)[^"]{16,}"'
 }
 
 $findings = New-Object System.Collections.Generic.List[object]
@@ -60,6 +61,7 @@ $findings = New-Object System.Collections.Generic.List[object]
 $backendFiles = Get-TextFiles $backendRoot @(
     "src\Hosts\Moe.StudentFinance.Api\appsettings.json",
     "src\Hosts\Moe.StudentFinance.Api\appsettings.UAT.json",
+    "src\Hosts\Moe.StudentFinance.Worker\appsettings.json",
     ".github",
     "docs\UAT_AZURE_APP_SERVICE_DEPLOYMENT.md",
     "docs\UAT_DEPLOYMENT_RUNBOOK.md",

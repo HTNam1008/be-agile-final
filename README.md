@@ -1,141 +1,198 @@
-# MOE Student Finance
+# MOE Student Finance Backend
 
-MOE Student Finance is a .NET 10 modular monolith. The repository is split into small projects for readability and team ownership, but deployment still goes through one main API host.
+Backend services for the MOE Student Finance platform. The solution is an
+ASP.NET Core .NET 10 modular monolith that supports school administration,
+student course enrollment, education accounts, financial assistance, billing,
+and online payments.
 
-## Codebase Overview
+## Capabilities
+
+- Admin authentication with Microsoft Entra ID and MFA
+- Student authentication with Singpass and MockPass for local/UAT use
+- Student and organization access management
+- Course fees, payment plans, enrollment, billing, and installments
+- Financial Assistance Scheme (FAS) configuration and voucher redemption
+- Education Account provisioning, top-ups, lifecycle, and interest processing
+- Education Account, Stripe, and combined statement payments
+- Enrollment cancellation and refunds
+- Email delivery, in-app notifications, and SignalR updates
+- AI-assisted finance support
+
+## Architecture
+
+The repository uses a modular monolith: business modules are independently
+structured projects but are composed into one API deployment.
 
 ```text
 MOE.StudentFinance.sln
 src/
   Hosts/
-    Moe.StudentFinance.Api          Main ASP.NET Core API host
-    Moe.StudentFinance.Worker       Background worker host
+    Moe.StudentFinance.Api       Main ASP.NET Core API
+    Moe.StudentFinance.Worker    Optional background worker
   Modules/
-    IdentityPlatform/                Admin identity, Entra ID, Singpass/MockPass, user access
-    EducationAccountTopUp/                 Education accounts and account provisioning
-    CourseBilling/                Course, billing, subsidy and FAS extension area
-    FasPayment/                Payment and digital integration extension area
+    IdentityPlatform
+    Mfa
+    CourseBilling
+    FasPayment
+    EducationAccountTopUp
+    Notifications
+    MailDelivery
+    AiCopilot
   Shared/
-    Moe.SharedKernel                Entity, AggregateRoot, Result, Error
-    Moe.Application.Abstractions    ICommand, IQuery, dispatchers, handlers, IClock, current user
-    Moe.Infrastructure.Shared       Middleware, auth setup, logging, API response mapping
+    Moe.SharedKernel
+    Moe.Application.Abstractions
+    Moe.Infrastructure.Shared
   Database/
-    Moe.StudentFinance.Persistence  DbContext
-    Moe.StudentFinance.Migrations   EF Core migrations
-tests/
-  Moe.EducationAccountTopUp.UnitTests
-frontend/
-  MOE login/admin test client
-docs/
-  Architecture and code convention notes
+    Moe.StudentFinance.Persistence
+    Moe.StudentFinance.Migrations
+tests/                           Unit, integration, architecture, and E2E tests
+docs/                            Architecture, business flows, and runbooks
+scripts/                         Database and deployment utilities
 ```
 
-## Runtime Shape
-
-- One API host: `src/Hosts/Moe.StudentFinance.Api`.
-- Two API surfaces:
-  - `/api/admin/v1` for admin users using Microsoft Entra ID.
-  - `/api/eservice/v1` for students using Singpass/MockPass.
-- One SQL Server database.
-- One optional worker host.
-- Multiple module projects compiled into the API output.
-
-## Module Structure
-
-Each business module follows the same shape:
+Each business module follows the same dependency direction:
 
 ```text
-Api              Controllers only
-Application      Commands, queries, handlers, FluentValidation
-Domain           Entities, domain rules, errors, constants
-IGateway         Repository and integration contracts
-Infrastructure   EF repositories, persistence mapping, external clients
+Api -> Application -> Domain
+                \-> IGateway <- Infrastructure
 ```
 
-The key rule is simple:
+- `Api` adapts HTTP requests and responses.
+- `Application` contains commands, queries, handlers, and validation.
+- `Domain` owns entities and business rules.
+- `IGateway` defines persistence and integration contracts.
+- `Infrastructure` implements gateways with EF Core and external providers.
 
-```text
-Application should express the use case.
-Infrastructure should know EF Core and external systems.
-Domain should own business rules.
-Api should only adapt HTTP.
-```
+Controllers and application handlers must not access `MoeDbContext` directly.
+Expected business failures are returned with `Result<T>` rather than exceptions.
 
-## Main Modules
+## API Surfaces
 
-| Module | Main Responsibility |
-|---|---|
-| `IdentityPlatform` | Admin authentication, Entra user provisioning, Singpass/MockPass login, user accounts, access scopes |
-| `EducationAccountTopUp` | Education account creation, student account-holder provisioning, account lifecycle |
-| `CourseBilling` | Future academic finance workflows |
-| `FasPayment` | Future payment and digital integration workflows |
+| Route prefix | Audience | Authentication |
+|---|---|---|
+| `/api/admin/v1` | School and platform administrators | Microsoft Entra ID |
+| `/api/eservice/v1` | Students | Singpass/MockPass session |
+| `/api/public/v1` | Public discovery endpoints | Endpoint-specific |
 
-## Authentication Flow
+Swagger is available at `/swagger` when enabled for the active environment.
 
-- Admin users authenticate through Microsoft Entra ID.
-- Students authenticate through Singpass. Local development uses MockPass.
-- Admin accounts cannot self-register; an existing admin creates another admin.
-- Student Singpass accounts must be provisioned locally before login succeeds.
-- If a student is an account holder, the system creates an education account with initial balance `0`.
+## Requirements
 
-## Code Rules
+- .NET SDK 10.0.100 or a compatible .NET 10 SDK
+- SQL Server
+- Optional local MockPass service for student login
+- External provider configuration only for features being exercised
 
-- Do not put EF Core in `Application` or `Api`.
-- Do not inject `MoeDbContext` into handlers/controllers.
-- Controllers dispatch commands/queries through `ICommandDispatcher` and `IQueryDispatcher`.
-- Use repositories/gateways through `IGateway` contracts.
-- Keep business constants in `Domain`.
-- Use `Result<T>` for expected business failures.
-- Use middleware only for cross-cutting HTTP concerns.
-- Keep secrets out of source-controlled settings.
+## Local Setup
 
-Read [docs/CODE_CONVENTIONS.md](docs/CODE_CONVENTIONS.md) before adding features. Future coding agents should follow [docs/AGENT_CODEBASE_SKILL.md](docs/AGENT_CODEBASE_SKILL.md).
-
-## Local commands
+Restore and build the solution:
 
 ```powershell
 dotnet restore MOE.StudentFinance.sln
 dotnet build MOE.StudentFinance.sln
-dotnet test MOE.StudentFinance.sln
+```
 
-dotnet ef migrations add InitialCreate `
+Provide a local database connection without modifying tracked settings:
+
+```powershell
+$env:ConnectionStrings__MoeDatabase = "Server=localhost,1433;Database=MOEStudentFinance;User Id=sa;Password=<your-password>;TrustServerCertificate=True"
+```
+
+Apply EF Core migrations:
+
+```powershell
+dotnet ef database update `
   --project src/Database/Moe.StudentFinance.Migrations `
   --startup-project src/Hosts/Moe.StudentFinance.Api
 ```
 
-## Canonical local database data
+Run the API:
 
-After applying the EF Core migrations, run the canonical local seed:
+```powershell
+dotnet run --project src/Hosts/Moe.StudentFinance.Api
+```
+
+The launch profile listens on `https://localhost:7000` and
+`http://localhost:7001`.
+
+## Configuration and Secrets
+
+ASP.NET Core configuration supports environment variables using double
+underscores for nested keys. Examples:
+
+```text
+ConnectionStrings__MoeDatabase
+Stripe__SecretKey
+Stripe__WebhookSecret
+AzureOpenAI__ApiKey
+AzureBlob__ConnectionString
+Redis__ConnectionString
+MailDelivery__Password
+MailDelivery__FallbackPassword
+EntraWorkforceDirectory__ClientSecret
+```
+
+Use environment variables, .NET User Secrets, GitHub environment secrets, or
+Azure App Service settings. Values such as Entra client IDs, tenant IDs,
+authorities, scopes, and public URLs are identifiers rather than credentials.
+
+Never commit provider keys, connection strings containing passwords, SMTP
+passwords, private keys, signing keys, or publish profiles.
+
+## Tests
+
+Run the complete test suite:
+
+```powershell
+dotnet test MOE.StudentFinance.sln
+```
+
+For a faster API compilation check:
+
+```powershell
+dotnet build src/Hosts/Moe.StudentFinance.Api/Moe.StudentFinance.Api.csproj --no-restore
+```
+
+## Local Seed Data
+
+After applying migrations, seed the canonical local dataset:
 
 ```powershell
 .\scripts\seed-local-database.ps1
 ```
 
-For a non-default SQL Server instance or database:
+For a custom SQL Server instance:
 
 ```powershell
 .\scripts\seed-local-database.ps1 `
   -Server "localhost\SQLEXPRESS" `
-  -Database "StudentFinance"
+  -Database "MOEStudentFinance"
 ```
 
-The seed is idempotent and preserves unrelated data. It always creates the same
-B-003 run-summary records:
+The seed is idempotent and intended for development and testing only.
 
-| Run ID | Organization | Status |
-|---:|---:|---|
-| `96001` | HQ (`1`) | `COMPLETED` |
-| `96002` | Demo school (`2`) | `PARTIAL` |
-| `96003` | HQ (`1`) | `PROCESSING` |
-| `96004` | Demo school (`2`) | `FAILED` |
+## Repository Hygiene
 
-Example:
+Before publishing or deploying, run the repository secret check:
 
-```http
-GET /api/admin/v1/top-up/runs/96001
+```powershell
+.\scripts\azure\check-uat-repo-hygiene.ps1 `
+  -FrontendRepositoryPath "..\aglie-final-brian-fe"
 ```
 
-The underlying SQL is available at
-`docs/database/seed-local-development.sql`.
+Also run the hosting platform's dependency and secret scanners. If a real secret
+has ever been committed, remove it from current configuration, rotate it at the
+provider, and assess whether Git history must be rewritten.
 
-The API must not automatically apply migrations in UAT. Generate and review SQL scripts in the deployment pipeline.
+## Deployment
+
+Database migrations must be generated and reviewed as SQL for UAT/production;
+the API must not automatically migrate the database at startup. Deployment
+guides are available in:
+
+- [`docs/UAT_AZURE_APP_SERVICE_DEPLOYMENT.md`](docs/UAT_AZURE_APP_SERVICE_DEPLOYMENT.md)
+- [`docs/UAT_DEPLOYMENT_RUNBOOK.md`](docs/UAT_DEPLOYMENT_RUNBOOK.md)
+- [`docs/uat-github-settings.md`](docs/uat-github-settings.md)
+
+Read [`docs/CODE_CONVENTIONS.md`](docs/CODE_CONVENTIONS.md) before adding a new
+module or use case.
